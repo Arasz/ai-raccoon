@@ -6,4 +6,5 @@ obj/
 /.ai-badger/worktrees/
 riderModule.iml
 /_ReSharper.Caches/
-.DS_Store__pycache__/
+.DS_Store
+__pycache__/
