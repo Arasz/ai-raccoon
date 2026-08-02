@@ -34,10 +34,10 @@ workspace's isolated context.
 
 ### Notes on the less obvious tools
 
-- **`scope` values:** `all` (default) searches `shared` + `project:<id>` (+ workspace
-  when named); `project` searches `project:<id>` only; `shared` searches the `shared`
-  promotion tier only. Workspace scratch is never included in `scope=all` — it is only
-  visible to a search that names that `workspaceId`.
+- **`scope` values:** `scope=all` (default) searches `shared` + `project:<id>` (+ workspace
+  when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
+  `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
+  only visible to a search that names that `workspaceId`.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
