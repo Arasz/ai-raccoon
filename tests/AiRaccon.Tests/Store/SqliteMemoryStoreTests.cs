@@ -1,6 +1,7 @@
 using AiRaccon.Core.Common;
 using AiRaccon.Core.Memory;
 using AiRaccon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -65,7 +66,7 @@ public class SqliteMemoryStoreTests
     }
 
     [Fact]
-    public async Task MapEntry_ReadsRowColumns_IntoMemoryEntry()
+    public async Task Dapper_MapsAliasedColumns_IntoMemoryEntry()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
@@ -88,12 +89,11 @@ public class SqliteMemoryStoreTests
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        await using var query = connection.CreateCommand();
-        query.CommandText = "SELECT hash, path, context, value, created_at FROM dbmem_content";
-        await using var reader = await query.ExecuteReaderAsync(TestContext.Current.CancellationToken);
-        await reader.ReadAsync(TestContext.Current.CancellationToken);
-
-        var entry = MemoryRowMapper.ToEntry(reader);
+        // The store's Dapper reads alias snake_case columns to record constructor names;
+        // this asserts that a query using those aliases materializes a MemoryEntry.
+        var entry = await connection.QueryFirstOrDefaultAsync<MemoryEntry>(
+            "SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt FROM dbmem_content",
+            TestContext.Current.CancellationToken);
 
         entry.ShouldBe(new MemoryEntry("abc123", "notes.md", "project:acme", "remember this", 1_752_000_000L));
     }
