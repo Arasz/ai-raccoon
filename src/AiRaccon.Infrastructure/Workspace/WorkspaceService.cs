@@ -17,7 +17,8 @@ public sealed class WorkspaceService
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var id = Guid.NewGuid().ToString("N");
+        // v7 (sortable, time-ordered) ids make workspace lists deterministic by creation order.
+        var id = Guid.CreateVersion7().ToString("N");
         return Task.FromResult(new WorkspaceRecord(id, projectId));
     }
 
