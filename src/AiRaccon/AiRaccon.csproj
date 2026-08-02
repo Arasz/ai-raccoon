@@ -30,6 +30,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="../AiRaccon.Core/AiRaccon.Core.csproj"/>
+        <ProjectReference Include="../AiRaccon.Infrastructure/AiRaccon.Infrastructure.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <InternalsVisibleTo Include="AiRaccon.Tests"/>
     </ItemGroup>
 

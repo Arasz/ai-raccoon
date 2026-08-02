@@ -16,6 +16,8 @@
 
     <ItemGroup>
         <ProjectReference Include="../../src/AiRaccon/AiRaccon.csproj"/>
+        <ProjectReference Include="../../src/AiRaccon.Core/AiRaccon.Core.csproj"/>
+        <ProjectReference Include="../../src/AiRaccon.Infrastructure/AiRaccon.Infrastructure.csproj"/>
     </ItemGroup>
 
 </Project>

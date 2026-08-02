@@ -1,4 +1,6 @@
 <Solution>
     <Project Path="src/AiRaccon/AiRaccon.csproj"/>
+    <Project Path="src/AiRaccon.Core/AiRaccon.Core.csproj"/>
+    <Project Path="src/AiRaccon.Infrastructure/AiRaccon.Infrastructure.csproj"/>
     <Project Path="tests/AiRaccon.Tests/AiRaccon.Tests.csproj"/>
 </Solution>

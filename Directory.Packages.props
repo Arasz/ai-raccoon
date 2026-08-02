@@ -4,8 +4,11 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Application">
+      <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
       <PackageVersion Include="ModelContextProtocol" Version="2.0.0" />
       <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.0.0" />
       <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0" />
+      <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+      <PackageVersion Include="Dapper" Version="2.1.79" />
   </ItemGroup>
 </Project>

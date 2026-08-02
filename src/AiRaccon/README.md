@@ -1,119 +1,78 @@
-# MCP Server
+# AiRaccon — Agent Memory MCP Server
 
-This README was created using the C# MCP server project template. It demonstrates how you can easily create an MCP
-server using C# and publish it as a NuGet package.
+An MCP server that gives AI agents persistent, project-scoped memory backed by
+[sqlite-memory](https://github.com/sqliteai/sqlite-memory). Local-first by default:
+one SQLite memory bank per install scope, local GGUF embeddings, hybrid semantic
+search, workspace sandboxes, a curated shared tier, memory degradation, and
+opt-in cloud sync through SQLite Cloud.
+
+Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
+
+## What an agent gets
+
+- **One memory bank per install scope.** A user-scope install (global tool) keeps a
+  single bank under `~/.ai-raccon` shared by every project; a project-scope install
+  keeps its own bank under `<project>/.ai-raccon`. Projects partition the bank via
+  context (`project:<id>`).
+- **Workspace sandboxes.** `memory_workspace_begin` mints a `workspace_id` whose
+  context is isolated by design — notes written with it stay in the outbox, never in
+  committed project memory, until consolidated.
+- **Shared promotion tier.** Plain writes land in the project. `memory_share`
+  promotes a hash into the flat `shared` context — cross-project, curated, and exempt
+  from degradation sweeps.
+- **Hybrid search.** `memory_search` combines vector similarity and FTS5, scoped by
+  `scope=all|project|shared` and optional workspace.
+- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps
+  remove old, low-rated project entries (`shared` is protected).
+- **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
+  (`shared` + `project:<id>`) into a configured SQLite Cloud database, which is the
+  correlation point between a user-scope install and any project-scope install.
+
+## Tools (17) and prompts (2)
+
+`memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
+`memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
+`memory_configure`, `memory_embed_pending`, `memory_workspace_begin`,
+`memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
+`memory_sweep`, `memory_sync` — plus the `memory-usage-guide` and
+`workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AIRACCON_DATA_ROOT` | Bank data root (default `~/.ai-raccon`) |
+| `AIRACCON_INSTALL_SCOPE` | `user` (default) or `project` |
+| `AIRACCON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
+| `AIRACCON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
+| `AIRACCON_VECTORSSPACE_API_KEY` | vectors.space API key (remote embeddings) |
+
+Credentials are read from the environment only — never from tracked files.
 
 ## Transports
 
-The server supports both transports, selected via the `MCP_TRANSPORT` environment variable
-(case-insensitive, anything other than `http` runs stdio):
-
 - `stdio` (default) — MCP clients launch the server as a subprocess.
-- `http` — Streamable HTTP at `/mcp`, e.g. `dotnet run --launch-profile http` (listens on `http://localhost:8080`).
+- `http` — Streamable HTTP at `/mcp`, selected via `MCP_TRANSPORT=http`
+  (stateless per the 2026-07-28 spec revision).
 
-Note: the HTTP transport uses the ASP.NET Core runtime, so a framework-dependent deployment requires the .NET
-runtime to include it. The self-contained single-file publish profile (`Properties/PublishProfiles/selfcontained-singlefile.pubxml`) bundles it.
+All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
-The MCP server is built as a self-contained application and does not require the .NET runtime to be installed on the
-target machine. However, since it is self-contained, it must be built for each target platform separately. By default,
-the template is configured to build for:
+## Native extensions
 
-* `win-x64`
-* `win-arm64`
-* `osx-arm64`
-* `linux-x64`
-* `linux-arm64`
-* `linux-musl-x64`
+sqlite-memory, sqlite-vector and sqlite-sync ship as native SQLite extensions,
+provisioned per platform on first run into `<data-root>/extensions/<rid>/`:
+sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 (pinned, SHA-256 verified).
+Local embeddings need a GGUF model (e.g. `nomic-embed-text-v1.5.Q8_0.gguf`) configured
+via `memory_configure`; without a model, writes are stored deferred and indexed later.
 
-If your users require more platforms to be supported, update the list of runtime identifiers in the project's
-`<RuntimeIdentifiers />` element.
+## Develop
 
-See [aka.ms/nuget/mcp/guide](https://aka.ms/nuget/mcp/guide) for the full guide.
+- `dotnet build` / `dotnet test` from the repo root.
+- The MCP server is packaged as the `ai-raccon` dotnet tool (multi-RID: win-x64/arm64,
+  osx-arm64, linux-x64/arm64/musl-x64).
 
-Please note that this template is currently in an early preview stage. If you have feedback, please take
-a [brief survey](http://aka.ms/dotnet-mcp-template-survey).
+## Licensing note
 
-## Checklist before publishing to NuGet.org
-
-- Test the MCP server locally using the steps below.
-- Update the package metadata in the .csproj file, in particular the `<PackageId>`.
-- Update `.mcp/server.json` to declare your MCP server's inputs.
-    - See [configuring inputs](https://aka.ms/nuget/mcp/guide/configuring-inputs) for more details.
-- Pack the project using `dotnet pack`.
-
-The `bin/Release` directory will contain the package file (.nupkg), which can
-be [published to NuGet.org](https://learn.microsoft.com/nuget/nuget-org/publish-a-package).
-
-## Developing locally
-
-To test this MCP server from source code (locally) without using a built MCP server package, you can configure your IDE
-to run the project directly using `dotnet run`.
-
-```json
-{
-  "servers": {
-    "AiRaccon": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<PATH TO PROJECT DIRECTORY>"
-      ]
-    }
-  }
-}
-```
-
-Refer to the VS Code or Visual Studio documentation for more information on configuring and using MCP servers:
-
-- [Use MCP servers in VS Code (Preview)](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)
-- [Use MCP servers in Visual Studio (Preview)](https://learn.microsoft.com/visualstudio/ide/mcp-servers)
-
-## Testing the MCP Server
-
-Once configured, you can ask Copilot Chat for a random number, for example, `Give me 3 random numbers`. It should prompt
-you to use the `get_random_number` tool on the `AiRaccon` MCP server and show you the results.
-
-## Publishing to NuGet.org
-
-1. Run `dotnet pack -c Release` to create the NuGet package
-2. Publish to NuGet.org with
-   `dotnet nuget push bin/Release/*.nupkg --api-key <your-api-key> --source https://api.nuget.org/v3/index.json`
-
-## Using the MCP Server from NuGet.org
-
-Once the MCP server package is published to NuGet.org, you can configure it in your preferred IDE. Both VS Code and
-Visual Studio use the `dnx` command to download and install the MCP server package from NuGet.org.
-
-- **VS Code**: Create a `<WORKSPACE DIRECTORY>/.vscode/mcp.json` file
-- **Visual Studio**: Create a `<SOLUTION DIRECTORY>\.mcp.json` file
-
-For both VS Code and Visual Studio, the configuration file uses the following server definition:
-
-```json
-{
-  "servers": {
-    "AiRaccon": {
-      "type": "stdio",
-      "command": "dnx",
-      "args": [
-        "<your package ID here>",
-        "--version",
-        "<your package version here>",
-        "--yes"
-      ]
-    }
-  }
-}
-```
-
-## More information
-
-.NET MCP servers use the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK. For more
-information about MCP:
-
-- [Official Documentation](https://modelcontextprotocol.io/)
-- [Protocol Specification](https://spec.modelcontextprotocol.io/)
-- [GitHub Organization](https://github.com/modelcontextprotocol)
-- [MCP C# SDK](https://modelcontextprotocol.github.io/csharp-sdk)
+sqlite-memory is MIT. sqlite-vector and sqlite-sync are Elastic License 2.0 — free for
+open-source and non-production use; contact SQLite Cloud for production/managed use.
+See the upstream repos for details.
