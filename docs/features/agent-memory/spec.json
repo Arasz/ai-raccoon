@@ -1,0 +1,105 @@
+{
+  "name": "agent-memory",
+  "title": "Agent Memory Management MCP Server (AiRaccon)",
+  "specFile": "docs/features/agent-memory/spec-issue-1.md",
+  "featureFile": "docs/features/agent-memory/agent-memory.feature",
+  "scope": [
+    "MCP server exposing sqlite-memory as a project-scoped agent memory backend",
+    "Mandatory project_id on every tool; one SQLite DB file per project",
+    "Workspace sandbox: isolated writes to workspace context, reads span project+workspace, consolidation promotes selected hashes to committed project memory",
+    "Hybrid semantic search (vector + FTS5) via memory_search with context/limit/min_score scoping",
+    "Memory write (text), file and directory ingestion, per-hash and per-context deletion",
+    "Per-project embedding configuration, local GGUF default, vectors.space remote optional",
+    "Deferred embeddings when no model is configured, embed_pending worker",
+    "First-class IMemoryExtension pipeline with retrieval-frequency rating and time/rating-based degradation (dry-run + real sweep)",
+    "Opt-in cloud sync via sqlite-sync + SQLite Cloud, committed project contexts only, workspace scratch never synced",
+    "MCP prompts (memory-usage-guide, workspace-consolidation-guide) teaching the agent protocol",
+    "ai-badger integration: agent-memory skill, mcp-index catalog entry, scaffolding wiring (framework repo)"
+  ],
+  "outOfScope": [
+    "REST/HTTP management API separate from MCP",
+    "Per-agent authentication or authorization beyond provenance agent_id",
+    "Hosted multi-tenant cloud service",
+    "Web UI, dashboards, analytics",
+    "Non-SQLite storage backends",
+    "Cross-replica search (search is always local)",
+    "MRTR-based consolidation (deferred, see deferred)",
+    "Single shared cloud memory bank with RLS (deferred, see deferred)"
+  ],
+  "nonFunctional": {
+    "platforms": ["win-x64", "win-arm64", "osx-arm64", "linux-x64", "linux-arm64", "linux-musl-x64"],
+    "concurrency": "Multiple agent processes per project DB; WAL + busy_timeout; content-hash dedup makes concurrent identical writes safe; sync serialized per project",
+    "secrets": "Keys only from AIRACCON_* env vars or runtime config; never in tracked files; connection-scoped to memory_set_apikey/cloudsync_network_set_apikey",
+    "logging": "Nested static partial Log with [LoggerMessage] methods; stderr-only for stdio transport",
+    "layering": "Domain pure in AiRaccon.Core; SQLite/extension loading in AiRaccon.Infrastructure; MCP tools thin 1:1",
+    "versioning": "sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 pinned; SHA-256 verified provisioning"
+  },
+  "constraints": [
+    "MCP stays thin: tools map 1:1 to IMemoryStore/service calls, no SQL in Tools/",
+    "Do not alter dbmem_content schema (CRDT sync schema hash must match across replicas); AiRaccon metadata lives in local-only raccon_meta.db",
+    "Missing project_id is an invalid-params tool error, never auto-guessed",
+    "Extension binaries provisioned per-RID on first run; offline start fails with a clear expected-path message",
+    "TDD mandatory: failing behavior-focused xunit test before each production change",
+    "TreatWarningsAsErrors is on; new code must build warning-free",
+    "Central package versions in Directory.Packages.props only"
+  ],
+  "gateVerdicts": [
+    {
+      "verdict": "feature file gate-verified",
+      "provenance": "spec_holes.py exit 0 on docs/features/agent-memory/agent-memory.feature (2026-08-02): 2 holes, 0 open, both deferred with fallbacks",
+      "detail": "11 rules, 25 scenarios (23 executable + 2 deferred); all FR-MEM/AC tags trace to spec-issue-1.md"
+    },
+    {
+      "verdict": "requirements complete",
+      "provenance": "spec-issue-1.md: 20 FR-MEM requirements (FR-MEM-1.1..1.20), each referenced by at least one of 10 acceptance criteria AC-1..AC-10"
+    },
+    {
+      "verdict": "dependency versions verified against upstream sources",
+      "provenance": "sqlite-memory 1.3.5 / sqlite-vector 1.0.0 / sqlite-sync 1.1.2 confirmed via GitHub releases API (2026-08-02); Reqnroll.xunit.v3 supports xunit v3 for future BDD execution"
+    }
+  ],
+  "deferred": [
+    {
+      "id": "OQ-1",
+      "question": "sqlite-vector and sqlite-sync are Elastic License 2.0; distribution license for ai-raccon?",
+      "fallback": "Treat as OSS for now; add LICENSE note + contact path in README",
+      "resolved": false
+    },
+    {
+      "id": "OQ-2",
+      "question": "Bundle native extensions in NuGet tool package vs download-on-first-run?",
+      "fallback": "Download-on-first-run with SHA-256 verification (sqlmem CLI precedent); bundling as later packaging option",
+      "resolved": false
+    },
+    {
+      "id": "OQ-3",
+      "question": "linux-musl-x64 has no sqlite-memory release binary — drop RID or build extension?",
+      "fallback": "Keep RID, clear provisioning failure message; revisit when upstream ships musl",
+      "resolved": false
+    },
+    {
+      "id": "OQ-4",
+      "question": "Consolidation as MRTR round-trip vs plain tool call?",
+      "fallback": "Plain tool call with explicit keep list for V1; MRTR upgrade later (workspace_id already threads like requestState)",
+      "resolved": true
+    },
+    {
+      "id": "OQ-5",
+      "question": "Single cloud memory bank (one DB + RLS) vs per-project cloud DBs?",
+      "fallback": "Per-project cloud DBs via sqlite-sync for V1; RLS single-bank deferred until sync volume demands it",
+      "resolved": true
+    },
+    {
+      "id": "OQ-6",
+      "question": "Default rating formula: linear decay vs half-life?",
+      "fallback": "Half-life on last_accessed_at (rating = base * 0.5^(age/half_life)) plus access-count multiplier; pure policy, adjustable",
+      "resolved": true
+    },
+    {
+      "id": "OQ-7",
+      "question": "GGUF model: download from HuggingFace on first run vs user-provided path?",
+      "fallback": "Download-on-first-run from pinned HF repo (nomic-embed-text-v1.5.Q8_0.gguf) with size warning (~137 MB)",
+      "resolved": true
+    }
+  ]
+}
