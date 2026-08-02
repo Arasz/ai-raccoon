@@ -1,11 +1,11 @@
 # language: en
-Feature: Agent memory management (ai-raccon MCP server)
+Feature: Agent memory management (ai-raccoon MCP server)
   As an AI agent working across projects
   I want a persistent memory bank shared across my projects
   So that I can recall durable knowledge, sandbox worktree notes, and promote what matters
 
   Background:
-    Given the ai-raccon MCP server is running
+    Given the ai-raccoon MCP server is running
     And a project with id "acme-web" exists
 
   @FR-MEM-1.1 @AC-1

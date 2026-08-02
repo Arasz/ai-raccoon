@@ -1,4 +1,4 @@
-# AiRaccon
+# AiRaccoon
 
 C# .NET 10 MCP server exposing random-number generation to AI assistants over the [Model
 Context Protocol](https://modelcontextprotocol.io/), built on the
@@ -10,7 +10,7 @@ Context Protocol](https://modelcontextprotocol.io/), built on the
 
 ## What it does
 
-AiRaccon is a small, dependency-light MCP server that registers one tool:
+AiRaccoon is a small, dependency-light MCP server that registers one tool:
 
 | Tool | What it does |
 |---|---|
@@ -41,7 +41,7 @@ dotnet build
 dotnet test
 ```
 
-The test project (`tests/AIRaccon.Tests`, xunit.v3 + Shouldly) covers the tools and the
+The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly) covers the tools and the
 transport selector — 13 cases, keep them green.
 
 ## Quickstart — run it
@@ -49,14 +49,14 @@ transport selector — 13 cases, keep them green.
 Run from source with the stdio transport (the default):
 
 ```bash
-dotnet run --project src/AiRaccon
+dotnet run --project src/AiRaccoon
 ```
 
 Or with the HTTP transport, using the `http` launch profile (listens on
 `http://localhost:8080`):
 
 ```bash
-dotnet run --project src/AiRaccon --launch-profile http
+dotnet run --project src/AiRaccoon --launch-profile http
 ```
 
 (`MCP_TRANSPORT=http` selects the HTTP transport too, but only with
@@ -72,7 +72,7 @@ Studio's `.mcp.json`):
 ```json
 {
   "servers": {
-    "AiRaccon": {
+    "AiRaccoon": {
       "type": "stdio",
       "command": "dotnet",
       "args": ["run", "--project", "<PATH TO PROJECT DIRECTORY>", "--no-launch-profile"]
@@ -91,12 +91,12 @@ should use the `get_random_number` tool.
 ## Architecture
 
 ```
-AiRaccon/
-  src/AiRaccon/            # the MCP server (thin)
+AiRaccoon/
+  src/AiRaccoon/            # the MCP server (thin)
     Program.cs             # transport selection + MCP wiring
     McpTransportSelector.cs
     Tools/RandomNumberTools.cs
-  tests/AIRaccon.Tests/    # xunit.v3 + Shouldly
+  tests/AiRaccoon.Tests/    # xunit.v3 + Shouldly
   Directory.Build.props    # analyzers, warnings-as-errors
   Directory.Packages.props # central package versions
   docs/                    # canonical documentation tree (see docs/README.md)
@@ -108,7 +108,7 @@ results, with no business logic of its own. Warnings are errors
 
 ## Packaging & release
 
-The server packs as a .NET tool (`PackAsTool`, package id `ai-raccon`, type `McpServer`):
+The server packs as a .NET tool (`PackAsTool`, package id `ai-raccoon`, type `McpServer`):
 
 ```bash
 dotnet pack -c Release

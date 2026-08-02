@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Dapper"/>
+        <PackageReference Include="Microsoft.Data.Sqlite"/>
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../AiRaccoon.Core/AiRaccoon.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="AiRaccoon.Tests"/>
+    </ItemGroup>
+
+</Project>

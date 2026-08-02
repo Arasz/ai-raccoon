@@ -128,7 +128,7 @@
       "taskId": "agent-memory-server",
       "subagents": [
         {
-          "description": "Wave 1: AiRaccon.Core domain project (TDD, 67 tests)",
+          "description": "Wave 1: AiRaccoon.Core domain project (TDD, 67 tests)",
           "totalTokens": 85000,
           "at": "2026-08-02T20:58:37.253047+00:00"
         },
@@ -169,7 +169,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-02T20:50:36.673891+00:00",
+          "timestamp": "2026-08-02T23:19:42.918522+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-02T23:19:42.918522+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},

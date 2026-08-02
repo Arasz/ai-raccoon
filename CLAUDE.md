@@ -1,6 +1,6 @@
 <!-- Managed by ai-badger. Source of truth: .ai-badger/CLAUDE.md. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
 
-# AiRaccon
+# AiRaccoon
 
 C# .NET 10 MCP server (stdio transport) exposing random-number generation tools to AI assistants, built on the ModelContextProtocol C# SDK.
 

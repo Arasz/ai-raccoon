@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-08-02T22:40:00Z",
+  "lastUpdated": "2026-08-03T00:40:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
@@ -12,6 +12,11 @@
       "id": "initialize-dotnet-project",
       "summary": "Unit test project (xunit.v3+Shouldly, 13 cases) for RandomNumberTools; dual stdio/http MCP transport via MCP_TRANSPORT; local NuGet feed deploy gated on dotnet_env=local; publish profile, launch settings, central versions.",
       "hasNotes": false
+    },
+    {
+      "id": "agent-memory-server",
+      "summary": "Agent memory management MCP server over sqlite-memory: Core domain (records, RatingPolicy, DegradationPolicy, IMemoryExtension + MemoryExtensionHost pipeline, SearchScope), Infrastructure (one SQLite bank per install scope, SqliteMemoryStore via Dapper, MetaStore rating, WorkspaceService, SweepService, ExtensionProvisioner with real SHA-256 manifest, SyncService), thin MCP layer (17 tools + 2 prompts, dual transport). Workspace sandboxes (workspace_id = isolation by design, no flag), shared promotion tier (memory_share via path-scoped hashes, sweep-exempt), deferred embeddings by default (FR-MEM-1.12), opt-in SQLite Cloud sync of committed contexts. Real-extension integration tests against sqlite-memory 1.3.5 + sqlite-vector 1.0.0. 168 tests, build 0 warnings.",
+      "hasNotes": true
     }
   ],
   "next": null,
@@ -19,6 +24,9 @@
   "research": [],
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
-    "MCP_TRANSPORT=http selects the Streamable HTTP transport at /mcp; anything else runs stdio"
+    "MCP_TRANSPORT=http selects the Streamable HTTP transport at /mcp; anything else runs stdio",
+    "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
+    "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured"
   ]
 }

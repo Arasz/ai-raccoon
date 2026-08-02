@@ -5,7 +5,7 @@
       "title": "Create unit test project and add tests for the example tooling",
       "sessionId": "20260802_213638_435316",
       "transcriptPath": null,
-      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon/AiRaccoon",
       "branch": "task/initialize-dotnet-project",
       "risk": false,
       "startedAt": "2026-08-02T19:38:46.698870+00:00",
@@ -20,7 +20,7 @@
       "title": "Init repo docs + enable all opt-in ai-badger skills",
       "sessionId": "20260802_222214_fed404",
       "transcriptPath": null,
-      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon/AiRaccoon",
       "branch": "task/docs-init",
       "risk": false,
       "startedAt": "2026-08-02T20:34:24.176205+00:00",
@@ -35,14 +35,15 @@
       "title": "Agent memory management MCP server",
       "sessionId": "hermes-agent-memory-20260802",
       "transcriptPath": null,
-      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon/AiRaccoon",
       "branch": "task/agent-memory-server",
       "risk": false,
       "startedAt": "2026-08-02T20:50:36.674237+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-02T23:19:42.918527+00:00",
+      "state": "FINISHED",
       "resumeCommand": "claude --resume hermes-agent-memory-20260802",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

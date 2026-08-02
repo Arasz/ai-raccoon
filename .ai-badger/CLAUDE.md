@@ -1,4 +1,4 @@
-# AiRaccon
+# AiRaccoon
 
 C# .NET 10 MCP server (stdio transport) exposing random-number generation tools to AI assistants, built on the ModelContextProtocol C# SDK.
 

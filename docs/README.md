@@ -1,6 +1,6 @@
 # Documentation
 
-The canonical documentation tree for AiRaccon. Docs root: `docs/`.
+The canonical documentation tree for AiRaccoon. Docs root: `docs/`.
 
 ## Map
 

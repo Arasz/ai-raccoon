@@ -7,14 +7,14 @@
 Report privately through GitHub's [private vulnerability reporting][pvr] (the
 **Security → Report a vulnerability** tab) once this repository is hosted there. If
 private reporting is unavailable, email **araszkiewiczrafal@gmail.com** with
-`ai-raccon security` in the subject.
+`ai-raccoon security` in the subject.
 
 ### What to include
 
 - What an attacker can do, and what they need in order to do it (a malicious MCP client?
   a crafted tool argument? a hostile package in the local NuGet feed?).
 - The affected file and, where possible, a failing test or a reproduction command.
-- The version — the `PackageVersion` in `src/AiRaccon/AiRaccon.csproj`, or the commit.
+- The version — the `PackageVersion` in `src/AiRaccoon/AiRaccoon.csproj`, or the commit.
 
 ### What to expect
 
@@ -30,7 +30,7 @@ no backports to older versions.
 
 ## What this project actually is, security-wise
 
-AiRaccon is a **local MCP server process**. There is no hosted service, no account, and no
+AiRaccoon is a **local MCP server process**. There is no hosted service, no account, and no
 network surface beyond an optional localhost HTTP endpoint. The honest threat model is:
 
 | Surface | What it does | Who controls the input |

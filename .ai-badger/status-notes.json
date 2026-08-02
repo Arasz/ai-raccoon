@@ -1,0 +1,13 @@
+{
+  "agent-memory-server": [
+    "Design: one memory bank per install scope (user-scope shared across projects, project-scope local); projects partition via context; shared promotion tier reached ONLY via memory_share (curated, sweep-exempt); workspace_id presence is the isolation declaration (no isolated flag).",
+    "Contract artifacts: docs/features/agent-memory/{spec-issue-1.md, agent-memory.feature (29 scenarios), spec.json}. Gherkin .feature is the behavioural contract, gated by .ai-badger/skills/create-task-spec/scripts/spec_holes.py.",
+    "Deferred (OQ-8): auto-promotion to shared based on ai-badger stack concept \u2014 the IMemoryExtension pipeline (OnConsolidateAsync/OnWriteAsync) is the seam.",
+    "Deferred (OQ-5): single cloud memory bank for all agents \u2014 V1 syncs committed contexts into one configured SQLite Cloud DB, which is the correlation point between user-scope and project-scope installs.",
+    "Deferred: Reqnroll/.feature test runner \u2014 spike verified green on xunit.v3 3.2.2 + net10.0 (Reqnroll.xunit.v3 3.3.4) but integration deferred; .feature stays the docs contract.",
+    "Licensing: sqlite-vector + sqlite-sync are Elastic 2.0 (free OSS/non-prod); linux-musl-x64 has no sqlite-memory release binary; provisioning refuses with a clear error.",
+    "Native extension facts: content-hash dedup is global (cross-context duplicates need preserve_duplicate_paths=1 + distinct paths); defer_embeddings=1 default so writes work pre-model; memory_add_text returns 1 not the hash; memory_embed_pending rejects NULL/0 limit.",
+    "Dapper 2.1.79 quirks: parameter binding is case-sensitive against SQL param names; record ctor matching chokes on nullable params (use settable DTO); MatchNamesWithUnderscores alone does not fix ctor matching \u2014 alias columns to record names.",
+    "Env vars: AIRACCON_DATA_ROOT, AIRACCON_INSTALL_SCOPE (user|project), AIRACCON_SQLITECLOUD_DB_ID/API_KEY, AIRACCON_VECTORSSPACE_API_KEY, AIRACCON_TEST_GGUF (gates embedding integration tests)."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+    "description": "Agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
+    "name": "ai-raccoon/agent-memory",
+    "version": "0.1.0-beta",
+    "packages": [
+        {
+            "registryType": "nuget",
+            "identifier": "ai-raccoon",
+            "version": "0.1.0-beta",
+            "transport": {
+                "type": "stdio"
+            },
+            "packageArguments": [],
+            "environmentVariables": [
+                "AIRACCOON_DATA_ROOT",
+                "AIRACCOON_INSTALL_SCOPE",
+                "AIRACCOON_SQLITECLOUD_DB_ID",
+                "AIRACCOON_SQLITECLOUD_API_KEY",
+                "AIRACCOON_VECTORSSPACE_API_KEY"
+            ]
+        }
+    ],
+    "repository": {
+        "url": "https://github.com/ai-raccoon/ai-raccoon",
+        "source": "github"
+    }
+}

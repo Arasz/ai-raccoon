@@ -1,8 +1,8 @@
-# Issue #1 — Agent Memory Management MCP Server (AiRaccon)
+# Issue #1 — Agent Memory Management MCP Server (AiRaccoon)
 
-> **Epic:** AiRaccon — agent memory management MCP server
+> **Epic:** AiRaccoon — agent memory management MCP server
 > **Status:** Draft
-> **Prerequisites:** none (first dossier in this repo; the random-number tools in `src/AiRaccon/Tools/RandomNumberTools.cs` are scaffold samples, superseded by this feature)
+> **Prerequisites:** none (first dossier in this repo; the random-number tools in `src/AiRaccoon/Tools/RandomNumberTools.cs` are scaffold samples, superseded by this feature)
 > **Dependencies (external):**
 > - MCP C# SDK **2.0.0** (already pinned in `Directory.Packages.props`) — 2026-07-28 spec revision, stateless HTTP, MRTR, `[McpServerTool]` attribute discovery
 > - [sqlite-memory](https://github.com/sqliteai/sqlite-memory) **1.3.5** (MIT) — markdown-aware memory extension, hybrid vector+FTS5 search, built-in llama.cpp local embedding engine, `memory_*` SQL functions
@@ -15,8 +15,8 @@
 
 ### In scope
 
-Turn AiRaccon from a scaffold MCP server into an **agent memory management MCP server**: a
-thin MCP adapter over the sqlite-memory SQL surface, packaged as the existing `ai-raccon`
+Turn AiRaccoon from a scaffold MCP server into an **agent memory management MCP server**: a
+thin MCP adapter over the sqlite-memory SQL surface, packaged as the existing `ai-raccoon`
 dotnet tool, that gives AI agents a persistent, project-scoped, searchable memory with:
 
 - **Multi-project / multi-agent operation** — every memory operation is keyed by a mandatory
@@ -73,12 +73,12 @@ Prefix `FR-MEM` (feature: memory). Tagged **[V1]** (this issue) or **[LATER]**.
 | FR-MEM-1.13 | A first-class extension pipeline (`IMemoryExtension`) wraps write/search/delete/consolidate/sweep with ordered hooks; extensions are DI-registered and config-driven. | Two registered extensions both run their hooks in registration order on a write. |
 | FR-MEM-1.14 | A **rating extension** maintains retrieval-frequency metadata (access count, last-accessed, computed rating) in a local-only meta table keyed by content hash; search hits increment the counter. | Searching an entry twice raises its access count and rating; meta rows are not synced. |
 | FR-MEM-1.15 | A **degradation extension** removes entries whose rating falls below a threshold and whose age exceeds a TTL; a sweep tool runs it on demand with a `dry_run` mode. Entries in the `shared` context are exempt from sweeping — sharing is an explicit promotion to the curated, durable tier. | Sweep with dry_run lists candidates; sweep for real deletes them; young/highly-rated entries survive; shared entries always survive. |
-| FR-MEM-1.16 | Sync is opt-in: with `AIRACCON_SQLITECLOUD_DB_ID` and `AIRACCON_SQLITECLOUD_API_KEY` set, `memory_sync` pushes/pulls the bank's committed contexts (`shared` + `project:<id>`) via sqlite-sync and reindexes merged content; workspace contexts are never synced. | After sync, remote entries are searchable locally; workspace contexts are absent from the payload. |
+| FR-MEM-1.16 | Sync is opt-in: with `AIRACCOON_SQLITECLOUD_DB_ID` and `AIRACCOON_SQLITECLOUD_API_KEY` set, `memory_sync` pushes/pulls the bank's committed contexts (`shared` + `project:<id>`) via sqlite-sync and reindexes merged content; workspace contexts are never synced. | After sync, remote entries are searchable locally; workspace contexts are absent from the payload. |
 | FR-MEM-1.22 | A project-scope (local-only) install syncs its bank to the configured cloud database; a user-scope install does the same. Global and local instances are correlated only through that cloud database — no direct link between them. | Local-only install syncs to cloud; a user-scope install on the same machine merges through the cloud DB, not through the local bank. |
 | FR-MEM-1.17 | MCP prompts (`memory-usage-guide`, `workspace-consolidation-guide`) describe the project-id / isolation / inbox-outbox / consolidation protocol to the calling agent. | Prompts listed via MCP `prompts/list`; content covers all five protocol points. |
-| FR-MEM-1.18 | The ai-badger framework ships an `agent-memory` skill teaching the protocol and an mcp-index catalog entry for the server's tools. | Skill file exists in framework common skills; catalog `features/<stack>/mcp/ai-raccon/tools.json` tags every tool. |
+| FR-MEM-1.18 | The ai-badger framework ships an `agent-memory` skill teaching the protocol and an mcp-index catalog entry for the server's tools. | Skill file exists in framework common skills; catalog `features/<stack>/mcp/ai-raccoon/tools.json` tags every tool. |
 | FR-MEM-1.19 | The server runs on win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64 (existing `RuntimeIdentifiers`); native extensions are provisioned per-RID at first run. | Server starts and serves tools on the supported host RIDs with extensions loaded. |
-| FR-MEM-1.20 | No credentials in tracked files: sync/embedding keys come only from environment variables or runtime config. | Repo scan finds no secrets; docs use `AIRACCON_*` placeholders. |
+| FR-MEM-1.20 | No credentials in tracked files: sync/embedding keys come only from environment variables or runtime config. | Repo scan finds no secrets; docs use `AIRACCOON_*` placeholders. |
 
 ## 3. User flows
 
@@ -130,7 +130,7 @@ Agent or scheduled caller:
 ### 3.4 Cloud sync
 
 ```
-User sets AIRACCON_SQLITECLOUD_DB_ID + AIRACCON_SQLITECLOUD_API_KEY.
+User sets AIRACCOON_SQLITECLOUD_DB_ID + AIRACCOON_SQLITECLOUD_API_KEY.
 Agent (or user) calls memory_sync(project_id=P):
   1. Server: memory_enable_sync('project:P')   [workspace contexts excluded]
   2. Server: cloudsync_network_init(dbId); cloudsync_network_set_apikey(key)
@@ -197,17 +197,17 @@ Prompts are implemented with the SDK v2 prompt attribute API and registered in
 ### 5.1 File layout
 
 ```
-<data-root>/                    # default ~/.ai-raccon (local scope) or <project>/.ai-raccon (project scope)
+<data-root>/                    # default ~/.ai-raccoon (local scope) or <project>/.ai-raccoon (project scope)
   projects/
     <project-id>/               # one directory per project; project-id is URL-safe slug
       memory.db                 # sqlite-memory database (dbmem_content, dbmem_vault, dbmem_vault_fts, dbmem_settings)
-      raccon_meta.db            # local-only metadata (rating, provenance) — see §5.3
+      raccoon_meta.db            # local-only metadata (rating, provenance) — see §5.3
   extensions/<rid>/             # provisioned native extensions per platform (vector, memory, cloudsync)
   models/                       # downloaded GGUF embedding model (optional, user-provided path allowed)
 ```
 
-Data root resolution: `AIRACCON_DATA_ROOT` env var → local default `~/.ai-raccon` →
-project-scoped `.ai-raccon/` when installed as a project tool. Each project DB is created
+Data root resolution: `AIRACCOON_DATA_ROOT` env var → local default `~/.ai-raccoon` →
+project-scoped `.ai-raccoon/` when installed as a project tool. Each project DB is created
 on first access with `memory_is_enabled()` check + schema init (sqlite-memory 1.0+ schema).
 
 ### 5.2 Context naming convention
@@ -225,10 +225,10 @@ local until consolidated (FR-MEM-1.16). The cloud database is the single correla
 between a user-scope install and any project-scope install (FR-MEM-1.22). `memory_search`
 supports the `context` hidden filter column, which is how read scoping is implemented.
 
-### 5.3 Local-only meta table (`raccon_meta.db`)
+### 5.3 Local-only meta table (`raccoon_meta.db`)
 
 sqlite-memory's `dbmem_content` schema is fixed and is the CRDT-synced table — we must not
-add columns to it (schema hash must match across replicas). All AiRaccon-owned metadata lives
+add columns to it (schema hash must match across replicas). All AiRaccoon-owned metadata lives
 in a separate local-only database:
 
 ```sql
@@ -255,7 +255,7 @@ This table is the substrate for the rating and degradation extensions (§6.3) an
 ### 6.1 Project layout (clean layering)
 
 ```
-src/AiRaccon.Core/            # NEW class library — pure domain, zero infra deps
+src/AiRaccoon.Core/            # NEW class library — pure domain, zero infra deps
   Memory/MemoryEntry.cs        # record: hash, path, context, value, created_at
   Memory/MemorySearchResult.cs # record: hash, seq, ranking, path, snippet
   Memory/Workspace.cs          # record: id, project_id, context, status
@@ -264,17 +264,17 @@ src/AiRaccon.Core/            # NEW class library — pure domain, zero infra de
   Rating/IMemoryExtension.cs   # extension contract + hook context records
   Degradation/DegradationPolicy.cs  # pure: candidate selection (rating < thr && age > ttl)
   Common/ContextNaming.cs      # pure: project/workspace context string builders
-src/AiRaccon.Infrastructure/   # NEW class library — sqlite-memory adapter + provisioning
+src/AiRaccoon.Infrastructure/   # NEW class library — sqlite-memory adapter + provisioning
   Sqlite/SqliteMemoryStore.cs      # IMemoryStore over Microsoft.Data.Sqlite + LoadExtension
-  Sqlite/MetaStore.cs              # raccon_meta.db CRUD
+  Sqlite/MetaStore.cs              # raccoon_meta.db CRUD
   Provisioning/ExtensionProvisioner.cs  # download/verify per-RID vector/memory/cloudsync
   Sync/SyncService.cs              # sqlite-sync orchestration (enable_sync, network_*, reindex)
-src/AiRaccon/                  # MCP server — thin (existing project)
+src/AiRaccoon/                  # MCP server — thin (existing project)
   Tools/MemoryTools.cs         # NEW: 17 tools, 1:1 to IMemoryStore / services
   Tools/WorkspaceTools.cs      # NEW: workspace_* tools (or merged into MemoryTools)
   Prompts/MemoryPrompts.cs     # NEW: memory-usage-guide, workspace-consolidation-guide
   Program.cs                   # MODIFIED: register Core/Infrastructure, WithToolsFromAssembly, WithPrompts
-tests/AIRaccon.Tests/          # existing xunit.v3 + Shouldly project
+tests/AiRaccoon.Tests/          # existing xunit.v3 + Shouldly project
   Domain/RatingPolicyTests.cs, DegradationPolicyTests.cs, ContextNamingTests.cs
   Store/SqliteMemoryStoreTests.cs   # integration, real extensions, temp DB
   Tools/MemoryToolsTests.cs         # tools against a fake IMemoryStore (existing pattern)
@@ -323,7 +323,7 @@ project DB:
 - `PRAGMA journal_mode=WAL`, `PRAGMA busy_timeout=5000` on every connection.
 - sqlite-memory functions are SAVEPOINT-transactional and content-hash-deduplicated, so
   concurrent identical writes are safe no-ops.
-- `raccon_meta.db` uses WAL too; rating bumps are `INSERT ... ON CONFLICT DO UPDATE`.
+- `raccoon_meta.db` uses WAL too; rating bumps are `INSERT ... ON CONFLICT DO UPDATE`.
 - Sync calls are serialized per project with a `SemaphoreSlim` (cloudsync is not
   concurrency-safe).
 
@@ -335,8 +335,8 @@ project DB:
 | Unknown project dir | first access | directory + empty DB created lazily | n/a |
 | Unknown `workspace_id` | `workspace_status`/consolidate | error `workspace-not-found` | agent begins a new workspace |
 | Embedding model not configured | write/search | writes stored deferred (`indexed:false`); search returns FTS-only results; `memory_stats` reports pending | `memory_configure` then `memory_embed_pending` |
-| Remote embedding without API key | `memory_configure`/write | error `embedding-api-key-missing`; never writes the key to the DB | set `AIRACCON_VECTORSSPACE_API_KEY` or pass `api_key` |
-| Sync without credentials | `memory_sync` | error `sync-not-configured` | set `AIRACCON_SQLITECLOUD_DB_ID`/`_API_KEY` |
+| Remote embedding without API key | `memory_configure`/write | error `embedding-api-key-missing`; never writes the key to the DB | set `AIRACCOON_VECTORSSPACE_API_KEY` or pass `api_key` |
+| Sync without credentials | `memory_sync` | error `sync-not-configured` | set `AIRACCOON_SQLITECLOUD_DB_ID`/`_API_KEY` |
 | Native extension missing for RID | startup provisioning | provisioner downloads pinned versions + SHA-256 check; offline → clear error with expected path | rerun with network, or pre-provision into data root |
 | sqlite-memory schema version mismatch | `memory_is_enabled()` | error with rebuild instruction (sqlite-memory 1.0+ schema) | rebuild DB |
 | Concurrent agents writing same content | content-hash dedup | second write is a no-op, returns same hash | n/a |
@@ -411,16 +411,16 @@ Numbered, each traceable to a requirement.
   (both connection-scoped by design — never persisted).
 - **Logging**: nested static partial `Log` class with `[LoggerMessage]` methods
   (high-performance-logging invariant), stderr-only for stdio transport.
-- **`InternalsVisibleTo`** already set for `AiRaccon.Tests`; Core/Infrastructure projects
+- **`InternalsVisibleTo`** already set for `AiRaccoon.Tests`; Core/Infrastructure projects
   need the same for their own test access.
 - **Packaging**: keep `PackAsTool` + `.mcp/server.json`; the server.json's
-  `environmentVariables` array should declare `AIRACCON_*` so MCP clients surface them.
+  `environmentVariables` array should declare `AIRACCOON_*` so MCP clients surface them.
 
 ## 11. Open questions
 
 | # | Question | Lean | Status |
 |---|---|---|---|
-| OQ-1 | sqlite-vector and sqlite-sync are **Elastic License 2.0** — free for OSS/non-production, commercial for production/managed. Is the ai-raccon distribution OSS-licensed? | Treat as OSS for now; add a LICENSE note + contact path in README | open |
+| OQ-1 | sqlite-vector and sqlite-sync are **Elastic License 2.0** — free for OSS/non-production, commercial for production/managed. Is the ai-raccoon distribution OSS-licensed? | Treat as OSS for now; add a LICENSE note + contact path in README | open |
 | OQ-2 | Bundle extensions inside the NuGet tool package per-RID vs download-on-first-run? | Download-on-first-run (sqlmem CLI precedent, keeps tool package small); bundling as a later packaging option | open |
 | OQ-3 | `linux-musl-x64` has no sqlite-memory release binary — drop the RID or build the extension for musl? | Keep RID, fail provisioning with a clear message; revisit when upstream ships musl | open |
 | OQ-4 | Should consolidation be an MRTR round-trip (server asks the agent which hashes to keep) instead of a plain tool call? | Plain tool call for V1; MRTR is a natural later upgrade since `workspace_id` already threads like `requestState` | open |
@@ -434,43 +434,43 @@ Numbered, each traceable to a requirement.
 
 | File | Purpose |
 |---|---|
-| `src/AiRaccon.Core/AiRaccon.Core.csproj` | pure domain library (no external deps) |
-| `src/AiRaccon.Core/Memory/*.cs` | MemoryEntry, MemorySearchResult, Workspace, IMemoryStore, SearchQuery |
-| `src/AiRaccon.Core/Rating/*.cs` | RatingPolicy, IMemoryExtension, hook context records |
-| `src/AiRaccon.Core/Degradation/*.cs` | DegradationPolicy, SweepCandidate, threshold/TTL options |
-| `src/AiRaccon.Core/Common/ContextNaming.cs` | project/workspace/custom context string builders |
-| `src/AiRaccon.Infrastructure/AiRaccon.Infrastructure.csproj` | sqlite adapter + provisioning + sync |
-| `src/AiRaccon.Infrastructure/Sqlite/*.cs` | SqliteMemoryStore, MetaStore, connection factory (WAL, busy_timeout) |
-| `src/AiRaccon.Infrastructure/Provisioning/*.cs` | ExtensionProvisioner, rid mapping, checksum manifest |
-| `src/AiRaccon.Infrastructure/Sync/SyncService.cs` | sqlite-sync orchestration |
-| `src/AiRaccon/Tools/MemoryTools.cs` | 16 `[McpServerTool]` methods |
-| `src/AiRaccon/Prompts/MemoryPrompts.cs` | 2 `[McpServerPrompt]` guides |
-| `tests/AIRaccon.Tests/Domain/*.cs` | rating/degradation/context/consolidation unit tests |
-| `tests/AIRaccon.Tests/Store/*.cs` | integration tests against real extensions |
-| `tests/AIRaccon.Tests/Tools/*.cs` | tool validation/mapping tests (fake IMemoryStore) |
-| `tests/AIRaccon.Tests/Provisioning/*.cs` | provisioner unit tests |
+| `src/AiRaccoon.Core/AiRaccoon.Core.csproj` | pure domain library (no external deps) |
+| `src/AiRaccoon.Core/Memory/*.cs` | MemoryEntry, MemorySearchResult, Workspace, IMemoryStore, SearchQuery |
+| `src/AiRaccoon.Core/Rating/*.cs` | RatingPolicy, IMemoryExtension, hook context records |
+| `src/AiRaccoon.Core/Degradation/*.cs` | DegradationPolicy, SweepCandidate, threshold/TTL options |
+| `src/AiRaccoon.Core/Common/ContextNaming.cs` | project/workspace/custom context string builders |
+| `src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj` | sqlite adapter + provisioning + sync |
+| `src/AiRaccoon.Infrastructure/Sqlite/*.cs` | SqliteMemoryStore, MetaStore, connection factory (WAL, busy_timeout) |
+| `src/AiRaccoon.Infrastructure/Provisioning/*.cs` | ExtensionProvisioner, rid mapping, checksum manifest |
+| `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` | sqlite-sync orchestration |
+| `src/AiRaccoon/Tools/MemoryTools.cs` | 16 `[McpServerTool]` methods |
+| `src/AiRaccoon/Prompts/MemoryPrompts.cs` | 2 `[McpServerPrompt]` guides |
+| `tests/AiRaccoon.Tests/Domain/*.cs` | rating/degradation/context/consolidation unit tests |
+| `tests/AiRaccoon.Tests/Store/*.cs` | integration tests against real extensions |
+| `tests/AiRaccoon.Tests/Tools/*.cs` | tool validation/mapping tests (fake IMemoryStore) |
+| `tests/AiRaccoon.Tests/Provisioning/*.cs` | provisioner unit tests |
 | `docs/features/README.md` | feature table row for this dossier (establishes the dossier convention) |
 
 ### Modified files
 
 | File | Specific changes |
 |---|---|
-| `src/AiRaccon/AiRaccon.csproj` | ProjectReferences to Core + Infrastructure; remove `RandomNumberTools` if replaced |
-| `src/AiRaccon/Program.cs` | register Core/Infrastructure services, `WithToolsFromAssembly()`, `WithPrompts...()`, keep dual-transport selector |
-| `src/AiRaccon/Tools/RandomNumberTools.cs` | delete (superseded scaffold sample) or keep for demo — decide in PR |
-| `src/AiRaccon/.mcp/server.json` | real package id/description, `AIRACCON_*` environmentVariables |
-| `src/AiRaccon/README.md` | memory server usage, env vars, extension provisioning, licensing note |
+| `src/AiRaccoon/AiRaccoon.csproj` | ProjectReferences to Core + Infrastructure; remove `RandomNumberTools` if replaced |
+| `src/AiRaccoon/Program.cs` | register Core/Infrastructure services, `WithToolsFromAssembly()`, `WithPrompts...()`, keep dual-transport selector |
+| `src/AiRaccoon/Tools/RandomNumberTools.cs` | delete (superseded scaffold sample) or keep for demo — decide in PR |
+| `src/AiRaccoon/.mcp/server.json` | real package id/description, `AIRACCOON_*` environmentVariables |
+| `src/AiRaccoon/README.md` | memory server usage, env vars, extension provisioning, licensing note |
 | `Directory.Packages.props` | `Microsoft.Data.Sqlite`, `SQLitePCLRaw.bundle_e_sqlite3` versions (central only) |
-| `tests/AIRaccon.Tests/AiRaccon.Tests.csproj` | reference Core/Infrastructure; integration trait config |
+| `tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj` | reference Core/Infrastructure; integration trait config |
 | `.ai-badger/config.json` | project summary/domain updated to memory server |
 
 ### Not modified (with reason)
 
 | File | Reason |
 |---|---|
-| `src/AiRaccon/McpTransportSelector.cs` | transport selection unchanged |
-| `tests/AIRaccon.Tests/McpTransportSelectorTests.cs` | still valid |
-| `tests/AIRaccon.Tests/RandomNumberToolsTests.cs` | deleted only with its tool |
+| `src/AiRaccoon/McpTransportSelector.cs` | transport selection unchanged |
+| `tests/AiRaccoon.Tests/McpTransportSelectorTests.cs` | still valid |
+| `tests/AiRaccoon.Tests/RandomNumberToolsTests.cs` | deleted only with its tool |
 
 ## 13. ai-badger integration (framework side, separate repo)
 
@@ -483,11 +483,11 @@ discipline around this server:
    - write durable facts to the project, promote cross-project knowledge to `shared` via
      `memory_share` (curated, sweep-exempt tier); search with `scope=all` to see shared + project;
    - consolidate at workspace end: promote durable facts, drop noise.
-2. **mcp-index catalog entry** — `features/<stack>/mcp/ai-raccon/tools.json` tagging every
+2. **mcp-index catalog entry** — `features/<stack>/mcp/ai-raccoon/tools.json` tagging every
    tool (`[memory]`, `[workspace]`, `[sync]`, `[rating]`) so the `pre_llm_call` hook
    recommends the right tool per turn.
-3. **Scaffolding wiring** — declare the `ai-raccon` stdio server in generated agent configs
-   (mcp.json / `.mcp/server.json`) and default `AIRACCON_DATA_ROOT` to the framework's
+3. **Scaffolding wiring** — declare the `ai-raccoon` stdio server in generated agent configs
+   (mcp.json / `.mcp/server.json`) and default `AIRACCOON_DATA_ROOT` to the framework's
    per-project data dir, so multiple ai-badger agents on one machine share project memory.
 4. **Multi-platform promise** — the same dotnet tool + per-RID extension provisioning covers
    macOS, Windows, Linux; the skill is platform-agnostic.

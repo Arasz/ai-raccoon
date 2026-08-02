@@ -1,6 +1,6 @@
 {
   "name": "agent-memory",
-  "title": "Agent Memory Management MCP Server (AiRaccon)",
+  "title": "Agent Memory Management MCP Server (AiRaccoon)",
   "specFile": "docs/features/agent-memory/spec-issue-1.md",
   "featureFile": "docs/features/agent-memory/agent-memory.feature",
   "scope": [
@@ -31,14 +31,14 @@
   "nonFunctional": {
     "platforms": ["win-x64", "win-arm64", "osx-arm64", "linux-x64", "linux-arm64", "linux-musl-x64"],
     "concurrency": "Multiple agent processes per project DB; WAL + busy_timeout; content-hash dedup makes concurrent identical writes safe; sync serialized per project",
-    "secrets": "Keys only from AIRACCON_* env vars or runtime config; never in tracked files; connection-scoped to memory_set_apikey/cloudsync_network_set_apikey",
+    "secrets": "Keys only from AIRACCOON_* env vars or runtime config; never in tracked files; connection-scoped to memory_set_apikey/cloudsync_network_set_apikey",
     "logging": "Nested static partial Log with [LoggerMessage] methods; stderr-only for stdio transport",
-    "layering": "Domain pure in AiRaccon.Core; SQLite/extension loading in AiRaccon.Infrastructure; MCP tools thin 1:1",
+    "layering": "Domain pure in AiRaccoon.Core; SQLite/extension loading in AiRaccoon.Infrastructure; MCP tools thin 1:1",
     "versioning": "sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 pinned; SHA-256 verified provisioning"
   },
   "constraints": [
     "MCP stays thin: tools map 1:1 to IMemoryStore/service calls, no SQL in Tools/",
-    "Do not alter dbmem_content schema (CRDT sync schema hash must match across replicas); AiRaccon metadata lives in local-only raccon_meta.db",
+    "Do not alter dbmem_content schema (CRDT sync schema hash must match across replicas); AiRaccoon metadata lives in local-only raccoon_meta.db",
     "Missing project_id is an invalid-params tool error, never auto-guessed",
     "Extension binaries provisioned per-RID on first run; offline start fails with a clear expected-path message",
     "TDD mandatory: failing behavior-focused xunit test before each production change",
@@ -63,7 +63,7 @@
   "deferred": [
     {
       "id": "OQ-1",
-      "question": "sqlite-vector and sqlite-sync are Elastic License 2.0; distribution license for ai-raccon?",
+      "question": "sqlite-vector and sqlite-sync are Elastic License 2.0; distribution license for ai-raccoon?",
       "fallback": "Treat as OSS for now; add LICENSE note + contact path in README",
       "resolved": false
     },

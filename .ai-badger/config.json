@@ -2,7 +2,7 @@
   "$schema": "./schemas/config.schema.json",
   "frameworkVersion": "0.76.0",
   "project": {
-    "name": "AiRaccon",
+    "name": "AiRaccoon",
     "summary": "C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
     "domain": "Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory."
   },
