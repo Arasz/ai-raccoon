@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    {
+      "taskId": "initialize-dotnet-project",
+      "title": "Create unit test project and add tests for the example tooling",
+      "sessionId": "20260802_213638_435316",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "branch": "task/initialize-dotnet-project",
+      "risk": false,
+      "startedAt": "2026-08-02T19:38:46.698870+00:00",
+      "finishedAt": "2026-08-02T20:04:12.320094+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260802_213638_435316",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    }
+  ]
+}

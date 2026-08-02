@@ -1,6 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+
 
 // Transport selection: the "http" launch profile sets MCP_TRANSPORT=http to run the
 // Streamable HTTP transport; anything else (default) uses stdio, which is what MCP
