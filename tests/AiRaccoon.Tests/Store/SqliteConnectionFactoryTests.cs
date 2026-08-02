@@ -30,13 +30,13 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     }
 
     [Fact]
-    public void MetaDatabasePath_UserScope_IsDataRootRacconMetaDb()
+    public void MetaDatabasePath_UserScope_IsDataRootRaccoonMetaDb()
     {
         Factory().MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, "raccoon_meta.db"));
     }
 
     [Fact]
-    public void MetaDatabasePath_ProjectScope_IsDataRootAiRaccoonRacconMetaDb()
+    public void MetaDatabasePath_ProjectScope_IsDataRootAiRaccoonRaccoonMetaDb()
     {
         Factory(InstallScope.Project).MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "raccoon_meta.db"));
     }
@@ -64,7 +64,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenMetaAsync_OpensRacconMetaDatabase_WithoutLoadingExtensions()
+    public async Task OpenMetaAsync_OpensRaccoonMetaDatabase_WithoutLoadingExtensions()
     {
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
