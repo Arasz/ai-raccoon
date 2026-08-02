@@ -6,7 +6,7 @@ namespace AiRaccon.Infrastructure.Sync;
 public sealed record SyncResult(int Sent, int Received, int Reindexed);
 
 /// <summary>Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;), serialized per spec §6.3.</summary>
-public sealed class SyncService
+public class SyncService
 {
     private readonly SyncOptions _options;
     private readonly ICloudSyncConnectionFactory _connections;
@@ -18,7 +18,7 @@ public sealed class SyncService
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
     }
 
-    public async Task<SyncResult> MemorySyncAsync(string projectId, CancellationToken cancellationToken = default)
+    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
 

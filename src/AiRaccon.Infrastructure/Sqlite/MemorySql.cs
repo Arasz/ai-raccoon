@@ -27,6 +27,25 @@ internal static class MemorySql
 
     public const string PendingCount = "SELECT memory_pending_count()";
 
+    public const string ListFiles = "SELECT memory_list_files()";
+
+    public const string IngestFile = "SELECT memory_add_file(@path, @context)";
+
+    public const string IngestDirectory = "SELECT memory_add_directory(@path, @context)";
+
+    public const string SetApiKey = "SELECT memory_set_apikey(@apiKey)";
+
+    public const string SetModel = "SELECT memory_set_model(@provider, @model)";
+
+    public const string EmbedPending = "SELECT memory_embed_pending(@limit)";
+
+    public const string SelectEntriesByContext = """
+        SELECT hash, path, context, value, created_at
+        FROM dbmem_content
+        WHERE context = @context
+        ORDER BY created_at DESC, rowid DESC
+        """;
+
     /// <summary>The bank's committed contexts — shared plus every distinct project context (FR-MEM-1.16); workspaces excluded, shared first.</summary>
     public const string CommittedContexts = """
         SELECT DISTINCT context

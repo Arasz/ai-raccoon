@@ -1,3 +1,6 @@
+using AiRaccon.Core.Degradation;
+using AiRaccon.Core.Workspace;
+
 namespace AiRaccon.Core.Memory;
 
 /// <summary>Port over the sqlite-memory SQL surface; thin and SQL-shaped, implemented by the Infrastructure layer.</summary>
@@ -15,4 +18,22 @@ public interface IMemoryStore
 
     /// <summary>Promotes the content behind hash into the flat shared context; the source project row may stay (FR-MEM-1.21).</summary>
     Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default);
+
+    /// <summary>The bank's file tree as returned by memory_list_files (spec §4.1 memory_list).</summary>
+    Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
+
+    /// <summary>Indexes one file into the given context (spec §4.1 memory_ingest_file).</summary>
+    Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default);
+
+    /// <summary>Indexes a directory tree into the given context (spec §4.1 memory_ingest_directory).</summary>
+    Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets the bank's embedding provider/model (and API key when remote); persists in dbmem_settings (spec §4.1 memory_configure).</summary>
+    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default);
+
+    /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
+    Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>
+    Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default);
 }

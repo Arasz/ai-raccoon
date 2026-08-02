@@ -1,0 +1,69 @@
+using AiRaccon.Core.Common;
+using AiRaccon.Core.Memory;
+using AiRaccon.Core.Workspace;
+using AiRaccon.Infrastructure.Sqlite;
+using WorkspaceRecord = AiRaccon.Core.Workspace.Workspace;
+
+namespace AiRaccon.Infrastructure.Workspace;
+
+/// <summary>Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox), discard (spec §3.2).</summary>
+public sealed class WorkspaceService
+{
+    private readonly IMemoryStore _store;
+
+    public WorkspaceService(IMemoryStore store) => _store = store ?? throw new ArgumentNullException(nameof(store));
+
+    public Task<WorkspaceRecord> BeginAsync(string projectId, string? agentId, string? name, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+
+        var id = Guid.NewGuid().ToString("N")[..8];
+        return Task.FromResult(new WorkspaceRecord(id, projectId));
+    }
+
+    public async Task<IReadOnlyList<MemoryEntry>> GetStatusAsync(string projectId, string workspaceId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(workspaceId);
+
+        var context = ContextNaming.WorkspaceContext(workspaceId);
+        return await _store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ConsolidationResult> ConsolidateAsync(
+        string projectId, string workspaceId, IReadOnlyList<string> keep, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(workspaceId);
+        ArgumentNullException.ThrowIfNull(keep);
+
+        var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
+        var entries = await _store.ListContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
+        var byHash = entries.ToDictionary(e => e.Hash, e => e, StringComparer.Ordinal);
+
+        var keepAll = keep.Count == 1 && string.Equals(keep[0], "all", StringComparison.OrdinalIgnoreCase);
+        var hashes = keepAll ? byHash.Keys.ToList() : keep.Where(byHash.ContainsKey).ToList();
+
+        var promoted = 0;
+        foreach (var hash in hashes)
+        {
+            var entry = byHash[hash];
+            await _store.WriteAsync(
+                new MemoryWriteRequest(projectId, entry.Value),
+                cancellationToken).ConfigureAwait(false);
+            promoted++;
+        }
+
+        var discarded = await _store.DeleteContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
+        return new ConsolidationResult(promoted, discarded);
+    }
+
+    public async Task<int> DiscardAsync(string projectId, string workspaceId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(workspaceId);
+
+        var context = ContextNaming.WorkspaceContext(workspaceId);
+        return await _store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+    }
+}

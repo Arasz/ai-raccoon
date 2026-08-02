@@ -16,7 +16,7 @@ public sealed record MetaEntry(
     int? TtlDays);
 
 /// <summary>CRUD over the local-only raccon_meta.db; rating bumps follow RatingPolicy from Core.</summary>
-public sealed class MetaStore
+public class MetaStore
 {
     private readonly SqliteConnectionFactory _factory;
 
@@ -70,7 +70,7 @@ public sealed class MetaStore
             createdAt, accessCount, now, rating, existing?.TtlDays);
     }
 
-    public async Task<MetaEntry?> GetEntryAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    public virtual async Task<MetaEntry?> GetEntryAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(hash);
@@ -106,7 +106,7 @@ public sealed class MetaStore
         return entries;
     }
 
-    public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(hash);

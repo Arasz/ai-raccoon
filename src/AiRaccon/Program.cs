@@ -1,4 +1,14 @@
-
+using AiRaccon.Core.Memory;
+using AiRaccon.Infrastructure.Degradation;
+using AiRaccon.Infrastructure.Options;
+using AiRaccon.Infrastructure.Sqlite;
+using AiRaccon.Infrastructure.Sync;
+using AiRaccon.Infrastructure.Workspace;
+using AiRaccon.Prompts;
+using AiRaccon.Tools;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 // Transport selection: the "http" launch profile sets MCP_TRANSPORT=http to run the
 // Streamable HTTP transport; anything else (default) uses stdio, which is what MCP
@@ -16,7 +26,10 @@ if (McpTransportSelector.UseHttp(Environment.GetEnvironmentVariable("MCP_TRANSPO
             // server-to-client requests like sampling or elicitation.
             options.Stateless = true;
         })
-        .WithTools<RandomNumberTools>();
+        .WithTools<MemoryTools>()
+        .WithPrompts<MemoryPrompts>();
+
+    RegisterMemoryServices(builder.Services);
 
     var app = builder.Build();
     app.MapMcp("/mcp");
@@ -33,7 +46,40 @@ else
     builder.Services
         .AddMcpServer()
         .WithStdioServerTransport()
-        .WithTools<RandomNumberTools>();
+        .WithTools<MemoryTools>()
+        .WithPrompts<MemoryPrompts>();
+
+    RegisterMemoryServices(builder.Services);
 
     await builder.Build().RunAsync();
+}
+
+static void RegisterMemoryServices(IServiceCollection services)
+{
+    // Options come from environment variables only — never hardcoded credentials.
+    var scope = string.Equals(
+        Environment.GetEnvironmentVariable("AIRACCON_INSTALL_SCOPE"), "project", StringComparison.OrdinalIgnoreCase)
+        ? InstallScope.Project
+        : InstallScope.User;
+
+    services.AddSingleton(new InfrastructureOptions
+    {
+        DataRoot = InfrastructureOptions.DefaultDataRoot(),
+        Scope = scope,
+        Sync = new SyncOptions
+        {
+            ManagedDatabaseId = Environment.GetEnvironmentVariable("AIRACCON_SQLITECLOUD_DB_ID"),
+            ApiKey = Environment.GetEnvironmentVariable("AIRACCON_SQLITECLOUD_API_KEY"),
+        },
+    });
+
+    services.AddSingleton(sp => new SqliteConnectionFactory(
+        sp.GetRequiredService<InfrastructureOptions>(),
+        loadCloudSync: true));
+    services.AddSingleton<IMemoryStore, SqliteMemoryStore>();
+    services.AddSingleton<MetaStore>();
+    services.AddSingleton<ICloudSyncConnectionFactory, CloudSyncConnectionFactory>();
+    services.AddSingleton<SyncService>();
+    services.AddSingleton<WorkspaceService>();
+    services.AddSingleton<SweepService>();
 }

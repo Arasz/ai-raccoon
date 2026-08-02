@@ -143,6 +143,119 @@ public sealed class SqliteMemoryStore : IMemoryStore
         pending.CommandText = MemorySql.PendingCount;
         var pendingCount = Convert.ToInt32(await pending.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
 
-        return new MemoryStats(entries, pendingCount);
+        await using var contexts = connection.CreateCommand();
+        contexts.CommandText = MemorySql.CommittedContexts;
+        var contextList = new List<string>();
+        await using var reader = await contexts.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            contextList.Add(reader.GetString(0));
+        }
+
+        return new MemoryStats(entries, pendingCount, contextList);
+    }
+
+    public async Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = MemorySql.ListFiles;
+        return (string)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = MemorySql.IngestFile;
+        command.Parameters.AddWithValue("@path", path);
+        command.Parameters.AddWithValue("@context", (object?)context ?? DBNull.Value);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+    }
+
+    public async Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = MemorySql.IngestDirectory;
+        command.Parameters.AddWithValue("@path", path);
+        command.Parameters.AddWithValue("@context", (object?)context ?? DBNull.Value);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+    }
+
+    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(
+        string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(model);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            await using var keyCommand = connection.CreateCommand();
+            keyCommand.CommandText = MemorySql.SetApiKey;
+            keyCommand.Parameters.AddWithValue("@apiKey", apiKey);
+            await keyCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var modelCommand = connection.CreateCommand();
+        modelCommand.CommandText = MemorySql.SetModel;
+        modelCommand.Parameters.AddWithValue("@provider", provider);
+        modelCommand.Parameters.AddWithValue("@model", model);
+        await modelCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+        return new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote");
+    }
+
+    public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var embed = connection.CreateCommand();
+        embed.CommandText = MemorySql.EmbedPending;
+        embed.Parameters.AddWithValue("@limit", (object?)limit ?? DBNull.Value);
+        var processed = Convert.ToInt32(await embed.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+
+        await using var pending = connection.CreateCommand();
+        pending.CommandText = MemorySql.PendingCount;
+        var pendingCount = Convert.ToInt32(await pending.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+
+        return new EmbedPendingResult(processed, pendingCount);
+    }
+
+    public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(context);
+
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = MemorySql.SelectEntriesByContext;
+        command.Parameters.AddWithValue("@context", context);
+
+        var entries = new List<MemoryEntry>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            entries.Add(MemoryRowMapper.ToEntry(reader));
+        }
+
+        return entries;
     }
 }
