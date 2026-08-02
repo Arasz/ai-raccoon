@@ -116,7 +116,36 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var shared = await store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
+        // The shared row must actually exist in the bank, not just be claimed by the return
+        // value: re-read the shared context and confirm the content is there (B1 — a no-op
+        // promotion would leave the shared context empty).
         shared.Context.ShouldBe(ContextNaming.SharedContext);
+        var sharedEntries = await store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken);
+        sharedEntries.ShouldContain(e => e.Value == "cross project convention");
+
+        // The source project row must remain.
+        var projectEntries = await store.ListContextAsync("acme", "project:acme", TestContext.Current.CancellationToken);
+        projectEntries.ShouldContain(e => e.Value == "cross project convention");
+    }
+
+    [Fact]
+    public async Task ShareAsync_Twice_IsIdempotent_AgainstRealExtensions()
+    {
+        var store = await TryCreateStoreAsync();
+        if (store is null)
+        {
+            return;
+        }
+
+        var entry = await store.WriteAsync(
+            new MemoryWriteRequest("acme", "share me once"),
+            TestContext.Current.CancellationToken);
+
+        await store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        await store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        var sharedEntries = await store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken);
+        sharedEntries.Count(e => e.Value == "share me once").ShouldBe(1);
     }
 
     [Fact]

@@ -26,18 +26,11 @@ public sealed class SqliteMemoryStore : IMemoryStore
         await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
         // memory_add_text returns 1 (success), not the hash — read the row back by
-        // (context, content), which the content-hash dedup makes unique per context.
-        await using var select = connection.CreateCommand();
-        select.CommandText = MemorySql.SelectEntryByContextAndValue;
-        select.Parameters.AddWithValue("@context", context);
-        select.Parameters.AddWithValue("@content", request.Content);
-        await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException($"memory_add_text stored no row for context '{context}'.");
-        }
-
-        return MemoryRowMapper.ToEntry(reader);
+        // (context, content). When the same content already exists in ANOTHER context the
+        // global dedup skips the insert, so fall back to any row with this content (M5).
+        var entry = await FindEntryAsync(connection, context, request.Content, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"memory_add_text stored no row for context '{context}'.");
+        return entry;
     }
 
     public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
@@ -96,13 +89,24 @@ public sealed class SqliteMemoryStore : IMemoryStore
         var createdAt = reader.GetInt64(2);
         await reader.DisposeAsync().ConfigureAwait(false);
 
-        await using var insert = connection.CreateCommand();
-        insert.CommandText = MemorySql.InsertText;
-        insert.Parameters.AddWithValue("@content", value);
-        insert.Parameters.AddWithValue("@context", ContextNaming.SharedContext);
-        await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        // Promotion must create a REAL row in the shared context. sqlite-memory's content-hash
+        // dedup is global, so a plain re-add is a silent no-op; with preserve_duplicate_paths=1
+        // (set at bank open) a distinct logical path under shared/ yields its own path-scoped
+        // hash and row (B1). Idempotent: re-sharing the same hash finds the existing row.
+        var sharedPath = $"shared/{path}";
+        var exists = await EntryExistsAsync(connection, sharedPath, ContextNaming.SharedContext, cancellationToken).ConfigureAwait(false);
+        if (!exists)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.CommandText = MemorySql.InsertContent;
+            insert.Parameters.AddWithValue("@path", sharedPath);
+            insert.Parameters.AddWithValue("@content", value);
+            insert.Parameters.AddWithValue("@context", ContextNaming.SharedContext);
+            await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        }
 
-        return new MemoryEntry(hash, path, ContextNaming.SharedContext, value, createdAt);
+        var shared = await GetEntryAsync(connection, sharedPath, ContextNaming.SharedContext, cancellationToken).ConfigureAwait(false);
+        return shared ?? new MemoryEntry(hash, sharedPath, ContextNaming.SharedContext, value, createdAt);
     }
 
     public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
@@ -138,8 +142,11 @@ public sealed class SqliteMemoryStore : IMemoryStore
 
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // Entry count is scoped to this project's committed context: workspace scratch and other
+        // projects' rows are excluded (feature scenario "without workspace shows zero drafts").
         await using var count = connection.CreateCommand();
-        count.CommandText = MemorySql.CountEntries;
+        count.CommandText = MemorySql.CountProjectEntries;
+        count.Parameters.AddWithValue("@project", ContextNaming.ProjectContext(projectId));
         var entries = Convert.ToInt32(await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
 
         await using var pending = connection.CreateCommand();
@@ -235,9 +242,15 @@ public sealed class SqliteMemoryStore : IMemoryStore
 
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // memory_embed_pending rejects a NULL/0 argument; use the 0-arg form when no limit
+        // is given ("process all pending") (M2).
         await using var embed = connection.CreateCommand();
-        embed.CommandText = MemorySql.EmbedPending;
-        embed.Parameters.AddWithValue("@limit", (object?)limit ?? DBNull.Value);
+        embed.CommandText = limit is > 0 ? MemorySql.EmbedPending : MemorySql.EmbedPendingAll;
+        if (limit is > 0)
+        {
+            embed.Parameters.AddWithValue("@limit", limit.Value);
+        }
+
         var processed = Convert.ToInt32(await embed.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
 
         await using var pending = connection.CreateCommand();
@@ -266,5 +279,45 @@ public sealed class SqliteMemoryStore : IMemoryStore
         }
 
         return entries;
+    }
+
+    private static async Task<bool> EntryExistsAsync(
+        SqliteConnection connection, string path, string context, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM dbmem_content WHERE path = @path AND context = @context LIMIT 1";
+        command.Parameters.AddWithValue("@path", path);
+        command.Parameters.AddWithValue("@context", context);
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
+    private static async Task<MemoryEntry?> FindEntryAsync(
+        SqliteConnection connection, string context, string content, CancellationToken cancellationToken)
+    {
+        // Prefer the row in the requested context; fall back to any row with this content
+        // (global dedup may have skipped the insert because another context owns it).
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT hash, path, context, value, created_at
+            FROM dbmem_content
+            WHERE value = @content
+            ORDER BY CASE WHEN context = @context THEN 0 ELSE 1 END, rowid DESC
+            LIMIT 1
+            """;
+        command.Parameters.AddWithValue("@content", content);
+        command.Parameters.AddWithValue("@context", context);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? MemoryRowMapper.ToEntry(reader) : null;
+    }
+
+    private static async Task<MemoryEntry?> GetEntryAsync(
+        SqliteConnection connection, string path, string context, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE path = @path AND context = @context LIMIT 1";
+        command.Parameters.AddWithValue("@path", path);
+        command.Parameters.AddWithValue("@context", context);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? MemoryRowMapper.ToEntry(reader) : null;
     }
 }

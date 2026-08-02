@@ -33,6 +33,12 @@ internal static class MemorySql
 
     public const string CountEntries = "SELECT count(*) FROM dbmem_content";
 
+    public const string CountProjectEntries = """
+        SELECT count(*)
+        FROM dbmem_content
+        WHERE context = @project
+        """;
+
     public const string PendingCount = "SELECT memory_pending_count()";
 
     public const string ListFiles = "SELECT memory_list_files()";
@@ -47,7 +53,13 @@ internal static class MemorySql
 
     public const string SetDeferEmbeddings = "SELECT memory_set_option('defer_embeddings', @value)";
 
+    public const string SetPreserveDuplicatePaths = "SELECT memory_set_option('preserve_duplicate_paths', @value)";
+
+    public const string InsertContent = "SELECT memory_add_content(@path, @content, @context)";
+
     public const string EmbedPending = "SELECT memory_embed_pending(@limit)";
+
+    public const string EmbedPendingAll = "SELECT memory_embed_pending()";
 
     public const string SelectEntriesByContext = """
         SELECT hash, path, context, value, created_at

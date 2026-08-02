@@ -183,7 +183,15 @@ public sealed class MemoryTools
     {
         RequireProjectId(projectId);
 
-        var config = await _store.ConfigureEmbeddingAsync(projectId, provider, model, apiKey, cancellationToken);
+        var isRemote = !string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
+        var resolvedKey = apiKey ?? Environment.GetEnvironmentVariable("AIRACCON_VECTORSSPACE_API_KEY");
+        if (isRemote && string.IsNullOrWhiteSpace(resolvedKey))
+        {
+            throw new McpException(
+                "embedding-api-key-missing: set AIRACCON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider");
+        }
+
+        var config = await _store.ConfigureEmbeddingAsync(projectId, provider, model, resolvedKey, cancellationToken);
         return new ConfigureResult(config.Provider, config.Model, config.Engine);
     }
 

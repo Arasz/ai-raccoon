@@ -53,15 +53,17 @@ public class SweepServiceTests
     }
 
     [Fact]
-    public async Task SweepAsync_NeverListsSharedContext()
+    public async Task SweepAsync_NeverSweepsSharedEntries()
     {
         var store = new FakeStore();
         var meta = new FakeMetaStore(rating: 0.1);
+        // The same hash exists in both the project and the shared tier.
+        store.SharedHashes.Add("old-low");
         var service = new SweepService(store, meta);
 
         await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
 
-        store.ListedContexts.ShouldNotContain(ContextNaming.SharedContext);
+        store.Deleted.ShouldBeEmpty();
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -69,6 +71,8 @@ public class SweepServiceTests
         public List<string> Deleted { get; } = [];
 
         public List<string> ListedContexts { get; } = [];
+
+        public HashSet<string> SharedHashes { get; } = new(StringComparer.Ordinal);
 
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
@@ -109,6 +113,12 @@ public class SweepServiceTests
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
         {
             ListedContexts.Add(context);
+            if (context == ContextNaming.SharedContext)
+            {
+                return Task.FromResult<IReadOnlyList<MemoryEntry>>(
+                    SharedHashes.Select(h => new MemoryEntry(h, "shared.md", context, "value", 0)).ToList());
+            }
+
             var age = context == ContextNaming.ProjectContext("acme") ? 40 : 0;
             return Task.FromResult<IReadOnlyList<MemoryEntry>>(
                 [new MemoryEntry("old-low", "note.md", context, "value", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - age * 86_400)]);

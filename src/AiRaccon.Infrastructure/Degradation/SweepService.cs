@@ -26,12 +26,22 @@ public sealed class SweepService
         var projectContext = ContextNaming.ProjectContext(projectId);
         var entries = await _store.ListContextAsync(projectId, projectContext, cancellationToken).ConfigureAwait(false);
 
+        // Shared rows are path-scoped (distinct hashes), but guard anyway: an entry whose
+        // content also lives in the shared tier must never be swept out of it (FR-MEM-1.15).
+        var sharedEntries = await _store.ListContextAsync(projectId, ContextNaming.SharedContext, cancellationToken).ConfigureAwait(false);
+        var sharedHashes = sharedEntries.Select(e => e.Hash).ToHashSet(StringComparer.Ordinal);
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var candidates = new List<SweepCandidate>();
         var deleted = new List<string>();
 
         foreach (var entry in entries)
         {
+            if (sharedHashes.Contains(entry.Hash))
+            {
+                continue;
+            }
+
             var meta = await _meta.GetEntryAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
             var rating = meta?.Rating ?? RatingPolicy.DefaultBaseScore;
             var ageDays = Math.Max(0, (now - entry.CreatedAt) / 86_400.0);

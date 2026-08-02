@@ -17,7 +17,7 @@ public sealed class WorkspaceService
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var id = Guid.NewGuid().ToString("N")[..8];
+        var id = Guid.NewGuid().ToString("N");
         return Task.FromResult(new WorkspaceRecord(id, projectId));
     }
 
@@ -49,7 +49,7 @@ public sealed class WorkspaceService
         {
             var entry = byHash[hash];
             await _store.WriteAsync(
-                new MemoryWriteRequest(projectId, entry.Value),
+                new MemoryWriteRequest(projectId, entry.Value, context: entry.Path),
                 cancellationToken).ConfigureAwait(false);
             promoted++;
         }

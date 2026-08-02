@@ -61,10 +61,27 @@ public sealed class SqliteConnectionFactory
 
         // Writes must work before any embedding model is configured: defer embeddings by
         // default (FR-MEM-1.12); memory_configure turns deferral off once a model is set.
-        using var defer = connection.CreateCommand();
-        defer.CommandText = MemorySql.SetDeferEmbeddings;
-        defer.Parameters.AddWithValue("@value", 1);
-        defer.ExecuteScalar();
+        // Only apply the deferral default when no provider is persisted yet — re-asserting it
+        // on every open would clobber a configured model's deferral-off (M1).
+        using var provider = connection.CreateCommand();
+        provider.CommandText = "SELECT memory_get_option('provider')";
+        var configuredProvider = provider.ExecuteScalar() as string;
+        if (string.IsNullOrWhiteSpace(configuredProvider))
+        {
+            using var defer = connection.CreateCommand();
+            defer.CommandText = MemorySql.SetDeferEmbeddings;
+            defer.Parameters.AddWithValue("@value", 1);
+            defer.ExecuteScalar();
+        }
+
+        // Path-scoped hashes: identical content may live in several contexts (a project row and
+        // its shared promotion, or the same fact in two projects). add_text still dedups within
+        // a context, which keeps FR-MEM-1.8; add_content with a distinct path creates the
+        // second row (B1).
+        using var preserve = connection.CreateCommand();
+        preserve.CommandText = MemorySql.SetPreserveDuplicatePaths;
+        preserve.Parameters.AddWithValue("@value", 1);
+        preserve.ExecuteScalar();
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
