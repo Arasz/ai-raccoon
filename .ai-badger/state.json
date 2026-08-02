@@ -25,8 +25,8 @@
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "MCP_TRANSPORT=http selects the Streamable HTTP transport at /mcp; anything else runs stdio",
-    "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
+    "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
     "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured"
   ]
 }
