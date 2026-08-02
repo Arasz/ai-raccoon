@@ -1,3 +1,5 @@
+namespace AiRaccoon;
+
 /// <summary>
 /// Decides which MCP transport the server should use from the MCP_TRANSPORT
 /// environment variable. Anything other than "http" (case-insensitive) runs stdio.

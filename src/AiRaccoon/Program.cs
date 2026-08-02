@@ -1,3 +1,4 @@
+using AiRaccoon;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Degradation;
@@ -9,9 +10,6 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Prompts;
 using AiRaccoon.Tools;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 // Transport selection: the "http" launch profile sets MCP_TRANSPORT=http to run the
 // Streamable HTTP transport; anything else (default) uses stdio, which is what MCP
