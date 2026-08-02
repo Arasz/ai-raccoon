@@ -59,9 +59,9 @@ Feature: Agent memory management (ai-raccon MCP server)
       When I call memory_workspace_begin for project "acme-web" with agent "agent-a"
       Then a workspace id is returned
       And its context is "workspace:<workspace-id>"
-    Scenario: Isolated writes land only in the workspace
+    Scenario: Writes with a workspace id stay in the workspace
       Given a workspace "ws-1" exists for project "acme-web"
-      When I write "draft finding" to project "acme-web" with workspace "ws-1" and isolated=true
+      When I write "draft finding" to project "acme-web" with workspace "ws-1"
       Then memory_stats for project "acme-web" without workspace shows zero draft entries
       And the entry is listed by memory_workspace_status for "ws-1"
     Scenario: Search spans project and workspace when the workspace is named

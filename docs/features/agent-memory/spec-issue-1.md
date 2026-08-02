@@ -23,7 +23,9 @@ dotnet tool, that gives AI agents a persistent, project-scoped, searchable memor
   `project_id`; any number of agents may work on any number of projects concurrently.
 - **Workspace sandboxing** — an agent working in a worktree (ai-badger `worktree-agent-isolation`
   style) writes to an isolated workspace context, reads the project's committed memory, and
-  decides what to keep when the workspace finishes (inbox/outbox + consolidation).
+  decides what to keep when the workspace finishes (inbox/outbox + consolidation). A workspace
+  is isolated by design: naming a `workspace_id` on a write routes it into the workspace
+  context — no separate isolation flag.
 - **Local-first defaults** — local SQLite DB per project, local GGUF embedding model by
   default; remote embeddings (vectors.space) and cloud sync (SQLite Cloud via sqlite-sync)
   are opt-in configuration.
@@ -31,7 +33,7 @@ dotnet tool, that gives AI agents a persistent, project-scoped, searchable memor
   two first-party extensions: **memory rating** (score by retrieval frequency) and **memory
   degradation** (time/rating-based removal of low-value memories).
 - **Agent-facing usage guidance** — MCP prompts that teach the agent the protocol: provide
-  `project_id`, track `isolated` state, use inbox/outbox, and when/how to consolidate.
+  `project_id`, track whether a workspace is active, use inbox/outbox, and when/how to consolidate.
 - **ai-badger integration** — ship the server as the framework's opinionated, multiplatform
   memory system: an agent skill documenting the discipline, an mcp-index catalog entry, and
   scaffolding wiring for agent configs.
@@ -55,7 +57,7 @@ Prefix `FR-MEM` (feature: memory). Tagged **[V1]** (this issue) or **[LATER]**.
 | FR-MEM-1.2 | Every memory tool requires a `project_id` string parameter; no operation is performed without one. | Missing `project_id` → tool error; valid id → operation runs. |
 | FR-MEM-1.3 | Each project owns a dedicated SQLite database file under the configured data root; project databases never share a file. | Two projects produce two distinct files; writes to one never appear in the other. |
 | FR-MEM-1.4 | Memory is partitioned inside the project DB by **context**: committed project memory lives in context `project:<project-id>`; workspace scratch memory lives in context `workspace:<workspace-id>`. | Search with a context filter returns only matching rows (verified via `memory_search` context column). |
-| FR-MEM-1.5 | An agent may begin a workspace (`workspace_begin`), which returns a `workspace_id`; while `isolated=true`, writes land in the workspace context and reads span project + workspace contexts. | Write with isolated=true; search returns both project and workspace rows; non-isolated search returns project rows only. |
+| FR-MEM-1.5 | An agent may begin a workspace (`workspace_begin`), which returns a `workspace_id`; naming that `workspace_id` on a write routes it into the workspace context (isolated by design — no flag), and reads that name it span project + workspace contexts. | Write with workspace_id; search returns both project and workspace rows; write/search without a workspace_id touches project rows only. |
 | FR-MEM-1.6 | The agent can consolidate a finished workspace: promote a selected subset (or all) of workspace entries into the project context, then remove the workspace context. | After `workspace_consolidate`, promoted hashes are searchable in project context; workspace context is gone; discarded hashes are deleted. |
 | FR-MEM-1.7 | The agent can discard a workspace without promoting anything; the workspace context and its rows are removed. | `workspace_discard` → workspace context empty; project memory unchanged. |
 | FR-MEM-1.8 | Memory writes support both raw text and file/directory ingestion, mirroring `memory_add_text` / `memory_add_content` / `memory_add_directory`. | Text entry searchable; directory ingest indexes markdown files with relative paths. |
@@ -76,7 +78,7 @@ Prefix `FR-MEM` (feature: memory). Tagged **[V1]** (this issue) or **[LATER]**.
 
 Text interaction trees. "Agent" is the LLM calling the MCP server; "User" is the human.
 
-### 3.1 Daily memory usage (non-isolated)
+### 3.1 Daily memory usage (no workspace)
 
 ```
 Agent (any task start, project P):
@@ -90,11 +92,11 @@ Agent (any task start, project P):
 ### 3.2 Workspace sandbox lifecycle (ai-badger worktree)
 
 ```
-Agent starts task in a worktree (isolated=true):
+Agent starts task in a worktree:
   1. memory_workspace_begin(project_id=P, agent_id=A) → workspace_id=W
   2. Agent works; every note goes to outbox:
-       memory_write(project_id=P, workspace_id=W, isolated=true, content=...)
-     Server: memory_add_text(content, 'workspace:W')  [NOT synced]
+       memory_write(project_id=P, workspace_id=W, content=...)
+     Server: memory_add_text(content, 'workspace:W')  [isolated by design, NOT synced]
   3. Agent researches with full visibility:
        memory_search(query, project_id=P, workspace_id=W)
      Server: search over 'project:P' ∪ 'workspace:W'
@@ -139,7 +141,7 @@ functions through a `IMemoryStore` port (see §6). Wire shapes are illustrative 
 
 | Tool | Parameters | Returns | Backing sqlite-memory call |
 |---|---|---|---|
-| `memory_write` | `project_id` (req), `content` (req), `workspace_id`?, `isolated`? (bool), `agent_id`?, `context`? (custom label) | `{hash, path, context, created_at, indexed}` | `memory_add_text(content, ctx)` where `ctx = workspace:W if isolated else project:P` |
+| `memory_write` | `project_id` (req), `content` (req), `workspace_id`?, `agent_id`?, `context`? (custom label) | `{hash, path, context, created_at, indexed}` | `memory_add_text(content, ctx)` where `ctx = workspace:W if workspace_id else project:P` |
 | `memory_search` | `project_id` (req), `query` (req), `workspace_id`?, `limit`? (default 20), `min_score`? (default 0.7) | `{results:[{hash, seq, ranking, path, snippet}], project_id}` | `SELECT ... FROM memory_search WHERE query=? [AND context=?]` |
 | `memory_list` | `project_id` (req), `context`? | `{files: <JSON tree from memory_list_files()>}` | `memory_list_files()` |
 | `memory_stats` | `project_id` (req) | `{entries, pending, contexts}` | `memory_pending_count()` + `SELECT count(*) FROM dbmem_content` |
@@ -160,8 +162,9 @@ Notes:
 - `project_id` on **every** tool — the server never guesses a project (FR-MEM-1.2). This follows
   the MCP v2 stateless guidance: the model threads an explicit handle across calls instead of
   the server keeping session state.
-- `isolated` is the agent's declaration that it is working in a worktree; the server enforces
-  write routing and search scoping from it. `workspace_id` is minted by `memory_workspace_begin`
+- A supplied `workspace_id` is the agent's declaration that it is working in a worktree; the
+  server treats the workspace context as isolated by design — a write naming a workspace never
+  touches committed project memory. `workspace_id` is minted by `memory_workspace_begin`
   and echoed back by the agent (opaque handle, like `requestState` in MRTR).
 - `agent_id` is provenance only (recorded in the local meta table, see §5.3). No auth.
 
@@ -169,7 +172,7 @@ Notes:
 
 | Prompt | Arguments | Purpose |
 |---|---|---|
-| `memory-usage-guide` | `project_id`? | Protocol for the agent: always pass `project_id`; check `isolated` state (worktree) before writing; write durable knowledge, search before asking the user; never write raw chatter. |
+| `memory-usage-guide` | `project_id`? | Protocol for the agent: always pass `project_id`; when a workspace is active, write with its `workspace_id` (isolated by design); write durable knowledge, search before asking the user; never write raw chatter. |
 | `workspace-consolidation-guide` | `workspace_id`?, `project_id`? | Ritual for finishing a workspace: list outbox entries, promote durable facts, drop noise, then discard/consolidate. Called by the agent before declaring a task done. |
 
 Prompts are implemented with the SDK v2 prompt attribute API and registered in
@@ -343,9 +346,9 @@ Numbered, each traceable to a requirement.
 2. **AC-2 (FR-MEM-1.2, 1.3, 1.4)** — calling any tool without `project_id` errors; two projects
    write into two distinct DB files; `memory_search(context='project:A')` never returns rows
    from project B.
-3. **AC-3 (FR-MEM-1.5, 1.6, 1.7)** — workspace flow end-to-end: begin → isolated writes →
-   search spanning project+workspace → consolidate `keep=[h1]` → h1 searchable in project
-   context, workspace context empty, h2 gone; discard variant removes everything.
+3. **AC-3 (FR-MEM-1.5, 1.6, 1.7)** — workspace flow end-to-end: begin → workspace-scoped
+   writes → search spanning project+workspace → consolidate `keep=[h1]` → h1 searchable in
+   project context, workspace context empty, h2 gone; discard variant removes everything.
 4. **AC-4 (FR-MEM-1.8, 1.9, 1.10)** — text write + directory ingest both searchable; search
    honors limit/min_score/context; per-hash and per-context deletes remove chunks/FTS rows.
 5. **AC-5 (FR-MEM-1.11, 1.12)** — with a GGUF path configured, writes embed locally; without
@@ -451,7 +454,7 @@ discipline around this server:
 
 1. **`agent-memory` skill** (new, `features/common/skills/agent-memory/`) — teaches agents:
    - always pass `project_id` (from scaffolding/bl-project config);
-   - detect worktree context (`isolated=true`) and keep writes in the workspace outbox;
+   - detect worktree context (an active `workspace_id`) and keep writes in the workspace outbox;
    - search before asking, write durable facts, never log raw chatter;
    - consolidate at workspace end: promote durable facts, drop noise.
 2. **mcp-index catalog entry** — `features/<stack>/mcp/ai-raccon/tools.json` tagging every

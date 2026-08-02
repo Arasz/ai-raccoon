@@ -6,7 +6,7 @@
   "scope": [
     "MCP server exposing sqlite-memory as a project-scoped agent memory backend",
     "Mandatory project_id on every tool; one SQLite DB file per project",
-    "Workspace sandbox: isolated writes to workspace context, reads span project+workspace, consolidation promotes selected hashes to committed project memory",
+    "Workspace sandbox: writes naming a workspace_id land in an isolated workspace context (isolated by design, no flag), reads span project+workspace, consolidation promotes selected hashes to committed project memory",
     "Hybrid semantic search (vector + FTS5) via memory_search with context/limit/min_score scoping",
     "Memory write (text), file and directory ingestion, per-hash and per-context deletion",
     "Per-project embedding configuration, local GGUF default, vectors.space remote optional",
