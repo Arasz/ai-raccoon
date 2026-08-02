@@ -5,14 +5,16 @@
   "featureFile": "docs/features/agent-memory/agent-memory.feature",
   "scope": [
     "MCP server exposing sqlite-memory as a project-scoped agent memory backend",
-    "Mandatory project_id on every tool; one SQLite DB file per project",
+    "Mandatory project_id on every tool; one memory bank per install scope (not per project)",
     "Workspace sandbox: writes naming a workspace_id land in an isolated workspace context (isolated by design, no flag), reads span project+workspace, consolidation promotes selected hashes to committed project memory",
+    "One memory bank per install scope (user-scope shared by all projects, project-scope its own); projects partition the bank by context; shared context is a curated promotion tier via memory_share, sweep-exempt",
+    "Shared memory is a promotion, not a write lane: writes land in project:<id>; memory_share promotes a hash to the flat shared context, visible cross-project via scope=all; local installs behave identically and sync shared entries",
     "Hybrid semantic search (vector + FTS5) via memory_search with context/limit/min_score scoping",
     "Memory write (text), file and directory ingestion, per-hash and per-context deletion",
-    "Per-project embedding configuration, local GGUF default, vectors.space remote optional",
+    "Per-bank embedding configuration (one model per install scope), local GGUF default, vectors.space remote optional",
     "Deferred embeddings when no model is configured, embed_pending worker",
     "First-class IMemoryExtension pipeline with retrieval-frequency rating and time/rating-based degradation (dry-run + real sweep)",
-    "Opt-in cloud sync via sqlite-sync + SQLite Cloud, committed project contexts only, workspace scratch never synced",
+    "Opt-in cloud sync via sqlite-sync + SQLite Cloud: committed contexts (shared + project:<id>) sync into one cloud DB, workspace scratch never synced; cloud DB is the correlation point between user-scope and project-scope installs",
     "MCP prompts (memory-usage-guide, workspace-consolidation-guide) teaching the agent protocol",
     "ai-badger integration: agent-memory skill, mcp-index catalog entry, scaffolding wiring (framework repo)"
   ],
@@ -51,7 +53,7 @@
     },
     {
       "verdict": "requirements complete",
-      "provenance": "spec-issue-1.md: 20 FR-MEM requirements (FR-MEM-1.1..1.20), each referenced by at least one of 10 acceptance criteria AC-1..AC-10"
+      "provenance": "spec-issue-1.md: 22 FR-MEM requirements (FR-MEM-1.1..1.22), each referenced by at least one of 10 acceptance criteria AC-1..AC-10"
     },
     {
       "verdict": "dependency versions verified against upstream sources",
@@ -84,9 +86,15 @@
       "resolved": true
     },
     {
+      "id": "OQ-8",
+      "question": "Auto-promotion to shared based on ai-badger stack concept?",
+      "fallback": "Deferred: the IMemoryExtension pipeline is the seam (OnConsolidateAsync/OnWriteAsync hooks); a StackPromotionExtension is not built in V1",
+      "resolved": true
+    },
+    {
       "id": "OQ-5",
       "question": "Single cloud memory bank (one DB + RLS) vs per-project cloud DBs?",
-      "fallback": "Per-project cloud DBs via sqlite-sync for V1; RLS single-bank deferred until sync volume demands it",
+      "fallback": "The cloud database is the correlation point for V1: committed contexts (shared + project:<id>) sync into one configured cloud DB; a user-scope and project-scope install correlate only through it. RLS-based isolation deferred until sync volume demands it",
       "resolved": true
     },
     {

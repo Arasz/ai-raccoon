@@ -21,12 +21,16 @@ dotnet tool, that gives AI agents a persistent, project-scoped, searchable memor
 
 - **Multi-project / multi-agent operation** — every memory operation is keyed by a mandatory
   `project_id`; any number of agents may work on any number of projects concurrently.
+- **One memory bank per install scope** — a single SQLite database holds all memory for an
+  install: user-scope installs (global tool) keep one bank shared by every project; project-scope
+  installs keep their own bank. Projects partition the bank via context (`project:<id>`), and a
+  `shared` context spans projects for cross-project knowledge.
 - **Workspace sandboxing** — an agent working in a worktree (ai-badger `worktree-agent-isolation`
-  style) writes to an isolated workspace context, reads the project's committed memory, and
+  style) writes to an isolated workspace context, reads the bank's committed memory, and
   decides what to keep when the workspace finishes (inbox/outbox + consolidation). A workspace
   is isolated by design: naming a `workspace_id` on a write routes it into the workspace
   context — no separate isolation flag.
-- **Local-first defaults** — local SQLite DB per project, local GGUF embedding model by
+- **Local-first defaults** — local SQLite bank, local GGUF embedding model by
   default; remote embeddings (vectors.space) and cloud sync (SQLite Cloud via sqlite-sync)
   are opt-in configuration.
 - **Extensibility layer** — a first-class extension pipeline designed in from day one, with
@@ -55,8 +59,9 @@ Prefix `FR-MEM` (feature: memory). Tagged **[V1]** (this issue) or **[LATER]**.
 |---|---|---|
 | FR-MEM-1.1 | The server exposes memory tools over MCP (stdio by default, HTTP opt-in per `MCP_TRANSPORT`), following the existing dual-transport wiring in `Program.cs`. | Both transports start; tools listed via MCP `tools/list`. |
 | FR-MEM-1.2 | Every memory tool requires a `project_id` string parameter; no operation is performed without one. | Missing `project_id` → tool error; valid id → operation runs. |
-| FR-MEM-1.3 | Each project owns a dedicated SQLite database file under the configured data root; project databases never share a file. | Two projects produce two distinct files; writes to one never appear in the other. |
-| FR-MEM-1.4 | Memory is partitioned inside the project DB by **context**: committed project memory lives in context `project:<project-id>`; workspace scratch memory lives in context `workspace:<workspace-id>`. | Search with a context filter returns only matching rows (verified via `memory_search` context column). |
+| FR-MEM-1.3 | One memory bank (a single SQLite database) exists per install scope: a user-scope install keeps one bank under the user data root shared by all projects; a project-scope install keeps one bank under the project. Projects are partitions inside the bank, never separate files. | A user-scope bank holds rows for two projects in one file; a project-scope install writes into its own single file. |
+| FR-MEM-1.4 | Memory is partitioned inside the bank by **context**: a `shared` context holds cross-project knowledge; committed project memory lives in context `project:<project-id>`; workspace scratch memory lives in context `workspace:<workspace-id>`. | Search with a context filter returns only matching rows (verified via `memory_search` context column). |
+| FR-MEM-1.21 | Writes land in `project:<project-id>` by default; a `memory_share` action promotes a hash into the flat `shared` context, making it visible from any project via `scope=all`. Nothing is shared without an explicit promotion. | Project write → hidden from another project's `scope=all` search; after `memory_share`, visible there; `scope=project` still hides it. |
 | FR-MEM-1.5 | An agent may begin a workspace (`workspace_begin`), which returns a `workspace_id`; naming that `workspace_id` on a write routes it into the workspace context (isolated by design — no flag), and reads that name it span project + workspace contexts. | Write with workspace_id; search returns both project and workspace rows; write/search without a workspace_id touches project rows only. |
 | FR-MEM-1.6 | The agent can consolidate a finished workspace: promote a selected subset (or all) of workspace entries into the project context, then remove the workspace context. | After `workspace_consolidate`, promoted hashes are searchable in project context; workspace context is gone; discarded hashes are deleted. |
 | FR-MEM-1.7 | The agent can discard a workspace without promoting anything; the workspace context and its rows are removed. | `workspace_discard` → workspace context empty; project memory unchanged. |
@@ -67,8 +72,9 @@ Prefix `FR-MEM` (feature: memory). Tagged **[V1]** (this issue) or **[LATER]**.
 | FR-MEM-1.12 | Local embeddings are the default when a GGUF model path is configured; without any model configured, writes use deferred embeddings (`defer_embeddings=1`) and report pending count. | Write with no model → entry stored, `indexed:false`, `memory_pending_count()` > 0; after model configured, `memory_embed_pending` indexes it. |
 | FR-MEM-1.13 | A first-class extension pipeline (`IMemoryExtension`) wraps write/search/delete/consolidate/sweep with ordered hooks; extensions are DI-registered and config-driven. | Two registered extensions both run their hooks in registration order on a write. |
 | FR-MEM-1.14 | A **rating extension** maintains retrieval-frequency metadata (access count, last-accessed, computed rating) in a local-only meta table keyed by content hash; search hits increment the counter. | Searching an entry twice raises its access count and rating; meta rows are not synced. |
-| FR-MEM-1.15 | A **degradation extension** removes entries whose rating falls below a threshold and whose age exceeds a TTL; a sweep tool runs it on demand with a `dry_run` mode. | Sweep with dry_run lists candidates; sweep for real deletes them; young/highly-rated entries survive. |
-| FR-MEM-1.16 | Sync is opt-in per project: with `AIRACCON_SQLITECLOUD_DB_ID` and `AIRACCON_SQLITECLOUD_API_KEY` set, `memory_sync` performs push/pull via sqlite-sync and reindexes merged content. | After sync, remote entries are searchable locally; workspace contexts are never synced. |
+| FR-MEM-1.15 | A **degradation extension** removes entries whose rating falls below a threshold and whose age exceeds a TTL; a sweep tool runs it on demand with a `dry_run` mode. Entries in the `shared` context are exempt from sweeping — sharing is an explicit promotion to the curated, durable tier. | Sweep with dry_run lists candidates; sweep for real deletes them; young/highly-rated entries survive; shared entries always survive. |
+| FR-MEM-1.16 | Sync is opt-in: with `AIRACCON_SQLITECLOUD_DB_ID` and `AIRACCON_SQLITECLOUD_API_KEY` set, `memory_sync` pushes/pulls the bank's committed contexts (`shared` + `project:<id>`) via sqlite-sync and reindexes merged content; workspace contexts are never synced. | After sync, remote entries are searchable locally; workspace contexts are absent from the payload. |
+| FR-MEM-1.22 | A project-scope (local-only) install syncs its bank to the configured cloud database; a user-scope install does the same. Global and local instances are correlated only through that cloud database — no direct link between them. | Local-only install syncs to cloud; a user-scope install on the same machine merges through the cloud DB, not through the local bank. |
 | FR-MEM-1.17 | MCP prompts (`memory-usage-guide`, `workspace-consolidation-guide`) describe the project-id / isolation / inbox-outbox / consolidation protocol to the calling agent. | Prompts listed via MCP `prompts/list`; content covers all five protocol points. |
 | FR-MEM-1.18 | The ai-badger framework ships an `agent-memory` skill teaching the protocol and an mcp-index catalog entry for the server's tools. | Skill file exists in framework common skills; catalog `features/<stack>/mcp/ai-raccon/tools.json` tags every tool. |
 | FR-MEM-1.19 | The server runs on win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64 (existing `RuntimeIdentifiers`); native extensions are provisioned per-RID at first run. | Server starts and serves tools on the supported host RIDs with extensions loaded. |
@@ -142,9 +148,10 @@ functions through a `IMemoryStore` port (see §6). Wire shapes are illustrative 
 | Tool | Parameters | Returns | Backing sqlite-memory call |
 |---|---|---|---|
 | `memory_write` | `project_id` (req), `content` (req), `workspace_id`?, `agent_id`?, `context`? (custom label) | `{hash, path, context, created_at, indexed}` | `memory_add_text(content, ctx)` where `ctx = workspace:W if workspace_id else project:P` |
-| `memory_search` | `project_id` (req), `query` (req), `workspace_id`?, `limit`? (default 20), `min_score`? (default 0.7) | `{results:[{hash, seq, ranking, path, snippet}], project_id}` | `SELECT ... FROM memory_search WHERE query=? [AND context=?]` |
+| `memory_search` | `project_id` (req), `query` (req), `scope`? (`all` default \| `project` \| `shared`), `workspace_id`?, `limit`? (default 20), `min_score`? (default 0.7) | `{results:[{hash, seq, ranking, path, snippet}], project_id}` | `SELECT ... FROM memory_search WHERE query=? [AND context=?]` (one query per in-scope context, merged) |
 | `memory_list` | `project_id` (req), `context`? | `{files: <JSON tree from memory_list_files()>}` | `memory_list_files()` |
 | `memory_stats` | `project_id` (req) | `{entries, pending, contexts}` | `memory_pending_count()` + `SELECT count(*) FROM dbmem_content` |
+| `memory_share` | `project_id` (req), `hash` (req) | `{shared: true, context: "shared"}` | re-adds the content under context `shared` (flat), promotes from `project:<id>`; sweep-exempt |
 | `memory_delete` | `project_id` (req), `hash` (req) | `{deleted: 0\|1}` | `memory_delete(hash)` |
 | `memory_delete_context` | `project_id` (req), `context` (req) | `{deleted: n}` | `memory_delete_context(ctx)` |
 | `memory_ingest_file` | `project_id` (req), `path` (req), `context`? | `{indexed: 1}` | `memory_add_file(path, ctx)` |
@@ -166,6 +173,13 @@ Notes:
   server treats the workspace context as isolated by design — a write naming a workspace never
   touches committed project memory. `workspace_id` is minted by `memory_workspace_begin`
   and echoed back by the agent (opaque handle, like `requestState` in MRTR).
+- **Sharing is a promotion, not a write lane.** Plain writes land in `project:<id>` (or the
+  workspace when named). Only `memory_share` moves a hash into the flat `shared` context —
+  the curated, cross-project, sweep-exempt tier. A local (project-scope) install behaves
+  identically: what the agent shares is shared, and it syncs like any other committed context.
+- `scope` on search: `all` (default) = `shared` ∪ `project:<id>` (+ workspace when named),
+  `project` = project rows only, `shared` = shared rows only. Implemented as one
+  `memory_search` query per in-scope context, merged by hash keeping the best ranking.
 - `agent_id` is provenance only (recorded in the local meta table, see §5.3). No auth.
 
 ### 4.2 Prompts
@@ -198,15 +212,18 @@ on first access with `memory_is_enabled()` check + schema init (sqlite-memory 1.
 
 ### 5.2 Context naming convention
 
-| Context | Meaning | Synced? |
-|---|---|---|
-| `project:<project-id>` | committed, durable project memory (inbox) | yes |
-| `workspace:<workspace-id>` | sandboxed workspace scratch memory (outbox) | never |
-| custom (`memory_write(context=...)`) | user-defined labels, e.g. `docs:api` | yes (unless excluded) |
+| Context | Meaning | Synced? | Sweep? |
+|---|---|---|---|
+| `shared` | curated cross-project knowledge — only via `memory_share` promotion | yes | exempt |
+| `project:<project-id>` | committed, durable project memory (inbox) | yes | eligible |
+| `workspace:<workspace-id>` | sandboxed workspace scratch memory (outbox) | never | n/a (deleted at end of life) |
+| custom (`memory_write(context=...)`) | user-defined labels, e.g. `docs:api` | yes (unless excluded) | eligible |
 
-Sync scope is `memory_enable_sync('project:<project-id>')` — exactly the committed context;
-workspace scratch stays local until consolidated (FR-MEM-1.16). `memory_search` supports the
-`context` hidden filter column, which is how read scoping is implemented.
+Sync scope is the bank's committed contexts — `shared` plus every `project:<id>` present —
+via `memory_enable_sync('shared', 'project:<project-id>', ...)`; workspace scratch stays
+local until consolidated (FR-MEM-1.16). The cloud database is the single correlation point
+between a user-scope install and any project-scope install (FR-MEM-1.22). `memory_search`
+supports the `context` hidden filter column, which is how read scoping is implemented.
 
 ### 5.3 Local-only meta table (`raccon_meta.db`)
 
@@ -253,7 +270,7 @@ src/AiRaccon.Infrastructure/   # NEW class library — sqlite-memory adapter + p
   Provisioning/ExtensionProvisioner.cs  # download/verify per-RID vector/memory/cloudsync
   Sync/SyncService.cs              # sqlite-sync orchestration (enable_sync, network_*, reindex)
 src/AiRaccon/                  # MCP server — thin (existing project)
-  Tools/MemoryTools.cs         # NEW: 16 tools, 1:1 to IMemoryStore / services
+  Tools/MemoryTools.cs         # NEW: 17 tools, 1:1 to IMemoryStore / services
   Tools/WorkspaceTools.cs      # NEW: workspace_* tools (or merged into MemoryTools)
   Prompts/MemoryPrompts.cs     # NEW: memory-usage-guide, workspace-consolidation-guide
   Program.cs                   # MODIFIED: register Core/Infrastructure, WithToolsFromAssembly, WithPrompts
@@ -293,6 +310,10 @@ public interface IMemoryExtension
     `memory_delete`, honors `dry_run`.
 - Third-party extensions implement the interface and are picked up by assembly scanning
   (`WithExtensionsFromAssembly`), mirroring the SDK's `WithToolsFromAssembly`.
+- **Deferred: auto-promotion extension.** The same pipeline is the future home of
+  stack-based auto-promotion (ai-badger's stack concept): a `StackPromotionExtension` would
+  hook `OnConsolidateAsync`/`OnWriteAsync` to promote entries whose stack context marks them
+  durable. Not built in V1 — the seam exists, the policy doesn't.
 
 ### 6.3 Concurrency
 
@@ -342,24 +363,28 @@ is on — new code must be warning-free.
 Numbered, each traceable to a requirement.
 
 1. **AC-1 (FR-MEM-1.1, 1.19)** — `dotnet run` starts the server on stdio; `MCP_TRANSPORT=http`
-   starts the HTTP transport; `tools/list` shows all 16 tools and 2 prompts on both.
-2. **AC-2 (FR-MEM-1.2, 1.3, 1.4)** — calling any tool without `project_id` errors; two projects
-   write into two distinct DB files; `memory_search(context='project:A')` never returns rows
-   from project B.
+   starts the HTTP transport; `tools/list` shows all 17 tools and 2 prompts on both.
+2. **AC-2 (FR-MEM-1.2, 1.3, 1.4, 1.21)** — calling any tool without `project_id` errors; two
+   projects write into one user-scope bank under different contexts; `scope=project` search in
+   project A never returns project B rows; a write is invisible cross-project until
+   `memory_share` promotes it into `shared`.
 3. **AC-3 (FR-MEM-1.5, 1.6, 1.7)** — workspace flow end-to-end: begin → workspace-scoped
    writes → search spanning project+workspace → consolidate `keep=[h1]` → h1 searchable in
    project context, workspace context empty, h2 gone; discard variant removes everything.
 4. **AC-4 (FR-MEM-1.8, 1.9, 1.10)** — text write + directory ingest both searchable; search
-   honors limit/min_score/context; per-hash and per-context deletes remove chunks/FTS rows.
+   honors scope/limit/min_score/context; per-hash and per-context deletes remove chunks/FTS rows.
 5. **AC-5 (FR-MEM-1.11, 1.12)** — with a GGUF path configured, writes embed locally; without
    any model, writes are deferred (`indexed:false`, pending>0) and `memory_embed_pending`
    indexes them after configuration.
 6. **AC-6 (FR-MEM-1.13, 1.14)** — two registered extensions run hooks in order; searching an
    entry twice increments its meta access count and raises its rating.
 7. **AC-7 (FR-MEM-1.15)** — `memory_sweep(dry_run=true)` lists low-rated/aged entries without
-   deleting; real run deletes exactly those and preserves young/highly-rated ones.
-8. **AC-8 (FR-MEM-1.16)** — with cloud env vars set, `memory_sync` sends/receives and reindexes;
-   workspace contexts are absent from the sync payload; without env vars it errors cleanly.
+   deleting; real run deletes exactly those and preserves young/highly-rated ones; `shared`
+   entries are never swept.
+8. **AC-8 (FR-MEM-1.16, 1.22)** — with cloud env vars set, `memory_sync` sends/receives and
+   reindexes; committed contexts (`shared` + `project:<id>`) are in the payload, workspace
+   contexts absent; without env vars it errors cleanly; a project-scope install syncs its bank
+   to the same cloud DB and correlates with a user-scope install only through it.
 9. **AC-9 (FR-MEM-1.17, 1.18)** — `prompts/list` exposes the two guides covering project-id,
    isolation, inbox/outbox, consolidation; the ai-badger skill + mcp-index catalog entry are
    present in the framework repo.
@@ -455,7 +480,8 @@ discipline around this server:
 1. **`agent-memory` skill** (new, `features/common/skills/agent-memory/`) — teaches agents:
    - always pass `project_id` (from scaffolding/bl-project config);
    - detect worktree context (an active `workspace_id`) and keep writes in the workspace outbox;
-   - search before asking, write durable facts, never log raw chatter;
+   - write durable facts to the project, promote cross-project knowledge to `shared` via
+     `memory_share` (curated, sweep-exempt tier); search with `scope=all` to see shared + project;
    - consolidate at workspace end: promote durable facts, drop noise.
 2. **mcp-index catalog entry** — `features/<stack>/mcp/ai-raccon/tools.json` tagging every
    tool (`[memory]`, `[workspace]`, `[sync]`, `[rating]`) so the `pre_llm_call` hook

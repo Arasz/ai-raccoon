@@ -1,7 +1,7 @@
 # language: en
 Feature: Agent memory management (ai-raccon MCP server)
   As an AI agent working across projects
-  I want a persistent, project-scoped memory exposed through MCP tools
+  I want a persistent memory bank shared across my projects
   So that I can recall durable knowledge, sandbox worktree notes, and promote what matters
 
   Background:
@@ -13,7 +13,7 @@ Feature: Agent memory management (ai-raccon MCP server)
     Scenario: Tools are listed over the stdio transport
       Given the server runs with the default stdio transport
       When I list available tools
-      Then memory_write, memory_search, memory_list, memory_stats are present
+      Then memory_write, memory_search, memory_list, memory_stats, memory_share are present
       And memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard are present
       And memory_sweep and memory_sync are present
     Scenario: The usage prompts are listed
@@ -21,16 +21,27 @@ Feature: Agent memory management (ai-raccon MCP server)
       Then memory-usage-guide is present
       And workspace-consolidation-guide is present
 
-  @FR-MEM-1.2 @FR-MEM-1.3 @FR-MEM-1.4 @AC-2
-  Rule: Memory is scoped to a project, and projects never share data
+  @FR-MEM-1.2 @FR-MEM-1.3 @FR-MEM-1.4 @FR-MEM-1.21 @AC-2
+  Rule: One memory bank per install scope; projects partition it, and a shared context spans them
     Scenario: Every tool requires a project id
       When I call memory_write without a project_id
       Then the tool errors with invalid-params
       And no memory is written
-    Scenario: Two projects keep separate databases
+    Scenario: Two projects keep separate partitions in one bank
       Given a second project with id "other-app" exists
       When I write "acme secret" to project "acme-web"
-      And I search for "acme secret" in project "other-app"
+      And I search for "acme secret" in project "other-app" with scope "project"
+      Then no results are returned
+    Scenario: Shared memory is promoted, then visible from any project
+      When I write "ci convention" to project "acme-web"
+      And I promote it to the shared scope
+      And I search for "ci convention" in project "other-app" with scope "all"
+      Then one result is returned
+      And when I search for "ci convention" in project "other-app" with scope "project"
+      Then the result is not returned
+    Scenario: A project write is not shared until promoted
+      When I write "acme secret" to project "acme-web"
+      And I search for "acme secret" in project "other-app" with scope "all"
       Then no results are returned
 
   @FR-MEM-1.8 @FR-MEM-1.9 @FR-MEM-1.10 @AC-4
@@ -82,7 +93,7 @@ Feature: Agent memory management (ai-raccon MCP server)
       And memory_stats for project "acme-web" is unchanged
 
   @FR-MEM-1.11 @FR-MEM-1.12 @AC-5
-  Rule: Embedding configuration is per project, local-first, remotely optional
+  Rule: Embedding configuration is per memory bank, local-first, remotely optional
     Scenario: The local GGUF model is configured once and reused
       When I call memory_configure with provider "local" and model "/models/nomic.gguf" for project "acme-web"
       Then writes to project "acme-web" are embedded with the local engine
@@ -122,18 +133,29 @@ Feature: Agent memory management (ai-raccon MCP server)
       When I call memory_sweep with dry_run=false
       Then the low-rated aged entry is deleted
       And the highly-rated entry survives
+    Scenario: Shared entries are protected from the sweep
+      Given a shared entry rated below threshold and older than the TTL exists
+      When I call memory_sweep with dry_run=false
+      Then the shared entry is not deleted
 
-  @FR-MEM-1.16 @AC-8
-  Rule: Cloud sync is opt-in and never carries workspace scratch memory
+  @FR-MEM-1.16 @FR-MEM-1.22 @AC-8
+  Rule: Cloud sync is opt-in, carries committed bank contexts only, and is the correlation point between installs
     Scenario: Sync without credentials errors cleanly
       When I call memory_sync for project "acme-web" without cloud credentials
       Then the tool errors with sync-not-configured
-    Scenario: Sync exchanges committed project memory only
+    Scenario: Sync exchanges committed contexts, never workspace scratch
       Given cloud credentials are configured
       And workspace "ws-1" contains "private scratch"
       When I call memory_sync for project "acme-web"
-      Then committed project entries are sent and received
+      Then committed project and shared entries are sent and received
       And "private scratch" is never part of the synced payload
+    Scenario: A local-only install syncs its bank to the cloud database
+      Given the tool is installed in project scope with no user-scope instance
+      And a shared entry exists in the local bank
+      When I call memory_sync for project "acme-web"
+      Then the local bank is synced to the configured cloud database
+      And the shared entry is included in the synced payload
+      And any user-scope instance correlates with it only through that cloud database
 
   @FR-MEM-1.20 @AC-10
   Rule: Credentials never appear in the repository
@@ -151,4 +173,5 @@ Feature: Agent memory management (ai-raccon MCP server)
   Rule: A single cloud memory bank could serve all agents
     @deferred
     Scenario: Project isolation is enforced on the cloud side via row-level security
-      # Fallback for V1: per-project cloud databases via sqlite-sync, as specified above.
+      # Fallback for V1: the cloud database is the correlation point; committed contexts
+      # (shared + project:<id>) sync into it, and global/local installs merge through it.
