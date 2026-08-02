@@ -58,6 +58,13 @@ public sealed class SqliteConnectionFactory
         {
             connection.LoadExtension(paths.CloudSync);
         }
+
+        // Writes must work before any embedding model is configured: defer embeddings by
+        // default (FR-MEM-1.12); memory_configure turns deferral off once a model is set.
+        using var defer = connection.CreateCommand();
+        defer.CommandText = MemorySql.SetDeferEmbeddings;
+        defer.Parameters.AddWithValue("@value", 1);
+        defer.ExecuteScalar();
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)

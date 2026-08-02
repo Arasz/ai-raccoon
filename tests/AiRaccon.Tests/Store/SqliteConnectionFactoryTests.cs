@@ -81,9 +81,9 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     {
         var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", includeCloudSync: true);
 
-        paths.Vector.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "vector0.dylib"));
-        paths.Memory.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "memory0.dylib"));
-        paths.CloudSync.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "sync0.dylib"));
+        paths.Vector.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "vector.dylib"));
+        paths.Memory.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "memory.dylib"));
+        paths.CloudSync.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "cloudsync.dylib"));
     }
 
     [Fact]
@@ -97,8 +97,8 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     [Fact]
     public void DefaultExtensionPaths_UsePlatformModuleSuffixes()
     {
-        ExtensionPaths.For(_dataRoot, "linux-x64", includeCloudSync: false).Vector.ShouldEndWith("vector0.so");
-        ExtensionPaths.For(_dataRoot, "win-x64", includeCloudSync: false).Vector.ShouldEndWith("vector0.dll");
+        ExtensionPaths.For(_dataRoot, "linux-x64", includeCloudSync: false).Vector.ShouldEndWith("vector.so");
+        ExtensionPaths.For(_dataRoot, "win-x64", includeCloudSync: false).Vector.ShouldEndWith("vector.dll");
     }
 
     private static string CreateTempRoot()

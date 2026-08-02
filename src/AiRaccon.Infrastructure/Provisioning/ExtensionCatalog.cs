@@ -21,12 +21,16 @@ public sealed record ExtensionSpec(
 /// <summary>Pinned sqliteai extension versions and their GitHub release asset naming.</summary>
 public static class ExtensionCatalog
 {
+    // ModulePrefix is the loadable-module basename (without platform extension): SQLite derives
+    // the entry point sqlite3_<basename>_init from it, so it must match the archive's module
+    // name exactly (vector -> sqlite3_vector_init, memory -> sqlite3_memory_init,
+    // cloudsync -> sqlite3_cloudsync_init).
     public static readonly ExtensionSpec Vector = new(
-        "vector", "sqlite-vector", "1.0.0", "vector0", "", "vector-{platform}-{version}.tar.gz");
+        "vector", "sqlite-vector", "1.0.0", "vector", "", "vector-{platform}-{version}.tar.gz");
 
     public static readonly ExtensionSpec Memory = new(
-        "memory", "sqlite-memory", "1.3.5", "memory0", "full", "memory-{platform}-{flavor}-{version}.tar.gz");
+        "memory", "sqlite-memory", "1.3.5", "memory", "full", "memory-{platform}-{flavor}-{version}.tar.gz");
 
     public static readonly ExtensionSpec Sync = new(
-        "sync", "sqlite-sync", "1.1.2", "sync0", "", "cloudsync-{platform}-{version}.tar.gz");
+        "sync", "sqlite-sync", "1.1.2", "cloudsync", "", "cloudsync-{platform}-{version}.tar.gz");
 }

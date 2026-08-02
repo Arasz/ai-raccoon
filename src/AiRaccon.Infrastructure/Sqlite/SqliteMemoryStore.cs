@@ -23,15 +23,18 @@ public sealed class SqliteMemoryStore : IMemoryStore
         insert.CommandText = MemorySql.InsertText;
         insert.Parameters.AddWithValue("@content", request.Content);
         insert.Parameters.AddWithValue("@context", context);
-        var hash = (string)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
+        // memory_add_text returns 1 (success), not the hash — read the row back by
+        // (context, content), which the content-hash dedup makes unique per context.
         await using var select = connection.CreateCommand();
-        select.CommandText = MemorySql.SelectEntryByHash;
-        select.Parameters.AddWithValue("@hash", hash);
+        select.CommandText = MemorySql.SelectEntryByContextAndValue;
+        select.Parameters.AddWithValue("@context", context);
+        select.Parameters.AddWithValue("@content", request.Content);
         await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException($"memory_add_text returned hash '{hash}' but no dbmem_content row was found.");
+            throw new InvalidOperationException($"memory_add_text stored no row for context '{context}'.");
         }
 
         return MemoryRowMapper.ToEntry(reader);
@@ -216,6 +219,12 @@ public sealed class SqliteMemoryStore : IMemoryStore
         modelCommand.Parameters.AddWithValue("@provider", provider);
         modelCommand.Parameters.AddWithValue("@model", model);
         await modelCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+        // A configured model means embeddings run immediately; deferral is off (FR-MEM-1.12).
+        await using var deferCommand = connection.CreateCommand();
+        deferCommand.CommandText = MemorySql.SetDeferEmbeddings;
+        deferCommand.Parameters.AddWithValue("@value", 0);
+        await deferCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
         return new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote");
     }

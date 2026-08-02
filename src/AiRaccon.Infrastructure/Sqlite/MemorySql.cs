@@ -7,6 +7,14 @@ internal static class MemorySql
 
     public const string SelectEntryByHash = "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash";
 
+    public const string SelectEntryByContextAndValue = """
+        SELECT hash, path, context, value, created_at
+        FROM dbmem_content
+        WHERE context = @context AND value = @content
+        ORDER BY rowid DESC
+        LIMIT 1
+        """;
+
     public const string SelectSourceByHashAndContext = "SELECT path, value, created_at FROM dbmem_content WHERE hash = @hash AND context = @context LIMIT 1";
 
     public const string SearchWithContext = """
@@ -36,6 +44,8 @@ internal static class MemorySql
     public const string SetApiKey = "SELECT memory_set_apikey(@apiKey)";
 
     public const string SetModel = "SELECT memory_set_model(@provider, @model)";
+
+    public const string SetDeferEmbeddings = "SELECT memory_set_option('defer_embeddings', @value)";
 
     public const string EmbedPending = "SELECT memory_embed_pending(@limit)";
 

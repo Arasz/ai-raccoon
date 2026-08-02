@@ -24,9 +24,9 @@ public sealed class ExtensionProvisionerTests : IDisposable
 
         var result = await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
-        result.Vector.ShouldBe(ModulePath("vector0.dylib"));
-        result.Memory.ShouldBe(ModulePath("memory0.dylib"));
-        result.CloudSync.ShouldBe(ModulePath("sync0.dylib"));
+        result.Vector.ShouldBe(ModulePath("vector.dylib"));
+        result.Memory.ShouldBe(ModulePath("memory.dylib"));
+        result.CloudSync.ShouldBe(ModulePath("cloudsync.dylib"));
         File.Exists(result.Vector).ShouldBeTrue();
         File.Exists(result.Memory).ShouldBeTrue();
         File.Exists(result.CloudSync).ShouldBeTrue();
@@ -68,8 +68,8 @@ public sealed class ExtensionProvisionerTests : IDisposable
     public async Task EnsureProvisioned_WhenModulesAlreadyPresent_SkipsDownload()
     {
         Directory.CreateDirectory(Path.Combine(_dataRoot, "extensions", "osx-arm64"));
-        File.WriteAllText(ModulePath("vector0.dylib"), "x");
-        File.WriteAllText(ModulePath("memory0.dylib"), "x");
+        File.WriteAllText(ModulePath("vector.dylib"), "x");
+        File.WriteAllText(ModulePath("memory.dylib"), "x");
         var handler = new FakeHandler(_ => Array.Empty<byte>());
         using var http = new HttpClient(handler);
         var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => Hash(Array.Empty<byte>()));
@@ -82,7 +82,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
     [Fact]
     public async Task EnsureProvisioned_OnChecksumMismatch_ThrowsAndLeavesNoFile()
     {
-        var archive = TarGz(("vector0.dylib", new byte[] { 1 }));
+        var archive = TarGz(("vector.dylib", new byte[] { 1 }));
         var handler = new FakeHandler(_ => archive);
         using var http = new HttpClient(handler);
         var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => new string('0', 64));
@@ -135,9 +135,9 @@ public sealed class ExtensionProvisionerTests : IDisposable
 
     private static Dictionary<string, byte[]> OsxArm64Archives() => new()
     {
-        ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector0.dylib", new byte[] { 1 })),
-        ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory0.dylib", new byte[] { 2 })),
-        ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("sync0.dylib", new byte[] { 3 })),
+        ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector.dylib", new byte[] { 1 })),
+        ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory.dylib", new byte[] { 2 })),
+        ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", new byte[] { 3 })),
     };
 
     private static string AssetName(Uri uri) => Path.GetFileName(uri.AbsolutePath);
