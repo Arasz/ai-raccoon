@@ -1,26 +1,40 @@
 # AiRaccoon
 
-C# .NET 10 MCP server exposing random-number generation to AI assistants over the [Model
-Context Protocol](https://modelcontextprotocol.io/), built on the
-[ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK.
+An MCP server that gives AI agents persistent, project-scoped memory backed by
+[sqlite-memory](https://github.com/sqliteai/sqlite-memory): local-first by default,
+one SQLite memory bank per install scope, hybrid semantic search, workspace
+sandboxes, a curated shared tier, memory degradation, and opt-in cloud sync
+through SQLite Cloud. Built on the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol)
+C# SDK 2.0.0 (net10.0).
 
-> Domain: provides AI assistants with deterministic utility tools (random number
-> generation) over MCP.
+> Domain: provides AI agents with persistent, project-scoped memory over MCP,
+> backed by sqlite-memory.
 > Stacks: `dotnet`, `mcp`.
 
-## What it does
+## What an agent gets
 
-AiRaccoon is a small, dependency-light MCP server that registers one tool:
+- **One memory bank per install scope.** A user-scope install (global tool) keeps a
+  single bank under `~/.ai-raccoon` shared by every project; a project-scope install
+  keeps its own bank under `<project>/.ai-raccoon`. Projects partition the bank via
+  context (`project:<id>`).
+- **Workspace sandboxes.** `memory_workspace_begin` mints a `workspace_id` whose
+  context is isolated by design — notes written with it stay in the outbox, never in
+  committed project memory, until consolidated.
+- **Shared promotion tier.** Plain writes land in the project. `memory_share`
+  promotes a hash into the flat `shared` context — cross-project, curated, and exempt
+  from degradation sweeps.
+- **Hybrid search.** `memory_search` combines vector similarity and FTS5, scoped by
+  `scope=all|project|shared` and optional workspace.
+- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps
+  remove old, low-rated project entries (`shared` is protected).
+- **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
+  (`shared` + `project:<id>`) into a configured SQLite Cloud database, which is the
+  correlation point between a user-scope install and any project-scope install.
 
-| Tool | What it does |
-|---|---|
-| `get_random_number` | Generates a random number between a minimum (inclusive) and maximum (exclusive) value |
+The full tool contract (17 tools, 2 prompts, environment variables, error
+shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-memory-server.md).
 
-Any MCP-capable client (VS Code Copilot Chat, Claude, other assistants) can call it. The
-server is built on the MCP C# SDK (`ModelContextProtocol` 2.0.0) with tools declared via
-`[McpServerTool]` attributes.
-
-### Transports
+## Transports
 
 - **stdio** (default) — what MCP clients expect when launching a server as a subprocess.
 - **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http`; serves the protocol at `/mcp`
@@ -28,7 +42,19 @@ server is built on the MCP C# SDK (`ModelContextProtocol` 2.0.0) with tools decl
 
 Transport selection lives in one place: `McpTransportSelector` keys off the
 `MCP_TRANSPORT` environment variable — anything other than `http` (case-insensitive)
-runs stdio.
+runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messages.
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
+| `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
+| `AIRACCOON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
+| `AIRACCOON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
+| `AIRACCOON_VECTORSSPACE_API_KEY` | vectors.space API key (remote embeddings) |
+
+Credentials are read from the environment only — never from tracked files.
 
 ## Requirements
 
@@ -41,8 +67,11 @@ dotnet build
 dotnet test
 ```
 
-The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly) covers the tools and the
-transport selector — 13 cases, keep them green.
+The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly, Dapper) covers the
+domain, the store (unit + real-extension integration), the tools and the prompts —
+168 cases (166 passing, 2 gated on `AIRACCOON_TEST_GGUF`). The integration tests
+exercise the real sqlite-memory 1.3.5 + sqlite-vector 1.0.0 binaries and skip
+honestly when the host RID has no provisioned extensions.
 
 ## Quickstart — run it
 
@@ -85,26 +114,40 @@ Studio's `.mcp.json`):
 stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP clients expect on
 stdio.
 
-Then ask the assistant for a random number — e.g. "give me 3 random numbers" — and it
-should use the `get_random_number` tool.
-
 ## Architecture
 
 ```
 AiRaccoon/
-  src/AiRaccoon/            # the MCP server (thin)
-    Program.cs             # transport selection + MCP wiring
+  src/AiRaccoon/              # the MCP server (thin)
+    Program.cs               # transport selection + DI + MCP wiring
     McpTransportSelector.cs
-    Tools/RandomNumberTools.cs
-  tests/AiRaccoon.Tests/    # xunit.v3 + Shouldly
-  Directory.Build.props    # analyzers, warnings-as-errors
-  Directory.Packages.props # central package versions
-  docs/                    # canonical documentation tree (see docs/README.md)
+    Tools/MemoryTools.cs     # 17 [McpServerTool] tools, 1:1 to the port
+    Prompts/MemoryPrompts.cs # 2 agent usage guides
+  src/AiRaccoon.Core/        # pure domain (no infra deps)
+    Memory/                  # records, SearchScope, IMemoryStore port
+    Rating/                  # RatingPolicy, IMemoryExtension + MemoryExtensionHost
+    Degradation/             # DegradationPolicy, SweepCandidate
+  src/AiRaccoon.Infrastructure/  # SQLite adapter, provisioning, sync
+    Sqlite/                  # SqliteMemoryStore (Dapper), MetaStore, factory
+    Workspace/               # WorkspaceService
+    Degradation/             # SweepService
+    Provisioning/            # ExtensionProvisioner (per-RID, SHA-256 verified)
+    Sync/                    # SyncService (sqlite-sync)
+  tests/AiRaccoon.Tests/     # xunit.v3 + Shouldly
+  Directory.Build.props      # analyzers, warnings-as-errors
+  Directory.Packages.props   # central package versions
+  docs/                      # canonical documentation tree (see docs/README.md)
 ```
 
 The server keeps the [MCP layer thin](CLAUDE.md): `Tools/` maps parameters and formats
-results, with no business logic of its own. Warnings are errors
-(`TreatWarningsAsErrors`), analyzers are on, and package versions are managed centrally.
+results, with no business logic of its own. The domain layer is pure; the SQLite adapter
+lives in Infrastructure. Warnings are errors (`TreatWarningsAsErrors`), analyzers are on,
+and package versions are managed centrally.
+
+Native extensions (sqlite-memory, sqlite-vector, sqlite-sync) are provisioned per RID on
+first run into `<data-root>/extensions/<rid>/`, pinned and SHA-256 verified. Local
+embeddings need a GGUF model configured via `memory_configure`; without a model, writes are
+stored deferred and indexed later (`memory_embed_pending`).
 
 ## Packaging & release
 

@@ -8,13 +8,13 @@ The canonical documentation tree for AiRaccoon. Docs root: `docs/`.
 |---|---|
 | `tutorials/` | Learning-oriented walkthroughs — we choose the goal, the reader follows |
 | `how-to/` | Task-oriented recipes — the reader has a goal, we show the steps |
-| `reference/` | Information-oriented lookups — consulted mid-task |
-| `explanation/` | Understanding-oriented background — why it is like this |
+| `reference/` | Information-oriented lookups — consulted mid-task. Currently: [agent-memory-server.md](reference/agent-memory-server.md) (tool contract) |
+| `explanation/` | Understanding-oriented background — why it is like this. Currently: [agent-memory-architecture.md](explanation/agent-memory-architecture.md) |
 | `adr/` | Architecture decision records — immutable, frozen |
 | `work/` | Dated work records: plans, designs, research, reviews, incidents, backlog |
 | `assets/` | Images and diagrams for the documentation |
 | `meta/` | Machine state: ledger, indexes, baselines |
-| `features/` | Pre-existing, non-canonical (predates this tree). Currently holds one dossier; candidate for `migrate-documentation` into `work/` |
+| `features/` | Feature dossiers + Gherkin contracts, indexed by [features/README.md](features/README.md). Currently: agent-memory (Implemented) |
 
 ## Conventions
 

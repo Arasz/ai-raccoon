@@ -5,4 +5,6 @@ packaging metadata. Filenames are bare nouns.
 
 ## Contents
 
-*No files yet — this directory is ready for its first reference.*
+- [`agent-memory-server.md`](agent-memory-server.md) — the MCP server's complete
+  agent-facing contract: 17 tools, 2 prompts, contexts, env vars, error shapes,
+  native-extension versions.

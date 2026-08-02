@@ -1,7 +1,7 @@
 # Issue #1 — Agent Memory Management MCP Server (AiRaccoon)
 
 > **Epic:** AiRaccoon — agent memory management MCP server
-> **Status:** Draft
+> **Status:** Implemented (merged to main 2026-08-03; 168 tests, 12 real-extension integration)
 > **Prerequisites:** none (first dossier in this repo; the random-number tools in `src/AiRaccoon/Tools/RandomNumberTools.cs` are scaffold samples, superseded by this feature)
 > **Dependencies (external):**
 > - MCP C# SDK **2.0.0** (already pinned in `Directory.Packages.props`) — 2026-07-28 spec revision, stateless HTTP, MRTR, `[McpServerTool]` attribute discovery

@@ -5,4 +5,7 @@ layers relate. Filenames are noun phrases, optionally `why-` prefixed.
 
 ## Contents
 
-*No files yet — this directory is ready for its first explanation.*
+- [`agent-memory-architecture.md`](agent-memory-architecture.md) — why the memory bank is
+  per install scope, why writes default to the project, why the workspace is a context
+  rather than a flag, why sync goes through one cloud database, and how the extension
+  pipeline keeps the server open.
