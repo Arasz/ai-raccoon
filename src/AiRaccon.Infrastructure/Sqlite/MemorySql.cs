@@ -8,17 +8,17 @@ internal static class MemorySql
     public const string SelectEntryByHash = "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash";
 
     public const string SelectEntryByContextAndValue = """
-        SELECT hash, path, context, value, created_at
+        SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
         FROM dbmem_content
         WHERE context = @context AND value = @content
         ORDER BY rowid DESC
         LIMIT 1
         """;
 
-    public const string SelectSourceByHashAndContext = "SELECT path, value, created_at FROM dbmem_content WHERE hash = @hash AND context = @context LIMIT 1";
+    public const string SelectSourceByHashAndContext = "SELECT path AS Path, value AS Value FROM dbmem_content WHERE hash = @hash AND context = @context LIMIT 1";
 
     public const string SearchWithContext = """
-        SELECT hash, seq, ranking, path, snippet
+        SELECT hash AS Hash, seq AS Seq, ranking AS Ranking, path AS Path, snippet AS Snippet
         FROM memory_search
         WHERE query = @query
           AND context = @context
@@ -62,7 +62,7 @@ internal static class MemorySql
     public const string EmbedPendingAll = "SELECT memory_embed_pending()";
 
     public const string SelectEntriesByContext = """
-        SELECT hash, path, context, value, created_at
+        SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
         FROM dbmem_content
         WHERE context = @context
         ORDER BY created_at DESC, rowid DESC

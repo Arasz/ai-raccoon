@@ -66,6 +66,21 @@ public class SweepServiceTests
         store.Deleted.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task SweepAsync_EntryWithoutMetaRow_IsNotCandidate()
+    {
+        var store = new FakeStore();
+        var meta = new FakeMetaStore(rating: null); // no meta row exists
+        var service = new SweepService(store, meta);
+
+        var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
+
+        // Missing meta falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
+        // entry must NOT be swept just because it was never searched (FR-MEM-1.15).
+        outcome.Candidates.ShouldBeEmpty();
+        store.Deleted.ShouldBeEmpty();
+    }
+
     private sealed class FakeStore : IMemoryStore
     {
         public List<string> Deleted { get; } = [];
@@ -110,6 +125,9 @@ public class SweepServiceTests
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
 
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
         {
             ListedContexts.Add(context);
@@ -127,13 +145,14 @@ public class SweepServiceTests
 
     private sealed class FakeMetaStore : MetaStore
     {
-        private readonly double _rating;
+        private readonly double? _rating;
 
-        public FakeMetaStore(double rating) : base(null!) => _rating = rating;
+        public FakeMetaStore(double? rating) : base(null!) => _rating = rating;
 
         public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult<MetaEntry?>(new MetaEntry(
-                hash, projectId, null, null, 0, 0, null, _rating, null));
+            => Task.FromResult<MetaEntry?>(_rating is null
+                ? null
+                : new MetaEntry(hash, projectId, null, null, 0, 0, null, _rating.Value, null));
 
         public override Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
             => Task.FromResult(true);

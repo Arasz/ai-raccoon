@@ -1,4 +1,5 @@
 using AiRaccon.Core.Rating;
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccon.Infrastructure.Sqlite;
@@ -33,7 +34,9 @@ public class MetaStore
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var existing = await GetEntryCoreAsync(connection, transaction, hash, cancellationToken).ConfigureAwait(false);
+        var existing = await connection.QueryFirstOrDefaultAsync<MetaRow>(
+            new CommandDefinition(SelectByHash, new { hash }, transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
 
         var accessCount = existing is null ? 1 : existing.AccessCount + 1;
         var createdAt = existing?.CreatedAt ?? now;
@@ -41,27 +44,21 @@ public class MetaStore
         var rating = RatingPolicy.Rating(
             RatingPolicy.DefaultBaseScore, accessCount, ageDays, RatingPolicy.DefaultHalfLifeDays);
 
-        await using var upsert = connection.CreateCommand();
-        upsert.Transaction = transaction;
-        upsert.CommandText = """
-            INSERT INTO entries (hash, project_id, context, agent_id, created_at, access_count, last_accessed_at, rating, ttl_days)
-            VALUES (@hash, @projectId, @context, @agentId, @createdAt, @accessCount, @lastAccessedAt, @rating, NULL)
-            ON CONFLICT(hash) DO UPDATE SET
-                context = COALESCE(@context, context),
-                agent_id = COALESCE(@agentId, agent_id),
-                access_count = @accessCount,
-                last_accessed_at = @lastAccessedAt,
-                rating = @rating
-            """;
-        upsert.Parameters.AddWithValue("@hash", hash);
-        upsert.Parameters.AddWithValue("@projectId", projectId);
-        upsert.Parameters.AddWithValue("@context", (object?)context ?? DBNull.Value);
-        upsert.Parameters.AddWithValue("@agentId", (object?)agentId ?? DBNull.Value);
-        upsert.Parameters.AddWithValue("@createdAt", createdAt);
-        upsert.Parameters.AddWithValue("@accessCount", accessCount);
-        upsert.Parameters.AddWithValue("@lastAccessedAt", now);
-        upsert.Parameters.AddWithValue("@rating", rating);
-        await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO entries (hash, project_id, context, agent_id, created_at, access_count, last_accessed_at, rating, ttl_days)
+                VALUES (@hash, @projectId, @context, @agentId, @createdAt, @accessCount, @lastAccessedAt, @rating, NULL)
+                ON CONFLICT(hash) DO UPDATE SET
+                    context = COALESCE(@context, context),
+                    agent_id = COALESCE(@agentId, agent_id),
+                    access_count = @accessCount,
+                    last_accessed_at = @lastAccessedAt,
+                    rating = @rating
+                """,
+                new { hash, projectId, context, agentId, createdAt, accessCount, lastAccessedAt = now, rating },
+                transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -77,7 +74,9 @@ public class MetaStore
 
         await EnsureSchemaAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await _factory.OpenMetaAsync(cancellationToken).ConfigureAwait(false);
-        return await GetEntryCoreAsync(connection, null, hash, cancellationToken).ConfigureAwait(false);
+        var row = await connection.QueryFirstOrDefaultAsync<MetaRow>(
+            new CommandDefinition(SelectByHash, new { hash }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return row is null ? null : ToEntry(row);
     }
 
     public async Task<IReadOnlyList<MetaEntry>> ListEntriesAsync(string projectId, CancellationToken cancellationToken = default)
@@ -87,23 +86,11 @@ public class MetaStore
         await EnsureSchemaAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await _factory.OpenMetaAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT hash, project_id, context, agent_id, created_at, access_count, last_accessed_at, rating, ttl_days
-            FROM entries
-            WHERE project_id = @projectId
-            ORDER BY created_at DESC, rowid DESC
-            """;
-        command.Parameters.AddWithValue("@projectId", projectId);
-
-        var entries = new List<MetaEntry>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            entries.Add(ReadEntry(reader));
-        }
-
-        return entries;
+        var rows = await connection.QueryAsync<MetaRow>(
+            new CommandDefinition(
+                ListByProject,
+                new { projectId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return rows.Select(ToEntry).ToList();
     }
 
     public virtual async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
@@ -114,67 +101,79 @@ public class MetaStore
         await EnsureSchemaAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await _factory.OpenMetaAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
-        command.Parameters.AddWithValue("@hash", hash);
-        command.Parameters.AddWithValue("@projectId", projectId);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
+        var deleted = await connection.ExecuteAsync(
+            new CommandDefinition(
+                "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId",
+                new { hash, projectId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return deleted > 0;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await _factory.OpenMetaAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS entries (
-                hash TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                context TEXT,
-                agent_id TEXT,
-                created_at INTEGER NOT NULL,
-                access_count INTEGER NOT NULL DEFAULT 0,
-                last_accessed_at INTEGER,
-                rating REAL NOT NULL DEFAULT 0.5,
-                ttl_days INTEGER
-            )
-            """;
-        await create.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                CREATE TABLE IF NOT EXISTS entries (
+                    hash TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    context TEXT,
+                    agent_id TEXT,
+                    created_at INTEGER NOT NULL,
+                    access_count INTEGER NOT NULL DEFAULT 0,
+                    last_accessed_at INTEGER,
+                    rating REAL NOT NULL DEFAULT 0.5,
+                    ttl_days INTEGER
+                )
+                """, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        await using var index = connection.CreateCommand();
-        index.CommandText = "CREATE INDEX IF NOT EXISTS idx_entries_project ON entries(project_id, context)";
-        await index.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "CREATE INDEX IF NOT EXISTS idx_entries_project ON entries(project_id, context)",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static async Task<MetaEntry?> GetEntryCoreAsync(
-        SqliteConnection connection, SqliteTransaction? transaction, string hash, CancellationToken cancellationToken)
+    private const string SelectByHash = """
+        SELECT hash AS Hash, project_id AS ProjectId, context AS Context, agent_id AS AgentId,
+               created_at AS CreatedAt, access_count AS AccessCount, last_accessed_at AS LastAccessedAt,
+               rating AS Rating, ttl_days AS TtlDays
+        FROM entries
+        WHERE hash = @hash
+        """;
+
+    private const string ListByProject = """
+        SELECT hash AS Hash, project_id AS ProjectId, context AS Context, agent_id AS AgentId,
+               created_at AS CreatedAt, access_count AS AccessCount, last_accessed_at AS LastAccessedAt,
+               rating AS Rating, ttl_days AS TtlDays
+        FROM entries
+        WHERE project_id = @projectId
+        ORDER BY created_at DESC, rowid DESC
+        """;
+
+    private static MetaEntry ToEntry(MetaRow row) => new(
+        row.Hash, row.ProjectId, row.Context, row.AgentId,
+        row.CreatedAt, row.AccessCount, row.LastAccessedAt, row.Rating, row.TtlDays);
+
+    /// <summary>Dapper materialization target: settable properties map nullable columns cleanly (the record's nullable params do not).</summary>
+    private sealed class MetaRow
     {
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            SELECT hash, project_id, context, agent_id, created_at, access_count, last_accessed_at, rating, ttl_days
-            FROM entries
-            WHERE hash = @hash
-            """;
-        command.Parameters.AddWithValue("@hash", hash);
+        public string Hash { get; set; } = "";
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return null;
-        }
+        public string ProjectId { get; set; } = "";
 
-        return ReadEntry(reader);
+        public string? Context { get; set; }
+
+        public string? AgentId { get; set; }
+
+        public long CreatedAt { get; set; }
+
+        public int AccessCount { get; set; }
+
+        public long? LastAccessedAt { get; set; }
+
+        public double Rating { get; set; }
+
+        public int? TtlDays { get; set; }
     }
-
-    private static MetaEntry ReadEntry(SqliteDataReader reader) => new(
-        reader.GetString(0),
-        reader.GetString(1),
-        reader.IsDBNull(2) ? null : reader.GetString(2),
-        reader.IsDBNull(3) ? null : reader.GetString(3),
-        reader.GetInt64(4),
-        reader.GetInt32(5),
-        reader.IsDBNull(6) ? null : reader.GetInt64(6),
-        reader.GetDouble(7),
-        reader.IsDBNull(8) ? null : reader.GetInt32(8));
 }

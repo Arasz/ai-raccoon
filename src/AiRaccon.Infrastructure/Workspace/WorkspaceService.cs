@@ -49,8 +49,12 @@ public sealed class WorkspaceService
         foreach (var hash in hashes)
         {
             var entry = byHash[hash];
-            await _store.WriteAsync(
-                new MemoryWriteRequest(projectId, entry.Value, context: entry.Path),
+            // Promote via memory_add_content(path, value, 'project:<id>') — preserves the
+            // entry's logical path and lands it in the project context (spec §3.2). Using
+            // add_content rather than add_text avoids the global content-hash dedup, which
+            // would skip content that already exists in the workspace context.
+            await _store.AddContentAsync(
+                projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
                 cancellationToken).ConfigureAwait(false);
             promoted++;
         }

@@ -1,7 +1,9 @@
 using AiRaccon.Core.Memory;
+using AiRaccon.Core.Rating;
 using AiRaccon.Infrastructure.Degradation;
 using AiRaccon.Infrastructure.Options;
 using AiRaccon.Infrastructure.Provisioning;
+using AiRaccon.Infrastructure.Rating;
 using AiRaccon.Infrastructure.Sqlite;
 using AiRaccon.Infrastructure.Sync;
 using AiRaccon.Infrastructure.Workspace;
@@ -82,8 +84,12 @@ static void RegisterMemoryServices(IServiceCollection services)
     services.AddSingleton(sp => new SqliteConnectionFactory(
         sp.GetRequiredService<InfrastructureOptions>(),
         loadCloudSync: true));
-    services.AddSingleton<IMemoryStore, SqliteMemoryStore>();
+    services.AddSingleton<SqliteMemoryStore>();
     services.AddSingleton<MetaStore>();
+    services.AddSingleton<IMemoryStore>(sp => new MemoryExtensionHost(
+        sp.GetRequiredService<SqliteMemoryStore>(),
+        [sp.GetRequiredService<RetrievalRatingExtension>()]));
+    services.AddSingleton<RetrievalRatingExtension>();
     services.AddSingleton<ICloudSyncConnectionFactory, CloudSyncConnectionFactory>();
     services.AddSingleton<SyncService>();
     services.AddSingleton<WorkspaceService>();

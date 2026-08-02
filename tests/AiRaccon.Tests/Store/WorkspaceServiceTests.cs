@@ -53,9 +53,10 @@ public class WorkspaceServiceTests
 
         result.Promoted.ShouldBe(1);
         result.Discarded.ShouldBe(2); // workspace context deleted entirely
-        var promoted = store.PromotedWrites.ShouldHaveSingleItem();
+        var promoted = store.PromotedContent.ShouldHaveSingleItem();
         promoted.Content.ShouldBe("durable fact");
-        promoted.WorkspaceId.ShouldBeNull();
+        promoted.Path.ShouldBe("note.md");
+        promoted.Context.ShouldBe("project:acme");
         store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
 
@@ -73,7 +74,7 @@ public class WorkspaceServiceTests
         var result = await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(2);
-        store.PromotedWrites.Count.ShouldBe(2);
+        store.PromotedContent.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -94,16 +95,19 @@ public class WorkspaceServiceTests
     {
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
-        public List<MemoryWriteRequest> PromotedWrites { get; } = [];
+        public List<(string Path, string Content, string Context)> PromotedContent { get; } = [];
 
         public List<string> DeletedContexts { get; } = [];
 
         public string? LastListedContext { get; private set; }
 
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new MemoryEntry("new-hash", request.Content, request.Context ?? ContextNaming.ProjectContext(request.ProjectId), request.Content, 1));
+
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
         {
-            PromotedWrites.Add(request);
-            return Task.FromResult(new MemoryEntry("new-hash", request.Content, request.Context ?? ContextNaming.ProjectContext(request.ProjectId), request.Content, 1));
+            PromotedContent.Add((path, content, context ?? ContextNaming.ProjectContext(projectId)));
+            return Task.FromResult(new MemoryEntry("new-hash", path, context ?? ContextNaming.ProjectContext(projectId), content, 1));
         }
 
         public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)

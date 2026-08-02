@@ -148,6 +148,9 @@ public class MemoryStorePortTests
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
             => Task.FromResult(new EmbedPendingResult(7, 3));
 
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
         {
             ListedContext = context;

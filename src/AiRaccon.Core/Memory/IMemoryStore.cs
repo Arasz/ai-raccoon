@@ -34,6 +34,9 @@ public interface IMemoryStore
     /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default);
 
+    /// <summary>Indexes caller-provided file content under an explicit logical path and context (memory_add_content; consolidation, share).</summary>
+    Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default);
+
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>
     Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default);
 }

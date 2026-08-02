@@ -1,4 +1,5 @@
 using AiRaccon.Infrastructure.Options;
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccon.Infrastructure.Sqlite;
@@ -9,6 +10,13 @@ public sealed class SqliteConnectionFactory
     private readonly InfrastructureOptions _options;
     private readonly bool _loadCloudSync;
     private readonly Action<SqliteConnection> _loadExtensions;
+
+    static SqliteConnectionFactory()
+    {
+        // Dapper maps columns to constructor parameters case-insensitively but not across
+        // underscores; the sqlite-memory schema uses snake_case (created_at, access_count, …).
+        DefaultTypeMap.MatchNamesWithUnderscores = true;
+    }
 
     public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false, Action<SqliteConnection>? loadExtensions = null)
     {

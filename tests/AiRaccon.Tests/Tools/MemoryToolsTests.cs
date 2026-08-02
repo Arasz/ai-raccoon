@@ -207,6 +207,9 @@ public class MemoryToolsTests
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
             => Task.FromResult(new EmbedPendingResult(0, 0));
 
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
+            => Task.FromResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1));
+
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
             => Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
     }
