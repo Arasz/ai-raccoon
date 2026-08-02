@@ -1,0 +1,81 @@
+root = true
+
+# Universal editor hygiene. These keys are EDITOR guidance only — no gate enforces
+# them, because 1094 of 1731 tracked text files currently lack a final newline and
+# 790 carry trailing whitespace. Enforcing them repo-wide would be a reformat, not
+# a gate. They converge files as they are edited instead.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Microsoft .NET properties
+csharp_new_line_before_members_in_object_initializers = false
+csharp_preferred_modifier_order = public, file, required, internal, private, new, protected, override, virtual, closed, static, async, abstract, extern, unsafe, volatile, sealed, readonly:suggestion
+csharp_preserve_single_line_blocks = true
+
+# ReSharper properties
+resharper_arguments_skip_single = true
+resharper_blank_lines_around_auto_property = 0
+resharper_blank_lines_around_single_line_local_method = 1
+resharper_csharp_keep_existing_enum_arrangement = false
+resharper_instance_members_qualify_declared_in =
+resharper_keep_existing_attribute_arrangement = false
+resharper_keep_existing_embedded_block_arrangement = false
+resharper_keep_existing_expr_member_arrangement = false
+resharper_max_attribute_length_for_same_line = 38
+resharper_parentheses_redundancy_style = remove
+resharper_wrap_after_property_in_chained_method_calls = true
+resharper_wrap_array_initializer_style = chop_if_long
+resharper_wrap_before_first_method_call = true
+
+# Markdown uses two trailing spaces as a hard line break.
+[*.md]
+trim_trailing_whitespace = false
+
+# Framework-managed Python under .ai-badger/ is 4-space; changing it upstream is
+# a feed-badger concern, not this repo's.
+[*.py]
+indent_size = 4
+
+[*.cs]
+indent_size = 4
+
+# ---------------------------------------------------------------------------
+# Build-enforced code style (Directory.Build.props sets EnforceCodeStyleInBuild).
+#
+# Anything set to `warning` below is an ERROR at build time, because
+# Directory.Build.props also sets TreatWarningsAsErrors. The build already runs in
+# the pre-push gate's `dotnet-unit` lane and in CI's `.NET`/`build` job, so these
+# rules cost no separate analysis pass — do not add a `dotnet format` hook for
+# them, it would only duplicate this at a much higher price.
+#
+# Only add a rule here after confirming the whole solution is already clean for
+# it: `dotnet build -t:Rebuild -p:TreatWarningsAsErrors=false` and grep for the id.
+# ---------------------------------------------------------------------------
+
+# "Use braces for every conditional and loop" — the repo's own C# convention.
+csharp_prefer_braces = true:warning
+
+# The repo is file-scoped-namespace throughout; pin it so it stays that way.
+csharp_style_namespace_declarations = file_scoped:warning
+
+# IDE0055 (whole-file "Fix formatting") is DELIBERATELY not a build gate, and this
+# line is what stops it drifting on.
+#
+# Roslyn's formatter and ReSharper's formatter disagree structurally on this
+# codebase. JobSearchAiAssistant.sln.DotSettings turns on INT_ALIGN_SWITCH_EXPRESSIONS,
+# INT_ALIGN_SWITCH_SECTIONS, INT_ALIGN_COMMENTS, ALIGN_TUPLE_COMPONENTS and
+# ALIGN_LINQ_QUERY; Roslyn has no concept of column alignment and flags every
+# aligned construct as a formatting violation. Measured 2026-07-28:
+# `dotnet_diagnostic.IDE0055.severity = warning` yields 1708 violations across 79
+# files, essentially all of them alignment padding that Rider would immediately
+# put back on the next format-on-save.
+#
+# Rider/ReSharper owns C# layout in this repo. Turning IDE0055 on — or running
+# `dotnet format whitespace` — means giving that up, which is a separate decision
+# with a repo-wide reformat attached, not a hook.
+dotnet_diagnostic.IDE0055.severity = None
