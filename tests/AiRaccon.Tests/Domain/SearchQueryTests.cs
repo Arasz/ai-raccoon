@@ -26,6 +26,23 @@ public class SearchQueryTests
         query.WorkspaceId.ShouldBeNull();
         query.Limit.ShouldBe(20);
         query.MinScore.ShouldBe(0.7);
+        query.Scope.ShouldBe(SearchScope.All);
+    }
+
+    [Fact]
+    public void Constructor_WithScope_KeepsIt()
+    {
+        var query = new SearchQuery("acme", "search", scope: SearchScope.Shared);
+
+        query.Scope.ShouldBe(SearchScope.Shared);
+    }
+
+    [Fact]
+    public void Constructor_WithProjectScope_KeepsIt()
+    {
+        var query = new SearchQuery("acme", "search", scope: SearchScope.Project);
+
+        query.Scope.ShouldBe(SearchScope.Project);
     }
 
     [Theory]

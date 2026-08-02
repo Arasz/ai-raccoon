@@ -49,4 +49,10 @@ public class ContextNamingTests
     {
         Should.Throw<ArgumentException>(() => ContextNaming.WorkspaceContext(null!));
     }
+
+    [Fact]
+    public void SharedContext_IsTheFlatSharedContext()
+    {
+        ContextNaming.SharedContext.ShouldBe("shared");
+    }
 }

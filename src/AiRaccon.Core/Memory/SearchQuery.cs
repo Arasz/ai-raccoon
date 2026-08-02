@@ -4,7 +4,13 @@ namespace AiRaccon.Core.Memory;
 
 public sealed record SearchQuery
 {
-    public SearchQuery(string projectId, string query, string? workspaceId = null, int limit = 20, double minScore = 0.7)
+    public SearchQuery(
+        string projectId,
+        string query,
+        SearchScope scope = SearchScope.All,
+        string? workspaceId = null,
+        int limit = 20,
+        double minScore = 0.7)
     {
         Guard.NotNullOrWhiteSpace(projectId, nameof(projectId));
         Guard.NotNullOrWhiteSpace(query, nameof(query));
@@ -13,6 +19,7 @@ public sealed record SearchQuery
 
         ProjectId = projectId;
         Query = query;
+        Scope = scope;
         WorkspaceId = workspaceId;
         Limit = limit;
         MinScore = minScore;
@@ -21,6 +28,8 @@ public sealed record SearchQuery
     public string ProjectId { get; }
 
     public string Query { get; }
+
+    public SearchScope Scope { get; }
 
     public string? WorkspaceId { get; }
 
