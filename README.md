@@ -1,42 +1,67 @@
-# MCP Server
+# AiRaccon
 
-This README was created using the C# MCP server project template. It demonstrates how you can easily create an MCP
-server using C# and publish it as a NuGet package.
+C# .NET 10 MCP server exposing random-number generation to AI assistants over the [Model
+Context Protocol](https://modelcontextprotocol.io/), built on the
+[ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK.
 
-The MCP server is built as a self-contained application and does not require the .NET runtime to be installed on the
-target machine. However, since it is self-contained, it must be built for each target platform separately. By default,
-the template is configured to build for:
+> Domain: provides AI assistants with deterministic utility tools (random number
+> generation) over MCP.
+> Stacks: `dotnet`, `mcp`.
 
-* `win-x64`
-* `win-arm64`
-* `osx-arm64`
-* `linux-x64`
-* `linux-arm64`
-* `linux-musl-x64`
+## What it does
 
-If your users require more platforms to be supported, update the list of runtime identifiers in the project's
-`<RuntimeIdentifiers />` element.
+AiRaccon is a small, dependency-light MCP server that registers one tool:
 
-See [aka.ms/nuget/mcp/guide](https://aka.ms/nuget/mcp/guide) for the full guide.
+| Tool | What it does |
+|---|---|
+| `get_random_number` | Generates a random number between a minimum (inclusive) and maximum (exclusive) value |
 
-Please note that this template is currently in an early preview stage. If you have feedback, please take
-a [brief survey](http://aka.ms/dotnet-mcp-template-survey).
+Any MCP-capable client (VS Code Copilot Chat, Claude, other assistants) can call it. The
+server is built on the MCP C# SDK (`ModelContextProtocol` 2.0.0) with tools declared via
+`[McpServerTool]` attributes.
 
-## Checklist before publishing to NuGet.org
+### Transports
 
-- Test the MCP server locally using the steps below.
-- Update the package metadata in the .csproj file, in particular the `<PackageId>`.
-- Update `.mcp/server.json` to declare your MCP server's inputs.
-    - See [configuring inputs](https://aka.ms/nuget/mcp/guide/configuring-inputs) for more details.
-- Pack the project using `dotnet pack`.
+- **stdio** (default) — what MCP clients expect when launching a server as a subprocess.
+- **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http`; serves the protocol at `/mcp`
+  (launch profile `http`, `http://localhost:8080`).
 
-The `bin/Release` directory will contain the package file (.nupkg), which can
-be [published to NuGet.org](https://learn.microsoft.com/nuget/nuget-org/publish-a-package).
+Transport selection lives in one place: `McpTransportSelector` keys off the
+`MCP_TRANSPORT` environment variable — anything other than `http` (case-insensitive)
+runs stdio.
 
-## Developing locally
+## Requirements
 
-To test this MCP server from source code (locally) without using a built MCP server package, you can configure your IDE
-to run the project directly using `dotnet run`.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+
+## Build & test
+
+```bash
+dotnet build
+dotnet test
+```
+
+The test project (`tests/AiRaccon.Tests`, xunit.v3 + Shouldly) covers the tools and the
+transport selector — 13 cases, keep them green.
+
+## Quickstart — run it
+
+Run from source with the stdio transport (the default):
+
+```bash
+dotnet run --project src/AiRaccon
+```
+
+Or with the HTTP transport:
+
+```bash
+MCP_TRANSPORT=http dotnet run --project src/AiRaccon
+```
+
+### Connect a client
+
+To use the server from an MCP client (for example VS Code's `.vscode/mcp.json`, or Visual
+Studio's `.mcp.json`):
 
 ```json
 {
@@ -44,65 +69,64 @@ to run the project directly using `dotnet run`.
     "AiRaccon": {
       "type": "stdio",
       "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<PATH TO PROJECT DIRECTORY>"
-      ]
+      "args": ["run", "--project", "<PATH TO PROJECT DIRECTORY>"]
     }
   }
 }
 ```
 
-Refer to the VS Code or Visual Studio documentation for more information on configuring and using MCP servers:
+Then ask the assistant for a random number — e.g. "give me 3 random numbers" — and it
+should use the `get_random_number` tool.
 
-- [Use MCP servers in VS Code (Preview)](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)
-- [Use MCP servers in Visual Studio (Preview)](https://learn.microsoft.com/visualstudio/ide/mcp-servers)
+## Architecture
 
-## Testing the MCP Server
-
-Once configured, you can ask Copilot Chat for a random number, for example, `Give me 3 random numbers`. It should prompt
-you to use the `get_random_number` tool on the `AiRaccon` MCP server and show you the results.
-
-## Publishing to NuGet.org
-
-1. Run `dotnet pack -c Release` to create the NuGet package
-2. Publish to NuGet.org with
-   `dotnet nuget push bin/Release/*.nupkg --api-key <your-api-key> --source https://api.nuget.org/v3/index.json`
-
-## Using the MCP Server from NuGet.org
-
-Once the MCP server package is published to NuGet.org, you can configure it in your preferred IDE. Both VS Code and
-Visual Studio use the `dnx` command to download and install the MCP server package from NuGet.org.
-
-- **VS Code**: Create a `<WORKSPACE DIRECTORY>/.vscode/mcp.json` file
-- **Visual Studio**: Create a `<SOLUTION DIRECTORY>\.mcp.json` file
-
-For both VS Code and Visual Studio, the configuration file uses the following server definition:
-
-```json
-{
-  "servers": {
-    "AiRaccon": {
-      "type": "stdio",
-      "command": "dnx",
-      "args": [
-        "<your package ID here>",
-        "--version",
-        "<your package version here>",
-        "--yes"
-      ]
-    }
-  }
-}
+```
+AiRaccon/
+  src/AiRaccon/            # the MCP server (thin)
+    Program.cs             # transport selection + MCP wiring
+    McpTransportSelector.cs
+    Tools/RandomNumberTools.cs
+  tests/AiRaccon.Tests/    # xunit.v3 + Shouldly
+  Directory.Build.props    # analyzers, warnings-as-errors
+  Directory.Packages.props # central package versions
+  docs/                    # canonical documentation tree (see docs/README.md)
 ```
 
-## More information
+The server keeps the [MCP layer thin](CLAUDE.md): `Tools/` maps parameters and formats
+results, with no business logic of its own. Warnings are errors
+(`TreatWarningsAsErrors`), analyzers are on, and package versions are managed centrally.
 
-.NET MCP servers use the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK. For more
-information about MCP:
+## Packaging & release
 
-- [Official Documentation](https://modelcontextprotocol.io/)
-- [Protocol Specification](https://spec.modelcontextprotocol.io/)
-- [GitHub Organization](https://github.com/modelcontextprotocol)
-- [MCP C# SDK](https://modelcontextprotocol.github.io/csharp-sdk)
+The server packs as a .NET tool (`PackAsTool`, package id `ai-raccon`, type `McpServer`):
+
+```bash
+dotnet pack -c Release
+```
+
+To deploy to the local NuGet feed (`.nupkg-local/`), set `dotnet_env=local` for the
+directory — the `DeployToLocalSource` build target pushes the freshly built package. The
+package embeds `.mcp/server.json`, so MCP clients can discover inputs.
+
+## Contributing
+
+Read [`CLAUDE.md`](CLAUDE.md) first — it is the source of truth for this repo's rules:
+
+- **TDD is mandatory** — a failing, behavior-focused test precedes any production change.
+- **One task per PR** — every unit of work ends in a pull request; never push directly to
+  `main`. The one exception is an explicit instruction from the person you work with.
+- Keep the [non-negotiable invariants](CLAUDE.md) (clean layering, minimal comments,
+  guarded nulls, no hardcoded secrets, …).
+
+Architecture decisions are recorded as ADRs under
+[`docs/adr/`](docs/adr/README.md).
+
+## Security
+
+Do not open a public issue for a security problem — report it privately; see
+[`SECURITY.md`](SECURITY.md) for the reporting channel, supported-versions policy, and the
+threat model.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Rafał Araszkiewicz.
