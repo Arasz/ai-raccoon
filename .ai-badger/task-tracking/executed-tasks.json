@@ -14,6 +14,35 @@
       "resumeCommand": "claude --resume 20260802_213638_435316",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "docs-init",
+      "title": "Init repo docs + enable all opt-in ai-badger skills",
+      "sessionId": "20260802_222214_fed404",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "branch": "task/docs-init",
+      "risk": false,
+      "startedAt": "2026-08-02T20:34:24.176205+00:00",
+      "finishedAt": "2026-08-02T20:49:57.224115+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260802_222214_fed404",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "agent-memory-server",
+      "title": "Agent memory management MCP server",
+      "sessionId": "hermes-agent-memory-20260802",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccon/AiRaccon",
+      "branch": "task/agent-memory-server",
+      "risk": false,
+      "startedAt": "2026-08-02T20:50:36.674237+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume hermes-agent-memory-20260802",
+      "resumeAttempts": []
     }
   ]
 }

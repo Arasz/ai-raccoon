@@ -58,6 +58,124 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "docs-init",
+      "subagents": [
+        {
+          "description": "code-reviewer quality gate (delegate_task deleg_a7fa2015; token count not exposed by Hermes delegation; 13 api_calls, 307s)",
+          "totalTokens": 0,
+          "at": "2026-08-02T20:49:57.166929+00:00"
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260802_222214_fed404",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-02T20:34:24.175718+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-02T20:49:57.224111+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-02T20:49:57.224111+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "agent-memory-server",
+      "subagents": [
+        {
+          "description": "Wave 1: AiRaccon.Core domain project (TDD, 67 tests)",
+          "totalTokens": 85000,
+          "at": "2026-08-02T20:58:37.253047+00:00"
+        }
+      ],
+      "grade": null,
+      "sessionId": "hermes-agent-memory-20260802",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-02T20:50:36.673891+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-02T20:50:36.673891+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 85000,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
     }
   ]
 }
