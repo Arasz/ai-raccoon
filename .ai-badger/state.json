@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-02T22:05:00Z",
+  "lastUpdated": "2026-08-02T22:40:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "docs-init",
+      "summary": "Enabled all 8 opt-in ai-badger skills (config.include.skills + scaffold on master: debug-issue, evidence-first-research, explore-codebase, migrate-documentation, refactor-safely, review-changes, scaffold-documentation, update-documentation); scaffolded canonical docs/ tree (README compass + per-directory READMEs per scaffold-documentation skill); rewrote root README.md and added LICENSE (MIT) + SECURITY.md adapted from ai-badger repo templates; .gitignore hygiene (.DS_Store, __pycache__).",
+      "hasNotes": false
+    },
     {
       "id": "initialize-dotnet-project",
       "summary": "Unit test project (xunit.v3+Shouldly, 13 cases) for RandomNumberTools; dual stdio/http MCP transport via MCP_TRANSPORT; local NuGet feed deploy gated on dotnet_env=local; publish profile, launch settings, central versions.",
