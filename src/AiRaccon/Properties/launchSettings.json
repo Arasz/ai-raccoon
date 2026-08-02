@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "stdio": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "http": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:8080",
+      "environmentVariables": {
+        "MCP_TRANSPORT": "http"
+      }
+    }
+  }
+}
