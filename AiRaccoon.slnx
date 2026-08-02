@@ -1,6 +1,10 @@
 <Solution>
-    <Project Path="src/AiRaccoon/AiRaccoon.csproj"/>
-    <Project Path="src/AiRaccoon.Core/AiRaccoon.Core.csproj"/>
-    <Project Path="src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
-    <Project Path="tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj"/>
+    <Folder Name="/src/">
+        <Project Path="src/AiRaccoon.Core/AiRaccoon.Core.csproj"/>
+        <Project Path="src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
+        <Project Path="src/AiRaccoon/AiRaccoon.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj"/>
+    </Folder>
 </Solution>
