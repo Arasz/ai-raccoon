@@ -8,8 +8,9 @@ pieces fit.
 
 ## Tools (17)
 
-Every tool requires `project_id`. Writes land in `project:<id>` by default; naming a
-`workspace_id` routes them into that workspace's isolated context.
+Every tool requires `projectId` (camelCase — all parameters are camelCase). Writes
+land in `project:<id>` by default; naming a `workspaceId` routes them into that
+workspace's isolated context.
 
 | Tool | Parameters | Returns |
 |---|---|---|
@@ -20,8 +21,8 @@ Every tool requires `project_id`. Writes land in `project:<id>` by default; nami
 | `memory_share` | `projectId`, `hash` | `{shared: true, context: "shared"}` |
 | `memory_delete` | `projectId`, `hash` | `{deleted: 0\|1}` |
 | `memory_delete_context` | `projectId`, `context` | `{deleted: n}` |
-| `memory_ingest_file` | `projectId`, `path`, `context?` | `{indexed}` |
-| `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned}` |
+| `memory_ingest_file` | `projectId`, `path`, `context?` | `{indexed: 0\|1}` |
+| `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned: n}` |
 | `memory_configure` | `projectId`, `provider`, `model`, `apiKey?` | `{provider, model, engine}` |
 | `memory_embed_pending` | `projectId`, `limit?` | `{processed, pending}` |
 | `memory_workspace_begin` | `projectId`, `agentId?`, `name?` | `{workspaceId, context}` |
@@ -30,6 +31,29 @@ Every tool requires `project_id`. Writes land in `project:<id>` by default; nami
 | `memory_workspace_discard` | `projectId`, `workspaceId` | `{discarded}` |
 | `memory_sweep` | `projectId`, `dryRun=true` | `{candidates, deleted}` |
 | `memory_sync` | `projectId` | `{sent, received, reindexed}` |
+
+### Notes on the less obvious tools
+
+- **`scope` values:** `all` (default) searches `shared` + `project:<id>` (+ workspace
+  when named); `project` searches `project:<id>` only; `shared` searches the `shared`
+  promotion tier only. Workspace scratch is never included in `scope=all` — it is only
+  visible to a search that names that `workspaceId`.
+- **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
+  or `memory_search` result) into `shared`. It is additive — the source project row
+  stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
+  `shared`.
+- **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
+  `["all"]` to promote every entry in the workspace. It then deletes the workspace
+  context entirely — entries not kept are gone.
+- **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
+  to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
+  age exceeds 30 days. `shared` entries are never swept.
+- **`memory_configure`:** `engine` is `local` (GGUF model on disk) or `remote`
+  (provider API). For a remote provider, `apiKey` or `AIRACCOON_VECTORSSPACE_API_KEY`
+  is required — an explicit `apiKey` parameter takes precedence over the environment
+  variable. Local embeddings need a GGUF model path; until one is configured, writes
+  are stored deferred (`memory_stats.pending > 0`) and only become searchable after
+  `memory_embed_pending`.
 
 ## Prompts (2)
 
@@ -66,13 +90,33 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 
 | Condition | Message prefix |
 |---|---|
-| Missing/blank `project_id` | `invalid-params: project_id is required` |
+| Missing/blank `projectId` | `invalid-params: project_id is required` |
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
-| Remote embedding provider without a key | `embedding-api-key-missing: …` |
-| Sync without credentials | `sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID …` |
+| Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider` |
+| Sync without credentials | `sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY` — both are required |
 
 ## Native extensions
 
 sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 are pinned and provisioned
-per RID into `<data-root>/extensions/<rid>/`, SHA-256 verified. `linux-musl-x64` has no
-sqlite-memory release binary — provisioning refuses with a clear error.
+per RID into `<data-root>/extensions/<rid>/` (e.g. `~/.ai-raccoon/extensions/osx-arm64/`),
+SHA-256 verified. `linux-musl-x64` has no sqlite-memory release binary — provisioning
+refuses with a clear `ExtensionProvisioningException` naming what is missing.
+
+## Deletion and sync semantics
+
+- Deletes are permanent — there is no trash or recovery.
+- `memory_delete` targets one hash wherever it lives, including a `shared` row;
+  `memory_delete_context` deletes every entry under a context label. Nothing forbids
+  targeting `shared` — use it deliberately.
+- Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;
+  the next `memory_sync` runs the sqlite-sync push/pull over the committed contexts, so
+  the removal is expected to reach the cloud database (sqlite-sync CRDT semantics —
+  verify against the pinned 1.1.2 release before relying on it).
+- Workspace contexts are never synced, so `memory_workspace_discard` and consolidation's
+  discard have no cloud counterpart.
+
+## Known limitations
+
+- There is no tool to list active workspaces: `memory_workspace_status` needs a
+  `workspaceId` you must already hold (keep the value returned by `memory_workspace_begin`).
+- No un-share tool exists; see `memory_share` notes above.
