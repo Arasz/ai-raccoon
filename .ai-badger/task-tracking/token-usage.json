@@ -131,6 +131,26 @@
           "description": "Wave 1: AiRaccon.Core domain project (TDD, 67 tests)",
           "totalTokens": 85000,
           "at": "2026-08-02T20:58:37.253047+00:00"
+        },
+        {
+          "description": "Wave 2 rework: bank-per-scope Infrastructure, shared promotion, SearchScope (TDD, 105->125 tests)",
+          "totalTokens": 90000,
+          "at": "2026-08-02T21:36:18.791283+00:00"
+        },
+        {
+          "description": "Wave 3 (in-session): service layer + 17 MCP tools + prompts + DI (TDD, 125->147 tests); two delegation attempts failed (iteration limit, model refusal)",
+          "totalTokens": 65000,
+          "at": "2026-08-02T22:03:03.467338+00:00"
+        },
+        {
+          "description": "Code review (CHANGES-REQUIRED, 2 blockers 6 majors found) + fix batch committed 3d552e0 (155 tests)",
+          "totalTokens": 110000,
+          "at": "2026-08-02T22:32:57.110065+00:00"
+        },
+        {
+          "description": "QA review of test harness (14 demanded tests) + extension pipeline + Dapper refactor \u2014 committed 99053d1 (168 tests)",
+          "totalTokens": 95000,
+          "at": "2026-08-02T23:04:38.398557+00:00"
         }
       ],
       "grade": null,
@@ -169,7 +189,7 @@
         "cacheReadTokens": 0,
         "cacheCreationTokens": 0,
         "cacheEfficiency": null,
-        "subagentTokens": 85000,
+        "subagentTokens": 445000,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,
