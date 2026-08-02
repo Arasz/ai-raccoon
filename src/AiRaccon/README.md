@@ -3,6 +3,17 @@
 This README was created using the C# MCP server project template. It demonstrates how you can easily create an MCP
 server using C# and publish it as a NuGet package.
 
+## Transports
+
+The server supports both transports, selected via the `MCP_TRANSPORT` environment variable
+(case-insensitive, anything other than `http` runs stdio):
+
+- `stdio` (default) — MCP clients launch the server as a subprocess.
+- `http` — Streamable HTTP at `/mcp`, e.g. `dotnet run --launch-profile http` (listens on `http://localhost:8080`).
+
+Note: the HTTP transport uses the ASP.NET Core runtime, so a framework-dependent deployment requires the .NET
+runtime to include it. The self-contained single-file publish profile (`Properties/PublishProfiles/selfcontained-singlefile.pubxml`) bundles it.
+
 The MCP server is built as a self-contained application and does not require the .NET runtime to be installed on the
 target machine. However, since it is self-contained, it must be built for each target platform separately. By default,
 the template is configured to build for:

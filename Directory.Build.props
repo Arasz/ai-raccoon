@@ -7,5 +7,6 @@
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
         <AnalysisLevel>latest</AnalysisLevel>
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <PackageOutputPath>$(MSBuildThisFileDirectory).nupkg/</PackageOutputPath>
     </PropertyGroup>
 </Project>
