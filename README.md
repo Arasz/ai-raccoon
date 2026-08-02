@@ -41,7 +41,7 @@ dotnet build
 dotnet test
 ```
 
-The test project (`tests/AiRaccon.Tests`, xunit.v3 + Shouldly) covers the tools and the
+The test project (`tests/AIRaccon.Tests`, xunit.v3 + Shouldly) covers the tools and the
 transport selector — 13 cases, keep them green.
 
 ## Quickstart — run it
@@ -52,11 +52,17 @@ Run from source with the stdio transport (the default):
 dotnet run --project src/AiRaccon
 ```
 
-Or with the HTTP transport:
+Or with the HTTP transport, using the `http` launch profile (listens on
+`http://localhost:8080`):
 
 ```bash
-MCP_TRANSPORT=http dotnet run --project src/AiRaccon
+dotnet run --project src/AiRaccon --launch-profile http
 ```
+
+(`MCP_TRANSPORT=http` selects the HTTP transport too, but only with
+`--no-launch-profile` — a launch profile overrides the environment variable, and the
+default `stdio` profile would silently switch you back. Without a profile the HTTP
+endpoint lands on ASP.NET's default port, not 8080.)
 
 ### Connect a client
 
@@ -69,11 +75,15 @@ Studio's `.mcp.json`):
     "AiRaccon": {
       "type": "stdio",
       "command": "dotnet",
-      "args": ["run", "--project", "<PATH TO PROJECT DIRECTORY>"]
+      "args": ["run", "--project", "<PATH TO PROJECT DIRECTORY>", "--no-launch-profile"]
     }
   }
 }
 ```
+
+`--no-launch-profile` matters: `dotnet run` otherwise prints its launch-settings notice to
+stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP clients expect on
+stdio.
 
 Then ask the assistant for a random number — e.g. "give me 3 random numbers" — and it
 should use the `get_random_number` tool.
@@ -86,7 +96,7 @@ AiRaccon/
     Program.cs             # transport selection + MCP wiring
     McpTransportSelector.cs
     Tools/RandomNumberTools.cs
-  tests/AiRaccon.Tests/    # xunit.v3 + Shouldly
+  tests/AIRaccon.Tests/    # xunit.v3 + Shouldly
   Directory.Build.props    # analyzers, warnings-as-errors
   Directory.Packages.props # central package versions
   docs/                    # canonical documentation tree (see docs/README.md)
@@ -119,7 +129,7 @@ Read [`CLAUDE.md`](CLAUDE.md) first — it is the source of truth for this repo'
   guarded nulls, no hardcoded secrets, …).
 
 Architecture decisions are recorded as ADRs under
-[`docs/adr/`](docs/adr/README.md).
+[`docs/adr/`](docs/adr/README.md) — none recorded yet.
 
 ## Security
 

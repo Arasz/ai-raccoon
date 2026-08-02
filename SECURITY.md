@@ -19,8 +19,8 @@ private reporting is unavailable, email **araszkiewiczrafal@gmail.com** with
 ### What to expect
 
 This is a **one-maintainer project**. There is no on-call rotation and no guaranteed
-response time. Realistically: acknowledgement within a week, and a fix released as a
-normal version bump.
+response time. Realistically: best effort, typically an acknowledgement within a week,
+and a fix released as a normal version bump.
 
 ## Supported versions
 
