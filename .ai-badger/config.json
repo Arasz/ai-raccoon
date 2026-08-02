@@ -43,5 +43,17 @@
     }
   ],
   "skillScope": "default",
+  "include": {
+    "skills": [
+      "debug-issue",
+      "evidence-first-research",
+      "explore-codebase",
+      "migrate-documentation",
+      "refactor-safely",
+      "review-changes",
+      "scaffold-documentation",
+      "update-documentation"
+    ]
+  },
   "docs": {}
 }
