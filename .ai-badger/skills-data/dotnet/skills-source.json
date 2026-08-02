@@ -1,0 +1,10 @@
+{
+  "sources": [
+    {
+      "name": "dotnet-agent-skills",
+      "type": "marketplace",
+      "source": "https://github.com/dotnet/skills",
+      "support": ["claude"]
+    }
+  ]
+}

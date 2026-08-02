@@ -1,0 +1,93 @@
+---
+name: prompt-markers
+description: >-
+  Use when a prompt starts with a marker prefix — `h:`/`hint:` (a lead to validate before
+  acting), `f:`/`feedback:` (a correction to apply immediately), `e:`/`extension:` (a request to
+  widen scope) — or when the user asks to add, change, or inspect those markers. The
+  UserPromptSubmit hook detects them and injects the matching behaviour.
+---
+
+# Prompt markers
+
+A small set of one- or two-word prefixes a user can put at the very start of a prompt to give an
+agent an explicit, machine-detectable signal about how to treat what follows — instead of relying
+on the model to infer intent from phrasing alone, which is inconsistent under long or compacted
+context.
+
+## The markers
+
+| Prefix | Meaning | Required behavior |
+|---|---|---|
+| `h:` / `hint:` | A potential insight or lead, not a command | Validate first — do a quick research pass (search the project, check relevant files/docs) before acting on it, and report what you found |
+| `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history |
+| `e:` / `extension:` | A request to expand the current task's scope | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large |
+
+Marker definitions (prefixes + the exact instruction text injected for each) live in
+`markers-context.json`, next to this file — edit that file to add a marker or change its wording;
+no code changes needed for that.
+
+## How detection works
+
+A `UserPromptSubmit` hook (`scripts/user_prompt_hook.py`) reads the hook's JSON payload from
+stdin, checks whether the prompt (after stripping leading whitespace) starts with one of the
+configured prefixes case-insensitively, and — if so — emits the matching marker's instruction
+text via the hook's `additionalContext` field. Claude Code merges `additionalContext` into what
+the agent sees for that turn.
+
+**Why `additionalContext` (append), never prepend or replace:** appending preserves the prefix of
+the conversation exactly as it was, which is what makes prompt caching effective — a cached
+prefix is only reusable if it stays byte-identical across turns. Prepending, or rewriting the
+prompt outright, would invalidate the cache for that turn and every subsequent one. This
+trade-off (and the alternatives considered — native system-prompt instructions, silently
+rewriting the prompt) is recorded in ADR-0017 "Prompt markers for agent context injection" in the
+project this skill was ported from; if the current project keeps ADRs, mirror that rationale
+there instead of re-deriving it.
+
+The hook is stdlib-only Python, resolves `markers-context.json` relative to its own location (so
+it works regardless of where the skill is installed), and never touches the original prompt text
+— the user's exact input is preserved; only extra context is added alongside it.
+
+## Auditing
+
+Every detected marker is recorded to a small history file so the record of what was injected
+survives later compaction or summarization, even though the injected context itself doesn't
+persist verbatim in a compacted transcript. This is best-effort and opt-in by convention: the
+hook looks for an already-existing `.ai-badger` directory (walking up from the prompt's `cwd`) and,
+only if one is found, writes/updates `.ai-badger/prompt-markers/marker-state.json` (capped at the
+most recent 100 entries). If no such directory exists, the hook still injects context but skips
+the audit write silently — it never creates project-tracking structure on its own.
+
+## Installation
+
+Register the hook in the project's Claude Code settings (`.claude/settings.json` or
+`.ai-badger`-scaffolded equivalent) under `UserPromptSubmit`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 <path-to-this-skill>/scripts/user_prompt_hook.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If the project already runs its own `UserPromptSubmit` hook (e.g. the `task` skill's session
+tracker), add this as an additional entry in the same array rather than replacing it — Claude
+Code runs all registered hooks for an event.
+
+## Agent-facing contract
+
+Whichever agent instruction file the project maintains (`CLAUDE.md`, `.junie/AGENTS.md`, …)
+should tell agents that these markers exist and name the required behavior for each — the hook
+delivers the instruction text at the moment a marker is used, but a standing mention in the
+always-loaded instructions makes the behavior legible to a human reading the file, and keeps it
+in effect even in a session where the hook somehow didn't fire.

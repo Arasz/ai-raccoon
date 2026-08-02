@@ -1,0 +1,22 @@
+{
+  "skills": [
+    {
+      "name": "dotnet-diag",
+      "source": "dotnet-agent-skills",
+      "scope": "default",
+      "description": ".NET performance investigation: around fifty anti-patterns with a detection recipe each, trace collection, dump collection, and BenchmarkDotNet measurement."
+    },
+    {
+      "name": "dotnet-test",
+      "source": "dotnet-agent-skills",
+      "scope": "default",
+      "description": ".NET test tooling: CRAP scoring and coverage analysis, static discovery of untested source, the testability trio (detect static dependencies, generate wrappers, migrate call sites), and test-quality audits including `test-anti-patterns`."
+    },
+    {
+      "name": "dotnet-msbuild",
+      "source": "dotnet-agent-skills",
+      "scope": "default",
+      "description": "Build diagnostics: binlog failure and performance analysis, incremental-build correctness, and MSBuild anti-patterns."
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "./schemas/config.schema.json",
+  "frameworkVersion": "0.76.0",
+  "project": {
+    "name": "AiRaccon",
+    "summary": "C# .NET 10 MCP server (stdio transport) exposing random-number generation tools to AI assistants, built on the ModelContextProtocol C# SDK.",
+    "domain": "Provides AI assistants with deterministic utility tools (random number generation) over the Model Context Protocol."
+  },
+  "stacks": [
+    "dotnet",
+    "mcp"
+  ],
+  "agents": [
+    "claude",
+    "copilot",
+    "hermes"
+  ],
+  "sourceControl": {
+    "platform": "none",
+    "repoUrl": null,
+    "projectUrl": null
+  },
+  "commands": {
+    "build": "dotnet build",
+    "test": "dotnet test"
+  },
+  "personaRouting": [
+    {
+      "work": "architecture, design decisions, project structure",
+      "agent": "architect"
+    },
+    {
+      "work": "tests, test strategy, test coverage",
+      "agent": "test-engineer"
+    },
+    {
+      "work": "code review, quality gates, PR review",
+      "agent": "code-reviewer"
+    },
+    {
+      "work": "C#/.NET implementation, MCP tools, backend work",
+      "agent": "dotnet-engineer"
+    }
+  ],
+  "skillScope": "default",
+  "docs": {}
+}

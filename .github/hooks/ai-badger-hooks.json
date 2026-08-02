@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/task/scripts/drift_notice_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "startup|resume"
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/mcp-index/scripts/context_enrichment_hook.py\"",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "bash": "python3 .ai-badger/skills/prompt-markers/scripts/user_prompt_hook.py",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/commit-reminder/scripts/commit_reminder_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit"
+      }
+    ]
+  }
+}

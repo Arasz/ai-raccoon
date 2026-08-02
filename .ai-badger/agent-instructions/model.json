@@ -1,0 +1,18 @@
+{
+  "$schema": "./schema.json",
+  "version": 1,
+  "files": {},
+  "directories": {},
+  "instructionSets": {},
+  "sharedPolicy": {
+    "authoritativeDocs": [],
+    "nonNegotiableInvariants": [],
+    "reviewCategories": []
+  },
+  "agents": {},
+  "validation": {
+    "requiredHeadings": {},
+    "requiredPatterns": {},
+    "forbiddenPatterns": {}
+  }
+}

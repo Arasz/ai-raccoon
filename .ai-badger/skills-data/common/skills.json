@@ -1,0 +1,16 @@
+{
+  "skills": [
+    {
+      "name": "superpowers",
+      "source": "claude-plugins-official",
+      "scope": "default",
+      "description": "Skill library for brainstorming, TDD, systematic debugging, worktree-based parallel work, and disciplined plan/review workflows."
+    },
+    {
+      "name": "pr-review-toolkit",
+      "source": "claude-plugins-official",
+      "scope": "default",
+      "description": "Specialized PR-review subagents (style/guideline adherence, test coverage, silent-failure hunting, type-design analysis)."
+    }
+  ]
+}

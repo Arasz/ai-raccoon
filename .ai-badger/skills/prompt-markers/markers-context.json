@@ -1,0 +1,22 @@
+{
+  "markers": [
+    {
+      "id": "hint",
+      "prefixes": ["h:", "hint:"],
+      "behavior": "research-first",
+      "inject": "HINT: The user has provided a potential insight or suggestion. Do not take it as a command. You MUST perform a quick, cheap research pass (search the project, check relevant files/docs) to validate this before proceeding. Report your findings."
+    },
+    {
+      "id": "feedback",
+      "prefixes": ["f:", "feedback:"],
+      "behavior": "high-priority-adjustment",
+      "inject": "FEEDBACK: The user is providing concrete feedback on previous work, a plan, or an output. This is high priority. Refer back to the session history, identify the specific point, and address it as soon as possible."
+    },
+    {
+      "id": "extension",
+      "prefixes": ["e:", "extension:"],
+      "behavior": "scope-extension",
+      "inject": "EXTENSION: The user is extending the current task's scope. Analyze this new requirement. Try to incorporate it into the current unit of work if it fits, or suggest splitting it into a follow-up task if it's too large."
+    }
+  ]
+}

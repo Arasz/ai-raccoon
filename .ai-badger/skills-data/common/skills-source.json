@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "name": "claude-plugins-official",
+      "type": "marketplace",
+      "source": "https://github.com/anthropics/claude-plugins-official",
+      "support": ["claude"]
+    },
+    {
+      "name": "ai-badger",
+      "type": "url",
+      "source": "https://github.com/Arasz/ai-badger",
+      "support": "common"
+    }
+  ]
+}

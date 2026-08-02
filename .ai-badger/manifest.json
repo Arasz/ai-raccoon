@@ -1,0 +1,1097 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "frameworkVersion": "0.76.0",
+  "frameworkCommit": "3ff8674f4654325a80d0adb8162d0dacb168a341",
+  "frameworkDirty": true,
+  "frameworkRoot": "/Users/arasz/RiderProjects/ai-badger",
+  "generatedAt": "2026-08-02T19:07:19Z",
+  "agents": [
+    "claude",
+    "copilot",
+    "hermes"
+  ],
+  "skillScope": "default",
+  "pluginScope": "default",
+  "configHash": "a031b3b10f93eba42a20a56b9cc5d9b8a27dac2dcd2fea52bc837f9d6a81b980",
+  "generatedConfig": [
+    {
+      "path": ".claude/settings.json",
+      "destination": ".claude/settings.json",
+      "frameworkVersion": "0.76.0"
+    },
+    {
+      "path": ".github/mcp.json",
+      "destination": ".github/mcp.json",
+      "frameworkVersion": "0.76.0"
+    },
+    {
+      "path": ".mcp.json",
+      "destination": ".mcp.json",
+      "frameworkVersion": "0.76.0"
+    }
+  ],
+  "entries": [
+    {
+      "feature": "personas",
+      "stack": "common",
+      "name": "architect",
+      "source": "features/common/personas/architect.md",
+      "target": ".ai-badger/agents/architect.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "9a7f3647e6c7835278edd1e9cc8e4b35fba834c0975a4b41df42442d65c686f3"
+    },
+    {
+      "feature": "personas",
+      "stack": "common",
+      "name": "code-reviewer",
+      "source": "features/common/personas/code-reviewer.md",
+      "target": ".ai-badger/agents/code-reviewer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "7193b7bb44533e58330255fc39308b91c4958b860e6878823d81c151796b803e"
+    },
+    {
+      "feature": "personas",
+      "stack": "common",
+      "name": "delegator",
+      "source": "features/common/personas/delegator.md",
+      "target": ".ai-badger/agents/delegator.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "ab8f4b5dbe72c43ce81c0709b64825cf7c1740a9f258b3d21e5a8b905e3ab95b"
+    },
+    {
+      "feature": "personas",
+      "stack": "common",
+      "name": "test-engineer",
+      "source": "features/common/personas/test-engineer.md",
+      "target": ".ai-badger/agents/test-engineer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "d37d6c8d1fb034b05eadd10e42183f5e05d98ad1bdf94880c78f055d61a92195"
+    },
+    {
+      "feature": "personas",
+      "stack": "dotnet",
+      "name": "dotnet-engineer",
+      "source": "features/dotnet/personas/dotnet-engineer.md",
+      "target": ".ai-badger/agents/dotnet-engineer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "d4c1f23da5c6e8e7aa7ec2f7baadbb5354ad1070606914cab904c052fdb3676f"
+    },
+    {
+      "feature": "instructions",
+      "stack": "common",
+      "name": "documentation.instructions",
+      "source": "features/common/instructions/documentation.instructions.md",
+      "target": ".ai-badger/instructions/documentation.instructions.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "49d0deaa5e85453ef729cab6fbb443ad079eaf3a6bab6d82d9d735cced36c4ca"
+    },
+    {
+      "feature": "instructions",
+      "stack": "dotnet",
+      "name": "csharp.instructions",
+      "source": "features/dotnet/instructions/csharp.instructions.md",
+      "target": ".ai-badger/instructions/csharp.instructions.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "99a0ffddf2ca4ae1425654835ff5cc86cdad9d5b774d255e34e68b8777cc0b08"
+    },
+    {
+      "feature": "instructions",
+      "stack": "mcp",
+      "name": "mcp.instructions",
+      "source": "features/mcp/instructions/mcp.instructions.md",
+      "target": ".ai-badger/instructions/mcp.instructions.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "433631eb0c4e089ee2f2bab50a685cf06653ebc166cb3a640d9c6a455890bae4"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "ask-if-simpler",
+      "source": "features/common/invariants/ask-if-simpler.md",
+      "target": ".ai-badger/invariants/ask-if-simpler.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "e02d242f6ce7993be31ced05957f6b9416b4c60d59cd6bf6caaf85749c243741"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "check-sources-not-yourself",
+      "source": "features/common/invariants/check-sources-not-yourself.md",
+      "target": ".ai-badger/invariants/check-sources-not-yourself.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "7df3c33c8644ee5be6009f3388fadbda9b85ded7ea23f3515f5c4d5107619d6b"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "guard-clauses",
+      "source": "features/common/invariants/guard-clauses.md",
+      "target": ".ai-badger/invariants/guard-clauses.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "81e27d082d09fbf6d93cfac034f07eea3481d77e36a176d5170e4c55c8ead4fb"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "measure-when-it-pays",
+      "source": "features/common/invariants/measure-when-it-pays.md",
+      "target": ".ai-badger/invariants/measure-when-it-pays.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "22d126a295210ee210c203aeb2360e2caceb9322e7f55871e409f33b6dfadd2e"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "minimal-comments",
+      "source": "features/common/invariants/minimal-comments.md",
+      "target": ".ai-badger/invariants/minimal-comments.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "28c17e954bfc850a6441c2ccbc032318d60085695b1320536e2b75bd563d0079"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "no-hand-rolled-crypto",
+      "source": "features/common/invariants/no-hand-rolled-crypto.md",
+      "target": ".ai-badger/invariants/no-hand-rolled-crypto.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "cbf086eeac7d8f6449d58c711b39e2aecbdff6885f4ed8575d090ae6cf8c1996"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "no-hardcoded-secrets",
+      "source": "features/common/invariants/no-hardcoded-secrets.md",
+      "target": ".ai-badger/invariants/no-hardcoded-secrets.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "b7433087d8f1260ace6a99ca3055286b89c16934e933c5e90834310c86c05e18"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "plain-names",
+      "source": "features/common/invariants/plain-names.md",
+      "target": ".ai-badger/invariants/plain-names.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "fb5481c20855554b3817dd4f27038d4a44b2e50bf1e1beb6b4aecdedc426ee20"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "pr-per-task",
+      "source": "features/common/invariants/pr-per-task.md",
+      "target": ".ai-badger/invariants/pr-per-task.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "792e236fa2065d4d7c82a1ff9d3f7eb9eddf87fd50b7d23b4fe11ee333c63d16"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "proof-of-done",
+      "source": "features/common/invariants/proof-of-done.md",
+      "target": ".ai-badger/invariants/proof-of-done.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "7e9b933d21a8d1f05e2cd3b5c8912aa67944cd2abcafb254cc11d95af0ac657c"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "screaming-architecture",
+      "source": "features/common/invariants/screaming-architecture.md",
+      "target": ".ai-badger/invariants/screaming-architecture.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "3fea8c23b252277aa3f003ef03944c66654384ef3a49c18e8b2e0a4a87581dcc"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "small-commits-early-draft-pr",
+      "source": "features/common/invariants/small-commits-early-draft-pr.md",
+      "target": ".ai-badger/invariants/small-commits-early-draft-pr.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "77d2954d232a9b7c1fc0c1186681979a4215cba322421521de584d1a4b175d4f"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "tdd-mandatory",
+      "source": "features/common/invariants/tdd-mandatory.md",
+      "target": ".ai-badger/invariants/tdd-mandatory.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "59b4a6d1cda4e11820f79949f673c45cdaa4f69d528d5be00a7fdfef63391b2b"
+    },
+    {
+      "feature": "invariants",
+      "stack": "common",
+      "name": "traceable-releases",
+      "source": "features/common/invariants/traceable-releases.md",
+      "target": ".ai-badger/invariants/traceable-releases.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "377265b6f5764fba81ec41fc5f8e6447ae3bb6d6f9aa38344e13e0c4dd1867b4"
+    },
+    {
+      "feature": "invariants",
+      "stack": "dotnet",
+      "name": "clean-architecture-layering",
+      "source": "features/dotnet/invariants/clean-architecture-layering.md",
+      "target": ".ai-badger/invariants/clean-architecture-layering.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "6563156211821bbaa9b9fd4b129d1815d7b3f70dc2af94644313910083d191d1"
+    },
+    {
+      "feature": "invariants",
+      "stack": "dotnet",
+      "name": "high-performance-logging",
+      "source": "features/dotnet/invariants/high-performance-logging.md",
+      "target": ".ai-badger/invariants/high-performance-logging.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "01ae7a360c42fa2141942e5b277f3433082e2ab579e65aa570fdc57a21a79437"
+    },
+    {
+      "feature": "invariants",
+      "stack": "mcp",
+      "name": "mcp-thin",
+      "source": "features/mcp/invariants/mcp-thin.md",
+      "target": ".ai-badger/invariants/mcp-thin.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "a118e9dfdcdf83981a0dcd7daba6f4379b626f5c0fa49060ab190410c4bf78fc"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "call-behaviorist",
+      "source": "features/common/skills/call-behaviorist",
+      "target": ".ai-badger/skills/call-behaviorist",
+      "frameworkVersion": "0.76.0",
+      "hash": "6cb89269d152469c874fc73cd7f0f57f9c7c7755d882fa27d5456c66c37bddcc",
+      "dirMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      },
+      "sourceHash": "6cb89269d152469c874fc73cd7f0f57f9c7c7755d882fa27d5456c66c37bddcc",
+      "sourceMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "code-review-checklist",
+      "source": "features/common/skills/code-review-checklist",
+      "target": ".ai-badger/skills/code-review-checklist",
+      "frameworkVersion": "0.76.0",
+      "hash": "186a58ae8afb006f2719cb9098340ee618b1cc0fea4600bfc5ab642fb532ac61",
+      "dirMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "sourceHash": "1396ddce3ea21c3219efc79d0913beccd8c575bca5f5b549649f9fa8f68aa308",
+      "sourceMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "commit-reminder",
+      "source": "features/common/skills/commit-reminder",
+      "target": ".ai-badger/skills/commit-reminder",
+      "frameworkVersion": "0.76.0",
+      "hash": "f6adcf48035968305439aee873db45f2a4909a904e7759b235506cc1da908c70",
+      "dirMeta": {
+        "file_count": 6,
+        "dir_count": 1
+      },
+      "sourceHash": "f6adcf48035968305439aee873db45f2a4909a904e7759b235506cc1da908c70",
+      "sourceMeta": {
+        "file_count": 6,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "create-task-spec",
+      "source": "features/common/skills/create-task-spec",
+      "target": ".ai-badger/skills/create-task-spec",
+      "frameworkVersion": "0.76.0",
+      "hash": "e3bce03e0fbf83341733795fb2f3683a4175c081b47948850ae9a90d2bec2ae1",
+      "dirMeta": {
+        "file_count": 4,
+        "dir_count": 2
+      },
+      "sourceHash": "e3bce03e0fbf83341733795fb2f3683a4175c081b47948850ae9a90d2bec2ae1",
+      "sourceMeta": {
+        "file_count": 4,
+        "dir_count": 2
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "den-refresh",
+      "source": "features/common/skills/den-refresh",
+      "target": ".ai-badger/skills/den-refresh",
+      "frameworkVersion": "0.76.0",
+      "hash": "1560aa23a2adfe5744b54ecdd0978d533065b9c56d0db5d29824d89b603d9476",
+      "dirMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      },
+      "sourceHash": "1560aa23a2adfe5744b54ecdd0978d533065b9c56d0db5d29824d89b603d9476",
+      "sourceMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "differential-feature-refactor",
+      "source": "features/common/skills/differential-feature-refactor",
+      "target": ".ai-badger/skills/differential-feature-refactor",
+      "frameworkVersion": "0.76.0",
+      "hash": "a9594d36adfa8d469f26499770e331aad9f29c55687b2a89a75f824d1f6e17fa",
+      "dirMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "sourceHash": "a9594d36adfa8d469f26499770e331aad9f29c55687b2a89a75f824d1f6e17fa",
+      "sourceMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "feed-badger",
+      "source": "features/common/skills/feed-badger",
+      "target": ".ai-badger/skills/feed-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "27a8d036979afb63d0446d886f046d013fa7e67f37652de00ed5c2cfce9c966c",
+      "dirMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      },
+      "sourceHash": "27a8d036979afb63d0446d886f046d013fa7e67f37652de00ed5c2cfce9c966c",
+      "sourceMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "maintain-agent-instructions",
+      "source": "features/common/skills/maintain-agent-instructions",
+      "target": ".ai-badger/skills/maintain-agent-instructions",
+      "frameworkVersion": "0.76.0",
+      "hash": "e24f7d3b05c56c117212b4e47cddc15aec23b5ec176f042e394a29feeebee786",
+      "dirMeta": {
+        "file_count": 5,
+        "dir_count": 2
+      },
+      "sourceHash": "e24f7d3b05c56c117212b4e47cddc15aec23b5ec176f042e394a29feeebee786",
+      "sourceMeta": {
+        "file_count": 5,
+        "dir_count": 2
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "mcp-index",
+      "source": "features/common/skills/mcp-index",
+      "target": ".ai-badger/skills/mcp-index",
+      "frameworkVersion": "0.76.0",
+      "hash": "6fe5ea89f3eadaf5c0e31a1c19996a998344c2c61577b919a3f620e9d930ec3a",
+      "dirMeta": {
+        "file_count": 7,
+        "dir_count": 1
+      },
+      "sourceHash": "6fe5ea89f3eadaf5c0e31a1c19996a998344c2c61577b919a3f620e9d930ec3a",
+      "sourceMeta": {
+        "file_count": 7,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "owner-gate-review",
+      "source": "features/common/skills/owner-gate-review",
+      "target": ".ai-badger/skills/owner-gate-review",
+      "frameworkVersion": "0.76.0",
+      "hash": "4eb3971cca59bf0f71d98efeb07befa6306dde2d2c37a4ea942cdd86cfa7f519",
+      "dirMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "sourceHash": "4eb3971cca59bf0f71d98efeb07befa6306dde2d2c37a4ea942cdd86cfa7f519",
+      "sourceMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "prompt-markers",
+      "source": "features/common/skills/prompt-markers",
+      "target": ".ai-badger/skills/prompt-markers",
+      "frameworkVersion": "0.76.0",
+      "hash": "a539865bcda2d701a8713c9e57df76f632d1b80c5ba6af1eb22b2ac1a67e7c62",
+      "dirMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "sourceHash": "a539865bcda2d701a8713c9e57df76f632d1b80c5ba6af1eb22b2ac1a67e7c62",
+      "sourceMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task",
+      "source": "features/common/skills/task",
+      "target": ".ai-badger/skills/task",
+      "frameworkVersion": "0.76.0",
+      "hash": "ceec6a5756b5641c0bd390b7f7441c7b7bf3e55884127123798707f42c200a24",
+      "dirMeta": {
+        "file_count": 15,
+        "dir_count": 2
+      },
+      "sourceHash": "ceec6a5756b5641c0bd390b7f7441c7b7bf3e55884127123798707f42c200a24",
+      "sourceMeta": {
+        "file_count": 15,
+        "dir_count": 2
+      }
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/claude/extension.json",
+      "source": "features/common/skills/task/extensions/claude/extension.json",
+      "target": ".ai-badger/skills/task/extensions/claude/extension.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "45a9dc0ac40b8eb93977f7ffe6b7ba4c08caee17db3f5dbbe9fcf5efdee7b21f"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/claude/extension.md",
+      "source": "features/common/skills/task/extensions/claude/extension.md",
+      "target": ".ai-badger/skills/task/extensions/claude/extension.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "6ef5f749b16d6fadfe80efbfd46ccaa75fd2227fc13a1662fbdfe898114796d5"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/copilot/extension.json",
+      "source": "features/common/skills/task/extensions/copilot/extension.json",
+      "target": ".ai-badger/skills/task/extensions/copilot/extension.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "04074e0b31fdbe54ee6e35bb3cd712363c066a08aa7ec160088eabe57a8aa4ad"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/copilot/extension.md",
+      "source": "features/common/skills/task/extensions/copilot/extension.md",
+      "target": ".ai-badger/skills/task/extensions/copilot/extension.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "7d1c9bd1e9e498018bfb62ef4a4675d08a35825877cb457c05e2910cb3a8bf26"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "welcome-ai-badger",
+      "source": "features/common/skills/welcome-ai-badger",
+      "target": ".ai-badger/skills/welcome-ai-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "f14969b31da54025e1df24f961ce11b20c0b470db682851317ecb5cd94911036",
+      "dirMeta": {
+        "file_count": 18,
+        "dir_count": 2
+      },
+      "sourceHash": "f14969b31da54025e1df24f961ce11b20c0b470db682851317ecb5cd94911036",
+      "sourceMeta": {
+        "file_count": 18,
+        "dir_count": 2
+      }
+    },
+    {
+      "feature": "templates",
+      "stack": "common",
+      "name": "agent-instructions/schema.json",
+      "source": "features/common/templates/agent-instructions/schema.json",
+      "target": ".ai-badger/agent-instructions/schema.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "f16a7eebab357b45d5b2b3575d15db8bc5b6273e140a58dfb5026a3ca9d9b0e3"
+    },
+    {
+      "feature": "templates",
+      "stack": "common",
+      "name": "agent-instructions/model.template.json",
+      "source": "features/common/templates/agent-instructions/model.template.json",
+      "target": ".ai-badger/agent-instructions/model.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "66773c529baad7498df3af925c86b40bcb097ac7c8fcf108eddae5585aef375e"
+    },
+    {
+      "feature": "templates",
+      "stack": "common",
+      "name": "state.json",
+      "source": "features/common/templates/state.json",
+      "target": ".ai-badger/state.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "340d9da18a9e2938ff0c058d36c1558428c82c11dd1cc4b35b312d620f923438"
+    },
+    {
+      "feature": "templates",
+      "stack": "common",
+      "name": "delegation.md.tmpl",
+      "source": "features/common/templates/delegation.md.tmpl",
+      "target": ".ai-badger/delegation.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "f8ff555e880966a58ae82aee36f133e3f14a292cc4045f4417b2b817c61a26f2"
+    },
+    {
+      "feature": "templates",
+      "stack": "claude",
+      "name": "CLAUDE.md.tmpl",
+      "source": "features/claude/templates/CLAUDE.md.tmpl",
+      "target": "CLAUDE.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "11d0ada78825b9da340b8844e6ec5d8c47970cccd1488be72c14d4259fe496be"
+    },
+    {
+      "feature": "templates",
+      "stack": "copilot",
+      "name": "copilot-instructions.md.tmpl",
+      "source": "features/copilot/templates/copilot-instructions.md.tmpl",
+      "target": ".github/copilot-instructions.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "11d0ada78825b9da340b8844e6ec5d8c47970cccd1488be72c14d4259fe496be"
+    },
+    {
+      "feature": "templates",
+      "stack": "hermes",
+      "name": "HERMES.md.tmpl",
+      "source": "features/hermes/templates/HERMES.md.tmpl",
+      "target": "HERMES.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "8df5436cac88bcf0cd525a1b5e9e37d48eb84546941198820bf1126141f2cf2e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/agents/architect.md",
+      "source": "features/claude/adjustments/adjust_agents.py",
+      "target": ".claude/agents/architect.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "5268e72297b81fcd4d675be4c26a0f9bf598bff5bdcbc3b805d0c614a19dd1c9"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/agents/code-reviewer.md",
+      "source": "features/claude/adjustments/adjust_agents.py",
+      "target": ".claude/agents/code-reviewer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "5268e72297b81fcd4d675be4c26a0f9bf598bff5bdcbc3b805d0c614a19dd1c9"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/agents/delegator.md",
+      "source": "features/claude/adjustments/adjust_agents.py",
+      "target": ".claude/agents/delegator.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "5268e72297b81fcd4d675be4c26a0f9bf598bff5bdcbc3b805d0c614a19dd1c9"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/agents/dotnet-engineer.md",
+      "source": "features/claude/adjustments/adjust_agents.py",
+      "target": ".claude/agents/dotnet-engineer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "5268e72297b81fcd4d675be4c26a0f9bf598bff5bdcbc3b805d0c614a19dd1c9"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/agents/test-engineer.md",
+      "source": "features/claude/adjustments/adjust_agents.py",
+      "target": ".claude/agents/test-engineer.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "5268e72297b81fcd4d675be4c26a0f9bf598bff5bdcbc3b805d0c614a19dd1c9"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/call-behaviorist",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/call-behaviorist",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/code-review-checklist",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/code-review-checklist",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/commit-reminder",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/commit-reminder",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/create-task-spec",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/create-task-spec",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/den-refresh",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/den-refresh",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/differential-feature-refactor",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/differential-feature-refactor",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/feed-badger",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/feed-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/maintain-agent-instructions",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/maintain-agent-instructions",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/mcp-index",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/mcp-index",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/owner-gate-review",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/owner-gate-review",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/prompt-markers",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/prompt-markers",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/task",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/task",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/welcome-ai-badger",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/welcome-ai-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
+      "source": "features/claude/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "57927b538803695abe1e38bc7078f190c32a0b8d03c0695ae81de7133a40a7f2"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/bm25.py",
+      "source": "features/claude/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/bm25.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "57927b538803695abe1e38bc7078f190c32a0b8d03c0695ae81de7133a40a7f2"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/mcp_matcher.py",
+      "source": "features/claude/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/mcp_matcher.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "57927b538803695abe1e38bc7078f190c32a0b8d03c0695ae81de7133a40a7f2"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/context_enrichment.py",
+      "source": "features/claude/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/context_enrichment.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "57927b538803695abe1e38bc7078f190c32a0b8d03c0695ae81de7133a40a7f2"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/hooks/ai-badger-hooks.json",
+      "source": "features/copilot/adjustments/adjust_hooks.py",
+      "target": ".github/hooks/ai-badger-hooks.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "8aafa8c70b18fa82912acf7213c4f0568d79fb65e189f979920d7b046deba686"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/call-behaviorist",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/call-behaviorist",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/code-review-checklist",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/code-review-checklist",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/commit-reminder",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/commit-reminder",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/create-task-spec",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/create-task-spec",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/den-refresh",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/den-refresh",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/differential-feature-refactor",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/differential-feature-refactor",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/feed-badger",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/feed-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/maintain-agent-instructions",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/maintain-agent-instructions",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/mcp-index",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/mcp-index",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/owner-gate-review",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/owner-gate-review",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/prompt-markers",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/prompt-markers",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/task",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/task",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/welcome-ai-badger",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/welcome-ai-badger",
+      "frameworkVersion": "0.76.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/agents/architect.agent.md",
+      "source": "features/copilot/adjustments/adjust_agents.py",
+      "target": ".github/agents/architect.agent.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "40212966d9efd49e034fe88c1b664b41447a4911804c22a4434b5ecf33fe8e05"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/agents/code-reviewer.agent.md",
+      "source": "features/copilot/adjustments/adjust_agents.py",
+      "target": ".github/agents/code-reviewer.agent.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "40212966d9efd49e034fe88c1b664b41447a4911804c22a4434b5ecf33fe8e05"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/agents/delegator.agent.md",
+      "source": "features/copilot/adjustments/adjust_agents.py",
+      "target": ".github/agents/delegator.agent.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "40212966d9efd49e034fe88c1b664b41447a4911804c22a4434b5ecf33fe8e05"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/agents/test-engineer.agent.md",
+      "source": "features/copilot/adjustments/adjust_agents.py",
+      "target": ".github/agents/test-engineer.agent.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "40212966d9efd49e034fe88c1b664b41447a4911804c22a4434b5ecf33fe8e05"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/agents/dotnet-engineer.agent.md",
+      "source": "features/copilot/adjustments/adjust_agents.py",
+      "target": ".github/agents/dotnet-engineer.agent.md",
+      "frameworkVersion": "0.76.0",
+      "hash": "40212966d9efd49e034fe88c1b664b41447a4911804c22a4434b5ecf33fe8e05"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
+      "source": "features/copilot/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "3f36bc11597189114f4d2ae7f7123ae8e93d5659c837e2349d13a70a41641f6d"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/bm25.py",
+      "source": "features/copilot/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/bm25.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "3f36bc11597189114f4d2ae7f7123ae8e93d5659c837e2349d13a70a41641f6d"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/mcp_matcher.py",
+      "source": "features/copilot/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/mcp_matcher.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "3f36bc11597189114f4d2ae7f7123ae8e93d5659c837e2349d13a70a41641f6d"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.ai-badger/skills/mcp-index/scripts/context_enrichment.py",
+      "source": "features/copilot/adjustments/adjust_retrieval.py",
+      "target": ".ai-badger/skills/mcp-index/scripts/context_enrichment.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "3f36bc11597189114f4d2ae7f7123ae8e93d5659c837e2349d13a70a41641f6d"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/ai_badger_hooks.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/ai_badger_hooks.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/mcp_index_hook.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/mcp_index_hook.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/commit_reminder.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/commit_reminder.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/impact_estimator.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/impact_estimator.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/tokenizer.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/tokenizer.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/bm25.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/bm25.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "hermes",
+      "name": "adjustments/.ai-badger/hooks/mcp_matcher.py",
+      "source": "features/hermes/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/mcp_matcher.py",
+      "frameworkVersion": "0.76.0",
+      "hash": "8ec32e97717dd1362179fbc0f872c4d9f637146d75217212d3d9b5f9f6a1a739"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "common/skills-source.json",
+      "source": "features/common/skills-source.json",
+      "target": ".ai-badger/skills-data/common/skills-source.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "ab2e2c2fa70f7fcb94fc026c49fe2d7db83bafe7de3b918afcac5790bb703a84"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "common/skills.json",
+      "source": "features/common/skills.json",
+      "target": ".ai-badger/skills-data/common/skills.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "d4193b9893a17927003d9af040a88d57adb7f4d1b5d72f085373967985cc5276"
+    },
+    {
+      "feature": "skills",
+      "stack": "dotnet",
+      "name": "dotnet/skills-source.json",
+      "source": "features/dotnet/skills-source.json",
+      "target": ".ai-badger/skills-data/dotnet/skills-source.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "e937ab09062910828f26f04fc7aa635c9bb2176df6a5f4b59a2c6a2312933b63"
+    },
+    {
+      "feature": "skills",
+      "stack": "dotnet",
+      "name": "dotnet/skills.json",
+      "source": "features/dotnet/skills.json",
+      "target": ".ai-badger/skills-data/dotnet/skills.json",
+      "frameworkVersion": "0.76.0",
+      "hash": "559039c52618dfdfd619e96c150dc67d1acc8e0f3fb54d1b84df1b49a789b7d4"
+    }
+  ]
+}
