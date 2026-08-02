@@ -6,3 +6,4 @@ obj/
 /.ai-badger/worktrees/
 riderModule.iml
 /_ReSharper.Caches/
+.DS_Store
