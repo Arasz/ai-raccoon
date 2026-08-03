@@ -167,7 +167,9 @@ public sealed class SqliteMemoryStore(
                             MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
                             cancellationToken: cancellationToken))
                     .ConfigureAwait(false))
-                .Select(row => new MemorySearchResult(row.Hash, row.Seq, row.Ranking, row.Path, row.Snippet))
+                .Select(row => new MemorySearchResult(
+                    row.Hash, row.Seq, row.Ranking, row.Path,
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
                 .ToList();
         }
         catch (SqliteException)
@@ -186,7 +188,8 @@ public sealed class SqliteMemoryStore(
                 .ConfigureAwait(false))
             .ToList();
         return rows
-            .Select(row => new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, row.Snippet))
+            .Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
             .ToList();
     }
 
@@ -848,6 +851,8 @@ public sealed class SqliteMemoryStore(
         public string Path { get; set; } = "";
 
         public string Snippet { get; set; } = "";
+
+        public string Value { get; set; } = "";
     }
 
     private sealed class VectorRow
@@ -858,7 +863,7 @@ public sealed class SqliteMemoryStore(
 
         public string Path { get; set; } = "";
 
-        public string Snippet { get; set; } = "";
+        public string Value { get; set; } = "";
     }
 
     private sealed record SourceRow(string Path, string Value);

@@ -55,7 +55,8 @@ internal static class MemorySql
 
     public const string SearchByFilter = """
                                          SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts) AS Ranking,
-                                                e.path AS Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet
+                                                e.path AS Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet,
+                                                e.value AS Value
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query
@@ -65,11 +66,12 @@ internal static class MemorySql
                                          """;
 
     // P6 vec0 modality: cosine KNN over the embedded rows, ordered by distance ascending so
-    // the row position is the rank for RRF. Vector hits carry a plain teaser snippet (the
-    // FTS list's snippet() payload wins for docs both modalities retrieve).
+    // the row position is the rank for RRF. Vector hits carry a fallback snippet built in
+    // C# from the entry value (the FTS list's snippet() payload wins for docs both
+    // modalities retrieve).
     public const string VectorSearchByFilter = """
                                                 SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
-                                                       substr(e.value, 1, 160) AS Snippet
+                                                       e.value AS Value
                                                 FROM vec_entries v
                                                 JOIN entries e ON e.id = v.rowid
                                                 WHERE {filter}

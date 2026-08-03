@@ -69,6 +69,30 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Search_VectorOnlyHit_SnippetFallsBackToTrimmedValue_WithEllipsis()
+    {
+        // ADOPT (P6b plan §8): a vector-only hit has no FTS5 snippet() — FR-NM-4 s1 still
+        // requires a snippet on every result, so the entry value is trimmed to ~200 chars
+        // ('…'-marked, keyed by hash) instead of an empty snippet.
+        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
+            "test-key-123", TestContext.Current.CancellationToken);
+
+        var longValue = string.Join(" ", Enumerable.Range(1, 40).Select(i =>
+            $"sentence number {i} with enough prose to exceed the two hundred character window"));
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
+
+        // No keyword overlap with the stored text, so only the vec modality retrieves it.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "fast canine"), TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        hit.Snippet.ShouldNotBeNullOrWhiteSpace();
+        hit.Snippet.ShouldBe(SnippetFallback.From(longValue, hit.Hash));
+    }
+
+    [Fact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
         // ADOPT (P6b plan §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
