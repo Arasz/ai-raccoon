@@ -20,7 +20,8 @@ public sealed class ExtensionProvisionerTests : IDisposable
         var archives = OsxArm64Archives();
         var handler = new FakeHandler(uri => archives[AssetName(uri)]);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, asset => Hash(archives[asset]), includeCloudSync: true);
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, asset => Hash(archives[asset]),
+            includeCloudSync: true);
 
         var result = await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
@@ -70,9 +71,9 @@ public sealed class ExtensionProvisionerTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_dataRoot, "extensions", "osx-arm64"));
         File.WriteAllText(ModulePath("vector.dylib"), "x");
         File.WriteAllText(ModulePath("memory.dylib"), "x");
-        var handler = new FakeHandler(_ => Array.Empty<byte>());
+        var handler = new FakeHandler(_ => []);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => Hash(Array.Empty<byte>()));
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => Hash([]));
 
         await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
@@ -82,13 +83,13 @@ public sealed class ExtensionProvisionerTests : IDisposable
     [Fact]
     public async Task EnsureProvisioned_OnChecksumMismatch_ThrowsAndLeavesNoFile()
     {
-        var archive = TarGz(("vector.dylib", new byte[] { 1 }));
+        var archive = TarGz(("vector.dylib", [1]));
         var handler = new FakeHandler(_ => archive);
         using var http = new HttpClient(handler);
         var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => new string('0', 64));
 
-        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(
-            () => provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
+        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
+            provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
 
         exception.Message.ShouldContain("Checksum mismatch");
         Directory.Exists(provisioner.ExtensionDirectory).ShouldBeTrue();
@@ -98,12 +99,12 @@ public sealed class ExtensionProvisionerTests : IDisposable
     [Fact]
     public async Task EnsureProvisioned_WithoutManifestChecksum_Throws()
     {
-        var handler = new FakeHandler(_ => Array.Empty<byte>());
+        var handler = new FakeHandler(_ => []);
         using var http = new HttpClient(handler);
         var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => null);
 
-        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(
-            () => provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
+        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
+            provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
 
         exception.Message.ShouldContain("No checksum recorded");
         handler.Requested.ShouldBeEmpty();
@@ -112,10 +113,11 @@ public sealed class ExtensionProvisionerTests : IDisposable
     [Fact]
     public async Task EnsureProvisioned_ForMuslRid_ThrowsListingMissingBinaries()
     {
-        var provisioner = new ExtensionProvisioner(_dataRoot, "linux-musl-x64", new HttpClient(), _ => null, includeCloudSync: true);
+        var provisioner = new ExtensionProvisioner(_dataRoot, "linux-musl-x64", new HttpClient(), _ => null,
+            includeCloudSync: true);
 
-        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(
-            () => provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
+        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
+            provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
 
         exception.Message.ShouldContain("memory-linux-musl-x86_64-full-1.3.5.tar.gz");
         exception.Message.ShouldContain("vector-linux-musl-x86_64-1.0.0.tar.gz");
@@ -127,18 +129,19 @@ public sealed class ExtensionProvisionerTests : IDisposable
     {
         var provisioner = new ExtensionProvisioner(_dataRoot, "win-arm64", new HttpClient(), _ => null);
 
-        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(
-            () => provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
+        var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
+            provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
 
         exception.Message.ShouldContain("win-arm64");
     }
 
-    private static Dictionary<string, byte[]> OsxArm64Archives() => new()
-    {
-        ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector.dylib", new byte[] { 1 })),
-        ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory.dylib", new byte[] { 2 })),
-        ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", new byte[] { 3 })),
-    };
+    private static Dictionary<string, byte[]> OsxArm64Archives() =>
+        new()
+        {
+            ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector.dylib", [1])),
+            ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory.dylib", [2])),
+            ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", [3])),
+        };
 
     private static string AssetName(Uri uri) => Path.GetFileName(uri.AbsolutePath);
 
@@ -173,20 +176,17 @@ public sealed class ExtensionProvisionerTests : IDisposable
         return buffer.ToArray();
     }
 
-    private sealed class FakeHandler : HttpMessageHandler
+    private sealed class FakeHandler(Func<Uri, byte[]> bodyFor) : HttpMessageHandler
     {
-        private readonly Func<Uri, byte[]> _bodyFor;
-
-        public FakeHandler(Func<Uri, byte[]> bodyFor) => _bodyFor = bodyFor;
-
         public List<Uri> Requested { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
             Requested.Add(request.RequestUri!);
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new ByteArrayContent(_bodyFor(request.RequestUri!)),
+                Content = new ByteArrayContent(bodyFor(request.RequestUri!)),
             };
             return Task.FromResult(response);
         }

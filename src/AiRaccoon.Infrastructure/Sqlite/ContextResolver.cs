@@ -13,11 +13,8 @@ internal static class ContextResolver
             return request.Context;
         }
 
-        if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
-        {
-            return ContextNaming.WorkspaceContext(request.WorkspaceId);
-        }
-
-        return ContextNaming.ProjectContext(request.ProjectId);
+        return string.IsNullOrWhiteSpace(request.WorkspaceId)
+            ? ContextNaming.ProjectContext(request.ProjectId)
+            : ContextNaming.WorkspaceContext(request.WorkspaceId);
     }
 }

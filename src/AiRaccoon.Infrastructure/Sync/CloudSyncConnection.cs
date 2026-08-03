@@ -5,15 +5,11 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>Runs the cloudsync SQL functions over the bank connection (spec §4.1).</summary>
-internal sealed class CloudSyncConnection : ICloudSyncConnection
+internal sealed class CloudSyncConnection(SqliteConnection connection) : ICloudSyncConnection
 {
-    private readonly SqliteConnection _connection;
-
-    public CloudSyncConnection(SqliteConnection connection) => _connection = connection;
-
     public async Task<IReadOnlyList<string>> GetCommittedContextsAsync(CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = MemorySql.CommittedContexts;
 
         var contexts = new List<string>();
@@ -28,7 +24,7 @@ internal sealed class CloudSyncConnection : ICloudSyncConnection
 
     public async Task EnableSyncAsync(string context, CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT memory_enable_sync(@context)";
         command.Parameters.AddWithValue("@context", context);
         await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
@@ -36,7 +32,7 @@ internal sealed class CloudSyncConnection : ICloudSyncConnection
 
     public async Task NetworkInitAsync(string databaseId, CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT cloudsync_network_init(@databaseId)";
         command.Parameters.AddWithValue("@databaseId", databaseId);
         await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
@@ -44,7 +40,7 @@ internal sealed class CloudSyncConnection : ICloudSyncConnection
 
     public async Task SetApiKeyAsync(string apiKey, CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT cloudsync_network_set_apikey(@apiKey)";
         command.Parameters.AddWithValue("@apiKey", apiKey);
         await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
@@ -52,7 +48,7 @@ internal sealed class CloudSyncConnection : ICloudSyncConnection
 
     public async Task<CloudSyncCounts> NetworkSyncAsync(CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT cloudsync_network_sync()";
         var json = (string)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
         return CloudSyncCounts.Parse(json);
@@ -60,10 +56,11 @@ internal sealed class CloudSyncConnection : ICloudSyncConnection
 
     public async Task<int> ReindexAsync(CancellationToken cancellationToken)
     {
-        await using var command = _connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT memory_reindex()";
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
     }
 
-    public ValueTask DisposeAsync() => _connection.DisposeAsync();
+    public ValueTask DisposeAsync() => connection.DisposeAsync();
 }

@@ -7,28 +7,23 @@ using AiRaccoon.Infrastructure.Sqlite;
 namespace AiRaccoon.Infrastructure.Degradation;
 
 /// <summary>Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec FR-MEM-1.15).</summary>
-public sealed class SweepService
+public sealed class SweepService(IMemoryStore store, MetaStore meta)
 {
-    private readonly IMemoryStore _store;
-    private readonly MetaStore _meta;
-
-    public SweepService(IMemoryStore store, MetaStore meta)
-    {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
-        _meta = meta ?? throw new ArgumentNullException(nameof(meta));
-    }
+    private readonly MetaStore _meta = meta ?? throw new ArgumentNullException(nameof(meta));
+    private readonly IMemoryStore _store = store ?? throw new ArgumentNullException(nameof(store));
 
     public async Task<SweepOutcome> SweepAsync(
         string projectId, double threshold, double ttlDays, bool dryRun, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         var projectContext = ContextNaming.ProjectContext(projectId);
         var entries = await _store.ListContextAsync(projectId, projectContext, cancellationToken).ConfigureAwait(false);
 
         // Shared rows are path-scoped (distinct hashes), but guard anyway: an entry whose
         // content also lives in the shared tier must never be swept out of it (FR-MEM-1.15).
-        var sharedEntries = await _store.ListContextAsync(projectId, ContextNaming.SharedContext, cancellationToken).ConfigureAwait(false);
+        var sharedEntries = await _store.ListContextAsync(projectId, ContextNaming.SharedContext, cancellationToken)
+            .ConfigureAwait(false);
         var sharedHashes = sharedEntries.Select(e => e.Hash).ToHashSet(StringComparer.Ordinal);
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -52,12 +47,14 @@ public sealed class SweepService
             }
 
             candidates.Add(new SweepCandidate(entry.Hash, rating, ageDays));
-            if (!dryRun)
+            if (dryRun)
             {
-                await _store.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
-                await _meta.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
-                deleted.Add(entry.Hash);
+                continue;
             }
+
+            await _store.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
+            await _meta.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
+            deleted.Add(entry.Hash);
         }
 
         return new SweepOutcome(candidates, deleted);

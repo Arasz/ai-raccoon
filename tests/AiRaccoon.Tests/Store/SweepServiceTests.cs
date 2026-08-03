@@ -1,7 +1,5 @@
 using AiRaccoon.Core.Common;
-using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
@@ -89,11 +87,13 @@ public class SweepServiceTests
 
         public HashSet<string> SharedHashes { get; } = new(StringComparer.Ordinal);
 
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry>
+            WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
         {
@@ -101,60 +101,69 @@ public class SweepServiceTests
             return Task.FromResult(true);
         }
 
-        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
+            string? apiKey, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default)
         {
             ListedContexts.Add(context);
             if (context == ContextNaming.SharedContext)
             {
                 return Task.FromResult<IReadOnlyList<MemoryEntry>>(
-                    SharedHashes.Select(h => new MemoryEntry(h, "shared.md", context, "value", 0)).ToList());
+                    [.. SharedHashes.Select(h => new MemoryEntry(h, "shared.md", context, "value", 0))]);
             }
 
             var age = context == ContextNaming.ProjectContext("acme") ? 40 : 0;
             return Task.FromResult<IReadOnlyList<MemoryEntry>>(
-                [new MemoryEntry("old-low", "note.md", context, "value", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - age * 86_400)]);
+            [
+                new MemoryEntry("old-low", "note.md", context, "value",
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds() - age * 86_400)
+            ]);
         }
     }
 
-    private sealed class FakeMetaStore : MetaStore
+    private sealed class FakeMetaStore(double? rating) : MetaStore(null!)
     {
-        private readonly double? _rating;
-
-        public FakeMetaStore(double? rating) : base(null!) => _rating = rating;
-
-        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult<MetaEntry?>(_rating is null
+        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<MetaEntry?>(rating is null
                 ? null
-                : new MetaEntry(hash, projectId, null, null, 0, 0, null, _rating.Value, null));
+                : new MetaEntry(hash, projectId, null, null, 0, 0, null, rating.Value, null));
 
-        public override Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public override Task<bool> DeleteAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }

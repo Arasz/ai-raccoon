@@ -1,7 +1,5 @@
 using AiRaccoon.Core.Common;
-using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -16,12 +14,12 @@ namespace AiRaccoon.Tests.Tools;
 
 public class MemoryToolsTests
 {
-    private readonly FakeStore _store = new();
-    private readonly FakeSyncService _sync = new();
     private readonly FakeMetaStore _meta = new();
-    private readonly WorkspaceService _workspaces;
+    private readonly FakeStore _store = new();
     private readonly SweepService _sweeper;
+    private readonly FakeSyncService _sync = new();
     private readonly MemoryTools _tools;
+    private readonly WorkspaceService _workspaces;
 
     public MemoryToolsTests()
     {
@@ -33,7 +31,8 @@ public class MemoryToolsTests
     [Fact]
     public async Task Write_WithoutProjectId_ThrowsMcpException()
     {
-        var ex = await Should.ThrowAsync<McpException>(() => _tools.Write("", "content", cancellationToken: TestContext.Current.CancellationToken));
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Write("", "content", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("project_id");
     }
 
@@ -42,7 +41,8 @@ public class MemoryToolsTests
     {
         _store.Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5);
 
-        var result = await _tools.Write("acme", "content", agentId: "agent-a", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Write("acme", "content", agentId: "agent-a",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         result.Hash.ShouldBe("h1");
         result.Context.ShouldBe("project:acme");
@@ -53,7 +53,8 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithInvalidScope_ThrowsMcpException()
     {
-        var ex = await Should.ThrowAsync<McpException>(() => _tools.Search("acme", "q", scope: "bogus", cancellationToken: TestContext.Current.CancellationToken));
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", "q", scope: "bogus", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("scope");
     }
 
@@ -83,7 +84,8 @@ public class MemoryToolsTests
     {
         _sync.Exception = new SyncNotConfiguredException();
 
-        var ex = await Should.ThrowAsync<McpException>(() => _tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("sync-not-configured");
     }
@@ -103,7 +105,8 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceBegin_ReturnsWorkspaceIdAndContext()
     {
-        var result = await _tools.WorkspaceBegin("acme", agentId: "agent-a", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.WorkspaceBegin("acme", agentId: "agent-a",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         result.WorkspaceId.ShouldNotBeNullOrWhiteSpace();
         result.Context.ShouldStartWith("workspace:");
@@ -118,7 +121,8 @@ public class MemoryToolsTests
             new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2),
         ];
 
-        var result = await _tools.WorkspaceConsolidate("acme", "ws-1", ["all"], cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.WorkspaceConsolidate("acme", "ws-1", ["all"],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(2);
     }
@@ -139,7 +143,9 @@ public class MemoryToolsTests
     public async Task Sweep_DryRunByDefault_ReportsCandidatesWithoutDeleting()
     {
         _store.EntriesByContext["project:acme"] =
-            [new MemoryEntry("old", "n.md", "project:acme", "v", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 40 * 86_400)];
+        [
+            new MemoryEntry("old", "n.md", "project:acme", "v", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 40 * 86_400)
+        ];
         _meta.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
 
@@ -171,60 +177,66 @@ public class MemoryToolsTests
             return Task.FromResult(Entry);
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default)
         {
             LastQuery = query;
             return Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
         }
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
-        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult(0);
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult(Stats);
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Stats);
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default)
         {
             Shared = (projectId, hash);
             return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
         }
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult("{\"root\":\"\"}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult("{\"root\":\"\"}");
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
+            string? apiKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbedPendingResult(0, 0));
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1));
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1));
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
     }
 
-    private sealed class FakeSyncService : SyncService
+    private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())
     {
         public SyncResult Result { get; set; } = new(0, 0, 0);
 
         public SyncNotConfiguredException? Exception { get; set; }
 
-        public FakeSyncService() : base(new SyncOptions(), new FakeCloudSyncFactory())
-        {
-        }
-
-        public override Task<SyncResult> MemorySyncAsync(string projectId, CancellationToken cancellationToken = default)
+        public override Task<SyncResult> MemorySyncAsync(string projectId,
+            CancellationToken cancellationToken = default)
         {
             if (Exception is not null)
             {
@@ -237,22 +249,20 @@ public class MemoryToolsTests
 
     private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken)
-            => throw new NotImplementedException();
+        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
     }
 
-    private sealed class FakeMetaStore : MetaStore
+    private sealed class FakeMetaStore() : MetaStore(null!)
     {
         public double Rating { get; set; } = 0.9;
 
-        public FakeMetaStore() : base(null!)
-        {
-        }
+        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<MetaEntry?>(new MetaEntry(hash, projectId, null, null, 0, 0, null, Rating, null));
 
-        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult<MetaEntry?>(new MetaEntry(hash, projectId, null, null, 0, 0, null, Rating, null));
-
-        public override Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public override Task<bool> DeleteAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }

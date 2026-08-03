@@ -13,8 +13,8 @@ public class SyncServiceTests
     {
         var service = new SyncService(new SyncOptions(), new FakeConnectionFactory(new FakeConnection([])));
 
-        await Should.ThrowAsync<SyncNotConfiguredException>(
-            () => service.MemorySyncAsync("acme", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncNotConfiguredException>(() =>
+            service.MemorySyncAsync("acme", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class SyncServiceTests
         await service.MemorySyncAsync("acme", TestContext.Current.CancellationToken);
 
         connection.Calls.Where(c => c.StartsWith("enable:", StringComparison.Ordinal))
-            .ShouldBe(new[] { "enable:shared", "enable:project:acme", "enable:project:other-app" });
+            .ShouldBe(["enable:shared", "enable:project:acme", "enable:project:other-app"]);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class SyncServiceTests
         await service.MemorySyncAsync("acme", TestContext.Current.CancellationToken);
 
         connection.Calls.Where(c => c.StartsWith("enable:", StringComparison.Ordinal))
-            .ShouldBe(new[] { "enable:shared", "enable:project:acme" });
+            .ShouldBe(["enable:shared", "enable:project:acme"]);
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class SyncServiceTests
 
     private sealed class FakeConnectionFactory(FakeConnection connection) : ICloudSyncConnectionFactory
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken)
-            => Task.FromResult<ICloudSyncConnection>(connection);
+        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<ICloudSyncConnection>(connection);
     }
 }

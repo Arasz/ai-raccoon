@@ -24,11 +24,8 @@ public sealed record InfrastructureOptions
     public static string DefaultDataRoot()
     {
         var env = Environment.GetEnvironmentVariable("AIRACCOON_DATA_ROOT");
-        if (!string.IsNullOrWhiteSpace(env))
-        {
-            return env;
-        }
-
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
+        return !string.IsNullOrWhiteSpace(env)
+            ? env
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
     }
 }

@@ -6,21 +6,18 @@ namespace AiRaccoon.Infrastructure.Sync;
 public sealed record SyncResult(int Sent, int Received, int Reindexed);
 
 /// <summary>Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;), serialized per spec §6.3.</summary>
-public class SyncService
+public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connections)
 {
-    private readonly SyncOptions _options;
-    private readonly ICloudSyncConnectionFactory _connections;
+    private readonly ICloudSyncConnectionFactory _connections =
+        connections ?? throw new ArgumentNullException(nameof(connections));
+
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SyncOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
-    public SyncService(SyncOptions options, ICloudSyncConnectionFactory connections)
+    public virtual async Task<SyncResult> MemorySyncAsync(string projectId,
+        CancellationToken cancellationToken = default)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
-    }
-
-    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         if (!_options.IsConfigured)
         {
@@ -43,9 +40,9 @@ public class SyncService
 
             var send = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);
             var receive = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);
-            var reindexed = await connection.ReindexAsync(cancellationToken).ConfigureAwait(false);
+            var reindexCount = await connection.ReindexAsync(cancellationToken).ConfigureAwait(false);
 
-            return new SyncResult(send.Sent, receive.Received, reindexed);
+            return new SyncResult(send.Sent, receive.Received, reindexCount);
         }
         finally
         {

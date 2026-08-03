@@ -21,9 +21,11 @@ internal static class SearchResultMerger
             }
         }
 
-        return bestByHash.Values
-            .OrderByDescending(r => r.Ranking)
-            .Take(limit)
-            .ToList();
+        return
+        [
+            .. bestByHash.Values
+                .OrderByDescending(r => r.Ranking)
+                .Take(limit)
+        ];
     }
 }

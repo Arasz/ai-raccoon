@@ -104,7 +104,9 @@ public class SqliteMemoryStoreTests
         var query = new SearchQuery("acme", "q", scope: SearchScope.All, workspaceId: "ws-1");
 
         SearchContexts.For(query).ShouldBe(
-            new[] { ContextNaming.SharedContext, ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1") });
+        [
+            ContextNaming.SharedContext, ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")
+        ]);
     }
 
     [Fact]
@@ -113,7 +115,7 @@ public class SqliteMemoryStoreTests
         var query = new SearchQuery("acme", "q");
 
         SearchContexts.For(query).ShouldBe(
-            new[] { ContextNaming.SharedContext, ContextNaming.ProjectContext("acme") });
+            [ContextNaming.SharedContext, ContextNaming.ProjectContext("acme")]);
     }
 
     [Fact]
@@ -122,7 +124,7 @@ public class SqliteMemoryStoreTests
         var query = new SearchQuery("acme", "q", scope: SearchScope.Project, workspaceId: "ws-1");
 
         SearchContexts.For(query).ShouldBe(
-            new[] { ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1") });
+            [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
     }
 
     [Fact]
@@ -130,7 +132,7 @@ public class SqliteMemoryStoreTests
     {
         var query = new SearchQuery("acme", "q", scope: SearchScope.Project);
 
-        SearchContexts.For(query).ShouldBe(new[] { ContextNaming.ProjectContext("acme") });
+        SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
     }
 
     [Fact]
@@ -138,18 +140,20 @@ public class SqliteMemoryStoreTests
     {
         var query = new SearchQuery("acme", "q", scope: SearchScope.Shared, workspaceId: "ws-1");
 
-        SearchContexts.For(query).ShouldBe(new[] { ContextNaming.SharedContext });
+        SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
 
     [Fact]
     public void Merge_KeepsBestRankingPerHash_AcrossContextBatches()
     {
-        var shared = new[] { new MemorySearchResult("h1", 1, 0.8, "a.md", "s"), new MemorySearchResult("h2", 2, 0.6, "b.md", "s") };
-        var project = new[] { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
+        var shared = new[]
+            { new MemorySearchResult("h1", 1, 0.8, "a.md", "s"), new MemorySearchResult("h2", 2, 0.6, "b.md", "s") };
+        var project = new[]
+            { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
 
-        var merged = SearchResultMerger.Merge(new[] { shared, project }, limit: 10);
+        var merged = SearchResultMerger.Merge([shared, project], limit: 10);
 
-        merged.Select(r => r.Hash).ShouldBe(new[] { "h1", "h2", "h3" });
+        merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
         merged[0].Ranking.ShouldBe(0.9);
     }
 
@@ -163,8 +167,8 @@ public class SqliteMemoryStoreTests
             new MemorySearchResult("h3", 3, 0.7, "c.md", "s"),
         };
 
-        var merged = SearchResultMerger.Merge(new[] { results }, limit: 2);
+        var merged = SearchResultMerger.Merge([results], limit: 2);
 
-        merged.Select(r => r.Hash).ShouldBe(new[] { "h2", "h3" });
+        merged.Select(r => r.Hash).ShouldBe(["h2", "h3"]);
     }
 }

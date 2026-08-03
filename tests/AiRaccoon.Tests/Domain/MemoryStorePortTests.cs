@@ -1,7 +1,5 @@
 using AiRaccoon.Core.Common;
-using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
 using Shouldly;
 using Xunit;
 
@@ -99,22 +97,26 @@ public class MemoryStorePortTests
 
         public string? ListedContext { get; private set; }
 
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry>
+            WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default)
         {
             Shared = (projectId, hash);
             return Task.FromResult(new MemoryEntry(hash, "notes.md", ContextNaming.SharedContext, "value", 1));
@@ -126,32 +128,38 @@ public class MemoryStorePortTests
             return Task.FromResult("{\"root\":\"\"}");
         }
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default)
         {
             IngestedFile = (path, context);
             return Task.FromResult(1);
         }
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default)
         {
             IngestedDirectory = (path, context);
             return Task.FromResult(3);
         }
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-            string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default)
+            string projectId, string provider, string model, string? apiKey,
+            CancellationToken cancellationToken = default)
         {
             Configured = (provider, model, apiKey);
             return Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
         }
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbedPendingResult(7, 3));
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbedPendingResult(7, 3));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default)
         {
             ListedContext = context;
             return Task.FromResult<IReadOnlyList<MemoryEntry>>(

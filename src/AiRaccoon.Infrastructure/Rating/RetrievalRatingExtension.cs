@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Degradation;
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
 
@@ -10,11 +9,9 @@ namespace AiRaccoon.Infrastructure.Rating;
 /// search returned gets its access count incremented and rating recomputed in the local meta
 /// store; writes record provenance so a later sweep has a rating to judge.
 /// </summary>
-public sealed class RetrievalRatingExtension : IMemoryExtension
+public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
 {
-    private readonly MetaStore _meta;
-
-    public RetrievalRatingExtension(MetaStore meta) => _meta = meta ?? throw new ArgumentNullException(nameof(meta));
+    private readonly MetaStore _meta = meta ?? throw new ArgumentNullException(nameof(meta));
 
     public string Name => "retrieval-rating";
 
@@ -30,7 +27,7 @@ public sealed class RetrievalRatingExtension : IMemoryExtension
         foreach (var result in context.Results)
         {
             await _meta.UpsertAccessAsync(
-                context.ProjectId, result.Hash, context: result.Path, cancellationToken: cancellationToken)
+                    context.ProjectId, result.Hash, context: result.Path, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -43,9 +40,10 @@ public sealed class RetrievalRatingExtension : IMemoryExtension
         }
     }
 
-    public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context, CancellationToken cancellationToken)
-        => Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
+    public Task<IReadOnlyList<SweepCandidate>>
+        OnSweepAsync(SweepContext context, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
 
-    public async Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken)
-        => await Task.CompletedTask;
+    public async Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
+        await Task.CompletedTask;
 }

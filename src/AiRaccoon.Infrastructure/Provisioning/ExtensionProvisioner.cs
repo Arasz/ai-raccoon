@@ -5,10 +5,7 @@ using AiRaccoon.Infrastructure.Common;
 
 namespace AiRaccoon.Infrastructure.Provisioning;
 
-public sealed class ExtensionProvisioningException : Exception
-{
-    public ExtensionProvisioningException(string message) : base(message) { }
-}
+public sealed class ExtensionProvisioningException(string message) : Exception(message);
 
 /// <summary>Absolute paths of the provisioned loadable extension modules.</summary>
 public sealed record ProvisionedExtensions(string Vector, string Memory, string? CloudSync);
@@ -17,16 +14,17 @@ public sealed record ProvisionedExtensions(string Vector, string Memory, string?
 public sealed class ExtensionProvisioner
 {
     private readonly string _dataRoot;
-    private readonly string _rid;
     private readonly HttpClient _http;
-    private readonly Func<string, string?> _sha256ForAsset;
     private readonly bool _includeCloudSync;
+    private readonly string _rid;
+    private readonly Func<string, string?> _sha256ForAsset;
 
     public ExtensionProvisioner(
-        string dataRoot, string rid, HttpClient http, Func<string, string?> sha256ForAsset, bool includeCloudSync = false)
+        string dataRoot, string rid, HttpClient http, Func<string, string?> sha256ForAsset,
+        bool includeCloudSync = false)
     {
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(dataRoot);
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(rid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rid);
 
         _dataRoot = dataRoot;
         _rid = rid;
@@ -75,7 +73,8 @@ public sealed class ExtensionProvisioner
     private string ModulePath(ExtensionSpec spec) =>
         Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));
 
-    private async Task DownloadAndVerifyAsync(ExtensionSpec spec, string platform, string modulePath, CancellationToken cancellationToken)
+    private async Task DownloadAndVerifyAsync(ExtensionSpec spec, string platform, string modulePath,
+        CancellationToken cancellationToken)
     {
         var asset = spec.AssetFileName(platform);
         var expectedSha256 = _sha256ForAsset(asset);
@@ -107,7 +106,8 @@ public sealed class ExtensionProvisioner
         var moduleName = Path.GetFileName(modulePath);
         var modulePrefix = Path.GetFileNameWithoutExtension(moduleName);
         var extracted = Directory.EnumerateFiles(ExtensionDirectory)
-            .FirstOrDefault(file => Path.GetFileNameWithoutExtension(file).StartsWith(modulePrefix, StringComparison.Ordinal));
+            .FirstOrDefault(file =>
+                Path.GetFileNameWithoutExtension(file).StartsWith(modulePrefix, StringComparison.Ordinal));
         if (extracted is null)
         {
             throw new ExtensionProvisioningException($"Archive '{asset}' did not contain a '{modulePrefix}' module.");

@@ -5,6 +5,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="JetBrains.Annotations"/>
+        <PackageReference Include="CommunityToolkit.Diagnostics"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <InternalsVisibleTo Include="AiRaccoon.Tests"/>
     </ItemGroup>
 

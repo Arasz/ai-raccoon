@@ -72,13 +72,10 @@ public sealed class MemoryExtensionHostTests : IDisposable
         return dir;
     }
 
-    private sealed class RecordingExtension : IMemoryExtension
+    private sealed class RecordingExtension(string name) : IMemoryExtension
     {
-        public RecordingExtension(string name) => Name = name;
-
-        public string Name { get; }
-
         public List<string> Calls { get; } = [];
+        public string Name { get; } = name;
 
         public Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken)
         {
@@ -98,7 +95,8 @@ public sealed class MemoryExtensionHostTests : IDisposable
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
+            CancellationToken cancellationToken)
         {
             Calls.Add("OnSweepAsync");
             return Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
@@ -111,11 +109,9 @@ public sealed class MemoryExtensionHostTests : IDisposable
         }
     }
 
-    private sealed class StubStore : IMemoryStore
+    private sealed class StubStore(IReadOnlyList<MemorySearchResult>? results = null) : IMemoryStore
     {
-        private readonly IReadOnlyList<MemorySearchResult> _results;
-
-        public StubStore(IReadOnlyList<MemorySearchResult>? results = null) => _results = results ?? [];
+        private readonly IReadOnlyList<MemorySearchResult> _results = results ?? [];
 
         public int Writes { get; private set; }
 
@@ -125,40 +121,49 @@ public sealed class MemoryExtensionHostTests : IDisposable
             return Task.FromResult(new MemoryEntry("h1", "note.md", "project:acme", request.Content, 1));
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
-            => Task.FromResult(_results);
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_results);
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
-        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult(0);
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryStats(0, 0, []));
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MemoryStats(0, 0, []));
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryEntry(hash, "shared/note.md", ContextNaming.SharedContext, "v", 1));
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MemoryEntry(hash, "shared/note.md", ContextNaming.SharedContext, "v", 1));
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult("{}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult("{}");
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbeddingConfig(provider, model, "local"));
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
+            string? apiKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model, "local"));
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbedPendingResult(0, 0));
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
     }
 }

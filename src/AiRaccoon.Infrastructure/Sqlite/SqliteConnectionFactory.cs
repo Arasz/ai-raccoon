@@ -7,9 +7,9 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>Opens the install's memory bank (one DB per install scope) with the shared PRAGMA policy and loads native extensions (spec §6.3).</summary>
 public sealed class SqliteConnectionFactory
 {
-    private readonly InfrastructureOptions _options;
     private readonly bool _loadCloudSync;
     private readonly Action<SqliteConnection> _loadExtensions;
+    private readonly InfrastructureOptions _options;
 
     static SqliteConnectionFactory()
     {
@@ -18,7 +18,8 @@ public sealed class SqliteConnectionFactory
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
-    public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false, Action<SqliteConnection>? loadExtensions = null)
+    public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false,
+        Action<SqliteConnection>? loadExtensions = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _loadCloudSync = loadCloudSync;
@@ -26,12 +27,14 @@ public sealed class SqliteConnectionFactory
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
-    public string BankDirectory => _options.Scope switch
-    {
-        InstallScope.User => _options.DataRoot,
-        InstallScope.Project => Path.Combine(_options.DataRoot, ".ai-raccoon"),
-        _ => throw new ArgumentOutOfRangeException(nameof(_options.Scope), _options.Scope, "Unknown install scope."),
-    };
+    private string BankDirectory =>
+        _options.Scope switch
+        {
+            InstallScope.User => _options.DataRoot,
+            InstallScope.Project => Path.Combine(_options.DataRoot, ".ai-raccoon"),
+            _ => throw new ArgumentOutOfRangeException(nameof(_options.Scope), _options.Scope,
+                "Unknown install scope."),
+        };
 
     public string BankPath => Path.Combine(BankDirectory, "memory.db");
 
@@ -58,7 +61,7 @@ public sealed class SqliteConnectionFactory
 
     private void LoadNativeExtensions(SqliteConnection connection)
     {
-        connection.EnableExtensions(true);
+        connection.EnableExtensions();
         var paths = ExtensionPaths.For(_options.DataRoot, _options.Rid, _loadCloudSync);
         connection.LoadExtension(paths.Vector);
         connection.LoadExtension(paths.Memory);
