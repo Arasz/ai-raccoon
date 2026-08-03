@@ -210,6 +210,10 @@ def build_queries(docs):
 
     return queries
 
+def csharp_string(text):
+    """Regular C# string literal (escaped) — used for titles, matching committed style."""
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
 def emit_cs(docs, queries):
     os.makedirs(OUT, exist_ok=True)
 
@@ -227,7 +231,7 @@ def emit_cs(docs, queries):
         "    [",
     ]
     for d in docs:
-        lines.append(f'        new CorpusDocument("{d["id"]}", {csharp_literal(d["title"])}, {csharp_literal(d["body"])}),')
+        lines.append(f'        new({csharp_string(d["id"])}, {csharp_string(d["title"])}, {csharp_literal(d["body"])}),')
     lines += [
         "    ];",
         "}",
@@ -253,7 +257,7 @@ def emit_cs(docs, queries):
     for qid, text, relevant, judgment in queries:
         ids = ", ".join(f'"{r}"' for r in relevant)
         lines.append(f"        {judgment}")
-        lines.append(f'        new CorpusQuery("{qid}", {csharp_literal(text)}, [{ids}]),')
+        lines.append(f'        new({csharp_string(qid)}, {csharp_literal(text)}, [{ids}]),')
     lines += [
         "    ];",
         "}",
