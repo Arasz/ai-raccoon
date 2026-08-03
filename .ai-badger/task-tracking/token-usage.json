@@ -326,6 +326,38 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "benchmark-embedding-models",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "hermes-benchmark-embedding-20260803",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-03T09:57:45.249189+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-03T09:57:45.249189+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
     }
   ]
 }
