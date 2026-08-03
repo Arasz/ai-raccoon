@@ -88,6 +88,24 @@ workspace's isolated context.
 
 Credentials are read from the environment only.
 
+## Local embedding model
+
+Local embeddings run through sqlite-memory's llama.cpp integration and need a
+GGUF embedding model on disk, passed to `memory_configure(provider="local")`.
+The server does not bundle a model — download one once per install:
+
+```bash
+# Smallest verified model (~21 MB, Apache-2.0):
+scripts/download-embedding-model.sh all-minilm
+# sqlite-memory's documented reference model (~139 MB, Apache-2.0):
+scripts/download-embedding-model.sh nomic
+```
+
+The script pins the SHA-256 of `all-minilm` (all-MiniLM-L6-v2 Q5_K_M) and
+installs it under `<data-root>/models/`. Point the embedding integration/E2E
+tests at it with `export AIRACCOON_TEST_GGUF=<data-root>/models/all-MiniLM-L6-v2.Q5_K_M.gguf`
+(without it those tests skip honestly). Remote embeddings need no model file.
+
 ## Error shapes
 
 Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):

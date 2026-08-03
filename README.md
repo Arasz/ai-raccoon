@@ -147,7 +147,10 @@ and package versions are managed centrally.
 Native extensions (sqlite-memory, sqlite-vector, sqlite-sync) are provisioned per RID on
 first run into `<data-root>/extensions/<rid>/`, pinned and SHA-256 verified. Local
 embeddings need a GGUF model configured via `memory_configure`; without a model, writes are
-stored deferred and indexed later (`memory_embed_pending`).
+stored deferred and indexed later (`memory_embed_pending`). Download the small verified
+embedding model (~21 MB, Apache-2.0) with `scripts/download-embedding-model.sh all-minilm`
+(see `docs/reference/agent-memory-server.md` for the `nomic` alternative and
+`AIRACCOON_TEST_GGUF` usage in the embedding tests).
 
 ## Packaging & release
 
