@@ -2,6 +2,7 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestSupport;
 using Shouldly;
 using Xunit;
 
@@ -9,12 +10,17 @@ namespace AiRaccoon.Tests.Store;
 
 public class SweepServiceTests
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
+    private static SweepService Service(IMemoryStore store, FakeMetaStore meta) =>
+        new(store, meta, new FixedTimeProvider(FixedNow));
+
     [Fact]
     public async Task SweepAsync_DryRun_ReportsCandidates_WithoutDeleting()
     {
         var store = new FakeStore();
         var meta = new FakeMetaStore(rating: 0.1);
-        var service = new SweepService(store, meta);
+        var service = Service(store, meta);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: true, TestContext.Current.CancellationToken);
 
@@ -29,7 +35,7 @@ public class SweepServiceTests
     {
         var store = new FakeStore();
         var meta = new FakeMetaStore(rating: 0.1);
-        var service = new SweepService(store, meta);
+        var service = Service(store, meta);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
 
@@ -42,7 +48,7 @@ public class SweepServiceTests
     {
         var store = new FakeStore();
         var meta = new FakeMetaStore(rating: 0.9);
-        var service = new SweepService(store, meta);
+        var service = Service(store, meta);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
 
@@ -57,7 +63,7 @@ public class SweepServiceTests
         var meta = new FakeMetaStore(rating: 0.1);
         // The same hash exists in both the project and the shared tier.
         store.SharedHashes.Add("old-low");
-        var service = new SweepService(store, meta);
+        var service = Service(store, meta);
 
         await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
 
@@ -69,7 +75,7 @@ public class SweepServiceTests
     {
         var store = new FakeStore();
         var meta = new FakeMetaStore(rating: null); // no meta row exists
-        var service = new SweepService(store, meta);
+        var service = Service(store, meta);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
 
@@ -149,12 +155,12 @@ public class SweepServiceTests
             return Task.FromResult<IReadOnlyList<MemoryEntry>>(
             [
                 new MemoryEntry("old-low", "note.md", context, "value",
-                    DateTimeOffset.UtcNow.ToUnixTimeSeconds() - age * 86_400)
+                    FixedNow.ToUnixTimeSeconds() - age * 86_400)
             ]);
         }
     }
 
-    private sealed class FakeMetaStore(double? rating) : MetaStore(null!)
+    private sealed class FakeMetaStore(double? rating) : MetaStore(null!, TimeProvider.System)
     {
         public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>

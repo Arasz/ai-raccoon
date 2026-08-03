@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Tests.TestSupport;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -14,6 +15,8 @@ namespace AiRaccoon.Tests.Tools;
 
 public class MemoryToolsTests
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
     private readonly FakeMetaStore _meta = new();
     private readonly FakeStore _store = new();
     private readonly SweepService _sweeper;
@@ -24,7 +27,7 @@ public class MemoryToolsTests
     public MemoryToolsTests()
     {
         _workspaces = new WorkspaceService(_store);
-        _sweeper = new SweepService(_store, _meta);
+        _sweeper = new SweepService(_store, _meta, new FixedTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
     }
 
@@ -144,7 +147,7 @@ public class MemoryToolsTests
     {
         _store.EntriesByContext["project:acme"] =
         [
-            new MemoryEntry("old", "n.md", "project:acme", "v", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 40 * 86_400)
+            new MemoryEntry("old", "n.md", "project:acme", "v", FixedNow.ToUnixTimeSeconds() - 40 * 86_400)
         ];
         _meta.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
@@ -253,7 +256,7 @@ public class MemoryToolsTests
             throw new NotImplementedException();
     }
 
-    private sealed class FakeMetaStore() : MetaStore(null!)
+    private sealed class FakeMetaStore() : MetaStore(null!, TimeProvider.System)
     {
         public double Rating { get; set; } = 0.9;
 

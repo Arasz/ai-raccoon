@@ -37,6 +37,7 @@ public static class Dependencies
         ProvisionExtensions(options);
 
         services.AddSingleton(options);
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
             true));
