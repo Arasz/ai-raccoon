@@ -37,11 +37,15 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory) : IMemory
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         foreach (var context in SearchContexts.For(query))
         {
-            var results = (await connection.QueryAsync<MemorySearchResult>(
+            // Dapper materializes into a settable DTO: the memory_search virtual table declares
+            // blob-affinity columns, and Dapper's record-ctor matching would demand byte[] params.
+            var results = (await connection.QueryAsync<SearchRow>(
                     Def(MemorySql.SearchWithContext,
                         new { query = query.Query, minScore = query.MinScore, context, limit = query.Limit },
                         cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                .ConfigureAwait(false))
+                .Select(row => new MemorySearchResult(row.Hash, row.Seq, row.Ranking, row.Path, row.Snippet))
+                .ToList();
             batches.Add(results);
         }
 
@@ -269,6 +273,20 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory) : IMemory
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
+
+    /// <summary>Dapper materialization target for memory_search rows (blob-affinity columns defeat record ctor matching).</summary>
+    private sealed class SearchRow
+    {
+        public string Hash { get; set; } = "";
+
+        public int Seq { get; set; }
+
+        public double Ranking { get; set; }
+
+        public string Path { get; set; } = "";
+
+        public string Snippet { get; set; } = "";
+    }
 
     private sealed record SourceRow(string Path, string Value);
 }
