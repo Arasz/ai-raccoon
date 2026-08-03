@@ -92,7 +92,11 @@ extensions.
 
 `benchmarks/AiRaccoon.Benchmarks` compares retrieval quality and latency across
 embedding backends (local GGUF via LLamaSharp vs LM Studio via the OpenAI SDK,
-both behind the official `Microsoft.Extensions.AI` abstraction):
+both behind the official `Microsoft.Extensions.AI` abstraction). The default
+corpus is real-world: 174 docs from this machine's other repositories
+(job-search-ai-assistant, ai-badger, arasz-home-page ADRs/invariants/skills +
+`.remember` notes) with 68 judged queries; `--synthetic` runs the original
+48-doc regression set:
 
 ```bash
 AIRACCOON_TEST_GGUF=$HOME/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf \
@@ -101,10 +105,11 @@ LMSTUDIO_MODELS="text-embedding-qwen3-embedding-0.6b,text-embedding-embeddinggem
 dotnet run --project benchmarks/AiRaccoon.Benchmarks
 ```
 
-Latest results (macos-arm64): local all-MiniLM-L6-v2 Q5_K_M reaches R@5 0.81 /
-MRR 1.0 at ~9 ms per query in-process; LM Studio's Qwen3-0.6b and
-EmbeddingGemma-300m both reach R@10 1.0 at 37–90 ms over the network. Full
-methodology and numbers in `benchmarks/README.md`.
+Latest results (real-world corpus, macos-arm64): EmbeddingGemma-300m leads
+(R@5 0.34 / nDCG@10 0.70), Qwen3-0.6b and local all-MiniLM are close behind
+(MRR 0.84–0.86); local in-process inference is ~9 ms/query vs 37–90 ms over
+the network. The real corpus differentiates models the synthetic one couldn't.
+Full methodology and numbers in `benchmarks/README.md`.
 
 ## Quickstart — run it
 
