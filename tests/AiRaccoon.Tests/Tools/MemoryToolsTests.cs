@@ -67,7 +67,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithAllScope_DelegatesWithSearchScopeAll()
     {
-        await _tools.Search("acme", "query", "all", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.Scope.ShouldBe(SearchScope.All);
         _store.LastQuery.ProjectId.ShouldBe("acme");

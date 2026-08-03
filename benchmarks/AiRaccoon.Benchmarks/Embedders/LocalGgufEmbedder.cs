@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Benchmarks.Embedders;
 
 /// <summary>
-/// Local GGUF embeddings via the official LLamaSharp package (llama.cpp .NET bindings).
-/// The model path comes from AIRACCOON_TEST_GGUF — the same variable that gates the
-/// embedding integration tests. No hand-rolled GGUF parsing: LLamaSharp loads the model
-/// and reports the true embedding dimension.
+///     Local GGUF embeddings via the official LLamaSharp package (llama.cpp .NET bindings).
+///     The model path comes from AIRACCOON_TEST_GGUF — the same variable that gates the
+///     embedding integration tests. No hand-rolled GGUF parsing: LLamaSharp loads the model
+///     and reports the true embedding dimension.
 /// </summary>
 public sealed class LocalGgufEmbedder : EmbeddingBackend
 {
@@ -41,7 +41,7 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
         var path = modelPath ?? ModelPath;
         var @params = new ModelParams(path)
         {
-            PoolingType = LLamaPoolingType.Mean,
+            PoolingType = LLamaPoolingType.Mean
         };
         weights = LLamaWeights.LoadFromFile(@params);
         return new LLamaEmbedder(weights, @params, NullLogger.Instance);

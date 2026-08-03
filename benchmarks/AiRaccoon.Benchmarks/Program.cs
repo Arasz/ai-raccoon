@@ -1,3 +1,8 @@
+using AiRaccoon.Benchmarks.Corpus;
+using AiRaccoon.Benchmarks.Embedders;
+using AiRaccoon.Benchmarks.Metrics;
+using BenchmarkDotNet.Running;
+
 namespace AiRaccoon.Benchmarks;
 
 public static class Program
@@ -34,11 +39,11 @@ public static class Program
             try
             {
                 embedder = name.StartsWith("local:", StringComparison.Ordinal)
-                    ? (IEmbedder)new LocalGgufEmbedder()
+                    ? new LocalGgufEmbedder()
                     : new LmStudioEmbedder(name["lmstudio:".Length..]);
 
                 embedder.IndexAsync(BenchmarkCorpus.Documents).GetAwaiter().GetResult();
-                var metrics = RetrievalMetricsEvaluator.Compute(embedder, BenchmarkCorpus.Queries, topK: 10);
+                var metrics = RetrievalMetricsEvaluator.Compute(embedder, BenchmarkCorpus.Queries, 10);
 
                 Console.WriteLine(
                     $"{name,-52} {embedder.Dimensions,-6} " +

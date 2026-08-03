@@ -1,17 +1,18 @@
+using System.ClientModel;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
 namespace AiRaccoon.Benchmarks.Embedders;
 
 /// <summary>
-/// LM Studio embeddings via the official OpenAI SDK (Microsoft.Extensions.AI.OpenAI
-/// AsIEmbeddingGenerator). LM Studio exposes an OpenAI-compatible /v1 endpoint, so the
-/// official client works against it with a placeholder key — no hand-rolled HTTP code.
+///     LM Studio embeddings via the official OpenAI SDK (Microsoft.Extensions.AI.OpenAI
+///     AsIEmbeddingGenerator). LM Studio exposes an OpenAI-compatible /v1 endpoint, so the
+///     official client works against it with a placeholder key — no hand-rolled HTTP code.
 /// </summary>
 public sealed class LmStudioEmbedder : EmbeddingBackend
 {
-    private readonly string _model;
     private readonly string _baseUrl;
+    private readonly string _model;
 
     public LmStudioEmbedder(string model, string? baseUrl = null)
         : base(CreateGenerator(model, baseUrl))

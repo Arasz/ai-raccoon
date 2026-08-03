@@ -34,11 +34,11 @@ public static class RetrievalMetricsEvaluator
         }
 
         return new RetrievalMetrics(
-            RecallAt5: recalls5.Average(),
-            RecallAt10: recalls10.Average(),
-            Mrr: mrrValues.Average(),
-            NdcgAt10: ndcg10.Average(),
-            Queries: queries.Count);
+            recalls5.Average(),
+            recalls10.Average(),
+            mrrValues.Average(),
+            ndcg10.Average(),
+            queries.Count);
     }
 
     private static double RecallAtK(IReadOnlyList<RetrievalHit> hits, HashSet<string> relevant, int k)

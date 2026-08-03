@@ -10,9 +10,9 @@ public sealed record CorpusDocument(string Id, string Title, string Body)
 public sealed record CorpusQuery(string Id, string Text, IReadOnlyList<string> RelevantDocIds);
 
 /// <summary>
-/// Synthetic retrieval corpus: 8 topics x 5 documents, 16 queries (2 per topic), each query
-/// judged relevant to its own topic's documents. Every topic uses distinctive vocabulary so
-/// ranking quality is sensitive to the embedding model, not to keyword overlap alone.
+///     Synthetic retrieval corpus: 8 topics x 5 documents, 16 queries (2 per topic), each query
+///     judged relevant to its own topic's documents. Every topic uses distinctive vocabulary so
+///     ranking quality is sensitive to the embedding model, not to keyword overlap alone.
 /// </summary>
 public static class BenchmarkCorpus
 {

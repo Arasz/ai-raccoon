@@ -7,9 +7,9 @@ namespace AiRaccoon.Benchmarks.Embedders;
 public sealed record RetrievalHit(string DocumentId, double Score);
 
 /// <summary>
-/// Retrieval backend over an official Microsoft.Extensions.AI IEmbeddingGenerator. Indexing
-/// embeds the corpus once; search embeds the query and ranks documents by cosine similarity.
-/// All backends share this ranking shape, so quality metrics are comparable across models.
+///     Retrieval backend over an official Microsoft.Extensions.AI IEmbeddingGenerator. Indexing
+///     embeds the corpus once; search embeds the query and ranks documents by cosine similarity.
+///     All backends share this ranking shape, so quality metrics are comparable across models.
 /// </summary>
 public abstract class EmbeddingBackend : IEmbedder, IDisposable
 {
@@ -24,6 +24,8 @@ public abstract class EmbeddingBackend : IEmbedder, IDisposable
 
     protected abstract string BackendName { get; }
 
+    public virtual void Dispose() => _generator.Dispose();
+
     public string Name => BackendName;
 
     public int Dimensions { get; private set; }
@@ -32,7 +34,7 @@ public abstract class EmbeddingBackend : IEmbedder, IDisposable
         CancellationToken cancellationToken = default)
     {
         var texts = documents.Select(d => d.Text).ToArray();
-        var results = await _generator.GenerateAsync(texts, options: null, cancellationToken);
+        var results = await _generator.GenerateAsync(texts, null, cancellationToken);
         _documentVectors = results.Select(e => e.Vector.ToArray()).ToArray();
         Dimensions = _documentVectors[0].Length;
     }
@@ -40,7 +42,7 @@ public abstract class EmbeddingBackend : IEmbedder, IDisposable
     public async Task<IReadOnlyList<RetrievalHit>> SearchAsync(string query, int topK,
         CancellationToken cancellationToken = default)
     {
-        var results = await _generator.GenerateAsync([query], options: null, cancellationToken);
+        var results = await _generator.GenerateAsync([query], null, cancellationToken);
         var queryVector = results[0].Vector.ToArray();
 
         var scored = new List<(string Id, double Score)>(_documents.Count);
@@ -51,11 +53,6 @@ public abstract class EmbeddingBackend : IEmbedder, IDisposable
 
         scored.Sort((a, b) => b.Score.CompareTo(a.Score));
         return scored.Take(topK).Select(s => new RetrievalHit(s.Id, s.Score)).ToList();
-    }
-
-    public virtual void Dispose()
-    {
-        _generator.Dispose();
     }
 
     private static double Cosine(float[] a, float[] b)

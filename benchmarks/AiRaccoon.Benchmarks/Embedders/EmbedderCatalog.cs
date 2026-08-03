@@ -1,9 +1,9 @@
 namespace AiRaccoon.Benchmarks.Embedders;
 
 /// <summary>
-/// The embedding backends a benchmark run can compare. LM Studio model ids come from the
-/// LMSTUDIO_MODELS environment variable (comma-separated; default the two models verified
-/// on the dev box); the local backend needs AIRACCOON_TEST_GGUF pointing at a GGUF file.
+///     The embedding backends a benchmark run can compare. LM Studio model ids come from the
+///     LMSTUDIO_MODELS environment variable (comma-separated; default the two models verified
+///     on the dev box); the local backend needs AIRACCOON_TEST_GGUF pointing at a GGUF file.
 /// </summary>
 public static class EmbedderCatalog
 {

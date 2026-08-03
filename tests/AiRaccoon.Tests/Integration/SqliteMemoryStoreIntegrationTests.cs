@@ -276,7 +276,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
             new MemoryWriteRequest("acme", "semantic searchable fact"), TestContext.Current.CancellationToken);
 
         var results = await store.SearchAsync(
-            new SearchQuery("acme", "semantic searchable", SearchScope.All),
+            new SearchQuery("acme", "semantic searchable"),
             TestContext.Current.CancellationToken);
 
         results.ShouldContain(r => r.Hash == entry.Hash);

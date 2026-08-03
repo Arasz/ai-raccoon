@@ -2,14 +2,10 @@ using AiRaccoon.Benchmarks.Corpus;
 
 namespace AiRaccoon.Benchmarks.Embedders;
 
-/// <summary>A ranked retrieval hit for one query.</summary>
-public sealed record RetrievalHit(string DocumentId, double Score);
-
 /// <summary>
-/// An embedding backend plus its retrieval path. The local GGUF backend runs through the
-/// real SqliteMemoryStore (hybrid search); the LM Studio backend embeds via the REST API and
-/// retrieves with brute-force cosine similarity. Both consume the same corpus and queries so
-/// the quality metrics are comparable.
+///     An embedding backend plus its retrieval path. All backends (local GGUF via LLamaSharp,
+///     LM Studio via the official OpenAI SDK) wrap a Microsoft.Extensions.AI IEmbeddingGenerator
+///     and share the same cosine ranking, so quality metrics are comparable across models.
 /// </summary>
 public interface IEmbedder
 {
