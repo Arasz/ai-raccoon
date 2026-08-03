@@ -10,3 +10,11 @@ riderModule.iml
 .DS_Store
 __pycache__/
 /BenchmarkDotNet.Artifacts/
+# Golden-retrieval harness reference binaries (pinned by manifest.json; the bootstrap copies
+# verified copies from ~/.ai-raccoon or downloads the pinned releases). Committed inside the
+# directory: manifest.json, reference-topk.json and the asset-policy sources.
+tests/AiRaccoon.Tests/Retrieval/assets/*
+!tests/AiRaccoon.Tests/Retrieval/assets/manifest.json
+!tests/AiRaccoon.Tests/Retrieval/assets/reference-topk.json
+!tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssets.cs
+!tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssetGateTests.cs
