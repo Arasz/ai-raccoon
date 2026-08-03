@@ -69,6 +69,34 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
+    {
+        // ADOPT (P6b plan §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
+        // list must rank ascending (the exact-restatement doc, distance 0, first) and the
+        // fused Ranking must stay an RRF score in 0..1 with the top exactly 1.0, never the
+        // raw distance. ftsWeight 0 isolates the vector modality.
+        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
+            "test-key-123", TestContext.Current.CancellationToken);
+
+        var identical = await _store.AddContentAsync("acme", "a.md",
+            "semantic memory retrieval system", ContextNaming.ProjectContext("acme"),
+            TestContext.Current.CancellationToken);
+        var unrelated = await _store.AddContentAsync("acme", "b.md",
+            "raspberry cheesecake recipe", ContextNaming.ProjectContext("acme"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "semantic memory retrieval system", SearchScope.Project,
+                limit: 10, minScore: 0.0, rrfK: 60, ftsWeight: 0, vectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        // distance 0 (identical text) must rank first; the distance value never becomes a score.
+        results.Select(r => r.Hash).ShouldBe([identical.Hash, unrelated.Hash]);
+        results[0].Ranking.ShouldBe(1.0);
+        results.ShouldAllBe(r => r.Ranking >= 0.0 && r.Ranking <= 1.0);
+    }
+
+    [Fact]
     public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
     {
         // ADOPT (P6b plan §8): per-modality candidate window K = max(limit*3, 100) — a doc
