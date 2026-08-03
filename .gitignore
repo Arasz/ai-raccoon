@@ -18,3 +18,6 @@ tests/AiRaccoon.Tests/Retrieval/assets/*
 !tests/AiRaccoon.Tests/Retrieval/assets/reference-topk.json
 !tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssets.cs
 !tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssetGateTests.cs
+# Bundled ONNX embedding model (FR-NM-3): downloaded + SHA-pinned by scripts/download-embedding-model.sh.
+# vocab.txt is committed; only the ~23 MB binary is gitignored.
+src/AiRaccoon/Models/*.onnx
