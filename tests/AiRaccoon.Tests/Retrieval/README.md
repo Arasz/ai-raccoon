@@ -22,6 +22,14 @@ runtime extension without losing the oracle.
   (deferral default on, explicit embed, `ORDER BY ranking DESC, seq ASC` for determinism). It
   does **not** depend on `src/AiRaccoon.Infrastructure/Sqlite`, which P1 rewrites.
   `assets/reference-topk.json` is the committed golden output.
+- `Managed/` — the new side of the gate (P6): `ManagedHarness` loads the shared corpus into
+  the managed store (FTS5 + vec0, bundled int8 ONNX engine, RRF fusion) and plugs into the
+  sweep runner's `RankSource`. `ParityGateTests` is FR-NM-5: no nDCG@10 regression beyond
+  Δ ≤ 0.02 vs the vendored golden at any sweep point (the gate is one-sided — observed deltas
+  are favorable: the new side exceeds the reference at every point), no regression on the
+  degenerate query subset (queries with a single relevant doc) at the default fusion config,
+  and p95 query latency within budget. Set `AIRACCOON_HARNESS_WRITE_REPORT=1` to regenerate
+  `Managed/parity-report.md` (sweep matrix + per-query audit with modality attribution).
 - `HarnessSmokeTests` — determinism + result-shape + sane-quality wiring over a fixed query set.
 
 ## Run
