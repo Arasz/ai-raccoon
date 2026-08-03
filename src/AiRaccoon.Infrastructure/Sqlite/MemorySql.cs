@@ -20,11 +20,23 @@ internal static class MemorySql
                                            """;
 
     public const string SelectSourceByHashAndProject = """
-                                                       SELECT path AS Path, value AS Value
-                                                       FROM entries
-                                                       WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
-                                                       LIMIT 1
-                                                       """;
+                                                         SELECT path AS Path, value AS Value
+                                                        FROM entries
+                                                        WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
+                                                        LIMIT 1
+                                                        """;
+
+    // Global content dedup (FR-NM-7): the earliest committed row (workspace_id IS NULL) holding
+    // this value, across every scope of the project — writing identical content returns it.
+    public const string SelectCommittedByValue = """
+                                                  SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                         project_id AS ProjectId, context_label AS ContextLabel,
+                                                         workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                  FROM entries
+                                                  WHERE value = @value AND workspace_id IS NULL AND project_id = @projectId
+                                                  ORDER BY id
+                                                  LIMIT 1
+                                                  """;
 
     public const string EntryExistsByPathInBucket = """
                                                     SELECT 1 FROM entries

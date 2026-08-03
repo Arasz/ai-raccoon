@@ -241,6 +241,55 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_SameContentTwice_ReturnsTheExistingEntry_AndStatsReportOneEntry()
+    {
+        var first = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "identical content"), TestContext.Current.CancellationToken);
+        var second = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "identical content"), TestContext.Current.CancellationToken);
+
+        second.Hash.ShouldBe(first.Hash);
+        second.Path.ShouldBe(first.Path);
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Share_CreatesARealSharedRow_WithDistinctPathScopedHash()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross project fact"), TestContext.Current.CancellationToken);
+
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        shared.Context.ShouldBe(ContextNaming.SharedContext);
+        shared.Path.ShouldBe($"shared/{entry.Path}");
+        shared.Value.ShouldBe(entry.Value);
+        shared.Hash.ShouldNotBe(entry.Hash);
+        shared.Hash.ShouldBe(ContentHash.Of($"shared/{entry.Path}", entry.Value));
+        // The source row stays in the project scope: both rows exist after sharing.
+        (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
+            .Count(e => e.Value == "cross project fact").ShouldBe(1);
+        (await _store.ListContextAsync("acme", "project:acme", TestContext.Current.CancellationToken))
+            .Count(e => e.Value == "cross project fact").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task AddContent_ConsolidationPromotion_PreservesTheLogicalPath_InTheCommittedRow()
+    {
+        // Consolidation (WorkspaceService) promotes via add_content with the workspace entry's
+        // path: the committed row must keep that logical path and its path-scoped hash.
+        await _store.AddContentAsync("acme", "docs/note.md", "workspace draft", "workspace:ws-1",
+            TestContext.Current.CancellationToken);
+
+        var committed = await _store.AddContentAsync("acme", "docs/note.md", "workspace draft",
+            ContextNaming.ProjectContext("acme"), TestContext.Current.CancellationToken);
+
+        committed.Context.ShouldBe("project:acme");
+        committed.Path.ShouldBe("docs/note.md");
+        committed.Hash.ShouldBe(ContentHash.Of("docs/note.md", "workspace draft"));
+    }
+
+    [Fact]
     public async Task ListFiles_ReturnsJsonTree_FromEntryPaths()
     {
         await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, TestContext.Current.CancellationToken);

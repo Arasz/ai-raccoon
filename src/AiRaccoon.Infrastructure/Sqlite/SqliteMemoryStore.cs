@@ -31,18 +31,31 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
         var context = ContextResolver.Resolve(request);
         var bucket = BucketFor(context, request.ProjectId);
 
-        // INTERIM content hash: P3 owns the path-scoped identity (SHA-256(path + value)) and
-        // dedup semantics — for now identical content yields identical hashes, no dedup.
-        var hash = HashOf(request.Content);
+        // memory_write carries no logical path; derive a stable one from the content itself so
+        // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7).
+        var path = WritePathFor(request.Content);
+        var hash = ContentHash.Of(path, request.Content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        // Global content dedup within the project's committed set: identical content anywhere in
+        // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7).
+        var existing = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectCommittedByValue,
+                    new { value = request.Content, projectId = request.ProjectId }, cancellationToken))
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            return ToEntry(existing);
+        }
+
         await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
                     new
                     {
                         hash,
-                        path = $"{hash}.md",
+                        path,
                         value = request.Content,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
@@ -126,8 +139,9 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
                 $"No entry with hash '{hash}' in context '{ContextNaming.ProjectContext(projectId)}'.");
         }
 
-        // Promotion creates a REAL shared-scope row under shared/<path> (interim: same content
-        // hash — the path-scoped distinct hash is P3/FR-NM-7).
+        // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
+        // (FR-NM-7) differs from the source row's by construction. AddContentAsync is idempotent:
+        // re-sharing finds the existing shared row.
         return await AddContentAsync(projectId, $"shared/{source.Path}", source.Value,
                 ContextNaming.SharedContext, cancellationToken)
             .ConfigureAwait(false);
@@ -289,7 +303,7 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
             return ToEntry(existing);
         }
 
-        var hash = HashOf(content);
+        var hash = ContentHash.Of(path, content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
@@ -372,7 +386,7 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
         var inserted = 0;
         foreach (var chunk in chunks)
         {
-            var hash = HashOf(chunk);
+            var hash = ContentHash.Of(path, chunk);
             var exists = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.EntryExistsByPathAndHashInBucket,
                         new
@@ -505,9 +519,9 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
         };
     }
 
-    private static string HashOf(string value) =>
-        // P3 moves to SHA-256(path + value) for path-scoped identity; keep the TODO until then.
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7).</summary>
+    private static string WritePathFor(string value) =>
+        $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
     private static bool IsIndexableFile(string path) =>
         !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
