@@ -441,7 +441,16 @@ class McpTools:
 
         Leaves anything already pathed, already expandable, or resolvable elsewhere on PATH
         alone; notes a command that resolves nowhere.
+
+        `AI_BADGER_MCP_AVAILABILITY=all` (the freshness guard's deterministic override)
+        short-circuits the probe: every declared server is treated as available, so commands
+        stay exactly as declared and nothing is "not found". Without this, the ${HOME} rewrite
+        made the generated tree depend on the host's filesystem — a binary present in a user
+        tool dir on the author's machine became `${HOME}/...` while the same tree on CI kept
+        the bare command, flipping `.github/mcp.json`'s #193 verdict between hosts.
         """
+        if os.environ.get("AI_BADGER_MCP_AVAILABILITY") == "all":
+            return command
         parts = command.split(maxsplit=1)
         if not parts:
             return command
