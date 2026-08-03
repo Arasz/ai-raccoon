@@ -156,6 +156,33 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         workspaceEntries.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Settings_UpsertAndRead_RoundTrip()
+    {
+        await _store.SetSettingAsync("test.setting", "value-1", TestContext.Current.CancellationToken);
+        (await _store.GetSettingAsync("test.setting", TestContext.Current.CancellationToken))
+            .ShouldBe("value-1");
+    }
+
+    [Fact]
+    public async Task Settings_Get_MissingKey_ReturnsNull()
+    {
+        (await _store.GetSettingAsync("test.missing", TestContext.Current.CancellationToken))
+            .ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task SetEntryTtl_UpdatesTheRowsTtlOverride()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "forgettable note"), TestContext.Current.CancellationToken);
+
+        await _store.SetEntryTtlAsync("acme", entry.Hash, 7, TestContext.Current.CancellationToken);
+
+        var metadata = await _store.GetMetadataAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        metadata!.TtlDays.ShouldBe(7);
+    }
+
     private static string CreateTempRoot()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-it", Guid.NewGuid().ToString("N"));

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Options;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -54,8 +55,28 @@ public sealed class SqliteConnectionFactory
         connection.LoadVector();
         _loadExtensions(connection);
         await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+        await SeedGlobalAccessModeAsync(connection, cancellationToken).ConfigureAwait(false);
 
         return connection;
+    }
+
+    // FR-NM-2: the global access mode is seeded once from the AIRACCOON_ACCESS_MODE env value
+    // (ro|rw|full); an operator-set settings row is never overwritten by the seed.
+    private static async Task SeedGlobalAccessModeAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var env = Environment.GetEnvironmentVariable("AIRACCOON_ACCESS_MODE");
+        if (AccessModePolicy.Parse(env) is not { } mode)
+        {
+            return;
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "INSERT INTO settings (key, value) VALUES (@key, @value) ON CONFLICT(key) DO NOTHING",
+                    new { key = AccessModePolicy.GlobalSettingKey, value = AccessModePolicy.Serialize(mode) },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private void LoadNativeExtensions(SqliteConnection connection)

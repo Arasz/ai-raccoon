@@ -99,4 +99,14 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
     public async Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         await inner.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        await inner.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+
+    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+        await inner.SetSettingAsync(key, value, cancellationToken).ConfigureAwait(false);
+
+    public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        CancellationToken cancellationToken = default) =>
+        await inner.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false);
 }

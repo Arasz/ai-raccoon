@@ -159,5 +159,14 @@ public class SweepServiceTests
             Task.FromResult<EntryMetadata?>(Rating is null
                 ? null
                 : new EntryMetadata(Rating.Value, null));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

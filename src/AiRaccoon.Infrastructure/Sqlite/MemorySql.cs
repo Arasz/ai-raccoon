@@ -101,10 +101,22 @@ internal static class MemorySql
         WHERE hash = @hash
         """;
 
-    public const string UpsertSetting = """
+    public const string UpsertSetting = """"
                                         INSERT INTO settings (key, value) VALUES (@key, @value)
                                         ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                                        """;
+                                        """";
+
+    public const string SelectSetting =
+        """
+        SELECT value FROM settings WHERE key = @key LIMIT 1
+        """;
+
+    public const string UpdateEntryTtl =
+        """
+        UPDATE entries
+        SET ttl_days = @ttlDays
+        WHERE project_id = @projectId AND hash = @hash
+        """;
 
     public const string SelectEntryMetadata =
         """

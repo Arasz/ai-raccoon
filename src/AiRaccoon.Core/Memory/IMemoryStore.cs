@@ -53,4 +53,14 @@ public interface IMemoryStore
     /// <summary>Reads the on-row rating/ttl metadata for one entry (degradation policy input).</summary>
     Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads one settings row (access modes, forgetting knobs); null when the key is absent.</summary>
+    Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default);
+
+    /// <summary>Upserts one settings row.</summary>
+    Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets an entry's ttl_days override — a forgetting knob gated to full mode at the boundary.</summary>
+    Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        CancellationToken cancellationToken = default);
 }

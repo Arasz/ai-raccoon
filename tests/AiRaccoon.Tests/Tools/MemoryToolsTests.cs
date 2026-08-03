@@ -235,6 +235,19 @@ public class MemoryToolsTests
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
+        public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+        {
+            Settings[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())

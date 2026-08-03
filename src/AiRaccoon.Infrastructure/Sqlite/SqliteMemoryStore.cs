@@ -367,6 +367,39 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory, TimeProvi
         return row is null ? null : new EntryMetadata(row.Rating, row.TtlDays);
     }
 
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key }, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(value);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                Def(MemorySql.UpdateEntryTtl, new { projectId, hash, ttlDays }, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     private async Task<int> InsertChunksAsync(string projectId, string path, string content, string? context,
         CancellationToken cancellationToken)
     {
