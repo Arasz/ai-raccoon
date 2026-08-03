@@ -53,7 +53,11 @@ public static class Program
             catch (Exception ex)
             {
                 failures++;
-                Console.WriteLine($"{name,-52} ERROR: {ex.Message.Split('\n')[0]}");
+                Console.WriteLine($"{name,-52} ERROR: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException is not null)
+                {
+                    Console.WriteLine($"    inner: {ex.InnerException.Message}");
+                }
             }
             finally
             {

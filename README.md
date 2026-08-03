@@ -88,6 +88,24 @@ downloaded model. The integration tests exercise the real sqlite-memory 1.3.5 +
 sqlite-vector 1.0.0 binaries and skip honestly when the host RID has no provisioned
 extensions.
 
+## Embedding benchmark
+
+`benchmarks/AiRaccoon.Benchmarks` compares retrieval quality and latency across
+embedding backends (local GGUF via LLamaSharp vs LM Studio via the OpenAI SDK,
+both behind the official `Microsoft.Extensions.AI` abstraction):
+
+```bash
+AIRACCOON_TEST_GGUF=$HOME/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf \
+LMSTUDIO_BASE_URL=http://localhost:1234 \
+LMSTUDIO_MODELS="text-embedding-qwen3-embedding-0.6b,text-embedding-embeddinggemma-300m" \
+dotnet run --project benchmarks/AiRaccoon.Benchmarks
+```
+
+Latest results (macos-arm64): local all-MiniLM-L6-v2 Q5_K_M reaches R@5 0.81 /
+MRR 1.0 at ~9 ms per query in-process; LM Studio's Qwen3-0.6b and
+EmbeddingGemma-300m both reach R@10 1.0 at 37–90 ms over the network. Full
+methodology and numbers in `benchmarks/README.md`.
+
 ## Quickstart — run it
 
 Run from source with the stdio transport (the default):

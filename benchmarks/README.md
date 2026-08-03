@@ -13,17 +13,26 @@ fixed synthetic corpus, so the numbers are reproducible and comparable.
 - **Latency**: BenchmarkDotNet (`--bench`) — single-query search wall time +
   allocation per backend.
 
-## Backends
+## Backends (official packages only)
 
-| Backend | How it retrieves |
-|---|---|
-| `local:*` | Real production path: `SqliteMemoryStore` + sqlite-memory's llama.cpp engine over a local GGUF model |
-| `lmstudio:*` | LM Studio OpenAI-compatible `/v1/embeddings` + brute-force cosine top-k |
+Every backend is a `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>`
+— the official .NET AI abstraction — and ranks with the same brute-force cosine
+(top-k), so quality metrics are comparable across models:
 
-The sqlite-memory extension's remote engine hardcodes the vectors.space URL,
-so LM Studio models cannot run through `memory_search` — the LM Studio backend
-embeds via REST and ranks with cosine, the same ranking shape the local path
-produces, keeping quality metrics comparable.
+| Backend | Model loading / embedding | Package |
+|---|---|---|
+| `local:*` | Local GGUF via llama.cpp .NET bindings | `LLamaSharp` + `LLamaSharp.Backend.Cpu` |
+| `lmstudio:*` | LM Studio OpenAI-compatible `/v1/embeddings` | `OpenAI` + `Microsoft.Extensions.AI.OpenAI` |
+
+Ranking uses `System.Numerics.Tensors.TensorPrimitives.CosineSimilarity`
+(BCL, hardware-accelerated — same primitive the .NET AI stack uses). No
+hand-rolled HTTP clients, GGUF parsing, or vector math.
+
+**Notes on the LLamaSharp integration:** LLamaSharp 0.27's
+`LLamaEmbedder` interface `GenerateAsync` implementation touches a disposed
+context handle, so `LocalGgufEmbedder` wraps the working
+`GetEmbeddings` call in a small adapter that still implements the official
+`IEmbeddingGenerator` contract.
 
 ## Run it
 
@@ -44,38 +53,35 @@ dotnet run --project benchmarks/AiRaccoon.Benchmarks
 Environment:
 - `AIRACCOON_TEST_GGUF` — local GGUF path (same variable as the embedding tests)
 - `LMSTUDIO_BASE_URL` — LM Studio server (default `http://localhost:1234`)
-- `LMSTUDIO_MODELS` — comma-separated LM Studio model ids (default: the two
-  models verified on the dev box)
+- `LMSTUDIO_MODELS` — comma-separated LM Studio model ids
 
 ## Results (2026-08-03, macos-arm64, LM Studio on 192.168.50.102)
 
-### Quality — Recall@5 / Recall@10 / MRR / nDCG@10 (16 queries)
+### Quality — Recall@5 / Recall@10 / MRR / nDCG@10 (16 queries, top-10)
 
 | embedder | dim | R@5 | R@10 | MRR | nDCG@10 |
 |---|---:|---:|---:|---:|---:|
-| local:all-MiniLM-L6-v2.Q5_K_M.gguf | 384 | 0.292 | 0.292 | 0.750 | 0.385 |
+| local:all-MiniLM-L6-v2.Q5_K_M.gguf | 384 | 0.812 | 1.000 | 1.000 | 0.997 |
 | lmstudio:text-embedding-qwen3-embedding-0.6b | 1024 | 0.833 | 1.000 | 1.000 | 0.998 |
 | lmstudio:text-embedding-embeddinggemma-300m | 768 | 0.823 | 1.000 | 1.000 | 0.998 |
 
-### Latency — single-query search (BenchmarkDotNet, ShortRun)
+### Latency — single-query search (BenchmarkDotNet ShortRun)
 
 | Method | Embedder | Mean | Allocated |
 |---|---:|---:|---:|
-| Search | lmstudio:…embeddinggemma-300m | 13.8 ms | 41.8 KB |
-| Search | local:all-MiniLM-L6-v2.Q5_K_M.gguf | 21.6 ms | 10.7 KB |
-| Search | lmstudio:…qwen3-embedding-0.6b | 40.9 ms | 50.5 KB |
+| Search | local:all-MiniLM-L6-v2.Q5_K_M.gguf | 9.2 ms | 25.9 KB |
+| Search | lmstudio:…embeddinggemma-300m | 36.8 ms | 143.8 KB |
+| Search | lmstudio:…qwen3-embedding-0.6b | 90.4 ms | 183.9 KB |
 
 ### Reading
 
-- The small local model (21 MB, Q5_K_M) is fast but weak at retrieval on this
-  corpus (R@5 0.29 vs 0.83): it finds *a* relevant doc (MRR 0.75) but misses
-  the rest of the topic cluster. The two LM Studio models both retrieve every
-  relevant doc by rank 10.
-- Latency includes query embedding + ranking; the local path also pays
-  sqlite-memory's in-process inference. LM Studio's EmbeddingGemma-300m is the
-  fastest served backend here.
-- Sizes on disk: all-MiniLM ~21 MB, EmbeddingGemma-300m ~334 MB,
-  Qwen3-0.6b ~639 MB (LM Studio downloads). Trade-off: model size vs
-  retrieval quality, with 100 MB-class models (e.g. nomic-embed-text-v1.5,
-  mxbai-embed-large) as the middle ground — see
-  `scripts/download-embedding-model.sh nomic`.
+- **The small local model is competitive on this corpus**: with pure cosine
+  retrieval the 21 MB all-MiniLM reaches R@5 0.81 and MRR 1.0 — close to the
+  LM Studio models — at ~9 ms/query in-process vs 37–90 ms over the network.
+  (An earlier run through the production sqlite-memory hybrid path scored
+  R@5 0.29, so retrieval path matters as much as the model.)
+- LM Studio's Qwen3-0.6b and EmbeddingGemma-300m both retrieve every relevant
+  doc by rank 10 (R@10 1.0), with EmbeddingGemma the faster served backend.
+- Trade-off: local all-MiniLM (~21 MB on disk, offline, fastest, no API) vs
+  LM Studio models (334–639 MB, needs the server) — for this corpus the
+  quality gap is small, but real corpora with more topics may widen it.
