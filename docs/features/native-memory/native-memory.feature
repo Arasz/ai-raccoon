@@ -24,26 +24,44 @@ Feature: Native memory store (ai-raccoon MCP server)
             Then a workspaces row with status "Active" exists in memory.db
 
     @FR-NM-2 @AC-2
-    Rule: The memory surface is trust-first — read-only by default, rw and destructive access gated by configuration
-        Scenario: A project without rw permission can read but cannot write
-            Given rw is not enabled for project "acme-web"
+    Rule: Access modes control what the agent may do — ro (read-only), rw (default, read+write), full (adds memory removal and forgetting-knob tuning)
+        Scenario: The default mode is rw
+            Given no mode is configured for project "acme-web"
+            When I call memory_write for project "acme-web"
+            Then the entry is stored
+            And memory_delete with a known hash errors with access-denied
+        Scenario: ro mode allows reading only
+            Given project "acme-web" is in mode ro
             When I call memory_write for project "acme-web"
             Then the tool errors with access-denied
             And memory_search for project "acme-web" still returns results
-        Scenario: rw is enabled per project
-            Given rw is enabled for project "acme-web" in configuration
-            When I call memory_write for project "acme-web"
-            Then the entry is stored
-        Scenario: rw is enabled globally
-            Given rw is enabled globally in configuration
-            And a project with id "other-app" exists
+        Scenario: full mode allows removal
+            Given project "acme-web" is in mode full
+            When I call memory_delete with a known hash
+            Then the entry is deleted
+        Scenario: full mode allows workspace discard
+            Given project "acme-web" is in mode full
+            And workspace "ws-1" exists for project "acme-web"
+            When I call memory_workspace_discard for "ws-1"
+            Then the workspace is removed
+        Scenario: Forgetting knobs are denied in rw
+            Given project "acme-web" is in mode rw
+            When I adjust the sweep threshold or an entry's ttl_days
+            Then the tool errors with access-denied
+            And the forgetting policy is unchanged
+        Scenario: Forgetting knobs are applied in full
+            Given project "acme-web" is in mode full
+            When I adjust the sweep threshold or an entry's ttl_days
+            Then the forgetting policy reflects the adjustment
+        Scenario: The global mode applies to projects without a per-project mode
+            Given a project with id "other-app" exists
+            And the global mode is rw
             When I call memory_write for project "other-app"
             Then the entry is stored
-        Scenario: Destructive tools are gated the same way
-            Given rw is not enabled for project "acme-web"
-            When I call memory_delete with a known hash
+        Scenario: The global mode can be tightened to ro
+            Given the global mode is ro
+            When I call memory_write for project "other-app"
             Then the tool errors with access-denied
-            And the entry is not deleted
         @deferred
         Scenario: The memory inspects itself through memory_inspect
         # Part 2: introspection tool exposing schema, engine, provider, counts, pending, workspaces, watches, sync state.
@@ -52,12 +70,16 @@ Feature: Native memory store (ai-raccoon MCP server)
     # Part 2: metrics and tracing so the knowledge about the memory is complete.
 
     @FR-NM-3 @AC-3
-    Rule: Embeddings are pluggable; the default engine is the small downloaded in-process model
+    Rule: Embeddings are pluggable; the default engine is the small in-process model bundled with the tool
         Scenario: The default engine embeds locally without a sidecar
-            Given the small model is downloaded to the data root
+            Given the small model ships inside the tool package
             When I call memory_configure with provider "local"
             Then writes are embedded with the local engine
-            And no external server process is required
+            And no external server process or download is required
+        Scenario: A custom model path overrides the bundled model
+            Given a custom model file exists
+            When I call memory_configure with provider "local" and a model path
+            Then the custom model is used
         Scenario: Any OpenAI-compatible provider replaces the default
             When I call memory_configure with provider "openai", baseUrl "http://localhost:11434" and model "nomic-embed-text"
             Then writes are embedded through that endpoint
