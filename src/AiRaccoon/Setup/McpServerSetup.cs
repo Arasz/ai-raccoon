@@ -14,7 +14,7 @@ internal static class McpServerSetup
     /// <summary>Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http" (case-insensitive) runs stdio.</summary>
     internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport)
     {
-        return Enum.TryParse<McpTransport>(transport, out var mcpTransport)
+        return Enum.TryParse<McpTransport>(transport, ignoreCase: true, out var mcpTransport)
             ? [mcpTransport]
             : DefaultTransport;
     }
