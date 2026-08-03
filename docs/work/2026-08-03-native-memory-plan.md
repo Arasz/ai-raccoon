@@ -94,7 +94,7 @@ Serial dependencies: **P1 → everything; P4 → P6; P8 → P9; P9 → P10; P7 g
 | C | **P6** hybrid search RRF (FR-NM-4) incl. **SearchResultMerger RRF rework** | single | 4 search scenarios; harness parity nDCG Δ≤0.02 vs vendored reference (GGUF) on the shared corpus |
 | D | **P8** workspaces structural (FR-NM-6 s1-s3; **s4 'sync/sweep exclude workspace rows' moves to P9's acceptance** — needs the new sync) | single | 3 workspace scenarios (begin/Active, XOR isolation, one-transaction consolidate); P8 schema + FK + CHECK in place |
 | E | **P9** own sync (FR-NM-8 all 6 + FR-NM-6 s4; per-project SemaphoreSlim + lockfile; merged-rows-reindexed scenario) → then **P10** provisioning removal + tool parity (FR-NM-9: no download-on-first-run, 17 tools listed, baseUrl config; `.mcp/server.json` env list updated; `memory_sync` intact because P9 already replaced it) | P9 then P10 serial (P9 first — no sync gap) | 6 sync scenarios (MinIO-backed integration or fake ICloudStore + real merge) + workspace-exclusion scenario; P10: no sqliteai runtime download; harness still green (vendored assets) |
-| F | **P11** docs (reference, env vars incl. AIRACCOON_SYNC_*, README, feature table; note fresh-start consequence + 17-tools wording nuance) + full `dotnet build`/`dotnet test` + merge | single | full suite green, build 0 warnings; docs match code |
+| F | **P11** docs (reference, env vars incl. AIRACCOON_SYNC_*, README, feature table; note fresh-start consequence + 17-tools wording nuance); **P12** Reqnroll generated-test suite (additive — e: 2026-08-03 research verdict) + full `dotnet build`/`dotnet test` + merge | P12 parallel to P11 | full suite green, build 0 warnings; Reqnroll suite executes the .feature scenarios (native-memory + agent-memory), @deferred mapped to @ignore |
 
 Each package: TDD RED→GREEN (failing scenario test first), small commits, `dotnet build` +
 targeted tests after each step; full suite at wave ends. P10 (runtime removal of the pinned
@@ -113,6 +113,7 @@ extension) fires only after P7's harness passes AND P9's sync is in.
 - Access modes: ro / rw (default) / full; per-project + global default, stored in settings.
 - No Semantic Kernel, no sqliteai natives at runtime, no CommunityToolkit.VectorData.SqliteVec.
 - Watcher + memory_inspect + telemetry: part 2 (not in this task).
+- Gherkin-to-tests (e: research 2026-08-03): adopt **Reqnroll** as an ADDITIVE generated suite in Wave F — not a replacement for hand-written tests. SpecFlow is EOL (Dec 2024, repos deleted); Xunit.Gherkin.Quick cannot parse modern Gherkin (Rule: blocks). Reqnroll 3.3.4 (BSD-3-Clause), Reqnroll.xunit.v3 + Reqnroll.Tools.MsBuild.Generation, supports xunit.v3 + .NET 10 + Rule:/tags; map our @deferred tag to @ignore for skip-at-generation.
 
 ## 6. Risks (rev 2 — harness and model risks added)
 
@@ -155,3 +156,4 @@ extension) fires only after P7's harness passes AND P9's sync is in.
   env list, `SqliteConnectionFactory.cs` extension-load removal. **P11:** `docs/reference/
   agent-memory-server.md`, `src/AiRaccoon/README.md`, `docs/features/README.md`.
 - DI wiring (`Dependencies.cs`, `Program.cs`) touched in P4 (embedding), P9 (sync), P10 (provisioner removal).
+- **P12 (new, tests only):** Reqnroll.xunit.v3 3.3.4 + Reqnroll.Tools.MsBuild.Generation pins (BSD-3-Clause) in Directory.Packages.props; .feature files wired into the test project; step definitions binding scenarios to IMemoryStore/test doubles; @deferred → @ignore tag mapping; tag → Category traits.
