@@ -4,6 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class McpServerSetupTests
 {
     [Theory]

@@ -22,6 +22,8 @@ namespace AiRaccoon.Tests.Integration;
 /// so the search/embedding round-trip is exercised in CI only when a model is provided, and
 /// reported as skipped otherwise, never as a false green.
 /// </summary>
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public class SqliteMemoryStoreIntegrationTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();

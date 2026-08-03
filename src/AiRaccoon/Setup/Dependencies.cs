@@ -37,6 +37,7 @@ public static partial class Dependencies
         // vector/memory/cloudsync modules for the host RID before any connection opens them.
         // Runs post-build via ProvisionExtensions (needs ILoggerFactory from the container).
         services.AddSingleton(options);
+        services.AddSingleton(options.Sync);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),

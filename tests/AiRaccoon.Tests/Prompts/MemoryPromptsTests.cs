@@ -4,6 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Prompts;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class MemoryPromptsTests
 {
     private readonly MemoryPrompts _prompts = new();
