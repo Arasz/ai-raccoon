@@ -100,7 +100,27 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         hit.Hash.ShouldBe(entry.Hash);
         hit.Path.ShouldBe(entry.Path);
         hit.Snippet.ShouldNotBeNullOrWhiteSpace();
-        hit.Ranking.ShouldBeLessThan(0); // interim BM25 rank; normalization is P6
+        // P6 contract: ranking is normalized into 0..1 with the top result at 1.0.
+        hit.Ranking.ShouldBeInRange(0.0, 1.0);
+        hit.Ranking.ShouldBe(1.0);
+    }
+
+    [Fact]
+    public async Task Search_WithoutEmbeddingEngine_KeywordOnlyQuery_ReturnsKeywordResultsAboveMinScore()
+    {
+        // FR-NM-4 s2: no engine configured -> the vec modality is absent. The keyword query
+        // must still return results above the minimum score without crashing.
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "the only exact keyword phrase present is ziggurat"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "ziggurat", minScore: 0.7),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        hit.Ranking.ShouldBe(1.0);
     }
 
     [Fact]

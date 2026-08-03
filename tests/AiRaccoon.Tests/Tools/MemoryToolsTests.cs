@@ -75,6 +75,27 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task Search_WithFusionParameters_DelegatesThemOnTheQuery()
+    {
+        await _tools.Search("acme", "query", rrfK: 30, ftsWeight: 2, vectorWeight: 1,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.RrfK.ShouldBe(30);
+        _store.LastQuery.FtsWeight.ShouldBe(2);
+        _store.LastQuery.VectorWeight.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Search_WithoutFusionParameters_AppliesDefaults()
+    {
+        await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.RrfK.ShouldBe(SearchQuery.DefaultRrfK);
+        _store.LastQuery.FtsWeight.ShouldBe(1);
+        _store.LastQuery.VectorWeight.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Share_DelegatesToStore_AndReportsSharedContext()
     {
         _store.SharedEntry = new MemoryEntry("h1", "p.md", ContextNaming.SharedContext, "v", 1);

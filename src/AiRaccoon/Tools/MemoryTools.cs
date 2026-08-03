@@ -72,6 +72,12 @@ public sealed class MemoryTools(
         int limit = 20,
         [Description("Minimum ranking threshold 0..1 (default 0.7).")]
         double minScore = 0.7,
+        [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
+        int rrfK = SearchQuery.DefaultRrfK,
+        [Description("Weight of the keyword (FTS5) list in the RRF fusion (default 1).")]
+        int ftsWeight = 1,
+        [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
+        int vectorWeight = 1,
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
@@ -85,7 +91,8 @@ public sealed class MemoryTools(
             _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore);
+        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
+            rrfK, ftsWeight, vectorWeight);
         new SearchQuery.Validator().ValidateAndThrow(searchQuery);
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);

@@ -96,42 +96,88 @@ public sealed class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // Hybrid modalities (FR-NM-4): a keyword list from FTS5 and a semantic list from vec0.
+        // No engine configured -> the query cannot be embedded, so the vec modality is absent
+        // and search degrades to FTS5-only results (never a crash).
+        var settings = await ReadEmbeddingSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        byte[]? queryVector = null;
+        if (!string.IsNullOrWhiteSpace(settings.Provider))
+        {
+            var generator = embeddings.CreateGenerator(settings);
+            var embedding = await generator.GenerateAsync([query.Query],
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            queryVector = EmbeddingBlob.ToBytes(embedding[0].Vector);
+        }
+
+        var ftsExpression = FtsQueryNormalizer.Normalize(query.Query);
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         foreach (var context in SearchContexts.For(query))
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
             var parameters = new DynamicParameters();
-            parameters.Add("query", query.Query);
+            parameters.Add("query", ftsExpression);
             parameters.Add("limit", query.Limit);
+            if (queryVector is not null)
+            {
+                parameters.Add("queryVector", queryVector);
+            }
+
             foreach (var (key, value) in values)
             {
                 parameters.Add(key, value);
             }
 
-            try
-            {
-                // minScore is intentionally not applied to the raw BM25 rank — ranking is
-                // unbounded until P6 normalizes scores into 0..1 and maps the threshold.
-                var results = (await connection.QueryAsync<SearchRow>(
-                            new CommandDefinition(
-                                MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                                cancellationToken: cancellationToken))
-                        .ConfigureAwait(false))
-                    .Select(row => new MemorySearchResult(row.Hash, row.Seq, row.Ranking, row.Path, row.Snippet))
-                    .ToList();
-                batches.Add(results);
-            }
-            catch (SqliteException)
-            {
-                // FTS5 rejects malformed MATCH syntax; P6 owns query normalization. Interim:
-                // an unparseable query yields no hits for this bucket instead of an error.
-                batches.Add([]);
-            }
+            var ftsResults = ftsExpression.Length == 0
+                ? []
+                : await QueryFtsBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+            var vectorResults = queryVector is null
+                ? []
+                : await QueryVectorBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+
+            // Per-context modality fusion; minScore/limit belong to the final merger pass.
+            batches.Add(ReciprocalRankFusion.Fuse(
+                [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
+                query.RrfK, minScore: 0, limit: int.MaxValue));
         }
 
-        var merged = SearchResultMerger.Merge(batches, query.Limit);
+        var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ftsExpression is normalized, but a pathological query can still trip the FTS5
+            // tokenizer limits; a failed keyword modality degrades to the vector list.
+            return (await connection.QueryAsync<SearchRow>(
+                        new CommandDefinition(
+                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(row => new MemorySearchResult(row.Hash, row.Seq, row.Ranking, row.Path, row.Snippet))
+                .ToList();
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        var rows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
+            .ToList();
+        return rows
+            .Select(row => new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, row.Snippet))
+            .ToList();
     }
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -788,6 +834,17 @@ public sealed class SqliteMemoryStore(
         public int Seq { get; set; }
 
         public double Ranking { get; set; }
+
+        public string Path { get; set; } = "";
+
+        public string Snippet { get; set; } = "";
+    }
+
+    private sealed class VectorRow
+    {
+        public string Hash { get; set; } = "";
+
+        public int Seq { get; set; }
 
         public string Path { get; set; } = "";
 
