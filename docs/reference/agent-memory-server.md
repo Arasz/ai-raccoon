@@ -104,7 +104,23 @@ scripts/download-embedding-model.sh nomic
 The script pins the SHA-256 of `all-minilm` (all-MiniLM-L6-v2 Q5_K_M) and
 installs it under `<data-root>/models/`. Point the embedding integration/E2E
 tests at it with `export AIRACCOON_TEST_GGUF=<data-root>/models/all-MiniLM-L6-v2.Q5_K_M.gguf`
-(without it those tests skip honestly). Remote embeddings need no model file.
+(without it those tests skip honestly).
+
+## Embedding configuration matrix
+
+`memory_configure` accepts any provider string; the pinned sqlite-memory
+extension (1.3.5) resolves exactly two engines:
+
+| Engine | `provider` | `model` | Key | Notes |
+|---|---|---|---|---|
+| Local (llama.cpp) | `local` | GGUF file path | none | Offline, no API cost; model file per the download script |
+| Remote (vectors.space) | `openai` | e.g. `text-embedding-3-small` | `AIRACCOON_VECTORSSPACE_API_KEY` | Free tier; endpoint is hardcoded to `https://api.vectors.space/v1/embeddings` |
+
+Other OpenAI-compatible endpoints (LM Studio, Ollama, self-hosted) are **not
+configurable**: the extension's remote engine pins the vectors.space URL and
+its custom-provider hook is an in-process C callback API, not a setting. To
+use such a backend the extension itself would need a base-URL override — out
+of scope for the pinned build.
 
 ## Error shapes
 

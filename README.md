@@ -56,6 +56,20 @@ runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messa
 
 Credentials are read from the environment only — never from tracked files.
 
+## Embeddings
+
+Embeddings are configured per bank via `memory_configure`; two engines:
+
+| Engine | `provider` | `model` | Setup |
+|---|---|---|---|
+| Local (llama.cpp, offline) | `local` | GGUF path | `scripts/download-embedding-model.sh all-minilm` (~21 MB, Apache-2.0) |
+| Remote (vectors.space) | `openai` | e.g. `text-embedding-3-small` | Free key at [vectors.space](https://vectors.space), set `AIRACCOON_VECTORSSPACE_API_KEY` |
+
+Other OpenAI-compatible endpoints (LM Studio, Ollama) are **not** supported by
+the pinned sqlite-memory extension — its remote engine hardcodes the
+vectors.space URL. See `docs/reference/agent-memory-server.md` for the full
+matrix and the `AIRACCOON_TEST_GGUF` usage in the embedding tests.
+
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
@@ -68,10 +82,11 @@ dotnet test
 ```
 
 The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly, Dapper) covers the
-domain, the store (unit + real-extension integration), the tools and the prompts —
-168 cases (166 passing, 2 gated on `AIRACCOON_TEST_GGUF`). The integration tests
-exercise the real sqlite-memory 1.3.5 + sqlite-vector 1.0.0 binaries and skip
-honestly when the host RID has no provisioned extensions.
+domain, the store (unit + real-extension integration), the tools, the prompts, the
+traits-filtered E2E suite — 185 cases, 0 skips when `AIRACCOON_TEST_GGUF` points at a
+downloaded model. The integration tests exercise the real sqlite-memory 1.3.5 +
+sqlite-vector 1.0.0 binaries and skip honestly when the host RID has no provisioned
+extensions.
 
 ## Quickstart — run it
 
