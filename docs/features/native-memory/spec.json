@@ -1,0 +1,128 @@
+{
+    "name": "native-memory",
+    "title": "Native .NET memory store replacing the pinned sqlite-memory extension",
+    "status": "agreed",
+    "specFile": "docs/features/native-memory/native-memory.feature",
+    "gate": {
+        "ownerGateReview": {
+            "form": "docs/work/2026-08-03-skip-sqlite-memory-review.html",
+            "feedback": "docs/work/2026-08-03-skip-sqlite-memory-feedback.md",
+            "answered": 15,
+            "open": 0,
+            "note": "15/15 approve; three notes refined scope (S2 access model + part-2 inspect, D5 default local model, D9 watcher to part 2)"
+        }
+    },
+    "verdicts": {
+        "S1": "approve",
+        "S2": "approve",
+        "S3": "approve",
+        "D1": "approve",
+        "D2": "approve",
+        "D3": "approve",
+        "D4": "approve",
+        "D5": "approve",
+        "D6": "approve",
+        "D7": "approve",
+        "D8": "approve",
+        "D9": "approve",
+        "D10": "approve",
+        "D11": "approve",
+        "D12": "approve"
+    },
+    "scope": {
+        "in": [
+            "One memory.db per install scope; all metadata (rating, access counts, provenance, workspace lifecycle, settings, sync state) as tables inside it; raccoon_meta.db deleted",
+            "Trust-first access control: memory surface read-only by default; rw/destructive access granted per project or globally via configuration",
+            "Pluggable embeddings via Microsoft.Extensions.AI IEmbeddingGenerator; memory_configure gains provider + baseUrl + model + apiKey",
+            "Default local embedding engine = small downloaded in-process model (all-MiniLM, ONNX Runtime); any OpenAI-compatible endpoint replaceable",
+            "Hybrid search = FTS5 + sqlite-vec fused with reciprocal rank fusion (k default 60, swept 10-60; weights default 1:1), ranking normalized to 0..1",
+            "Golden-retrieval harness gating the extension swap (nDCG parity delta <= 0.02, no degenerate-query regression, p95 latency)",
+            "Workspaces as first-class entities: entries.workspace_id FK + XOR CHECK, lifecycle Active/Closed in-bank, consolidate/discard in one transaction",
+            "Content identity = path-scoped SHA-256(path + value); global content dedup preserved (write-once, share via distinct path, consolidation keeps path)",
+            "Own sync: one snapshot file per install scope to S3-compatible storage (R2/S3/MinIO), VACUUM INTO + integrity check + If-Match CAS + row merge (updated_at LWW + tombstones); workspace rows never sync",
+            "Deterministic, token-accurate (Microsoft.ML.Tokenizers), code-fence-aware chunking",
+            "MCP surface parity: 17 tools unchanged in name and parameters"
+        ],
+        "out": [
+            "Unified multi-source question answering (SmartRAG-style text-to-SQL across databases, OCR, transcripts) — the agent is the integrator",
+            "Semantic Kernel and Microsoft.Extensions.VectorData connectors as dependencies",
+            "sqliteai native extensions (sqlite-memory, sqlite-vector, sqlite-sync/cloudsync) and download-on-first-run provisioning",
+            "File-watcher tools (part 2, separate task)",
+            "memory_inspect introspection tool (part 2, separate task)",
+            "Metrics and tracing for memory operations (part 2)",
+            "Existing-bank migration (fresh start; re-hash + re-embed migration only if a deployment later needs it)",
+            "Retrieval-mode strategy bands (keyword/vector/hybrid routing — later, behind the same memory_search contract)",
+            "REST/HTTP management API, auth beyond configuration-gated access, web UI"
+        ]
+    },
+    "nonFunctional": [
+        "Clean layering: domain (Core) free of SQLite/HTTP dependencies; MCP layer stays thin; SQL confined to Infrastructure",
+        "High-performance logging: static partial Log with [LoggerMessage] methods",
+        "No hardcoded secrets: AIRACCOON_SYNC_* and provider keys from environment only; repo scan finds no credentials",
+        "WAL + busy_timeout on every connection; sync serialized per project (SemaphoreSlim + lockfile)",
+        "VACUUM INTO snapshot before upload; PRAGMA integrity_check before any replace; snapshot uploads never corrupt the cloud copy",
+        "Tombsone GC strictly below the minimum of both installs' last_pull watermark",
+        "TDD mandatory: behavior tests before implementation, scenario tests pinning dedup/share/consolidation semantics",
+        "TreatWarningsAsErrors; dotnet build + dotnet test green"
+    ],
+    "constraints": {
+        "packages": [
+            "Microsoft.Extensions.AI.Abstractions 10.8.3",
+            "Microsoft.Extensions.AI.OpenAI 10.8.3 (endpoint override for any OpenAI-compatible provider)",
+            "HiraokaHyperTools.sqlite-vec 0.1.9 (or own provisioning of sqlite-vec v0.1.9)",
+            "Microsoft.OnnxRuntime (V1 default local embedding engine)",
+            "Microsoft.ML.Tokenizers 2.0.0 + Microsoft.ML.Tokenizers.Data.O200kBase (chunk sizing)",
+            "AWSSDK.S3 or Minio (sync transport)"
+        ],
+        "forbidden": [
+            "Microsoft.SemanticKernel*",
+            "sqlite-memory / sqlite-vector / sqlite-sync native provisioning",
+            "CommunityToolkit.VectorData.SqliteVec (vector-only, preview, model-first schema)"
+        ],
+        "targets": {
+            "feature": "docs/features/native-memory/native-memory.feature",
+            "manifest": "docs/features/native-memory/spec.json",
+            "implementation": "src/AiRaccoon.Infrastructure (SQLite schema, search, embedding, sync) + src/AiRaccoon.Core (domain)",
+            "tests": "tests/AiRaccoon.Tests (Domain + Store integration + Tools + Sync)"
+        },
+        "risks": [
+            "sqlite-vec is pre-v1 ('expect breaking changes') — pin version and re-run the harness on upgrade",
+            "linux-musl gap: sqlite-vec NuGet natives and ONNX Runtime musl coverage unverified — verify at build time",
+            "RRF k is corpus-scale-dependent — the harness sweeps k and weights rather than assuming 60",
+            "Engine change forces a one-time full re-embed of the bank",
+            "Delete propagation correctness is the highest-risk merge surface — dedicated tombstone tests required"
+        ]
+    },
+    "deferred": [
+        {
+            "id": "D9",
+            "decision": "File-watcher tools (memory_watch_add/status/remove)",
+            "fallback": "Part 2, separate task; watches table added with it",
+            "tag": "deferred"
+        },
+        {
+            "id": "S2-inspect",
+            "decision": "memory_inspect introspection tool",
+            "fallback": "Part 2; the trust-first access model ships in V1 core",
+            "tag": "deferred"
+        },
+        {
+            "id": "S2-telemetry",
+            "decision": "Metrics and tracing for memory operations",
+            "fallback": "Not now",
+            "tag": "deferred"
+        },
+        {
+            "id": "D10",
+            "decision": "Retrieval-mode strategy bands (keyword/vector/hybrid routing)",
+            "fallback": "Later, behind the same memory_search contract",
+            "tag": "deferred"
+        },
+        {
+            "id": "D11",
+            "decision": "Existing-bank migration",
+            "fallback": "Fresh start; re-hash + re-embed migration later if a deployment needs it",
+            "tag": "deferred"
+        }
+    ]
+}
