@@ -12,7 +12,7 @@ public class ContextResolverTests
     [Fact]
     public void Resolve_WithExplicitContext_UsesItOverWorkspaceAndProject()
     {
-        var request = new MemoryWriteRequest("acme", "note", context: "docs:api", workspaceId: "ws-1");
+        var request = new MemoryWriteRequest("acme", "note", "docs:api", workspaceId: "ws-1");
 
         ContextResolver.Resolve(request).ShouldBe("docs:api");
     }
@@ -36,7 +36,7 @@ public class ContextResolverTests
     [Fact]
     public void Resolve_WithExplicitSharedContext_UsesSharedContext()
     {
-        var request = new MemoryWriteRequest("acme", "note", context: "shared");
+        var request = new MemoryWriteRequest("acme", "note", "shared");
 
         ContextResolver.Resolve(request).ShouldBe("shared");
     }

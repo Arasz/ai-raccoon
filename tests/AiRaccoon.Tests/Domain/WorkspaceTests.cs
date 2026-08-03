@@ -38,17 +38,11 @@ public class WorkspaceTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankId_Throws(string? id)
-    {
-        Should.Throw<ArgumentException>(() => new Workspace(id!, "acme"));
-    }
+    public void Constructor_WithBlankId_Throws(string? id) => Should.Throw<ArgumentException>(() => new Workspace(id!, "acme"));
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankProjectId_Throws(string? projectId)
-    {
-        Should.Throw<ArgumentException>(() => new Workspace("ws-1", projectId!));
-    }
+    public void Constructor_WithBlankProjectId_Throws(string? projectId) => Should.Throw<ArgumentException>(() => new Workspace("ws-1", projectId!));
 }

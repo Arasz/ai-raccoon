@@ -16,9 +16,9 @@ public static class RatingPolicy
         double halfLifeDays,
         double accessMultiplier = DefaultAccessMultiplier)
     {
-        Guard.IsGreaterThanOrEqualTo(accessCount, 0, nameof(accessCount));
-        Guard.IsGreaterThanOrEqualTo(ageDays, 0, nameof(ageDays));
-        Guard.IsGreaterThan(halfLifeDays, 0, nameof(halfLifeDays));
+        Guard.IsGreaterThanOrEqualTo(accessCount, 0);
+        Guard.IsGreaterThanOrEqualTo(ageDays, 0);
+        Guard.IsGreaterThan(halfLifeDays, 0);
 
         return baseScore * Math.Pow(0.5, ageDays / halfLifeDays) * (1 + accessCount * accessMultiplier);
     }

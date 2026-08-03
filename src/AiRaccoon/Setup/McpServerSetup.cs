@@ -4,23 +4,24 @@ using AiRaccoon.Tools;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-/// Decides which MCP transport the server should use from the MCP_TRANSPORT
-/// environment variable. Anything other than "http" (case-insensitive) runs stdio.
+///     Decides which MCP transport the server should use from the MCP_TRANSPORT
+///     environment variable. Anything other than "http" (case-insensitive) runs stdio.
 /// </summary>
 internal static partial class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
 
-    /// <summary>Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http" (case-insensitive) runs stdio.</summary>
-    internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport)
-    {
-        return Enum.TryParse<McpTransport>(transport, ignoreCase: true, out var mcpTransport)
-            ? [mcpTransport]
-            : DefaultTransport;
-    }
-
     private static readonly Lazy<IReadOnlyCollection<McpTransport>> ConfiguredTransport = new(() =>
         SelectTransports(Environment.GetEnvironmentVariable("MCP_TRANSPORT")));
+
+    /// <summary>
+    ///     Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http"
+    ///     (case-insensitive) runs stdio.
+    /// </summary>
+    internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport) =>
+        Enum.TryParse<McpTransport>(transport, true, out var mcpTransport)
+            ? [mcpTransport]
+            : DefaultTransport;
 
     extension(WebApplication webApplication)
     {
@@ -88,22 +89,18 @@ internal static partial class McpServerSetup
             return mcpServerBuilder.WithStdioServerTransport();
         }
 
-        private IMcpServerBuilder HandleHttpTransport()
-        {
-            return mcpServerBuilder.WithHttpTransport(options =>
+        private IMcpServerBuilder HandleHttpTransport() =>
+            mcpServerBuilder.WithHttpTransport(options =>
             {
                 // Stateless mode is recommended for servers that don't need
                 // server-to-client requests like sampling or elicitation.
                 options.Stateless = true;
             });
-        }
 
-        private IMcpServerBuilder HandleHttpsTransport()
-        {
+        private IMcpServerBuilder HandleHttpsTransport() =>
             // Unsupported: no transport is configured for https; the warning is emitted
             // once in ConfigureMcpEndpoints where the app logger is available.
-            return mcpServerBuilder;
-        }
+            mcpServerBuilder;
     }
 
     internal static partial class Log

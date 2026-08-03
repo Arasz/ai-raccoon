@@ -13,17 +13,12 @@ namespace AiRaccoon.Tests.Store;
 public class SqliteMemoryStoreTests
 {
     [Fact]
-    public void InsertTextStatement_IsMemoryAddText()
-    {
-        MemorySql.InsertText.ShouldBe("SELECT memory_add_text(@content, @context)");
-    }
+    public void InsertTextStatement_IsMemoryAddText() => MemorySql.InsertText.ShouldBe("SELECT memory_add_text(@content, @context)");
 
     [Fact]
-    public void SelectEntryByHashStatement_ReadsDbmemContentColumns()
-    {
+    public void SelectEntryByHashStatement_ReadsDbmemContentColumns() =>
         MemorySql.SelectEntryByHash.ShouldBe(
             "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash");
-    }
 
     [Fact]
     public void SearchStatement_WithContext_FiltersByContextColumn()
@@ -49,16 +44,10 @@ public class SqliteMemoryStoreTests
     }
 
     [Fact]
-    public void DeleteStatement_IsMemoryDelete()
-    {
-        MemorySql.Delete.ShouldBe("SELECT memory_delete(@hash)");
-    }
+    public void DeleteStatement_IsMemoryDelete() => MemorySql.Delete.ShouldBe("SELECT memory_delete(@hash)");
 
     [Fact]
-    public void DeleteContextStatement_IsMemoryDeleteContext()
-    {
-        MemorySql.DeleteContext.ShouldBe("SELECT memory_delete_context(@context)");
-    }
+    public void DeleteContextStatement_IsMemoryDeleteContext() => MemorySql.DeleteContext.ShouldBe("SELECT memory_delete_context(@context)");
 
     [Fact]
     public void StatsStatements_CountEntriesAndPending()
@@ -103,7 +92,7 @@ public class SqliteMemoryStoreTests
     [Fact]
     public void SearchContexts_AllScope_SpansSharedProjectAndNamedWorkspace()
     {
-        var query = new SearchQuery("acme", "q", scope: SearchScope.All, workspaceId: "ws-1");
+        var query = new SearchQuery("acme", "q", SearchScope.All, "ws-1");
 
         SearchContexts.For(query).ShouldBe(
         [
@@ -123,7 +112,7 @@ public class SqliteMemoryStoreTests
     [Fact]
     public void SearchContexts_ProjectScope_SpansProjectAndNamedWorkspace()
     {
-        var query = new SearchQuery("acme", "q", scope: SearchScope.Project, workspaceId: "ws-1");
+        var query = new SearchQuery("acme", "q", SearchScope.Project, "ws-1");
 
         SearchContexts.For(query).ShouldBe(
             [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
@@ -132,7 +121,7 @@ public class SqliteMemoryStoreTests
     [Fact]
     public void SearchContexts_ProjectScope_WithoutWorkspace_IsProjectOnly()
     {
-        var query = new SearchQuery("acme", "q", scope: SearchScope.Project);
+        var query = new SearchQuery("acme", "q", SearchScope.Project);
 
         SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
     }
@@ -140,7 +129,7 @@ public class SqliteMemoryStoreTests
     [Fact]
     public void SearchContexts_SharedScope_IsSharedOnly_EvenWhenWorkspaceNamed()
     {
-        var query = new SearchQuery("acme", "q", scope: SearchScope.Shared, workspaceId: "ws-1");
+        var query = new SearchQuery("acme", "q", SearchScope.Shared, "ws-1");
 
         SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
@@ -153,7 +142,7 @@ public class SqliteMemoryStoreTests
         var project = new[]
             { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
 
-        var merged = SearchResultMerger.Merge([shared, project], limit: 10);
+        var merged = SearchResultMerger.Merge([shared, project], 10);
 
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
         merged[0].Ranking.ShouldBe(0.9);
@@ -166,10 +155,10 @@ public class SqliteMemoryStoreTests
         {
             new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
             new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
-            new MemorySearchResult("h3", 3, 0.7, "c.md", "s"),
+            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
         };
 
-        var merged = SearchResultMerger.Merge([results], limit: 2);
+        var merged = SearchResultMerger.Merge([results], 2);
 
         merged.Select(r => r.Hash).ShouldBe(["h2", "h3"]);
     }

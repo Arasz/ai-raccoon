@@ -69,7 +69,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
             "all" => SearchScope.All,
             "project" => SearchScope.Project,
             "shared" => SearchScope.Shared,
-            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared."),
+            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
         };
 
         var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore);
@@ -111,7 +111,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(hash, nameof(hash));
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.ShareAsync(projectId, hash, cancellationToken);
         return new ShareResult(true, entry.Context);
@@ -126,7 +126,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(hash, nameof(hash));
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
         return new DeletedResult(deleted ? 1 : 0);
@@ -141,7 +141,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(context, nameof(context));
+        ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
         var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
         return new DeletedContextResult(deleted);
@@ -158,7 +158,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path, nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
         return new IngestResult(indexed);
@@ -175,7 +175,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path, nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
         return new ScannedResult(scanned);
@@ -247,7 +247,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
         return new WorkspaceStatusResult(entries, entries.Count);
@@ -264,8 +264,8 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
-        ArgumentNullException.ThrowIfNull(keep, nameof(keep));
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        ArgumentNullException.ThrowIfNull(keep);
 
         var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
         return new ConsolidationToolResult(result.Promoted, result.Discarded);
@@ -279,7 +279,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
         return new DeletedContextResult(discarded);

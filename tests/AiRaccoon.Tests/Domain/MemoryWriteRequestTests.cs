@@ -12,7 +12,7 @@ public class MemoryWriteRequestTests
     public void Constructor_WithValidValues_KeepsThem()
     {
         var request = new MemoryWriteRequest(
-            "acme", "remember this", context: "docs:api", agentId: "agent-1", workspaceId: "ws-1");
+            "acme", "remember this", "docs:api", "agent-1", "ws-1");
 
         request.ProjectId.ShouldBe("acme");
         request.Content.ShouldBe("remember this");

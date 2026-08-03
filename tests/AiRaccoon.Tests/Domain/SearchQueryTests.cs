@@ -34,7 +34,7 @@ public class SearchQueryTests
     [Fact]
     public void Constructor_WithScope_KeepsIt()
     {
-        var query = new SearchQuery("acme", "search", scope: SearchScope.Shared);
+        var query = new SearchQuery("acme", "search", SearchScope.Shared);
 
         query.Scope.ShouldBe(SearchScope.Shared);
     }
@@ -42,7 +42,7 @@ public class SearchQueryTests
     [Fact]
     public void Constructor_WithProjectScope_KeepsIt()
     {
-        var query = new SearchQuery("acme", "search", scope: SearchScope.Project);
+        var query = new SearchQuery("acme", "search", SearchScope.Project);
 
         query.Scope.ShouldBe(SearchScope.Project);
     }

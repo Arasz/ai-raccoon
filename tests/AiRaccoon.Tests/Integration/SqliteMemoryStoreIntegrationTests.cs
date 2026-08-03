@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
@@ -12,15 +11,14 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-/// End-to-end tests against the REAL sqlite-memory/vector extensions (the "done means proven"
-/// gate for the store). They need provisioned native binaries under the data root; when the
-/// host RID has none they are skipped honestly via Assert.Skip (never counted as passing green).
-///
-/// Embedding-gated tests: with no model configured the bank runs in deferred mode (FR-MEM-1.12)
-/// and memory_search returns nothing until memory_embed_pending runs. Tests that need real
-/// embeddings read AIRACCOON_TEST_GGUF (a GGUF model path) and Assert.Skip when it is unset —
-/// so the search/embedding round-trip is exercised in CI only when a model is provided, and
-/// reported as skipped otherwise, never as a false green.
+///     End-to-end tests against the REAL sqlite-memory/vector extensions (the "done means proven"
+///     gate for the store). They need provisioned native binaries under the data root; when the
+///     host RID has none they are skipped honestly via Assert.Skip (never counted as passing green).
+///     Embedding-gated tests: with no model configured the bank runs in deferred mode (FR-MEM-1.12)
+///     and memory_search returns nothing until memory_embed_pending runs. Tests that need real
+///     embeddings read AIRACCOON_TEST_GGUF (a GGUF model path) and Assert.Skip when it is unset —
+///     so the search/embedding round-trip is exercised in CI only when a model is provided, and
+///     reported as skipped otherwise, never as a false green.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -28,10 +26,9 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    private static string? TestModelPath => Environment.GetEnvironmentVariable("AIRACCOON_TEST_GGUF");
 
-    private static string? TestModelPath =>
-        Environment.GetEnvironmentVariable("AIRACCOON_TEST_GGUF");
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private async Task<SqliteMemoryStore?> TryCreateStoreAsync()
     {
@@ -39,7 +36,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         {
             DataRoot = _dataRoot,
             Rid = RuntimeInformation.RuntimeIdentifier,
-            Scope = InstallScope.User,
+            Scope = InstallScope.User
         };
 
         await ProvisionIfAvailableAsync(options);
@@ -252,8 +249,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         // not throw the upstream "expects a positive INTEGER" error (M2). The 0-arg form is
         // used; with no model it errors cleanly as "no embedding model configured".
         await store.WriteAsync(new MemoryWriteRequest("acme", "pending item"), TestContext.Current.CancellationToken);
-        var exception = await Record.ExceptionAsync(
-            () => store.EmbedPendingAsync("acme", limit: null, TestContext.Current.CancellationToken));
+        var exception = await Record.ExceptionAsync(() => store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken));
 
         exception.ShouldNotBeNull();
         exception!.Message.ShouldNotContain("positive INTEGER");
@@ -280,7 +276,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
             new MemoryWriteRequest("acme", "semantic searchable fact"), TestContext.Current.CancellationToken);
 
         var results = await store.SearchAsync(
-            new SearchQuery("acme", "semantic searchable", scope: SearchScope.All),
+            new SearchQuery("acme", "semantic searchable"),
             TestContext.Current.CancellationToken);
 
         results.ShouldContain(r => r.Hash == entry.Hash);
@@ -302,13 +298,13 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         }
 
         await store.ConfigureEmbeddingAsync("acme", "local", model, null, TestContext.Current.CancellationToken);
-        await store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", context: "docs:api"), TestContext.Current.CancellationToken);
+        await store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", "docs:api"), TestContext.Current.CancellationToken);
 
         var projectOnly = await store.SearchAsync(
-            new SearchQuery("acme", "docs only", scope: SearchScope.Project),
+            new SearchQuery("acme", "docs only", SearchScope.Project),
             TestContext.Current.CancellationToken);
         var docsOnly = await store.SearchAsync(
-            new SearchQuery("acme", "docs only", scope: SearchScope.Project, limit: 20, minScore: 0),
+            new SearchQuery("acme", "docs only", SearchScope.Project, limit: 20, minScore: 0),
             TestContext.Current.CancellationToken);
 
         // The content lives in context docs:api, not project:acme — so a project-scoped search
@@ -362,7 +358,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         Directory.CreateDirectory(target);
         foreach (var file in Directory.EnumerateFiles(source))
         {
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
         }
     }
 

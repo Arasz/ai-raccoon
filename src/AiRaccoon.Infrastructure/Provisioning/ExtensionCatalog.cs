@@ -9,13 +9,13 @@ public sealed record ExtensionSpec(
     string Flavor,
     string AssetTemplate)
 {
-    public string AssetFileName(string platform) => AssetTemplate
-        .Replace("{platform}", platform)
-        .Replace("{version}", Version)
-        .Replace("{flavor}", Flavor);
+    public string AssetFileName(string platform) =>
+        AssetTemplate
+            .Replace("{platform}", platform)
+            .Replace("{version}", Version)
+            .Replace("{flavor}", Flavor);
 
-    public Uri AssetUrl(string platform) =>
-        new($"https://github.com/sqliteai/{Repo}/releases/download/{Version}/{AssetFileName(platform)}");
+    public Uri AssetUrl(string platform) => new($"https://github.com/sqliteai/{Repo}/releases/download/{Version}/{AssetFileName(platform)}");
 }
 
 /// <summary>Pinned sqliteai extension versions and their GitHub release asset naming.</summary>

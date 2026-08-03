@@ -74,6 +74,20 @@
       "resumeCommand": "claude --resume hermes-local-embedding-20260803",
       "resumeAttempts": [],
       "stateJsonUpdated": false
+    },
+    {
+      "taskId": "benchmark-embedding-models",
+      "title": "Benchmark retrieval quality/performance across embedding models (local GGUF vs LM Studio)",
+      "sessionId": "hermes-benchmark-embedding-20260803",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/benchmark-embedding-models",
+      "risk": false,
+      "startedAt": "2026-08-03T09:57:45.249644+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume hermes-benchmark-embedding-20260803",
+      "resumeAttempts": []
     }
   ]
 }

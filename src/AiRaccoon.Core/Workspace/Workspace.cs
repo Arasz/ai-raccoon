@@ -7,8 +7,8 @@ public sealed record Workspace
 {
     public Workspace(string id, string projectId, WorkspaceStatus status = WorkspaceStatus.Active)
     {
-        Guard.IsNotNullOrWhiteSpace(id, nameof(id));
-        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(id);
+        Guard.IsNotNullOrWhiteSpace(projectId);
 
         Id = id;
         ProjectId = projectId;

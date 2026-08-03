@@ -39,7 +39,7 @@ public class SyncServiceTests
             "apikey:test-key-0000",
             "sync",
             "sync",
-            "reindex",
+            "reindex"
         });
     }
 
@@ -86,24 +86,17 @@ public class SyncServiceTests
     }
 
     [Fact]
-    public void Parse_ReadsSendAndReceiveCounts()
-    {
+    public void Parse_ReadsSendAndReceiveCounts() =>
         CloudSyncCounts.Parse("""{"send":{"ok":true,"count":3},"receive":{"ok":true,"count":5}}""")
             .ShouldBe(new CloudSyncCounts(3, 5));
-    }
 
     [Fact]
-    public void Parse_MissingCountDefaultsToZero()
-    {
+    public void Parse_MissingCountDefaultsToZero() =>
         CloudSyncCounts.Parse("""{"send":{"ok":false},"receive":{"ok":true,"count":2}}""")
             .ShouldBe(new CloudSyncCounts(0, 2));
-    }
 
     [Fact]
-    public void Parse_InvalidJson_ThrowsJsonException()
-    {
-        Should.Throw<JsonException>(() => CloudSyncCounts.Parse("not json"));
-    }
+    public void Parse_InvalidJson_ThrowsJsonException() => Should.Throw<JsonException>(() => CloudSyncCounts.Parse("not json"));
 
     private sealed class FakeConnection(IReadOnlyList<string> committedContexts) : ICloudSyncConnection
     {
@@ -150,7 +143,6 @@ public class SyncServiceTests
 
     private sealed class FakeConnectionFactory(FakeConnection connection) : ICloudSyncConnectionFactory
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<ICloudSyncConnection>(connection);
+        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) => Task.FromResult<ICloudSyncConnection>(connection);
     }
 }

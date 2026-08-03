@@ -186,7 +186,19 @@ class McpTools:
         return command if isinstance(command, str) and command else None
 
     def _server_available(self, server: Dict[str, Any]) -> bool:
-        """Whether the server's optional executable gate resolves on PATH."""
+        """Whether the server's optional executable gate resolves on PATH.
+
+        `AI_BADGER_MCP_AVAILABILITY` overrides the probe: "all" forces every declared server
+        available, "none" forces none. The scaffold-freshness guard sets it to "all" so its
+        re-scaffold comparison is deterministic regardless of the host's PATH — a machine with
+        `hermes` installed and one without must produce the same tree (issue: guard failed on
+        main because the committed tree was scaffolded on a hermes machine and CI is not).
+        """
+        override = os.environ.get("AI_BADGER_MCP_AVAILABILITY", "")
+        if override == "all":
+            return True
+        if override == "none":
+            return False
         command = self._availability_command(server)
         return command is None or shutil.which(command) is not None
 

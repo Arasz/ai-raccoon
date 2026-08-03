@@ -1,8 +1,8 @@
 {
   "$schema": "../schemas/manifest.schema.json",
   "frameworkVersion": "0.76.0",
-  "frameworkCommit": "3ff8674f4654325a80d0adb8162d0dacb168a341",
-  "frameworkDirty": true,
+  "frameworkCommit": "e5caa48c9ec52592d861cbf3ac245266a088420f",
+  "frameworkDirty": false,
   "frameworkRoot": "/Users/arasz/RiderProjects/ai-badger",
   "generatedAt": null,
   "agents": [
@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "71435ee5ab4b48b6641549af5b33ad6b73af4481b69a4b9b15d479f8493c77ae",
+  "configHash": "8093ec7626c48c3979b5c88b91db0bb280f60d1986158e5a8f3b53e0df7f39e6",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -515,12 +515,12 @@
       "source": "features/common/skills/welcome-ai-badger",
       "target": ".ai-badger/skills/welcome-ai-badger",
       "frameworkVersion": "0.76.0",
-      "hash": "f14969b31da54025e1df24f961ce11b20c0b470db682851317ecb5cd94911036",
+      "hash": "de027eaef61101cc520847dc0ca62affad4b6f7ec187c97debdce32e0fa47abc",
       "dirMeta": {
         "file_count": 18,
         "dir_count": 2
       },
-      "sourceHash": "f14969b31da54025e1df24f961ce11b20c0b470db682851317ecb5cd94911036",
+      "sourceHash": "de027eaef61101cc520847dc0ca62affad4b6f7ec187c97debdce32e0fa47abc",
       "sourceMeta": {
         "file_count": 18,
         "dir_count": 2

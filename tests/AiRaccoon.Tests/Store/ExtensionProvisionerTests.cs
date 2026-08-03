@@ -14,7 +14,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task EnsureProvisioned_DownloadsMissingModules_AndReturnsPaths()
@@ -23,7 +23,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
         var handler = new FakeHandler(uri => archives[AssetName(uri)]);
         using var http = new HttpClient(handler);
         var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, asset => Hash(archives[asset]),
-            includeCloudSync: true);
+            true);
 
         var result = await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
@@ -116,7 +116,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
     public async Task EnsureProvisioned_ForMuslRid_ThrowsListingMissingBinaries()
     {
         var provisioner = new ExtensionProvisioner(_dataRoot, "linux-musl-x64", new HttpClient(), _ => null,
-            includeCloudSync: true);
+            true);
 
         var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
             provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
@@ -142,7 +142,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
         {
             ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector.dylib", [1])),
             ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory.dylib", [2])),
-            ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", [3])),
+            ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", [3]))
         };
 
     private static string AssetName(Uri uri) => Path.GetFileName(uri.AbsolutePath);
@@ -161,15 +161,15 @@ public sealed class ExtensionProvisionerTests : IDisposable
     private static byte[] TarGz(params (string Name, byte[] Content)[] files)
     {
         using var buffer = new MemoryStream();
-        using (var gzip = new GZipStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true))
+        using (var gzip = new GZipStream(buffer, CompressionLevel.SmallestSize, true))
         {
-            using (var writer = new TarWriter(gzip, TarEntryFormat.Pax, leaveOpen: true))
+            using (var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
             {
                 foreach (var (name, content) in files)
                 {
                     writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, name)
                     {
-                        DataStream = new MemoryStream(content),
+                        DataStream = new MemoryStream(content)
                     });
                 }
             }
@@ -188,7 +188,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
             Requested.Add(request.RequestUri!);
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new ByteArrayContent(bodyFor(request.RequestUri!)),
+                Content = new ByteArrayContent(bodyFor(request.RequestUri!))
             };
             return Task.FromResult(response);
         }

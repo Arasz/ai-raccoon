@@ -8,24 +8,24 @@ internal static class MemorySql
     public const string SelectEntryByHash = "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash";
 
     public const string SelectEntryByContextAndValue = """
-        SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
-        FROM dbmem_content
-        WHERE context = @context AND value = @content
-        ORDER BY rowid DESC
-        LIMIT 1
-        """;
+                                                       SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
+                                                       FROM dbmem_content
+                                                       WHERE context = @context AND value = @content
+                                                       ORDER BY rowid DESC
+                                                       LIMIT 1
+                                                       """;
 
     public const string SelectSourceByHashAndContext = "SELECT path AS Path, value AS Value FROM dbmem_content WHERE hash = @hash AND context = @context LIMIT 1";
 
     public const string SearchWithContext = """
-        SELECT hash AS Hash, seq AS Seq, ranking AS Ranking, path AS Path, snippet AS Snippet
-        FROM memory_search
-        WHERE query = @query
-          AND context = @context
-          AND ranking >= @minScore
-        ORDER BY ranking DESC
-        LIMIT @limit
-        """;
+                                            SELECT hash AS Hash, seq AS Seq, ranking AS Ranking, path AS Path, snippet AS Snippet
+                                            FROM memory_search
+                                            WHERE query = @query
+                                              AND context = @context
+                                              AND ranking >= @minScore
+                                            ORDER BY ranking DESC
+                                            LIMIT @limit
+                                            """;
 
     public const string Delete = "SELECT memory_delete(@hash)";
 
@@ -34,10 +34,10 @@ internal static class MemorySql
     public const string CountEntries = "SELECT count(*) FROM dbmem_content";
 
     public const string CountProjectEntries = """
-        SELECT count(*)
-        FROM dbmem_content
-        WHERE context = @project
-        """;
+                                              SELECT count(*)
+                                              FROM dbmem_content
+                                              WHERE context = @project
+                                              """;
 
     public const string PendingCount = "SELECT memory_pending_count()";
 
@@ -62,17 +62,20 @@ internal static class MemorySql
     public const string EmbedPendingAll = "SELECT memory_embed_pending()";
 
     public const string SelectEntriesByContext = """
-        SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
-        FROM dbmem_content
-        WHERE context = @context
-        ORDER BY created_at DESC, rowid DESC
-        """;
+                                                 SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
+                                                 FROM dbmem_content
+                                                 WHERE context = @context
+                                                 ORDER BY created_at DESC, rowid DESC
+                                                 """;
 
-    /// <summary>The bank's committed contexts — shared plus every distinct project context (FR-MEM-1.16); workspaces excluded, shared first.</summary>
+    /// <summary>
+    ///     The bank's committed contexts — shared plus every distinct project context (FR-MEM-1.16); workspaces excluded,
+    ///     shared first.
+    /// </summary>
     public const string CommittedContexts = """
-        SELECT DISTINCT context
-        FROM dbmem_content
-        WHERE context = 'shared' OR context LIKE 'project:%'
-        ORDER BY CASE WHEN context = 'shared' THEN 0 ELSE 1 END, context
-        """;
+                                            SELECT DISTINCT context
+                                            FROM dbmem_content
+                                            WHERE context = 'shared' OR context LIKE 'project:%'
+                                            ORDER BY CASE WHEN context = 'shared' THEN 0 ELSE 1 END, context
+                                            """;
 }

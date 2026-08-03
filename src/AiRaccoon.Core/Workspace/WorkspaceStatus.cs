@@ -4,5 +4,5 @@ public enum WorkspaceStatus
 {
     Active,
     Consolidating,
-    Closed,
+    Closed
 }

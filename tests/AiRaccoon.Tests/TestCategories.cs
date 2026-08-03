@@ -1,9 +1,9 @@
 namespace AiRaccoon.Tests;
 
 /// <summary>
-/// Trait values for filtering: `dotnet test --filter "Category=Unit&Speed=Fast"`.
-/// Category: Unit (pure logic / fakes), Integration (real SQLite or native extensions),
-/// E2E (full server over HTTP via WebApplicationFactory). Speed: Fast vs Slow.
+///     Trait values for filtering: `dotnet test --filter "Category=Unit&Speed=Fast"`.
+///     Category: Unit (pure logic / fakes), Integration (real SQLite or native extensions),
+///     E2E (full server over HTTP via WebApplicationFactory). Speed: Fast vs Slow.
 /// </summary>
 public static class TestCategories
 {

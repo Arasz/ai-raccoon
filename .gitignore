@@ -4,7 +4,9 @@ obj/
 /.nupkg/
 /.nupkg-local/
 /.ai-badger/worktrees/
+/.ai-badger.bckp/
 riderModule.iml
 /_ReSharper.Caches/
 .DS_Store
 __pycache__/
+/BenchmarkDotNet.Artifacts/

@@ -40,10 +40,10 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory) : IMemory
             // Dapper materializes into a settable DTO: the memory_search virtual table declares
             // blob-affinity columns, and Dapper's record-ctor matching would demand byte[] params.
             var results = (await connection.QueryAsync<SearchRow>(
-                    Def(MemorySql.SearchWithContext,
-                        new { query = query.Query, minScore = query.MinScore, context, limit = query.Limit },
-                        cancellationToken))
-                .ConfigureAwait(false))
+                        Def(MemorySql.SearchWithContext,
+                            new { query = query.Query, minScore = query.MinScore, context, limit = query.Limit },
+                            cancellationToken))
+                    .ConfigureAwait(false))
                 .Select(row => new MemorySearchResult(row.Hash, row.Seq, row.Ranking, row.Path, row.Snippet))
                 .ToList();
             batches.Add(results);
@@ -255,11 +255,10 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory) : IMemory
     }
 
     private static async Task<MemoryEntry?> FindEntryAsync(
-        SqliteConnection connection, string context, string content, CancellationToken cancellationToken)
-    {
+        SqliteConnection connection, string context, string content, CancellationToken cancellationToken) =>
         // Prefer the row in the requested context; fall back to any row with this content
         // (global dedup may have skipped the insert because another context owns it).
-        return await connection.QueryFirstOrDefaultAsync<MemoryEntry>(
+        await connection.QueryFirstOrDefaultAsync<MemoryEntry>(
             Def("""
                 SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
                 FROM dbmem_content
@@ -268,7 +267,6 @@ public sealed class SqliteMemoryStore(SqliteConnectionFactory factory) : IMemory
                 LIMIT 1
                 """,
                 new { content, context }, cancellationToken)).ConfigureAwait(false);
-    }
 
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>

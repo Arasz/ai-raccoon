@@ -5,13 +5,12 @@ using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;
 
 namespace AiRaccoon.Infrastructure.Workspace;
 
-/// <summary>Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox), discard (spec §3.2).</summary>
+/// <summary>
+///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
+///     discard (spec §3.2).
+/// </summary>
 public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider)
 {
-    private readonly IMemoryStore _store = store;
-    private readonly TimeProvider _time = timeProvider;
-    private readonly IWorkspaceStore _workspaceStore = workspaceStore;
-
     public async Task<WorkspaceRecord> BeginAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -19,7 +18,8 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         // v7 (sortable, time-ordered) ids make workspace lists deterministic by creation order.
         var id = Guid.CreateVersion7().ToString("N");
         var workspace = new WorkspaceRecord(id, projectId);
-        await _workspaceStore.BeginAsync(projectId, id, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await workspaceStore.BeginAsync(projectId, id, timeProvider.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
         return workspace;
     }
 
@@ -30,7 +30,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        return await _store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        return await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ConsolidationResult> ConsolidateAsync(
@@ -41,7 +41,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentNullException.ThrowIfNull(keep);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
-        var entries = await _store.ListContextAsync(projectId, workspaceContext, cancellationToken)
+        var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
             .ConfigureAwait(false);
         var byHash = entries.ToDictionary(e => e.Hash, e => e, StringComparer.Ordinal);
 
@@ -56,15 +56,15 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
             // entry's logical path and lands it in the project context (spec §3.2). Using
             // add_content rather than add_text avoids the global content-hash dedup, which
             // would skip content that already exists in the workspace context.
-            await _store.AddContentAsync(
+            await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
                 cancellationToken).ConfigureAwait(false);
             promoted++;
         }
 
-        var discarded = await _store.DeleteContextAsync(projectId, workspaceContext, cancellationToken)
+        var discarded = await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken)
             .ConfigureAwait(false);
-        await _workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, _time.GetUtcNow(),
+        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return new ConsolidationResult(promoted, discarded);
     }
@@ -76,8 +76,8 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        var discarded = await _store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
-        await _workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, _time.GetUtcNow(),
+        var discarded = await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return discarded;
     }
