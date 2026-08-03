@@ -415,23 +415,45 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
 
-    // The interim merger keeps the best ranking per hash; the RRF rework (P6) rewrites these.
+    // The RRF rework (P6) fuses per-context batches by rank position, not best ranking.
     [Fact]
-    public void Merge_KeepsBestRankingPerHash_AcrossContextBatches()
+    public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
-        var shared = new[]
-            { new MemorySearchResult("h1", 1, 0.8, "a.md", "s"), new MemorySearchResult("h2", 2, 0.6, "b.md", "s") };
-        var project = new[]
-            { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
+        var shared = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md") };
+        var project = new[] { Hit("h2", 1, "b.md"), Hit("h3", 2, "c.md") };
 
-        var merged = SearchResultMerger.Merge([shared, project], 10);
+        var merged = SearchResultMerger.Merge([shared, project], 10, rrfK: 60);
 
-        merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
-        merged[0].Ranking.ShouldBe(0.9);
+        // h1 = 1/61, h3 = 1/62, h2 = 1/61 + 1/62 -> h2 ranks first and normalizes to 1.0.
+        merged.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"]);
+        merged[0].Ranking.ShouldBe(1.0);
+        merged[1].Ranking.ShouldBe(62.0 / 123, 1e-9);
     }
 
     [Fact]
-    public void Merge_SortsByRankingDescending_AndLimits()
+    public void Merge_SingleContextBatch_KeepsItsOrderAndNormalizesTopToOne()
+    {
+        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+
+        var merged = SearchResultMerger.Merge([results], 10);
+
+        merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
+        merged[0].Ranking.ShouldBe(1.0);
+    }
+
+    [Fact]
+    public void Merge_AppliesMinScoreAfterNormalization()
+    {
+        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+
+        var merged = SearchResultMerger.Merge([results], 10, minScore: 0.9, rrfK: 10);
+
+        // Single-list scores 11/11, 11/12, 11/13; only the top two clear 0.9.
+        merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
+    }
+
+    [Fact]
+    public void Merge_SortsByFusedScoreDescending_AndLimits()
     {
         var results = new[]
         {
@@ -442,8 +464,19 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var merged = SearchResultMerger.Merge([results], 2);
 
-        merged.Select(r => r.Hash).ShouldBe(["h2", "h3"]);
+        // Rank order decides, not the interim score payload.
+        merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
     }
+
+    [Fact]
+    public void Merge_EmptyBatches_ReturnsEmpty()
+    {
+        SearchResultMerger.Merge([Array.Empty<MemorySearchResult>(), Array.Empty<MemorySearchResult>()], 10)
+            .ShouldBeEmpty();
+    }
+
+    private static MemorySearchResult Hit(string hash, int seq, string path) =>
+        new(hash, seq, 0, path, "s");
 
     private async Task<EntryRow?> ReadRowAsync(string hash)
     {

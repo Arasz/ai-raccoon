@@ -3,32 +3,23 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Merges per-context search batches by hash keeping the best ranking, then sorts by ranking desc and limits
-///     (spec §4.1).
+///     Fuses the per-context search batches with reciprocal rank fusion (spec §4.1): each
+///     batch is one ranked list, contexts fuse at uniform weight, scores normalize to their
+///     max (top result = 1.0), then minScore and limit apply.
 /// </summary>
 internal static class SearchResultMerger
 {
     public static IReadOnlyList<MemorySearchResult> Merge(
-        IEnumerable<IReadOnlyList<MemorySearchResult>> batches, int limit)
+        IEnumerable<IReadOnlyList<MemorySearchResult>> batches,
+        int limit,
+        double minScore = 0.0,
+        int rrfK = SearchQuery.DefaultRrfK)
     {
-        var bestByHash = new Dictionary<string, MemorySearchResult>(StringComparer.Ordinal);
+        ArgumentNullException.ThrowIfNull(batches);
 
-        foreach (var batch in batches)
-        {
-            foreach (var result in batch)
-            {
-                if (!bestByHash.TryGetValue(result.Hash, out var existing) || result.Ranking > existing.Ranking)
-                {
-                    bestByHash[result.Hash] = result;
-                }
-            }
-        }
-
-        return
-        [
-            .. bestByHash.Values
-                .OrderByDescending(r => r.Ranking)
-                .Take(limit)
-        ];
+        var lists = batches
+            .Select(batch => (batch, Weight: 1.0))
+            .ToList();
+        return ReciprocalRankFusion.Fuse(lists, rrfK, minScore, limit);
     }
 }
