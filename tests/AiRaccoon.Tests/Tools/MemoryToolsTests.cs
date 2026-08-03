@@ -5,8 +5,8 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Tests.TestSupport;
 using AiRaccoon.Tools;
+using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
 using Xunit;
@@ -27,7 +27,7 @@ public class MemoryToolsTests
     public MemoryToolsTests()
     {
         _workspaces = new WorkspaceService(_store);
-        _sweeper = new SweepService(_store, _meta, new FixedTimeProvider(FixedNow));
+        _sweeper = new SweepService(_store, _meta, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
     }
 

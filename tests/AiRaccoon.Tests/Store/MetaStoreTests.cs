@@ -1,7 +1,7 @@
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
@@ -20,7 +20,7 @@ public sealed class MetaStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             loadExtensions: _ => { });
-        _store = new MetaStore(_factory, new FixedTimeProvider(FixedNow));
+        _store = new MetaStore(_factory, new FakeTimeProvider(FixedNow));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, recursive: true);

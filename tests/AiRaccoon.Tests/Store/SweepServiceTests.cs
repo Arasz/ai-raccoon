@@ -2,7 +2,7 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
@@ -13,7 +13,7 @@ public class SweepServiceTests
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private static SweepService Service(IMemoryStore store, FakeMetaStore meta) =>
-        new(store, meta, new FixedTimeProvider(FixedNow));
+        new(store, meta, new FakeTimeProvider(FixedNow));
 
     [Fact]
     public async Task SweepAsync_DryRun_ReportsCandidates_WithoutDeleting()
