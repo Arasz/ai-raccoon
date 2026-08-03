@@ -1,4 +1,4 @@
-using CommunityToolkit.Diagnostics;
+using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -12,11 +12,6 @@ public sealed record SearchQuery
         int limit = 20,
         double minScore = 0.7)
     {
-        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
-        Guard.IsNotNullOrWhiteSpace(query, nameof(query));
-        Guard.IsGreaterThan(limit, 0, nameof(limit));
-        Guard.IsInRange(minScore, 0.0, 1.0, nameof(minScore));
-
         ProjectId = projectId;
         Query = query;
         Scope = scope;
@@ -36,4 +31,15 @@ public sealed record SearchQuery
     public int Limit { get; }
 
     public double MinScore { get; }
+
+    public sealed class Validator : AbstractValidator<SearchQuery>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.ProjectId).NotNull().NotEmpty();
+            RuleFor(x => x.Query).NotNull().NotEmpty();
+            RuleFor(x => x.Limit).GreaterThan(0);
+            RuleFor(x => x.MinScore).InclusiveBetween(0.0, 1.0);
+        }
+    }
 }

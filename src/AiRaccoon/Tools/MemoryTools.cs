@@ -4,6 +4,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using FluentValidation;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -37,10 +38,11 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(content, nameof(content));
 
-        var entry = await store.WriteAsync(
-            new MemoryWriteRequest(projectId, content, context, agentId, workspaceId), cancellationToken);
+        var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId);
+        new MemoryWriteRequest.Validator().ValidateAndThrow(request);
+
+        var entry = await store.WriteAsync(request, cancellationToken);
         return new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
     }
 
@@ -61,18 +63,19 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(query, nameof(query));
 
         var parsedScope = scope.ToLowerInvariant() switch
         {
             "all" => SearchScope.All,
             "project" => SearchScope.Project,
             "shared" => SearchScope.Shared,
-            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
+            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared."),
         };
 
-        var results = await store.SearchAsync(
-            new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore), cancellationToken);
+        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore);
+        new SearchQuery.Validator().ValidateAndThrow(searchQuery);
+
+        var results = await store.SearchAsync(searchQuery, cancellationToken);
         return new SearchResultList(results);
     }
 

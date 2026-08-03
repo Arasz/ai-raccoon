@@ -1,4 +1,4 @@
-using CommunityToolkit.Diagnostics;
+using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -11,9 +11,6 @@ public sealed record MemoryWriteRequest
         string? agentId = null,
         string? workspaceId = null)
     {
-        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
-        Guard.IsNotNullOrWhiteSpace(content, nameof(content));
-
         ProjectId = projectId;
         Content = content;
         Context = context;
@@ -30,4 +27,13 @@ public sealed record MemoryWriteRequest
     public string? AgentId { get; }
 
     public string? WorkspaceId { get; }
+
+    public sealed class Validator : AbstractValidator<MemoryWriteRequest>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.ProjectId).NotNull().NotEmpty();
+            RuleFor(x => x.Content).NotNull().NotEmpty();
+        }
+    }
 }
