@@ -59,6 +59,21 @@
       "resumeCommand": "claude --resume hermes-review-feedback-20260803",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "local-embedding-model",
+      "title": "Research small local GGUF embedding model for AIRACCOON_TEST_GGUF distribution",
+      "sessionId": "hermes-local-embedding-20260803",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/local-embedding-model",
+      "risk": false,
+      "startedAt": "2026-08-03T09:50:24.341290+00:00",
+      "finishedAt": "2026-08-03T09:50:32.174944+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume hermes-local-embedding-20260803",
+      "resumeAttempts": [],
+      "stateJsonUpdated": false
     }
   ]
 }
