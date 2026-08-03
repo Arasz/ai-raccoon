@@ -1,19 +1,25 @@
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Tools;
+using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Tools;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class MemoryToolsTests
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
     private readonly FakeMetaStore _meta = new();
     private readonly FakeStore _store = new();
     private readonly SweepService _sweeper;
@@ -23,8 +29,8 @@ public class MemoryToolsTests
 
     public MemoryToolsTests()
     {
-        _workspaces = new WorkspaceService(_store);
-        _sweeper = new SweepService(_store, _meta);
+        _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
+        _sweeper = new SweepService(_store, _meta, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
     }
 
@@ -144,7 +150,7 @@ public class MemoryToolsTests
     {
         _store.EntriesByContext["project:acme"] =
         [
-            new MemoryEntry("old", "n.md", "project:acme", "v", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 40 * 86_400)
+            new MemoryEntry("old", "n.md", "project:acme", "v", FixedNow.ToUnixTimeSeconds() - 40 * 86_400)
         ];
         _meta.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
@@ -253,7 +259,7 @@ public class MemoryToolsTests
             throw new NotImplementedException();
     }
 
-    private sealed class FakeMetaStore() : MetaStore(null!)
+    private sealed class FakeMetaStore() : MetaStore(null!, TimeProvider.System)
     {
         public double Rating { get; set; } = 0.9;
 
@@ -264,5 +270,14 @@ public class MemoryToolsTests
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+    }
+
+    private sealed class FakeWorkspaceStore : IWorkspaceStore
+    {
+        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

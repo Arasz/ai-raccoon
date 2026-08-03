@@ -24,6 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Diagnostics"/>
         <PackageReference Include="FluentValidation"/>
         <PackageReference Include="ModelContextProtocol"/>
         <PackageReference Include="ModelContextProtocol.AspNetCore"/>

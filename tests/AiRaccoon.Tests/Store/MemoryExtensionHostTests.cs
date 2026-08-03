@@ -10,6 +10,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemoryExtensionHostTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
@@ -47,7 +49,7 @@ public sealed class MemoryExtensionHostTests : IDisposable
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             loadCloudSync: false, loadExtensions: _ => { });
-        var meta = new MetaStore(factory);
+        var meta = new MetaStore(factory, TimeProvider.System);
         var extension = new RetrievalRatingExtension(meta);
         var results = new List<MemorySearchResult>
         {

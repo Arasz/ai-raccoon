@@ -7,10 +7,11 @@ using AiRaccoon.Infrastructure.Sqlite;
 namespace AiRaccoon.Infrastructure.Degradation;
 
 /// <summary>Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec FR-MEM-1.15).</summary>
-public sealed class SweepService(IMemoryStore store, MetaStore meta)
+public sealed class SweepService(IMemoryStore store, MetaStore meta, TimeProvider timeProvider)
 {
-    private readonly MetaStore _meta = meta ?? throw new ArgumentNullException(nameof(meta));
-    private readonly IMemoryStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly MetaStore _meta = meta;
+    private readonly IMemoryStore _store = store;
+    private readonly TimeProvider _time = timeProvider;
 
     public async Task<SweepOutcome> SweepAsync(
         string projectId, double threshold, double ttlDays, bool dryRun, CancellationToken cancellationToken = default)
@@ -26,7 +27,7 @@ public sealed class SweepService(IMemoryStore store, MetaStore meta)
             .ConfigureAwait(false);
         var sharedHashes = sharedEntries.Select(e => e.Hash).ToHashSet(StringComparer.Ordinal);
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = _time.GetUtcNow().ToUnixTimeSeconds();
         var candidates = new List<SweepCandidate>();
         var deleted = new List<string>();
 

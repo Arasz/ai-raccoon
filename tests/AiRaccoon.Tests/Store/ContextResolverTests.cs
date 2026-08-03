@@ -5,6 +5,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ContextResolverTests
 {
     [Fact]

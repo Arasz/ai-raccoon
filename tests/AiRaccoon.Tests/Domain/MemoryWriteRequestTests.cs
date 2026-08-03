@@ -4,6 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Domain;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class MemoryWriteRequestTests
 {
     [Fact]
@@ -33,17 +35,34 @@ public class MemoryWriteRequestTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankProjectId_Throws(string? projectId)
+    public void Validator_WithBlankProjectId_ReportsCamelCaseProperty(string? projectId)
     {
-        Should.Throw<ArgumentException>(() => new MemoryWriteRequest(projectId!, "content"));
+        var result = new MemoryWriteRequest.Validator()
+            .Validate(new MemoryWriteRequest(projectId!, "content"));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "projectId");
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankContent_Throws(string? content)
+    public void Validator_WithBlankContent_ReportsCamelCaseProperty(string? content)
     {
-        Should.Throw<ArgumentException>(() => new MemoryWriteRequest("acme", content!));
+        var result = new MemoryWriteRequest.Validator()
+            .Validate(new MemoryWriteRequest("acme", content!));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "content");
+    }
+
+    [Fact]
+    public void Validator_WithValidValues_Passes()
+    {
+        var result = new MemoryWriteRequest.Validator()
+            .Validate(new MemoryWriteRequest("acme", "remember this"));
+
+        result.IsValid.ShouldBeTrue();
     }
 }

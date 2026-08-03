@@ -2,18 +2,29 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Workspace;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class WorkspaceServiceTests
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
+    private static WorkspaceService Service(IMemoryStore store, out FakeWorkspaceStore workspaceStore)
+    {
+        workspaceStore = new FakeWorkspaceStore();
+        return new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow));
+    }
+
     [Fact]
     public async Task BeginAsync_ReturnsActiveWorkspace_WithWorkspaceContext()
     {
         var store = new FakeStore();
-        var service = new WorkspaceService(store);
+        var service = Service(store, out var workspaceStore);
 
         var workspace = await service.BeginAsync("acme", TestContext.Current.CancellationToken);
 
@@ -24,12 +35,27 @@ public class WorkspaceServiceTests
     }
 
     [Fact]
+    public async Task BeginAsync_RecordsActiveWorkspaceInStore()
+    {
+        var store = new FakeStore();
+        var service = Service(store, out var workspaceStore);
+
+        var workspace = await service.BeginAsync("acme", TestContext.Current.CancellationToken);
+
+        var record = workspaceStore.Begun.ShouldHaveSingleItem();
+        record.ProjectId.ShouldBe("acme");
+        record.WorkspaceId.ShouldBe(workspace.Id);
+        record.Status.ShouldBe(WorkspaceStatus.Active);
+        record.StartedAt.ShouldNotBe(default);
+    }
+
+    [Fact]
     public async Task GetStatusAsync_ListsEntriesInTheWorkspaceContext()
     {
         var store = new FakeStore();
         store.EntriesByContext["workspace:ws-1"] =
             [new MemoryEntry("h1", "note.md", "workspace:ws-1", "draft", 1)];
-        var service = new WorkspaceService(store);
+        var service = Service(store, out _);
 
         var entries = await service.GetStatusAsync("acme", "ws-1", TestContext.Current.CancellationToken);
 
@@ -46,7 +72,7 @@ public class WorkspaceServiceTests
             new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1),
             new MemoryEntry("h2", "todo.md", "workspace:ws-1", "noise", 2),
         ];
-        var service = new WorkspaceService(store);
+        var service = Service(store, out var workspaceStore);
 
         var result = await service.ConsolidateAsync("acme", "ws-1", ["h1"], TestContext.Current.CancellationToken);
 
@@ -60,6 +86,22 @@ public class WorkspaceServiceTests
     }
 
     [Fact]
+    public async Task ConsolidateAsync_ClosesTheWorkspaceRecord()
+    {
+        var store = new FakeStore();
+        store.EntriesByContext["workspace:ws-1"] =
+            [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)];
+        var service = Service(store, out var workspaceStore);
+
+        await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
+
+        var closed = workspaceStore.Closed.ShouldHaveSingleItem();
+        closed.ProjectId.ShouldBe("acme");
+        closed.WorkspaceId.ShouldBe("ws-1");
+        closed.Status.ShouldBe(WorkspaceStatus.Closed);
+    }
+
+    [Fact]
     public async Task ConsolidateAsync_WithAll_PromotesEveryEntry()
     {
         var store = new FakeStore();
@@ -68,7 +110,7 @@ public class WorkspaceServiceTests
             new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
             new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2),
         ];
-        var service = new WorkspaceService(store);
+        var service = Service(store, out _);
 
         var result = await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
 
@@ -82,12 +124,28 @@ public class WorkspaceServiceTests
         var store = new FakeStore();
         store.EntriesByContext["workspace:ws-1"] =
             [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)];
-        var service = new WorkspaceService(store);
+        var service = Service(store, out _);
 
         var deleted = await service.DiscardAsync("acme", "ws-1", TestContext.Current.CancellationToken);
 
         deleted.ShouldBe(1);
         store.DeletedContexts.ShouldContain("workspace:ws-1");
+    }
+
+    [Fact]
+    public async Task DiscardAsync_ClosesTheWorkspaceRecord()
+    {
+        var store = new FakeStore();
+        store.EntriesByContext["workspace:ws-1"] =
+            [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)];
+        var service = Service(store, out var workspaceStore);
+
+        await service.DiscardAsync("acme", "ws-1", TestContext.Current.CancellationToken);
+
+        var closed = workspaceStore.Closed.ShouldHaveSingleItem();
+        closed.ProjectId.ShouldBe("acme");
+        closed.WorkspaceId.ShouldBe("ws-1");
+        closed.Status.ShouldBe(WorkspaceStatus.Closed);
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -158,6 +216,27 @@ public class WorkspaceServiceTests
         {
             LastListedContext = context;
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries : []);
+        }
+    }
+
+    private sealed class FakeWorkspaceStore : IWorkspaceStore
+    {
+        public List<(string ProjectId, string WorkspaceId, WorkspaceStatus Status, DateTimeOffset StartedAt)> Begun { get; } = [];
+
+        public List<(string ProjectId, string WorkspaceId, WorkspaceStatus Status, DateTimeOffset ClosedAt)> Closed { get; } = [];
+
+        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default)
+        {
+            Begun.Add((projectId, workspaceId, WorkspaceStatus.Active, startedAt));
+            return Task.CompletedTask;
+        }
+
+        public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
+            CancellationToken cancellationToken = default)
+        {
+            Closed.Add((projectId, workspaceId, status, closedAt));
+            return Task.CompletedTask;
         }
     }
 }

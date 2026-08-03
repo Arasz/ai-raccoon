@@ -7,6 +7,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteConnectionFactoryTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();

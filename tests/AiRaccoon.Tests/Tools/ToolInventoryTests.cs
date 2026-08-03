@@ -7,6 +7,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Tools;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ToolInventoryTests
 {
     [Fact]

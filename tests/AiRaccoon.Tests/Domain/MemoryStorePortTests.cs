@@ -5,6 +5,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Domain;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class MemoryStorePortTests
 {
     [Fact]

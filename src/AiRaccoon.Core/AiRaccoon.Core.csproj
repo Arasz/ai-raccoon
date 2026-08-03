@@ -2,9 +2,13 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
+        <!-- ValidatorConfiguration uses a ModuleInitializer to set FluentValidation's global
+             camelCase property-path resolver — intentional library-side global config. -->
+        <NoWarn>$(NoWarn);CA2255</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="FluentValidation"/>
         <PackageReference Include="JetBrains.Annotations"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
     </ItemGroup>

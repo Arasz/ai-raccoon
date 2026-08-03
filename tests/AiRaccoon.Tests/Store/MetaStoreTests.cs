@@ -1,13 +1,18 @@
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MetaStoreTests : IDisposable
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
     private readonly string _dataRoot = CreateTempRoot();
     private readonly SqliteConnectionFactory _factory;
     private readonly MetaStore _store;
@@ -17,10 +22,20 @@ public sealed class MetaStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             loadExtensions: _ => { });
-        _store = new MetaStore(_factory);
+        _store = new MetaStore(_factory, new FakeTimeProvider(FixedNow));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+
+    [Fact]
+    public async Task UpsertAccess_TimestampsComeFromInjectedClock()
+    {
+        var entry = await _store.UpsertAccessAsync(
+            "acme", "abc123", cancellationToken: TestContext.Current.CancellationToken);
+
+        entry.CreatedAt.ShouldBe(FixedNow.ToUnixTimeSeconds());
+        entry.LastAccessedAt.ShouldBe(FixedNow.ToUnixTimeSeconds());
+    }
 
     [Fact]
     public async Task UpsertAccess_OnMissingEntry_CreatesRowWithProvenance()

@@ -11,7 +11,7 @@ namespace AiRaccoon.Infrastructure.Rating;
 /// </summary>
 public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
 {
-    private readonly MetaStore _meta = meta ?? throw new ArgumentNullException(nameof(meta));
+    private readonly MetaStore _meta = meta;
 
     public string Name => "retrieval-rating";
 

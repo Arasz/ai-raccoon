@@ -4,6 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Domain;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SearchQueryTests
 {
     [Fact]
@@ -49,33 +51,53 @@ public class SearchQueryTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankProjectId_Throws(string? projectId)
+    public void Validator_WithBlankProjectId_ReportsCamelCaseProperty(string? projectId)
     {
-        Should.Throw<ArgumentException>(() => new SearchQuery(projectId!, "query"));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery(projectId!, "query"));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "projectId");
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Constructor_WithBlankQuery_Throws(string? query)
+    public void Validator_WithBlankQuery_ReportsCamelCaseProperty(string? query)
     {
-        Should.Throw<ArgumentException>(() => new SearchQuery("acme", query!));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", query!));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "query");
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    public void Constructor_WithNonPositiveLimit_Throws(int limit)
+    public void Validator_WithNonPositiveLimit_ReportsCamelCaseProperty(int limit)
     {
-        Should.Throw<ArgumentOutOfRangeException>(() => new SearchQuery("acme", "query", limit: limit));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", limit: limit));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "limit");
     }
 
     [Theory]
     [InlineData(-0.1)]
     [InlineData(1.1)]
-    public void Constructor_WithMinScoreOutsideUnitInterval_Throws(double minScore)
+    public void Validator_WithMinScoreOutsideUnitInterval_ReportsCamelCaseProperty(double minScore)
     {
-        Should.Throw<ArgumentOutOfRangeException>(() => new SearchQuery("acme", "query", minScore: minScore));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", minScore: minScore));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "minScore");
+    }
+
+    [Fact]
+    public void Validator_WithValidValues_Passes()
+    {
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", limit: 5, minScore: 0.9));
+
+        result.IsValid.ShouldBeTrue();
     }
 }
