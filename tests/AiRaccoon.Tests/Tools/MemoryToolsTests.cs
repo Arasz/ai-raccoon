@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -26,7 +27,7 @@ public class MemoryToolsTests
 
     public MemoryToolsTests()
     {
-        _workspaces = new WorkspaceService(_store);
+        _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         _sweeper = new SweepService(_store, _meta, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
     }
@@ -267,5 +268,14 @@ public class MemoryToolsTests
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+    }
+
+    private sealed class FakeWorkspaceStore : IWorkspaceStore
+    {
+        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

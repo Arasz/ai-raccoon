@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
@@ -330,7 +331,9 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
 
         // Drive the REAL WorkspaceService so the promote (add_content with the entry's path
         // into project:acme) and the workspace-context delete are both exercised (QA #8).
-        var workspaces = new WorkspaceService(store);
+        var factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = RuntimeInformation.RuntimeIdentifier });
+        var workspaces = new WorkspaceService(store, new SqliteWorkspaceStore(factory), TimeProvider.System);
         var result = await workspaces.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(1);
