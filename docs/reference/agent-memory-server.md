@@ -52,12 +52,12 @@ workspace's isolated context.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
   age exceeds 30 days. `shared` entries are never swept.
-- **`memory_configure`:** `engine` is `local` (GGUF model on disk) or `remote`
-  (provider API). For a remote provider, `apiKey` or `AIRACCOON_VECTORSSPACE_API_KEY`
-  is required — an explicit `apiKey` parameter takes precedence over the environment
-  variable. Local embeddings need a GGUF model path; until one is configured, writes
-  are stored deferred (`memory_stats.pending > 0`) and only become searchable after
-  `memory_embed_pending`.
+- **`memory_configure`:** `provider` is `local` (bundled int8 ONNX model in-process)
+  or `openai` (any OpenAI-compatible endpoint). For `openai`, `model` and an API key
+  (`apiKey` arg or `AIRACCOON_OPENAI_API_KEY`) are required — an explicit `apiKey`
+  parameter takes precedence over the environment variable. Until an engine is
+  configured, writes are stored deferred (`memory_stats.pending > 0`) and only become
+  searchable after `memory_embed_pending`. Changing the engine re-embeds the bank.
 
 ## Prompts (2)
 
@@ -83,44 +83,38 @@ workspace's isolated context.
 | `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
 | `AIRACCOON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
 | `AIRACCOON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
-| `AIRACCOON_VECTORSSPACE_API_KEY` | vectors.space API key (remote embeddings) |
-| `AIRACCOON_TEST_GGUF` | GGUF model path; gates the embedding integration tests |
+| `AIRACCOON_OPENAI_API_KEY` | API key for `provider=openai` embeddings |
+| `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path for `provider=local` (default: the bundled model) |
 
 Credentials are read from the environment only.
 
 ## Local embedding model
 
-Local embeddings run through sqlite-memory's llama.cpp integration and need a
-GGUF embedding model on disk, passed to `memory_configure(provider="local")`.
-The server does not bundle a model — download one once per install:
+Local embeddings run in-process on ONNX Runtime over the small int8
+all-MiniLM-L6-v2 model (dimension 384, mean-pool + L2-normalize) **bundled inside
+the tool package** — `memory_configure(provider="local")` needs no sidecar, server
+process or download. The binary is gitignored and fetched once by the pinned script
+(SHA-256 verified); the tests FAIL (never skip) when it is missing:
 
 ```bash
-# Smallest verified model (~21 MB, Apache-2.0):
-scripts/download-embedding-model.sh all-minilm
-# sqlite-memory's documented reference model (~139 MB, Apache-2.0):
-scripts/download-embedding-model.sh nomic
+scripts/download-embedding-model.sh          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
 ```
 
-The script pins the SHA-256 of `all-minilm` (all-MiniLM-L6-v2 Q5_K_M) and
-installs it under `<data-root>/models/`. Point the embedding integration/E2E
-tests at it with `export AIRACCOON_TEST_GGUF=<data-root>/models/all-MiniLM-L6-v2.Q5_K_M.gguf`
-(without it those tests skip honestly).
+A custom ONNX model path overrides the bundled model via
+`memory_configure(provider="local", model="/path/to/model.onnx")` or
+`AIRACCOON_EMBEDDING_MODEL`.
 
 ## Embedding configuration matrix
 
-`memory_configure` accepts any provider string; the pinned sqlite-memory
-extension (1.3.5) resolves exactly two engines:
+`memory_configure` resolves exactly two engines:
 
-| Engine | `provider` | `model` | Key | Notes |
-|---|---|---|---|---|
-| Local (llama.cpp) | `local` | GGUF file path | none | Offline, no API cost; model file per the download script |
-| Remote (vectors.space) | `openai` | e.g. `text-embedding-3-small` | `AIRACCOON_VECTORSSPACE_API_KEY` | Free tier; endpoint is hardcoded to `https://api.vectors.space/v1/embeddings` |
+| Engine | `provider` | `model` | `baseUrl` | Key | Notes |
+|---|---|---|---|---|---|
+| Local (bundled ONNX) | `local` | optional ONNX path (default: bundled model) | ignored | none | In-process, offline, no API cost |
+| OpenAI-compatible | `openai` | model id (required), e.g. `nomic-embed-text` | optional endpoint (default `https://api.openai.com/v1`) | `apiKey` arg or `AIRACCOON_OPENAI_API_KEY` | Any OpenAI-compatible `/embeddings` backend (LM Studio, Ollama, self-hosted, OpenAI) |
 
-Other OpenAI-compatible endpoints (LM Studio, Ollama, self-hosted) are **not
-configurable**: the extension's remote engine pins the vectors.space URL and
-its custom-provider hook is an in-process C callback API, not a setting. To
-use such a backend the extension itself would need a base-URL override — out
-of scope for the pinned build.
+Changing the engine (provider, model or baseUrl) re-embeds the bank with the new
+engine.
 
 ## Error shapes
 
@@ -130,7 +124,7 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 |---|---|
 | Missing/blank `projectId` | `invalid-params: project_id is required` |
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
-| Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider` |
+| Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'` |
 | Sync without credentials | `sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY` — both are required |
 
 ## Native extensions

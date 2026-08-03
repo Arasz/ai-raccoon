@@ -5,6 +5,7 @@ using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Provisioning;
 using AiRaccoon.Infrastructure.Rating;
@@ -45,6 +46,7 @@ public static partial class Dependencies
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
             true));
+        services.AddSingleton<EmbeddingService>();
         services.AddSingleton<SqliteMemoryStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
         services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());

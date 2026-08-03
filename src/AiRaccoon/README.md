@@ -39,9 +39,11 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
 |----------------------------------|-------------------------------------------|
 | `AIRACCOON_DATA_ROOT`            | Bank data root (default `~/.ai-raccoon`)  |
 | `AIRACCOON_INSTALL_SCOPE`        | `user` (default) or `project`             |
+| `AIRACCOON_ACCESS_MODE`          | Default global access mode (`ro`\|`rw`\|`full`) |
+| `AIRACCOON_OPENAI_API_KEY`       | API key for `provider=openai` embeddings  |
+| `AIRACCOON_EMBEDDING_MODEL`      | Custom ONNX model path for `provider=local` |
 | `AIRACCOON_SQLITECLOUD_DB_ID`    | SQLite Cloud managed database id (sync)   |
 | `AIRACCOON_SQLITECLOUD_API_KEY`  | SQLite Cloud API key (sync)               |
-| `AIRACCOON_VECTORSSPACE_API_KEY` | vectors.space API key (remote embeddings) |
 
 Credentials are read from the environment only — never from tracked files.
 
@@ -57,9 +59,16 @@ All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
 sqlite-memory, sqlite-vector and sqlite-sync ship as native SQLite extensions, provisioned per platform on first run
 into `<data-root>/extensions/<rid>/`:
-sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 (pinned, SHA-256 verified). Local embeddings need a GGUF
-model (e.g. `nomic-embed-text-v1.5.Q8_0.gguf`) configured via `memory_configure`; without a model, writes are stored
-deferred and indexed later.
+sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 (pinned, SHA-256 verified).
+
+## Embeddings
+
+The default embedding engine is the small int8 all-MiniLM-L6-v2 ONNX model bundled inside the tool package
+(`Models/`, SHA-256 pinned) — `memory_configure(provider="local")` embeds in-process with no sidecar or download.
+`memory_configure(provider="openai")` routes through any OpenAI-compatible `baseUrl` (default
+`https://api.openai.com/v1`) with a model id; it needs an API key (`api_key` arg or `AIRACCOON_OPENAI_API_KEY`).
+Without a configured engine, writes are stored deferred (`embed_state=pending`) and indexed later via
+`memory_embed_pending`. Changing the engine re-embeds the bank.
 
 ## Develop
 

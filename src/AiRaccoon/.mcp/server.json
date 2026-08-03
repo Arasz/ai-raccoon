@@ -15,9 +15,11 @@
             "environmentVariables": [
                 "AIRACCOON_DATA_ROOT",
                 "AIRACCOON_INSTALL_SCOPE",
+                "AIRACCOON_ACCESS_MODE",
+                "AIRACCOON_OPENAI_API_KEY",
+                "AIRACCOON_EMBEDDING_MODEL",
                 "AIRACCOON_SQLITECLOUD_DB_ID",
-                "AIRACCOON_SQLITECLOUD_API_KEY",
-                "AIRACCOON_VECTORSSPACE_API_KEY"
+                "AIRACCOON_SQLITECLOUD_API_KEY"
             ]
         }
     ],
