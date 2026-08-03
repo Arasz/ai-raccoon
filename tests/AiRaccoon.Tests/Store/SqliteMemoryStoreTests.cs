@@ -1,165 +1,379 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Rating;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
-using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
-[Trait(TestCategories.Category, TestCategories.Unit)]
-[Trait(TestCategories.Speed, TestCategories.Fast)]
-public class SqliteMemoryStoreTests
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
+public sealed class SqliteMemoryStoreTests : IDisposable
 {
-    [Fact]
-    public void InsertTextStatement_IsMemoryAddText() => MemorySql.InsertText.ShouldBe("SELECT memory_add_text(@content, @context)");
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    [Fact]
-    public void SelectEntryByHashStatement_ReadsDbmemContentColumns() =>
-        MemorySql.SelectEntryByHash.ShouldBe(
-            "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash");
+    private readonly string _dataRoot = CreateTempRoot();
+    private readonly SqliteConnectionFactory _factory;
+    private readonly SqliteMemoryStore _store;
 
-    [Fact]
-    public void SearchStatement_WithContext_FiltersByContextColumn()
+    public SqliteMemoryStoreTests()
     {
-        MemorySql.SearchWithContext.ShouldContain("AND context = @context");
-        MemorySql.SearchWithContext.ShouldContain("ORDER BY ranking DESC");
+        _factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
+            loadExtensions: _ => { });
+        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker());
     }
 
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
     [Fact]
-    public void ShareSourceStatement_ReadsSourceRowByHashAndProjectContext()
+    public async Task Write_CreatesRowInProjectScope_WithPendingEmbedState_AndOnRowDefaults()
     {
-        MemorySql.SelectSourceByHashAndContext.ShouldContain("WHERE hash = @hash");
-        MemorySql.SelectSourceByHashAndContext.ShouldContain("AND context = @context");
-        MemorySql.SelectSourceByHashAndContext.ShouldContain("LIMIT 1");
-    }
-
-    [Fact]
-    public void CommittedContextsStatement_SpansSharedAndProjectContextsOnly()
-    {
-        MemorySql.CommittedContexts.ShouldContain("context = 'shared'");
-        MemorySql.CommittedContexts.ShouldContain("LIKE 'project:%'");
-        MemorySql.CommittedContexts.ShouldNotContain("workspace");
-    }
-
-    [Fact]
-    public void DeleteStatement_IsMemoryDelete() => MemorySql.Delete.ShouldBe("SELECT memory_delete(@hash)");
-
-    [Fact]
-    public void DeleteContextStatement_IsMemoryDeleteContext() => MemorySql.DeleteContext.ShouldBe("SELECT memory_delete_context(@context)");
-
-    [Fact]
-    public void StatsStatements_CountEntriesAndPending()
-    {
-        MemorySql.CountEntries.ShouldBe("SELECT count(*) FROM dbmem_content");
-        MemorySql.PendingCount.ShouldBe("SELECT memory_pending_count()");
-    }
-
-    [Fact]
-    public async Task Dapper_MapsAliasedColumns_IntoMemoryEntry()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-
-        await using (var create = connection.CreateCommand())
-        {
-            create.CommandText =
-                "CREATE TABLE dbmem_content (hash TEXT, path TEXT, context TEXT, value TEXT, created_at INTEGER)";
-            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using (var insert = connection.CreateCommand())
-        {
-            insert.CommandText = "INSERT INTO dbmem_content VALUES (@hash, @path, @context, @value, @createdAt)";
-            insert.Parameters.AddWithValue("@hash", "abc123");
-            insert.Parameters.AddWithValue("@path", "notes.md");
-            insert.Parameters.AddWithValue("@context", "project:acme");
-            insert.Parameters.AddWithValue("@value", "remember this");
-            insert.Parameters.AddWithValue("@createdAt", 1_752_000_000L);
-            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
-
-        // The store's Dapper reads alias snake_case columns to record constructor names;
-        // this asserts that a query using those aliases materializes a MemoryEntry.
-        var entry = await connection.QueryFirstOrDefaultAsync<MemoryEntry>(
-            "SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt FROM dbmem_content",
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "SQLite memory stores project knowledge"),
             TestContext.Current.CancellationToken);
 
-        entry.ShouldBe(new MemoryEntry("abc123", "notes.md", "project:acme", "remember this", 1_752_000_000L));
+        entry.Context.ShouldBe("project:acme");
+        entry.Hash.ShouldNotBeNullOrWhiteSpace();
+        entry.Value.ShouldBe("SQLite memory stores project knowledge");
+        entry.CreatedAt.ShouldBe(FixedNow.ToUnixTimeSeconds());
+
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.Scope.ShouldBe("project");
+        row.ProjectId.ShouldBe("acme");
+        row.EmbedState.ShouldBe("pending");
+        row.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
+        row.AccessCount.ShouldBe(0);
+        row.Path.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public void SearchContexts_AllScope_SpansSharedProjectAndNamedWorkspace()
+    public async Task Write_WithWorkspace_LandsInWorkspaceScope()
     {
-        var query = new SearchQuery("acme", "q", SearchScope.All, "ws-1");
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "draft finding", workspaceId: "ws-1"),
+            TestContext.Current.CancellationToken);
 
-        SearchContexts.For(query).ShouldBe(
-        [
-            ContextNaming.SharedContext, ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")
-        ]);
+        entry.Context.ShouldBe("workspace:ws-1");
+
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.WorkspaceId.ShouldBe("ws-1");
+        row.Scope.ShouldBeNull();
     }
 
     [Fact]
-    public void SearchContexts_AllScope_WithoutWorkspace_SpansSharedAndProject()
+    public async Task Write_WithExplicitContext_UsesCustomScope_AndStoresAgentId()
     {
-        var query = new SearchQuery("acme", "q");
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "docs only fact", "docs:api", "agent-1"),
+            TestContext.Current.CancellationToken);
 
-        SearchContexts.For(query).ShouldBe(
-            [ContextNaming.SharedContext, ContextNaming.ProjectContext("acme")]);
+        entry.Context.ShouldBe("docs:api");
+
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.Scope.ShouldBe("custom");
+        row.ContextLabel.ShouldBe("docs:api");
+        row.AgentId.ShouldBe("agent-1");
     }
 
     [Fact]
-    public void SearchContexts_ProjectScope_SpansProjectAndNamedWorkspace()
+    public async Task Search_FindsKeywordMatch_AndCarriesTheContractFields()
     {
-        var query = new SearchQuery("acme", "q", SearchScope.Project, "ws-1");
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "SQLite memory stores project knowledge"),
+            TestContext.Current.CancellationToken);
 
-        SearchContexts.For(query).ShouldBe(
-            [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "knowledge"),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        hit.Path.ShouldBe(entry.Path);
+        hit.Snippet.ShouldNotBeNullOrWhiteSpace();
+        hit.Ranking.ShouldBeLessThan(0); // interim BM25 rank; normalization is P6
     }
 
     [Fact]
-    public void SearchContexts_ProjectScope_WithoutWorkspace_IsProjectOnly()
+    public async Task Search_ProjectScope_ExcludesOtherProjectsAndCustomContexts()
     {
-        var query = new SearchQuery("acme", "q", SearchScope.Project);
+        var acmeEntry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "acme project fact"), TestContext.Current.CancellationToken);
+        var otherEntry = await _store.WriteAsync(
+            new MemoryWriteRequest("other", "other project fact"), TestContext.Current.CancellationToken);
+        var customEntry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "custom context fact", "docs:api"),
+            TestContext.Current.CancellationToken);
 
-        SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "fact", SearchScope.Project),
+            TestContext.Current.CancellationToken);
+
+        results.Select(r => r.Hash).ShouldContain(acmeEntry.Hash);
+        results.ShouldNotContain(r => r.Hash == otherEntry.Hash);
+        results.ShouldNotContain(r => r.Hash == customEntry.Hash);
     }
 
     [Fact]
-    public void SearchContexts_SharedScope_IsSharedOnly_EvenWhenWorkspaceNamed()
+    public async Task Search_BumpsAccessCountAndRating_OnTheReturnedRow()
     {
-        var query = new SearchQuery("acme", "q", SearchScope.Shared, "ws-1");
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "frequently retrieved fact"),
+            TestContext.Current.CancellationToken);
 
-        SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
+        await _store.SearchAsync(new SearchQuery("acme", "retrieved"), TestContext.Current.CancellationToken);
+
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.AccessCount.ShouldBe(1);
+        row.Rating.ShouldBeGreaterThan(RatingPolicy.DefaultBaseScore);
+        row.LastAccessedAt.ShouldBe(FixedNow.ToUnixTimeSeconds());
+
+        var metadata = await _store.GetMetadataAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        metadata.ShouldNotBeNull();
+        metadata!.Rating.ShouldBe(row.Rating);
     }
 
     [Fact]
-    public void Merge_KeepsBestRankingPerHash_AcrossContextBatches()
+    public async Task Share_CopiesRowIntoSharedScope_PreservingPath()
     {
-        var shared = new[]
-            { new MemorySearchResult("h1", 1, 0.8, "a.md", "s"), new MemorySearchResult("h2", 2, 0.6, "b.md", "s") };
-        var project = new[]
-            { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross project convention"),
+            TestContext.Current.CancellationToken);
 
-        var merged = SearchResultMerger.Merge([shared, project], 10);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
-        merged[0].Ranking.ShouldBe(0.9);
+        shared.Context.ShouldBe(ContextNaming.SharedContext);
+        shared.Path.ShouldStartWith("shared/");
+        (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
+            .ShouldContain(e => e.Value == "cross project convention");
+        (await _store.ListContextAsync("acme", "project:acme", TestContext.Current.CancellationToken))
+            .ShouldContain(e => e.Value == "cross project convention");
     }
 
     [Fact]
-    public void Merge_SortsByRankingDescending_AndLimits()
+    public async Task Share_Twice_IsIdempotent()
     {
-        var results = new[]
-        {
-            new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
-            new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
-            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
-        };
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "share me once"), TestContext.Current.CancellationToken);
 
-        var merged = SearchResultMerger.Merge([results], 2);
+        await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        merged.Select(r => r.Hash).ShouldBe(["h2", "h3"]);
+        (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
+            .Count(e => e.Value == "share me once").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Delete_RemovesTheRows_AndTheFtsIndexEntry()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "to be deleted"), TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeTrue();
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
+        (await _store.SearchAsync(
+                new SearchQuery("acme", "deleted", minScore: 0),
+                TestContext.Current.CancellationToken))
+            .ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Delete_ForAnotherProject_DoesNotRemoveTheRow()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "belongs to acme"), TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteAsync("other", entry.Hash, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeFalse();
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task DeleteContext_WorkspaceContext_RemovesWorkspaceRowsOnly()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "workspace draft", workspaceId: "ws-1"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteContextAsync("acme", "workspace:ws-1", TestContext.Current.CancellationToken);
+
+        deleted.ShouldBe(1);
+        (await _store.ListContextAsync("acme", "workspace:ws-1", TestContext.Current.CancellationToken)).ShouldBeEmpty();
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Stats_CountsCommittedEntries_AndPendingFromEmbedState()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "workspace draft", workspaceId: "ws-1"),
+            TestContext.Current.CancellationToken);
+
+        var stats = await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken);
+
+        stats.EntryCount.ShouldBe(1);
+        stats.PendingCount.ShouldBe(2);
+        stats.Contexts.ShouldContain("project:acme");
+    }
+
+    [Fact]
+    public async Task AddContent_IsIdempotent_ByPathInBucket()
+    {
+        var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
+            TestContext.Current.CancellationToken);
+        var second = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
+            TestContext.Current.CancellationToken);
+
+        second.Hash.ShouldBe(first.Hash);
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ListFiles_ReturnsJsonTree_FromEntryPaths()
+    {
+        await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, TestContext.Current.CancellationToken);
+        await _store.AddContentAsync("acme", "notes.md", "notes", null, TestContext.Current.CancellationToken);
+
+        var tree = await _store.ListFilesAsync("acme", TestContext.Current.CancellationToken);
+
+        tree.ShouldContain("docs");
+        tree.ShouldContain("guide.md");
+        tree.ShouldContain("notes.md");
+    }
+
+    [Fact]
+    public async Task EmbedPending_ReturnsZeroProcessed_AndPendingCount()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "pending note"), TestContext.Current.CancellationToken);
+
+        var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
+
+        result.Processed.ShouldBe(0); // embeddings land in P4
+        result.Pending.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ConfigureEmbedding_StoresProviderAndModel_InSettings()
+    {
+        var config = await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", null,
+            TestContext.Current.CancellationToken);
+
+        config.Provider.ShouldBe("openai");
+        config.Model.ShouldBe("nomic-embed-text");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var provider = await connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.provider'");
+        var model = await connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.model'");
+        provider.ShouldBe("openai");
+        model.ShouldBe("nomic-embed-text");
+    }
+
+    [Fact]
+    public async Task IngestFile_ChunksContent_ThroughTheChunker_AndReturnsIndexedCount()
+    {
+        var file = Path.Combine(_dataRoot, "long-note.md");
+        await File.WriteAllTextAsync(file, "first chunk\n\nsecond chunk\n\nthird chunk",
+            TestContext.Current.CancellationToken);
+
+        var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        indexed.ShouldBe(1);
+        var entries = await _store.ListContextAsync("acme", "project:acme", TestContext.Current.CancellationToken);
+        entries.Count.ShouldBe(3);
+        entries.ShouldAllBe(e => e.Path == file);
+
+        // Unchanged file is skipped on re-ingest.
+        (await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task IngestDirectory_IndexesMarkdownFiles_AndSkipsUnchanged()
+    {
+        var dir = Path.Combine(_dataRoot, "docs");
+        Directory.CreateDirectory(dir);
+        await File.WriteAllTextAsync(Path.Combine(dir, "a.md"), "alpha content", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(dir, "b.md"), "beta content", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(dir, "notes.txt"), "plain text", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(dir, "image.png"), "not text", TestContext.Current.CancellationToken);
+
+        var first = await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+        var second = await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+
+        first.ShouldBe(3); // a.md + b.md + notes.txt
+        second.ShouldBe(0);
+    }
+
+    private async Task<EntryRow?> ReadRowAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<EntryRow>(
+            """
+            SELECT hash AS Hash, path AS Path, scope AS Scope, project_id AS ProjectId,
+                   context_label AS ContextLabel, workspace_id AS WorkspaceId, agent_id AS AgentId,
+                   created_at AS CreatedAt, access_count AS AccessCount, last_accessed_at AS LastAccessedAt,
+                   rating AS Rating, ttl_days AS TtlDays, embed_state AS EmbedState
+            FROM entries
+            WHERE hash = @hash
+            ORDER BY id
+            LIMIT 1
+            """,
+            new { hash });
+    }
+
+    private static string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "airaccoon-store-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private sealed class EntryRow
+    {
+        public string Hash { get; set; } = "";
+
+        public string Path { get; set; } = "";
+
+        public string? Scope { get; set; }
+
+        public string ProjectId { get; set; } = "";
+
+        public string? ContextLabel { get; set; }
+
+        public string? WorkspaceId { get; set; }
+
+        public string? AgentId { get; set; }
+
+        public long CreatedAt { get; set; }
+
+        public int AccessCount { get; set; }
+
+        public long? LastAccessedAt { get; set; }
+
+        public double Rating { get; set; }
+
+        public int? TtlDays { get; set; }
+
+        public string EmbedState { get; set; } = "";
+    }
+
+    /// <summary>Deterministic test chunker: splits on blank lines.</summary>
+    private sealed class StubChunker : IChunker
+    {
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
+            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

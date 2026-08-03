@@ -214,6 +214,10 @@ public class WorkspaceServiceTests
             LastListedContext = context;
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries : []);
         }
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

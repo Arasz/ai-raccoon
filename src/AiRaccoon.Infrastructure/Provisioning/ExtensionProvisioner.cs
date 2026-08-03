@@ -8,11 +8,12 @@ namespace AiRaccoon.Infrastructure.Provisioning;
 public sealed class ExtensionProvisioningException(string message) : Exception(message);
 
 /// <summary>Absolute paths of the provisioned loadable extension modules.</summary>
-public sealed record ProvisionedExtensions(string Vector, string Memory, string? CloudSync);
+public sealed record ProvisionedExtensions(string? CloudSync);
 
 /// <summary>
-///     Downloads and verifies pinned native extensions into &lt;dataRoot&gt;/extensions/&lt;rid&gt;/ (spec §10,
-///     OQ-3).
+///     Downloads and verifies the pinned cloudsync module into &lt;dataRoot&gt;/extensions/&lt;rid&gt;/
+///     (spec §10, OQ-3). Memory/vector natives are no longer provisioned (P1); P10 deletes this
+///     provisioner once P9's own sync lands.
 /// </summary>
 public sealed class ExtensionProvisioner
 {
@@ -55,21 +56,12 @@ public sealed class ExtensionProvisioner
             }
         }
 
-        return new ProvisionedExtensions(
-            ModulePath(ExtensionCatalog.Vector),
-            ModulePath(ExtensionCatalog.Memory),
-            _includeCloudSync ? ModulePath(ExtensionCatalog.Sync) : null);
+        return new ProvisionedExtensions(_includeCloudSync ? ModulePath(ExtensionCatalog.Sync) : null);
     }
 
     private List<ExtensionSpec> RequiredSpecs()
     {
-        var specs = new List<ExtensionSpec> { ExtensionCatalog.Vector, ExtensionCatalog.Memory };
-        if (_includeCloudSync)
-        {
-            specs.Add(ExtensionCatalog.Sync);
-        }
-
-        return specs;
+        return _includeCloudSync ? [ExtensionCatalog.Sync] : [];
     }
 
     private string ModulePath(ExtensionSpec spec) => Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));

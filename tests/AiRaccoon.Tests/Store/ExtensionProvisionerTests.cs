@@ -17,7 +17,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
-    public async Task EnsureProvisioned_DownloadsMissingModules_AndReturnsPaths()
+    public async Task EnsureProvisioned_WithCloudSync_DownloadsSyncModule()
     {
         var archives = OsxArm64Archives();
         var handler = new FakeHandler(uri => archives[AssetName(uri)]);
@@ -27,33 +27,28 @@ public sealed class ExtensionProvisionerTests : IDisposable
 
         var result = await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
-        result.Vector.ShouldBe(ModulePath("vector.dylib"));
-        result.Memory.ShouldBe(ModulePath("memory.dylib"));
         result.CloudSync.ShouldBe(ModulePath("cloudsync.dylib"));
-        File.Exists(result.Vector).ShouldBeTrue();
-        File.Exists(result.Memory).ShouldBeTrue();
         File.Exists(result.CloudSync).ShouldBeTrue();
-        handler.Requested.Count.ShouldBe(3);
+        handler.Requested.Count.ShouldBe(1);
     }
 
     [Fact]
-    public async Task EnsureProvisioned_RequestsPinnedGithubAssetUrls()
+    public async Task EnsureProvisioned_RequestsPinnedGithubAssetUrl()
     {
         var archives = OsxArm64Archives();
         var handler = new FakeHandler(uri => archives[AssetName(uri)]);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, asset => Hash(archives[asset]));
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, asset => Hash(archives[asset]),
+            true);
 
         await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
         handler.Requested.Select(u => u.AbsoluteUri).ShouldContain(
-            "https://github.com/sqliteai/sqlite-vector/releases/download/1.0.0/vector-macos-arm64-1.0.0.tar.gz");
-        handler.Requested.Select(u => u.AbsoluteUri).ShouldContain(
-            "https://github.com/sqliteai/sqlite-memory/releases/download/1.3.5/memory-macos-arm64-full-1.3.5.tar.gz");
+            "https://github.com/sqliteai/sqlite-sync/releases/download/1.1.2/cloudsync-macos-arm64-1.1.2.tar.gz");
     }
 
     [Fact]
-    public async Task EnsureProvisioned_WithoutCloudSync_SkipsSyncDownload()
+    public async Task EnsureProvisioned_WithoutCloudSync_DownloadsNothing()
     {
         var archives = OsxArm64Archives();
         var handler = new FakeHandler(uri => archives[AssetName(uri)]);
@@ -63,19 +58,17 @@ public sealed class ExtensionProvisionerTests : IDisposable
         var result = await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
         result.CloudSync.ShouldBeNull();
-        handler.Requested.Count.ShouldBe(2);
-        handler.Requested.ShouldNotContain(u => u.AbsoluteUri.Contains("cloudsync", StringComparison.Ordinal));
+        handler.Requested.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task EnsureProvisioned_WhenModulesAlreadyPresent_SkipsDownload()
+    public async Task EnsureProvisioned_WhenModuleAlreadyPresent_SkipsDownload()
     {
         Directory.CreateDirectory(Path.Combine(_dataRoot, "extensions", "osx-arm64"));
-        File.WriteAllText(ModulePath("vector.dylib"), "x");
-        File.WriteAllText(ModulePath("memory.dylib"), "x");
+        File.WriteAllText(ModulePath("cloudsync.dylib"), "x");
         var handler = new FakeHandler(_ => []);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => Hash([]));
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => Hash([]), true);
 
         await provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken);
 
@@ -85,10 +78,10 @@ public sealed class ExtensionProvisionerTests : IDisposable
     [Fact]
     public async Task EnsureProvisioned_OnChecksumMismatch_ThrowsAndLeavesNoFile()
     {
-        var archive = TarGz(("vector.dylib", [1]));
+        var archive = TarGz(("cloudsync.dylib", [1]));
         var handler = new FakeHandler(_ => archive);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => new string('0', 64));
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => new string('0', 64), true);
 
         var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
             provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
@@ -103,7 +96,7 @@ public sealed class ExtensionProvisionerTests : IDisposable
     {
         var handler = new FakeHandler(_ => []);
         using var http = new HttpClient(handler);
-        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => null);
+        var provisioner = new ExtensionProvisioner(_dataRoot, "osx-arm64", http, _ => null, true);
 
         var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
             provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
@@ -121,8 +114,6 @@ public sealed class ExtensionProvisionerTests : IDisposable
         var exception = await Should.ThrowAsync<ExtensionProvisioningException>(() =>
             provisioner.EnsureProvisionedAsync(TestContext.Current.CancellationToken));
 
-        exception.Message.ShouldContain("memory-linux-musl-x86_64-full-1.3.5.tar.gz");
-        exception.Message.ShouldContain("vector-linux-musl-x86_64-1.0.0.tar.gz");
         exception.Message.ShouldContain("cloudsync-linux-musl-x86_64-1.1.2.tar.gz");
     }
 
@@ -140,8 +131,6 @@ public sealed class ExtensionProvisionerTests : IDisposable
     private static Dictionary<string, byte[]> OsxArm64Archives() =>
         new()
         {
-            ["vector-macos-arm64-1.0.0.tar.gz"] = TarGz(("vector.dylib", [1])),
-            ["memory-macos-arm64-full-1.3.5.tar.gz"] = TarGz(("memory.dylib", [2])),
             ["cloudsync-macos-arm64-1.1.2.tar.gz"] = TarGz(("cloudsync.dylib", [3]))
         };
 

@@ -5,8 +5,9 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Opens the install's memory bank (one DB per install scope) with the shared PRAGMA policy and loads native
-///     extensions (spec §6.3).
+///     Opens the install's single memory bank (memory.db) with the shared PRAGMA policy, loads
+///     vec0 (NuGet) and — when enabled — the cloudsync extension, and initializes our schema on
+///     first open. There is no second meta database: every table lives in memory.db (FR-NM-1).
 /// </summary>
 public sealed class SqliteConnectionFactory
 {
@@ -17,7 +18,7 @@ public sealed class SqliteConnectionFactory
     static SqliteConnectionFactory()
     {
         // Dapper maps columns to constructor parameters case-insensitively but not across
-        // underscores; the sqlite-memory schema uses snake_case (created_at, access_count, …).
+        // underscores; our schema uses snake_case (created_at, access_count, …).
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
@@ -41,61 +42,36 @@ public sealed class SqliteConnectionFactory
 
     public string BankPath => Path.Combine(BankDirectory, "memory.db");
 
-    public string MetaDatabasePath => Path.Combine(BankDirectory, "raccoon_meta.db");
-
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(BankDirectory);
 
         var connection = new SqliteConnection($"Data Source={BankPath}");
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        connection.EnableExtensions();
+        // vec0 ships in the NuGet package — always available, no provisioning (plan §4).
+        connection.LoadVector();
         _loadExtensions(connection);
-        return connection;
-    }
+        await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
 
-    public async Task<SqliteConnection> OpenMetaAsync(CancellationToken cancellationToken = default)
-    {
-        Directory.CreateDirectory(BankDirectory);
-
-        var connection = new SqliteConnection($"Data Source={MetaDatabasePath}");
-        await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
         return connection;
     }
 
     private void LoadNativeExtensions(SqliteConnection connection)
     {
-        connection.EnableExtensions();
-        var paths = ExtensionPaths.For(_options.DataRoot, _options.Rid, _loadCloudSync);
-        connection.LoadExtension(paths.Vector);
-        connection.LoadExtension(paths.Memory);
-        if (paths.CloudSync is not null)
+        if (!_loadCloudSync)
         {
-            connection.LoadExtension(paths.CloudSync);
+            return;
         }
 
-        // Writes must work before any embedding model is configured: defer embeddings by
-        // default (FR-MEM-1.12); memory_configure turns deferral off once a model is set.
-        // Only apply the deferral default when no provider is persisted yet — re-asserting it
-        // on every open would clobber a configured model's deferral-off (M1).
-        using var provider = connection.CreateCommand();
-        provider.CommandText = "SELECT memory_get_option('provider')";
-        var configuredProvider = provider.ExecuteScalar() as string;
-        if (string.IsNullOrWhiteSpace(configuredProvider))
+        // Sync stays extension-backed until P9 replaces it. A missing module disables sync
+        // loudly at call time (no such function) rather than failing every bank open.
+        var syncPath = ExtensionPaths.CloudSyncModulePath(_options.DataRoot, _options.Rid);
+        if (File.Exists(syncPath))
         {
-            using var defer = connection.CreateCommand();
-            defer.CommandText = MemorySql.SetDeferEmbeddings;
-            defer.Parameters.AddWithValue("@value", 1);
-            defer.ExecuteScalar();
+            connection.LoadExtension(syncPath);
         }
-
-        // Path-scoped hashes: identical content may live in several contexts (a project row and
-        // its shared promotion, or the same fact in two projects). add_text still dedups within
-        // a context, which keeps FR-MEM-1.8; add_content with a distinct path creates the
-        // second row (B1).
-        using var preserve = connection.CreateCommand();
-        preserve.CommandText = MemorySql.SetPreserveDuplicatePaths;
-        preserve.Parameters.AddWithValue("@value", 1);
-        preserve.ExecuteScalar();
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)

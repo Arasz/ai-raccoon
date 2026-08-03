@@ -20,7 +20,6 @@ public class MemoryToolsTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly FakeMetaStore _meta = new();
     private readonly FakeStore _store = new();
     private readonly SweepService _sweeper;
     private readonly FakeSyncService _sync = new();
@@ -30,7 +29,7 @@ public class MemoryToolsTests
     public MemoryToolsTests()
     {
         _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
-        _sweeper = new SweepService(_store, _meta, new FakeTimeProvider(FixedNow));
+        _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
     }
 
@@ -152,7 +151,7 @@ public class MemoryToolsTests
         [
             new MemoryEntry("old", "n.md", "project:acme", "v", FixedNow.ToUnixTimeSeconds() - 40 * 86_400)
         ];
-        _meta.Rating = 0.1;
+        _store.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
 
         var result = await _tools.Sweep("acme", cancellationToken: TestContext.Current.CancellationToken);
@@ -168,6 +167,8 @@ public class MemoryToolsTests
         public MemoryEntry? SharedEntry { get; set; }
 
         public MemoryStats Stats { get; set; } = new(0, 0, []);
+
+        public double Rating { get; set; } = 0.9;
 
         public MemoryWriteRequest? LastRequest { get; private set; }
 
@@ -230,6 +231,10 @@ public class MemoryToolsTests
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
     }
 
     private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())
@@ -253,19 +258,6 @@ public class MemoryToolsTests
     private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
     {
         public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
-    }
-
-    private sealed class FakeMetaStore() : MetaStore(null!, TimeProvider.System)
-    {
-        public double Rating { get; set; } = 0.9;
-
-        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<MetaEntry?>(new MetaEntry(hash, projectId, null, null, 0, 0, null, Rating, null));
-
-        public override Task<bool> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

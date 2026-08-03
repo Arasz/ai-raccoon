@@ -8,12 +8,11 @@ namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
 ///     Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client):
-///     the tools, the store, the native sqlite-memory extension and the JSON-RPC transport
-///     all run together. Requires the host RID's native extensions to be provisioned
-///     (~/.ai-raccoon/extensions/&lt;rid&gt;) — otherwise they skip honestly, like the store
-///     integration tests. See the E2E collection: env mutation forces serial execution.
+///     the tools, the managed store and the JSON-RPC transport all run together. No sqliteai
+///     native extensions are required since P1 (the bank is our own memory.db).
 ///     Assertions use stats/status/list (no embeddings required) except the dedicated
-///     embeddings test, which needs AIRACCOON_TEST_GGUF.
+///     embeddings test, which asserts P1's deferred-embedding behavior — the real embedding
+///     round-trip lands with P4.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -26,11 +25,6 @@ public class McpServerE2ETests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         _factory = new McpServerFactory();
-        if (!_factory.HasNativeExtensions)
-        {
-            Assert.Skip("native extensions not provisioned for this host RID; skipping E2E tests");
-        }
-
         _client = await _factory.CreateClientAsync();
     }
 
@@ -164,21 +158,21 @@ public class McpServerE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Embeddings_ConfigureEmbedThenSearch_WithConfiguredModel()
+    public async Task Embeddings_WriteDeferredUntilP4_AndKeywordSearchStillWorks()
     {
-        var model = Environment.GetEnvironmentVariable("AIRACCOON_TEST_GGUF");
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            Assert.Skip("AIRACCOON_TEST_GGUF not set; skipping the real-embedding E2E round-trip");
-        }
-
-        await CallAsync("memory_configure",
-            ("projectId", "acme"), ("provider", "local"), ("model", model));
+        // P1: writes land with embed_state 'pending' (embeddings are P4), memory_embed_pending
+        // reports zero processed, and the interim FTS5 search still finds the row by keyword.
+        // The real embedding round-trip (configure → embed → semantic search) is a P4 gap.
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "semantic e2e fact"));
 
         var embed = await CallAsync("memory_embed_pending", ("projectId", "acme"));
-        Text(embed).ShouldContain("\"processed\"");
+        var embedText = Text(embed);
+        embedText.ShouldContain("\"processed\":0");
+        embedText.ShouldContain("\"pending\":1");
+
+        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        Text(stats).ShouldContain("\"pending\":1");
 
         var search = await CallAsync("memory_search",
             ("projectId", "acme"), ("query", "semantic e2e"), ("scope", "project"));

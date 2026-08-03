@@ -3,21 +3,14 @@ using AiRaccoon.Infrastructure.Provisioning;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>Absolute paths of the loadable extension modules for a platform.</summary>
-public sealed record ExtensionPaths(string Vector, string Memory, string? CloudSync)
+/// <summary>
+///     Absolute path of the loadable cloudsync module for a platform. Vector/memory natives are
+///     no longer provisioned (P1); sync stays extension-backed until P9 replaces it and P10
+///     deletes the provisioner.
+/// </summary>
+public static class ExtensionPaths
 {
-    public static ExtensionPaths For(string dataRoot, string rid, bool includeCloudSync)
-    {
-        var directory = Path.Combine(dataRoot, "extensions", rid);
-
-        return new ExtensionPaths(
-            Module(ExtensionCatalog.Vector),
-            Module(ExtensionCatalog.Memory),
-            includeCloudSync ? Module(ExtensionCatalog.Sync) : null);
-
-        string Module(ExtensionSpec spec)
-        {
-            return Path.Combine(directory, $"{spec.ModulePrefix}{RuntimePlatform.ModuleExtension(rid)}");
-        }
-    }
+    public static string CloudSyncModulePath(string dataRoot, string rid) =>
+        Path.Combine(dataRoot, "extensions", rid,
+            $"{ExtensionCatalog.Sync.ModulePrefix}{RuntimePlatform.ModuleExtension(rid)}");
 }

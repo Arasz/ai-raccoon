@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
@@ -9,8 +8,10 @@ namespace AiRaccoon.Tests.E2E;
 /// <summary>
 ///     Boots the real HTTP MCP server (MCP_TRANSPORT=http) in-process over
 ///     WebApplicationFactory and exposes an MCP client bound to it. Each instance
-///     gets its own temp data root; provisioning reuses the developer's already
-///     provisioned extensions when present, exactly like the store integration tests.
+///     gets its own temp data root. Since P1 the managed store needs no sqliteai native
+///     extensions, so the E2E suite runs without provisioning; the developer's already
+///     provisioned cloudsync module is copied when present so ProvisionExtensions stays
+///     offline (sync itself is not exercised by these tests).
 ///     The server reads MCP_TRANSPORT / AIRACCOON_DATA_ROOT from the environment, so
 ///     those are set before the host starts and restored on dispose — E2E tests must
 ///     therefore run in a non-parallel collection (see E2ETestCollection).
@@ -27,14 +28,11 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         _previousDataRoot = Environment.GetEnvironmentVariable("AIRACCOON_DATA_ROOT");
         Environment.SetEnvironmentVariable("MCP_TRANSPORT", "http");
         Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", DataRoot);
-        TryProvisionNativeExtensions();
+        TryCopyCloudSyncModule();
     }
 
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
-
-    /// <summary>True when the host RID's native extensions are available (copied into this instance's data root).</summary>
-    public bool HasNativeExtensions => Directory.Exists(Path.Combine(DataRoot, "extensions", RuntimeInformation.RuntimeIdentifier));
 
     public async Task<McpClient> CreateClientAsync()
     {
@@ -80,26 +78,26 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    ///     Copies the host RID's already-provisioned native modules (~/.ai-raccoon/extensions/&lt;rid&gt;)
-    ///     into this instance's data root so the real sqlite-memory/vector/cloudsync binaries load.
-    ///     When nothing is provisioned, E2E tests must Assert.Skip (they cannot fake the extension).
+    ///     Copies the developer's already-provisioned cloudsync module
+    ///     (~/.ai-raccoon/extensions/&lt;rid&gt;/cloudsync.dylib) into this instance's data root so
+    ///     the server's ProvisionExtensions step stays offline. Absent a module, the server logs
+    ///     a provisioning failure and sync calls fail loudly at call time — these tests never
+    ///     exercise sync with credentials.
     /// </summary>
-    private void TryProvisionNativeExtensions()
+    private void TryCopyCloudSyncModule()
     {
-        var rid = RuntimeInformation.RuntimeIdentifier;
+        var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
         var source = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon", "extensions", rid);
-        if (!Directory.Exists(source))
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon", "extensions", rid,
+            "cloudsync.dylib");
+        if (!File.Exists(source))
         {
             return;
         }
 
-        var target = Path.Combine(DataRoot, "extensions", rid);
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source))
-        {
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
-        }
+        var targetDir = Path.Combine(DataRoot, "extensions", rid);
+        Directory.CreateDirectory(targetDir);
+        File.Copy(source, Path.Combine(targetDir, "cloudsync.dylib"), true);
     }
 
     private static string CreateTempRoot()

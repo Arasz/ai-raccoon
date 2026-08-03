@@ -1,6 +1,8 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Provisioning;
@@ -43,9 +45,9 @@ public static partial class Dependencies
             sp.GetRequiredService<InfrastructureOptions>(),
             true));
         services.AddSingleton<SqliteMemoryStore>();
-        services.AddSingleton<MetaStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
         services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
+        services.AddSingleton<IChunker, TokenizerChunker>();
         services.AddSingleton<IMemoryStore>(sp => new MemoryExtensionHost(
             sp.GetRequiredService<SqliteMemoryStore>(),
             [sp.GetRequiredService<RetrievalRatingExtension>()]));

@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -14,14 +13,13 @@ public class SweepServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    private static SweepService Service(IMemoryStore store, FakeMetaStore meta) => new(store, meta, new FakeTimeProvider(FixedNow));
+    private static SweepService Service(FakeStore store) => new(store, new FakeTimeProvider(FixedNow));
 
     [Fact]
     public async Task SweepAsync_DryRun_ReportsCandidates_WithoutDeleting()
     {
-        var store = new FakeStore();
-        var meta = new FakeMetaStore(rating: 0.1);
-        var service = Service(store, meta);
+        var store = new FakeStore { Rating = 0.1 };
+        var service = Service(store);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, true, TestContext.Current.CancellationToken);
 
@@ -34,9 +32,8 @@ public class SweepServiceTests
     [Fact]
     public async Task SweepAsync_RealRun_DeletesOnlyCandidates()
     {
-        var store = new FakeStore();
-        var meta = new FakeMetaStore(rating: 0.1);
-        var service = Service(store, meta);
+        var store = new FakeStore { Rating = 0.1 };
+        var service = Service(store);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
@@ -47,9 +44,8 @@ public class SweepServiceTests
     [Fact]
     public async Task SweepAsync_HighlyRatedEntry_Survives()
     {
-        var store = new FakeStore();
-        var meta = new FakeMetaStore(rating: 0.9);
-        var service = Service(store, meta);
+        var store = new FakeStore { Rating = 0.9 };
+        var service = Service(store);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
@@ -60,11 +56,10 @@ public class SweepServiceTests
     [Fact]
     public async Task SweepAsync_NeverSweepsSharedEntries()
     {
-        var store = new FakeStore();
-        var meta = new FakeMetaStore(rating: 0.1);
+        var store = new FakeStore { Rating = 0.1 };
         // The same hash exists in both the project and the shared tier.
         store.SharedHashes.Add("old-low");
-        var service = Service(store, meta);
+        var service = Service(store);
 
         await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
@@ -72,15 +67,14 @@ public class SweepServiceTests
     }
 
     [Fact]
-    public async Task SweepAsync_EntryWithoutMetaRow_IsNotCandidate()
+    public async Task SweepAsync_EntryWithoutMetadataRow_IsNotCandidate()
     {
-        var store = new FakeStore();
-        var meta = new FakeMetaStore(rating: null); // no meta row exists
-        var service = Service(store, meta);
+        var store = new FakeStore { Rating = null }; // no on-row metadata exists
+        var service = Service(store);
 
         var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
-        // Missing meta falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
+        // Missing metadata falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
         // entry must NOT be swept just because it was never searched (FR-MEM-1.15).
         outcome.Candidates.ShouldBeEmpty();
         store.Deleted.ShouldBeEmpty();
@@ -88,6 +82,8 @@ public class SweepServiceTests
 
     private sealed class FakeStore : IMemoryStore
     {
+        public double? Rating { get; set; } = 0.1;
+
         public List<string> Deleted { get; } = [];
 
         public List<string> ListedContexts { get; } = [];
@@ -157,18 +153,11 @@ public class SweepServiceTests
                     FixedNow.ToUnixTimeSeconds() - age * 86_400)
             ]);
         }
-    }
 
-    private sealed class FakeMetaStore(double? rating) : MetaStore(null!, TimeProvider.System)
-    {
-        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<MetaEntry?>(rating is null
+            Task.FromResult<EntryMetadata?>(Rating is null
                 ? null
-                : new MetaEntry(hash, projectId, null, null, 0, 0, null, rating.Value, null));
-
-        public override Task<bool> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+                : new EntryMetadata(Rating.Value, null));
     }
 }

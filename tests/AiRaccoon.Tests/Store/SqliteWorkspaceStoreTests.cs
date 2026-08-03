@@ -72,11 +72,11 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
 
     private async Task<WorkspaceRow?> ReadRowAsync(string workspaceId)
     {
-        await using var connection = await _factory.OpenMetaAsync(TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.QueryFirstOrDefaultAsync<WorkspaceRow>(
             new CommandDefinition(
-                "SELECT workspace_id AS WorkspaceId, project_id AS ProjectId, status AS Status, " +
-                "created_at AS CreatedAt, closed_at AS ClosedAt FROM workspaces WHERE workspace_id = @workspaceId",
+                "SELECT id AS Id, project_id AS ProjectId, status AS Status, " +
+                "created_at AS CreatedAt, closed_at AS ClosedAt FROM workspaces WHERE id = @workspaceId",
                 new { workspaceId }));
     }
 
@@ -89,7 +89,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
 
     private sealed class WorkspaceRow
     {
-        public string WorkspaceId { get; set; } = "";
+        public string Id { get; set; } = "";
 
         public string ProjectId { get; set; } = "";
 

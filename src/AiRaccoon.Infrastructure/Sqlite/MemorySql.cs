@@ -1,81 +1,123 @@
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>SQL for the sqlite-memory surface; kept in one place so the store stays thin (spec §6.1).</summary>
+/// <summary>SQL over our memory.db tables (plan §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
-    public const string InsertText = "SELECT memory_add_text(@content, @context)";
+    // embed_state defaults to 'pending': embeddings are P4 — every write lands deferred.
+    public const string InsertEntry = """
+                                      INSERT INTO entries (hash, path, value, scope, project_id, context_label,
+                                                           workspace_id, agent_id, created_at, updated_at)
+                                      VALUES (@hash, @path, @value, @scope, @projectId, @contextLabel,
+                                              @workspaceId, @agentId, @createdAt, @updatedAt)
+                                      """;
 
-    public const string SelectEntryByHash = "SELECT hash, path, context, value, created_at FROM dbmem_content WHERE hash = @hash";
+    public const string SelectEntryById = """
+                                           SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                  project_id AS ProjectId, context_label AS ContextLabel,
+                                                  workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                           FROM entries
+                                           WHERE id = @id
+                                           """;
 
-    public const string SelectEntryByContextAndValue = """
-                                                       SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
-                                                       FROM dbmem_content
-                                                       WHERE context = @context AND value = @content
-                                                       ORDER BY rowid DESC
+    public const string SelectSourceByHashAndProject = """
+                                                       SELECT path AS Path, value AS Value
+                                                       FROM entries
+                                                       WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
                                                        LIMIT 1
                                                        """;
 
-    public const string SelectSourceByHashAndContext = "SELECT path AS Path, value AS Value FROM dbmem_content WHERE hash = @hash AND context = @context LIMIT 1";
+    public const string EntryExistsByPathInBucket = """
+                                                    SELECT 1 FROM entries
+                                                    WHERE path = @path AND scope IS @scope AND project_id = @projectId
+                                                      AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                    LIMIT 1
+                                                    """;
 
-    public const string SearchWithContext = """
-                                            SELECT hash AS Hash, seq AS Seq, ranking AS Ranking, path AS Path, snippet AS Snippet
-                                            FROM memory_search
-                                            WHERE query = @query
-                                              AND context = @context
-                                              AND ranking >= @minScore
-                                            ORDER BY ranking DESC
-                                            LIMIT @limit
+    public const string EntryExistsByPathAndHashInBucket = """
+                                                           SELECT 1 FROM entries
+                                                           WHERE path = @path AND hash = @hash
+                                                             AND scope IS @scope AND project_id = @projectId
+                                                             AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                           LIMIT 1
+                                                           """;
+
+    public const string SearchByFilter = """
+                                         SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts) AS Ranking,
+                                                e.path AS Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet
+                                         FROM entries_fts
+                                         JOIN entries e ON e.id = entries_fts.rowid
+                                         WHERE entries_fts MATCH @query
+                                           AND {filter}
+                                         ORDER BY bm25(entries_fts)
+                                         LIMIT @limit
+                                         """;
+
+    public const string DeleteByHashAndProject =
+        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
+
+    public const string CountProjectEntries =
+        "SELECT count(*) FROM entries WHERE scope = 'project' AND project_id = @projectId";
+
+    public const string PendingCount =
+        "SELECT count(*) FROM entries WHERE embed_state = 'pending' AND project_id = @projectId";
+
+    public const string CommittedContexts = """
+                                            SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
+                                            FROM entries
+                                            WHERE scope IN ('shared', 'project')
+                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 ELSE 1 END, context
                                             """;
 
-    public const string Delete = "SELECT memory_delete(@hash)";
+    public const string DistinctFilePaths = """
+                                            SELECT DISTINCT path
+                                            FROM entries
+                                            WHERE scope IN ('shared', 'project')
+                                              AND (project_id = @projectId OR scope = 'shared')
+                                              AND path IS NOT NULL
+                                            ORDER BY path
+                                            """;
 
-    public const string DeleteContext = "SELECT memory_delete_context(@context)";
+    public const string SelectRatingForBump =
+        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries WHERE hash = @hash LIMIT 1";
 
-    public const string CountEntries = "SELECT count(*) FROM dbmem_content";
+    public const string BumpAccess =
+        """
+        UPDATE entries
+        SET access_count = access_count + 1,
+            last_accessed_at = @now,
+            rating = @rating
+        WHERE hash = @hash
+        """;
 
-    public const string CountProjectEntries = """
-                                              SELECT count(*)
-                                              FROM dbmem_content
-                                              WHERE context = @project
-                                              """;
+    public const string UpsertSetting = """
+                                        INSERT INTO settings (key, value) VALUES (@key, @value)
+                                        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                                        """;
 
-    public const string PendingCount = "SELECT memory_pending_count()";
-
-    public const string ListFiles = "SELECT memory_list_files()";
-
-    public const string IngestFile = "SELECT memory_add_file(@path, @context)";
-
-    public const string IngestDirectory = "SELECT memory_add_directory(@path, @context)";
-
-    public const string SetApiKey = "SELECT memory_set_apikey(@apiKey)";
-
-    public const string SetModel = "SELECT memory_set_model(@provider, @model)";
-
-    public const string SetDeferEmbeddings = "SELECT memory_set_option('defer_embeddings', @value)";
-
-    public const string SetPreserveDuplicatePaths = "SELECT memory_set_option('preserve_duplicate_paths', @value)";
-
-    public const string InsertContent = "SELECT memory_add_content(@path, @content, @context)";
-
-    public const string EmbedPending = "SELECT memory_embed_pending(@limit)";
-
-    public const string EmbedPendingAll = "SELECT memory_embed_pending()";
+    public const string SelectEntryMetadata =
+        """
+        SELECT rating AS Rating, ttl_days AS TtlDays
+        FROM entries
+        WHERE project_id = @projectId AND hash = @hash
+        LIMIT 1
+        """;
 
     public const string SelectEntriesByContext = """
-                                                 SELECT hash AS Hash, path AS Path, context AS Context, value AS Value, created_at AS CreatedAt
-                                                 FROM dbmem_content
-                                                 WHERE context = @context
-                                                 ORDER BY created_at DESC, rowid DESC
+                                                 SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                        project_id AS ProjectId, context_label AS ContextLabel,
+                                                        workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                 FROM entries
+                                                 WHERE {filter}
+                                                 ORDER BY created_at DESC, id DESC
                                                  """;
 
-    /// <summary>
-    ///     The bank's committed contexts — shared plus every distinct project context (FR-MEM-1.16); workspaces excluded,
-    ///     shared first.
-    /// </summary>
-    public const string CommittedContexts = """
-                                            SELECT DISTINCT context
-                                            FROM dbmem_content
-                                            WHERE context = 'shared' OR context LIKE 'project:%'
-                                            ORDER BY CASE WHEN context = 'shared' THEN 0 ELSE 1 END, context
-                                            """;
+    public const string SelectEntryByPathInBucket = """
+                                                    SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                           project_id AS ProjectId, context_label AS ContextLabel,
+                                                           workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                    FROM entries
+                                                    WHERE path = @path AND scope IS @scope AND project_id = @projectId
+                                                      AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                    LIMIT 1
+                                                    """;
 }

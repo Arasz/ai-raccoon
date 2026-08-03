@@ -1,6 +1,7 @@
 using System.Data;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -27,12 +28,6 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     public void BankPath_ProjectScope_IsDataRootAiRaccoonMemoryDb() => Factory(InstallScope.Project).BankPath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db"));
 
     [Fact]
-    public void MetaDatabasePath_UserScope_IsDataRootRaccoonMetaDb() => Factory().MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, "raccoon_meta.db"));
-
-    [Fact]
-    public void MetaDatabasePath_ProjectScope_IsDataRootAiRaccoonRaccoonMetaDb() => Factory(InstallScope.Project).MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "raccoon_meta.db"));
-
-    [Fact]
     public async Task OpenBankAsync_CreatesDatabaseAtBankPath()
     {
         var factory = Factory();
@@ -55,41 +50,45 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenMetaAsync_OpensRaccoonMetaDatabase_WithoutLoadingExtensions()
+    public async Task OpenBankAsync_InitializesOurSchema_OnFirstOpen()
     {
-        var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => throw new InvalidOperationException("extensions must not load"));
+        var factory = Factory();
 
-        await using var connection = await factory.OpenMetaAsync(TestContext.Current.CancellationToken);
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        File.Exists(factory.MetaDatabasePath).ShouldBeTrue();
-        connection.State.ShouldBe(ConnectionState.Open);
+        var tables = (await connection.QueryAsync<string>(
+                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name"))
+            .ToList();
+        tables.ShouldContain("entries");
+        tables.ShouldContain("workspaces");
+        tables.ShouldContain("settings");
+        tables.ShouldContain("entries_fts");
+        tables.ShouldContain("vec_entries");
     }
 
     [Fact]
-    public void DefaultExtensionPaths_FollowDataRootExtensionsRidLayout()
+    public async Task OpenBankAsync_CreatesOnlyMemoryDb_InTheBankDirectory()
     {
-        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", true);
+        var factory = Factory();
 
-        paths.Vector.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "vector.dylib"));
-        paths.Memory.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "memory.dylib"));
-        paths.CloudSync.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "cloudsync.dylib"));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var dbFiles = Directory.EnumerateFiles(_dataRoot, "*.db").Select(Path.GetFileName).ToList();
+        dbFiles.ShouldBe(["memory.db"]);
     }
 
     [Fact]
-    public void DefaultExtensionPaths_WithoutCloudSync_OmitsSyncModule()
+    public void CloudSyncExtensionPath_FollowsDataRootExtensionsRidLayout()
     {
-        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", false);
-
-        paths.CloudSync.ShouldBeNull();
+        ExtensionPaths.CloudSyncModulePath(_dataRoot, "osx-arm64")
+            .ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "cloudsync.dylib"));
     }
 
     [Fact]
-    public void DefaultExtensionPaths_UsePlatformModuleSuffixes()
+    public void CloudSyncExtensionPath_UsePlatformModuleSuffixes()
     {
-        ExtensionPaths.For(_dataRoot, "linux-x64", false).Vector.ShouldEndWith("vector.so");
-        ExtensionPaths.For(_dataRoot, "win-x64", false).Vector.ShouldEndWith("vector.dll");
+        ExtensionPaths.CloudSyncModulePath(_dataRoot, "linux-x64").ShouldEndWith("cloudsync.so");
+        ExtensionPaths.CloudSyncModulePath(_dataRoot, "win-x64").ShouldEndWith("cloudsync.dll");
     }
 
     private static string CreateTempRoot()

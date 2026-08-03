@@ -49,4 +49,8 @@ public interface IMemoryStore
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>
     Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the on-row rating/ttl metadata for one entry (degradation policy input).</summary>
+    Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default);
 }

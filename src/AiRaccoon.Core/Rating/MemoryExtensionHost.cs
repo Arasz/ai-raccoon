@@ -95,4 +95,8 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>
         await inner.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+
+    public async Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default) =>
+        await inner.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
 }
