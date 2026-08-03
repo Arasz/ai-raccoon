@@ -19,7 +19,6 @@ public sealed record MetaEntry(
 /// <summary>CRUD over the local-only raccoon_meta.db; rating bumps follow RatingPolicy from Core.</summary>
 public class MetaStore(SqliteConnectionFactory factory, TimeProvider timeProvider)
 {
-    private readonly TimeProvider _time = timeProvider;
     private const string SelectByHash = """
                                         SELECT hash AS Hash, project_id AS ProjectId, context AS Context, agent_id AS AgentId,
                                                created_at AS CreatedAt, access_count AS AccessCount, last_accessed_at AS LastAccessedAt,
@@ -49,7 +48,7 @@ public class MetaStore(SqliteConnectionFactory factory, TimeProvider timeProvide
         await using var transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        var now = _time.GetUtcNow().ToUnixTimeSeconds();
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var existing = await connection.QueryFirstOrDefaultAsync<MetaRow>(
                 new CommandDefinition(SelectByHash, new { hash }, transaction, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
@@ -154,10 +153,12 @@ public class MetaStore(SqliteConnectionFactory factory, TimeProvider timeProvide
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MetaEntry ToEntry(MetaRow row) =>
-        new(
+    private static MetaEntry ToEntry(MetaRow row)
+    {
+        return new MetaEntry(
             row.Hash, row.ProjectId, row.Context, row.AgentId,
             row.CreatedAt, row.AccessCount, row.LastAccessedAt, row.Rating, row.TtlDays);
+    }
 
     /// <summary>Dapper materialization target: settable properties map nullable columns cleanly (the record's nullable params do not).</summary>
     private sealed class MetaRow

@@ -8,17 +8,14 @@ public sealed record SyncResult(int Sent, int Received, int Reindexed);
 /// <summary>Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;), serialized per spec §6.3.</summary>
 public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connections)
 {
-    private readonly ICloudSyncConnectionFactory _connections = connections;
-
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly SyncOptions _options = options;
 
     public virtual async Task<SyncResult> MemorySyncAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        if (!_options.IsConfigured)
+        if (!options.IsConfigured)
         {
             throw new SyncNotConfiguredException();
         }
@@ -26,7 +23,7 @@ public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connec
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await using var connection = await _connections.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await connections.OpenAsync(cancellationToken).ConfigureAwait(false);
 
             var committedContexts = await connection.GetCommittedContextsAsync(cancellationToken).ConfigureAwait(false);
             foreach (var context in committedContexts)
@@ -34,8 +31,8 @@ public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connec
                 await connection.EnableSyncAsync(context, cancellationToken).ConfigureAwait(false);
             }
 
-            await connection.NetworkInitAsync(_options.ManagedDatabaseId!, cancellationToken).ConfigureAwait(false);
-            await connection.SetApiKeyAsync(_options.ApiKey!, cancellationToken).ConfigureAwait(false);
+            await connection.NetworkInitAsync(options.ManagedDatabaseId!, cancellationToken).ConfigureAwait(false);
+            await connection.SetApiKeyAsync(options.ApiKey!, cancellationToken).ConfigureAwait(false);
 
             var send = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);
             var receive = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);

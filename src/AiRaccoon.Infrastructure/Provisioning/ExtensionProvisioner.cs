@@ -13,7 +13,6 @@ public sealed record ProvisionedExtensions(string Vector, string Memory, string?
 /// <summary>Downloads and verifies pinned native extensions into &lt;dataRoot&gt;/extensions/&lt;rid&gt;/ (spec §10, OQ-3).</summary>
 public sealed class ExtensionProvisioner
 {
-    private readonly string _dataRoot;
     private readonly HttpClient _http;
     private readonly bool _includeCloudSync;
     private readonly string _rid;
@@ -26,14 +25,14 @@ public sealed class ExtensionProvisioner
         ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(rid);
 
-        _dataRoot = dataRoot;
+        ExtensionDirectory = dataRoot;
         _rid = rid;
         _http = http;
         _sha256ForAsset = sha256ForAsset;
         _includeCloudSync = includeCloudSync;
     }
 
-    public string ExtensionDirectory => Path.Combine(_dataRoot, "extensions", _rid);
+    public string ExtensionDirectory => Path.Combine(field, "extensions", _rid);
 
     public async Task<ProvisionedExtensions> EnsureProvisionedAsync(CancellationToken cancellationToken = default)
     {
@@ -70,29 +69,33 @@ public sealed class ExtensionProvisioner
         return specs;
     }
 
-    private string ModulePath(ExtensionSpec spec) =>
-        Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));
+    private string ModulePath(ExtensionSpec spec)
+    {
+        return Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));
+    }
 
     private async Task DownloadAndVerifyAsync(ExtensionSpec spec, string platform, string modulePath,
         CancellationToken cancellationToken)
     {
         var asset = spec.AssetFileName(platform);
         var expectedSha256 = _sha256ForAsset(asset);
-        if (expectedSha256 is null)
+        if (expectedSha256 is not null)
+        {
+            var bytes = await _http.GetByteArrayAsync(spec.AssetUrl(platform), cancellationToken).ConfigureAwait(false);
+            var actualSha256 = Convert.ToHexString(SHA256.HashData(bytes));
+            if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExtensionProvisioningException(
+                    $"Checksum mismatch for '{asset}': expected {expectedSha256}, got {actualSha256}.");
+            }
+
+            Extract(bytes, asset, modulePath);
+        }
+        else
         {
             throw new ExtensionProvisioningException(
                 $"No checksum recorded for '{asset}'; record its SHA-256 in ExtensionManifest before provisioning.");
         }
-
-        var bytes = await _http.GetByteArrayAsync(spec.AssetUrl(platform), cancellationToken).ConfigureAwait(false);
-        var actualSha256 = Convert.ToHexString(SHA256.HashData(bytes));
-        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ExtensionProvisioningException(
-                $"Checksum mismatch for '{asset}': expected {expectedSha256}, got {actualSha256}.");
-        }
-
-        Extract(bytes, asset, modulePath);
     }
 
     private void Extract(byte[] archive, string asset, string modulePath)
@@ -101,21 +104,28 @@ public sealed class ExtensionProvisioner
         using var tar = new MemoryStream();
         gzip.CopyTo(tar);
         tar.Position = 0;
-        TarFile.ExtractToDirectory(tar, ExtensionDirectory, overwriteFiles: true);
+        TarFile.ExtractToDirectory(tar, ExtensionDirectory, true);
 
         var moduleName = Path.GetFileName(modulePath);
         var modulePrefix = Path.GetFileNameWithoutExtension(moduleName);
         var extracted = Directory.EnumerateFiles(ExtensionDirectory)
             .FirstOrDefault(file =>
                 Path.GetFileNameWithoutExtension(file).StartsWith(modulePrefix, StringComparison.Ordinal));
-        if (extracted is null)
-        {
-            throw new ExtensionProvisioningException($"Archive '{asset}' did not contain a '{modulePrefix}' module.");
-        }
 
-        if (!string.Equals(Path.GetFileName(extracted), moduleName, StringComparison.Ordinal))
+        switch (extracted)
         {
-            File.Move(extracted, modulePath, overwrite: true);
+            case null:
+                throw new ExtensionProvisioningException(
+                    $"Archive '{asset}' did not contain a '{modulePrefix}' module.");
+            default:
+            {
+                if (!string.Equals(Path.GetFileName(extracted), moduleName, StringComparison.Ordinal))
+                {
+                    File.Move(extracted, modulePath, true);
+                }
+
+                break;
+            }
         }
     }
 

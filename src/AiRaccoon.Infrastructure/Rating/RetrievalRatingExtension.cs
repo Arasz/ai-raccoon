@@ -11,8 +11,6 @@ namespace AiRaccoon.Infrastructure.Rating;
 /// </summary>
 public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
 {
-    private readonly MetaStore _meta = meta;
-
     public string Name => "retrieval-rating";
 
     public async Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken)
@@ -26,7 +24,7 @@ public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
     {
         foreach (var result in context.Results)
         {
-            await _meta.UpsertAccessAsync(
+            await meta.UpsertAccessAsync(
                     context.ProjectId, result.Hash, context: result.Path, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -36,14 +34,18 @@ public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
     {
         if (!string.IsNullOrWhiteSpace(context.Hash))
         {
-            await _meta.DeleteAsync(context.ProjectId, context.Hash, cancellationToken).ConfigureAwait(false);
+            await meta.DeleteAsync(context.ProjectId, context.Hash, cancellationToken).ConfigureAwait(false);
         }
     }
 
     public Task<IReadOnlyList<SweepCandidate>>
-        OnSweepAsync(SweepContext context, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
+        OnSweepAsync(SweepContext context, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
+    }
 
-    public async Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
+    public async Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken)
+    {
         await Task.CompletedTask;
+    }
 }
