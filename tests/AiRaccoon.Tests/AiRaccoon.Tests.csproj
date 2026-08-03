@@ -29,4 +29,13 @@
         <ProjectReference Include="../../src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
     </ItemGroup>
 
+    <!-- Golden-retrieval harness (tests/Retrieval): reuse the benchmark corpus (data-only C#
+         files, no benchmark packages) and copy the committed asset manifest to the output. -->
+    <ItemGroup>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/CorpusModels.cs" Link="Retrieval/Corpus/CorpusModels.cs"/>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs" Link="Retrieval/Corpus/RealWorldCorpus.cs"/>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldQueries.cs" Link="Retrieval/Corpus/RealWorldQueries.cs"/>
+        <Content Include="Retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
 </Project>
