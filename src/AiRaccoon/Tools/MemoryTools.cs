@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using AiRaccoon.Access;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
@@ -11,7 +13,12 @@ using ModelContextProtocol.Server;
 namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tools over IMemoryStore and the workspace/sweep/sync services — no business logic here (spec §6.1).</summary>
-public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceService workspaces, SweepService sweeper)
+public sealed class MemoryTools(
+    IMemoryStore store,
+    SyncService sync,
+    WorkspaceService workspaces,
+    SweepService sweeper,
+    IMemoryAccessGuard access)
 {
     private static void RequireProjectId(string? projectId)
     {
@@ -20,6 +27,10 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
             throw new McpException("invalid-params: project_id is required");
         }
     }
+
+    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
+        CancellationToken cancellationToken) =>
+        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = "memory_write")]
     [Description(
@@ -38,6 +49,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_write", cancellationToken);
 
         var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId);
         new MemoryWriteRequest.Validator().ValidateAndThrow(request);
@@ -63,6 +75,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_search", cancellationToken);
 
         var parsedScope = scope.ToLowerInvariant() switch
         {
@@ -86,6 +99,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_list", cancellationToken);
         var files = await store.ListFilesAsync(projectId, cancellationToken);
         return new ListResult(files);
     }
@@ -97,6 +111,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_stats", cancellationToken);
         var stats = await store.GetStatsAsync(projectId, cancellationToken);
         return new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
     }
@@ -111,6 +126,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_share", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.ShareAsync(projectId, hash, cancellationToken);
@@ -126,6 +142,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
@@ -141,6 +158,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete_context", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
         var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
@@ -158,6 +176,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_ingest_file", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
@@ -175,6 +194,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_ingest_directory", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
@@ -195,6 +215,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_configure", cancellationToken);
 
         var isRemote = !string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
         var resolvedKey = apiKey ?? Environment.GetEnvironmentVariable("AIRACCOON_VECTORSSPACE_API_KEY");
@@ -217,6 +238,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_embed_pending", cancellationToken);
 
         var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
         return new EmbedResult(result.Processed, result.Pending);
@@ -234,6 +256,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_workspace_begin", cancellationToken);
 
         var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
         return new WorkspaceBeginResult(workspace.Id, workspace.Context);
@@ -247,6 +270,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_workspace_status", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
@@ -264,6 +288,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_workspace_consolidate", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
@@ -279,6 +304,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_workspace_discard", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
@@ -295,6 +321,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, "memory_sweep", cancellationToken);
 
         var outcome = await sweeper.SweepAsync(projectId, 0.3, 30, dryRun, cancellationToken);
         return new SweepResult(outcome.Candidates, outcome.DeletedHashes);
@@ -308,6 +335,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_sync", cancellationToken);
 
         try
         {

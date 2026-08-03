@@ -20,14 +20,19 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 {
     private readonly string? _previousDataRoot;
     private readonly string? _previousTransport;
+    private readonly string? _previousAccessMode;
     private bool _disposed;
 
     public McpServerFactory()
     {
         _previousTransport = Environment.GetEnvironmentVariable("MCP_TRANSPORT");
         _previousDataRoot = Environment.GetEnvironmentVariable("AIRACCOON_DATA_ROOT");
+        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2
+        // (the seed at bank open turns this env value into the global access.mode setting).
+        _previousAccessMode = Environment.GetEnvironmentVariable("AIRACCOON_ACCESS_MODE");
         Environment.SetEnvironmentVariable("MCP_TRANSPORT", "http");
         Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", DataRoot);
+        Environment.SetEnvironmentVariable("AIRACCOON_ACCESS_MODE", "full");
         TryCopyCloudSyncModule();
     }
 
@@ -67,6 +72,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         Environment.SetEnvironmentVariable("MCP_TRANSPORT", _previousTransport);
         Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", _previousDataRoot);
+        Environment.SetEnvironmentVariable("AIRACCOON_ACCESS_MODE", _previousAccessMode);
         try
         {
             Directory.Delete(DataRoot, true);

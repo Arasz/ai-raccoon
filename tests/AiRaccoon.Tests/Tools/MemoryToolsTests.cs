@@ -1,3 +1,5 @@
+using AiRaccoon.Access;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
@@ -30,7 +32,7 @@ public class MemoryToolsTests
     {
         _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
+        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store));
     }
 
     [Fact]
@@ -120,6 +122,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceConsolidate_WithAll_PromotesEverything()
     {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
         _store.EntriesByContext["workspace:ws-1"] =
         [
             new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),

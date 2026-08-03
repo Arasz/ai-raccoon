@@ -1,3 +1,4 @@
+using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
@@ -56,6 +57,8 @@ public static partial class Dependencies
         services.AddSingleton<SyncService>();
         services.AddSingleton<WorkspaceService>();
         services.AddSingleton<SweepService>();
+        services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
+            sp.GetRequiredService<IMemoryStore>()));
     }
 
     /// <summary>Downloads + verifies the pinned native extensions before the first connection opens them (FR-MEM-1.19).</summary>
