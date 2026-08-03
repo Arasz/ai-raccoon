@@ -1,6 +1,6 @@
+using System.Numerics.Tensors;
 using AiRaccoon.Benchmarks.Corpus;
 using Microsoft.Extensions.AI;
-using System.Numerics.Tensors;
 
 namespace AiRaccoon.Benchmarks.Embedders;
 
@@ -30,7 +30,7 @@ public abstract class EmbeddingBackend(IEmbeddingGenerator<string, Embedding<flo
     {
         var texts = documents.Select(d => d.Text).ToArray();
         var results = await generator.GenerateAsync(texts, null, cancellationToken);
-        _documentVectors = results.Select(e => e.Vector.ToArray()).ToArray();
+        _documentVectors = [.. results.Select(e => e.Vector.ToArray())];
         Dimensions = _documentVectors[0].Length;
     }
 
@@ -47,9 +47,8 @@ public abstract class EmbeddingBackend(IEmbeddingGenerator<string, Embedding<flo
         }
 
         scored.Sort((a, b) => b.Score.CompareTo(a.Score));
-        return scored.Take(topK).Select(s => new RetrievalHit(s.Id, s.Score)).ToList();
+        return [.. scored.Take(topK).Select(s => new RetrievalHit(s.Id, s.Score))];
     }
 
-    private static double Cosine(float[] a, float[] b) =>
-        TensorPrimitives.CosineSimilarity(a, b);
+    private static double Cosine(float[] a, float[] b) => TensorPrimitives.CosineSimilarity(a, b);
 }

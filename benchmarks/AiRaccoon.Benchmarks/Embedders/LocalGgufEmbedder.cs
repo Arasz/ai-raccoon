@@ -43,7 +43,7 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
         var path = modelPath ?? ModelPath;
         var @params = new ModelParams(path)
         {
-            PoolingType = LLamaPoolingType.Mean,
+            PoolingType = LLamaPoolingType.Mean
         };
         weights = LLamaWeights.LoadFromFile(@params);
         var embedder = new LLamaEmbedder(weights, @params, NullLogger.Instance);

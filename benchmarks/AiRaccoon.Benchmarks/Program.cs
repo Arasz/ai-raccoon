@@ -11,7 +11,7 @@ public static class Program
     {
         if (args.Contains("--bench"))
         {
-            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args.Where(a => a != "--bench").ToArray());
+            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run([.. args.Where(a => a != "--bench")]);
             return 0;
         }
 
