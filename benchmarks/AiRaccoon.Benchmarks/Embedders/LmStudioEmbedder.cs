@@ -9,19 +9,11 @@ namespace AiRaccoon.Benchmarks.Embedders;
 ///     AsIEmbeddingGenerator). LM Studio exposes an OpenAI-compatible /v1 endpoint, so the
 ///     official client works against it with a placeholder key — no hand-rolled HTTP code.
 /// </summary>
-public sealed class LmStudioEmbedder : EmbeddingBackend
+public sealed class LmStudioEmbedder(string model, string? baseUrl = null) : EmbeddingBackend(CreateGenerator(model, baseUrl))
 {
-    private readonly string _baseUrl;
-    private readonly string _model;
+    private readonly string _baseUrl = baseUrl ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL") ?? "http://localhost:1234";
 
-    public LmStudioEmbedder(string model, string? baseUrl = null)
-        : base(CreateGenerator(model, baseUrl))
-    {
-        _model = model;
-        _baseUrl = baseUrl ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL") ?? "http://localhost:1234";
-    }
-
-    protected override string BackendName => $"lmstudio:{_model}";
+    protected override string BackendName => $"lmstudio:{model}";
 
     private static IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(string model, string? baseUrl)
     {

@@ -16,6 +16,6 @@ public interface IEmbedder
     /// <summary>Indexes the corpus so queries can be run against it.</summary>
     Task IndexAsync(IReadOnlyList<CorpusDocument> documents, CancellationToken cancellationToken = default);
 
-    /// <summary>Returns the top-k documents for a query, best first.</summary>
+    /// <summary>Returns the top-k documents for a query, the best first.</summary>
     Task<IReadOnlyList<RetrievalHit>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default);
 }

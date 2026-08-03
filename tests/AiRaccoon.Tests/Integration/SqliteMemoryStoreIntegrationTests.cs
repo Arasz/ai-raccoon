@@ -99,7 +99,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         }
 
         var entry = await store.WriteAsync(
-            new MemoryWriteRequest("acme", "draft finding", workspaceId: "ws-1"),
+            new MemoryWriteRequest("acme", "draft finding", WorkspaceId: "ws-1"),
             TestContext.Current.CancellationToken);
 
         entry.Context.ShouldBe("workspace:ws-1");
@@ -304,7 +304,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
             new SearchQuery("acme", "docs only", SearchScope.Project),
             TestContext.Current.CancellationToken);
         var docsOnly = await store.SearchAsync(
-            new SearchQuery("acme", "docs only", SearchScope.Project, limit: 20, minScore: 0),
+            new SearchQuery("acme", "docs only", SearchScope.Project, Limit: 20, MinScore: 0),
             TestContext.Current.CancellationToken);
 
         // The content lives in context docs:api, not project:acme — so a project-scoped search
@@ -324,7 +324,7 @@ public class SqliteMemoryStoreIntegrationTests : IDisposable
         }
 
         await store.WriteAsync(
-            new MemoryWriteRequest("acme", "workspace durable fact", workspaceId: "ws-1"),
+            new MemoryWriteRequest("acme", "workspace durable fact", WorkspaceId: "ws-1"),
             TestContext.Current.CancellationToken);
 
         // Drive the REAL WorkspaceService so the promote (add_content with the entry's path

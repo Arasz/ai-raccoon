@@ -2,36 +2,14 @@ using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
-public sealed record SearchQuery
+public sealed record SearchQuery(
+    string ProjectId,
+    string Query,
+    SearchScope Scope = SearchScope.All,
+    string? WorkspaceId = null,
+    int Limit = 20,
+    double MinScore = 0.7)
 {
-    public SearchQuery(
-        string projectId,
-        string query,
-        SearchScope scope = SearchScope.All,
-        string? workspaceId = null,
-        int limit = 20,
-        double minScore = 0.7)
-    {
-        ProjectId = projectId;
-        Query = query;
-        Scope = scope;
-        WorkspaceId = workspaceId;
-        Limit = limit;
-        MinScore = minScore;
-    }
-
-    public string ProjectId { get; }
-
-    public string Query { get; }
-
-    public SearchScope Scope { get; }
-
-    public string? WorkspaceId { get; }
-
-    public int Limit { get; }
-
-    public double MinScore { get; }
-
     public sealed class Validator : AbstractValidator<SearchQuery>
     {
         public Validator()

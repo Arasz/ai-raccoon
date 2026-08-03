@@ -12,7 +12,7 @@ public class ContextResolverTests
     [Fact]
     public void Resolve_WithExplicitContext_UsesItOverWorkspaceAndProject()
     {
-        var request = new MemoryWriteRequest("acme", "note", "docs:api", workspaceId: "ws-1");
+        var request = new MemoryWriteRequest("acme", "note", "docs:api", WorkspaceId: "ws-1");
 
         ContextResolver.Resolve(request).ShouldBe("docs:api");
     }
@@ -20,7 +20,7 @@ public class ContextResolverTests
     [Fact]
     public void Resolve_WithWorkspaceId_UsesWorkspaceContext()
     {
-        var request = new MemoryWriteRequest("acme", "note", workspaceId: "ws-1");
+        var request = new MemoryWriteRequest("acme", "note", WorkspaceId: "ws-1");
 
         ContextResolver.Resolve(request).ShouldBe("workspace:ws-1");
     }

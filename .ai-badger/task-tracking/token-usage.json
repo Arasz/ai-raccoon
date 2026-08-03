@@ -408,6 +408,11 @@
           "description": "P3 content identity: ContentHash (Core, SHA-256 UTF8(path)+UTF8(value)), global dedup on write, share creates distinct-hash shared row, consolidation path preserved; 45/45 targeted; commit 286e5fb",
           "totalTokens": 0,
           "at": "2026-08-03T18:49:19.165378+00:00"
+        },
+        {
+          "description": "P2 access modes: Core AccessMode resolution (per-project + global in settings), tool-boundary guard, access-denied error shape, forgetting-knob gating; 38/38; commits ac4f6e0, 2040f61",
+          "totalTokens": 0,
+          "at": "2026-08-03T19:04:11.363190+00:00"
         }
       ],
       "grade": null,

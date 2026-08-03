@@ -55,15 +55,8 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
     /// built-in interface implementation disposes its context handle before use; this
     /// adapter sidesteps that bug while keeping the official abstraction.
     /// </summary>
-    private sealed class LlamaGeneratorAdapter : IEmbeddingGenerator<string, Embedding<float>>
+    private sealed class LlamaGeneratorAdapter(LLamaEmbedder embedder) : IEmbeddingGenerator<string, Embedding<float>>
     {
-        private readonly LLamaEmbedder _embedder;
-
-        public LlamaGeneratorAdapter(LLamaEmbedder embedder)
-        {
-            _embedder = embedder;
-        }
-
         public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
             IEnumerable<string> values, EmbeddingGenerationOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -71,7 +64,7 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
             var generated = new GeneratedEmbeddings<Embedding<float>>();
             foreach (var value in values)
             {
-                var embeddings = await _embedder.GetEmbeddings(value, cancellationToken);
+                var embeddings = await embedder.GetEmbeddings(value, cancellationToken);
                 var vector = embeddings.Single();
                 generated.Add(new Embedding<float>(vector));
             }
@@ -81,6 +74,6 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
 
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
-        public void Dispose() => _embedder.Dispose();
+        public void Dispose() => embedder.Dispose();
     }
 }
