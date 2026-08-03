@@ -45,6 +45,10 @@ workspace's isolated context.
 - **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
+- **Workspace lifecycle record:** `memory_workspace_begin` writes an `Active` row
+  (id, project, created_at) into the local meta DB (`raccoon_meta.db`, never synced);
+  consolidate and discard mark it `Closed` with `closed_at`. A workspace begun but
+  never finished therefore stays traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
   age exceeds 30 days. `shared` entries are never swept.
