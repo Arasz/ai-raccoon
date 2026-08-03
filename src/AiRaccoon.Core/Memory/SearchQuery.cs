@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -12,10 +12,10 @@ public sealed record SearchQuery
         int limit = 20,
         double minScore = 0.7)
     {
-        Guard.NotNullOrWhiteSpace(projectId, nameof(projectId));
-        Guard.NotNullOrWhiteSpace(query, nameof(query));
-        Guard.GreaterThan(limit, 0, nameof(limit));
-        Guard.InRange(minScore, 0.0, 1.0, nameof(minScore));
+        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(query, nameof(query));
+        Guard.IsGreaterThan(limit, 0, nameof(limit));
+        Guard.IsInRange(minScore, 0.0, 1.0, nameof(minScore));
 
         ProjectId = projectId;
         Query = query;

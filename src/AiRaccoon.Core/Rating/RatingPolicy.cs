@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Rating;
 
@@ -16,9 +16,9 @@ public static class RatingPolicy
         double halfLifeDays,
         double accessMultiplier = DefaultAccessMultiplier)
     {
-        Guard.GreaterThanOrEqualTo(accessCount, 0, nameof(accessCount));
-        Guard.GreaterThanOrEqualTo(ageDays, 0, nameof(ageDays));
-        Guard.GreaterThan(halfLifeDays, 0, nameof(halfLifeDays));
+        Guard.IsGreaterThanOrEqualTo(accessCount, 0, nameof(accessCount));
+        Guard.IsGreaterThanOrEqualTo(ageDays, 0, nameof(ageDays));
+        Guard.IsGreaterThan(halfLifeDays, 0, nameof(halfLifeDays));
 
         return baseScore * Math.Pow(0.5, ageDays / halfLifeDays) * (1 + accessCount * accessMultiplier);
     }

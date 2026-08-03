@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Common;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Workspace;
 
@@ -6,8 +7,8 @@ public sealed record Workspace
 {
     public Workspace(string id, string projectId, WorkspaceStatus status = WorkspaceStatus.Active)
     {
-        Guard.NotNullOrWhiteSpace(id, nameof(id));
-        Guard.NotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(id, nameof(id));
+        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
 
         Id = id;
         ProjectId = projectId;

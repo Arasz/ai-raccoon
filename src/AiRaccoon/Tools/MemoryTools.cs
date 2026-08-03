@@ -12,11 +12,6 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IMemoryStore and the workspace/sweep/sync services — no business logic here (spec §6.1).</summary>
 public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceService workspaces, SweepService sweeper)
 {
-    private readonly IMemoryStore _store = store ?? throw new ArgumentNullException(nameof(store));
-    private readonly SweepService _sweeper = sweeper ?? throw new ArgumentNullException(nameof(sweeper));
-    private readonly SyncService _sync = sync ?? throw new ArgumentNullException(nameof(sync));
-    private readonly WorkspaceService _workspaces = workspaces ?? throw new ArgumentNullException(nameof(workspaces));
-
     private static void RequireProjectId(string? projectId)
     {
         if (string.IsNullOrWhiteSpace(projectId))
@@ -44,7 +39,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(content, nameof(content));
 
-        var entry = await _store.WriteAsync(
+        var entry = await store.WriteAsync(
             new MemoryWriteRequest(projectId, content, context, agentId, workspaceId), cancellationToken);
         return new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
     }
@@ -73,10 +68,10 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
             "all" => SearchScope.All,
             "project" => SearchScope.Project,
             "shared" => SearchScope.Shared,
-            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared."),
+            _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        var results = await _store.SearchAsync(
+        var results = await store.SearchAsync(
             new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore), cancellationToken);
         return new SearchResultList(results);
     }
@@ -88,7 +83,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        var files = await _store.ListFilesAsync(projectId, cancellationToken);
+        var files = await store.ListFilesAsync(projectId, cancellationToken);
         return new ListResult(files);
     }
 
@@ -99,7 +94,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
-        var stats = await _store.GetStatsAsync(projectId, cancellationToken);
+        var stats = await store.GetStatsAsync(projectId, cancellationToken);
         return new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
     }
 
@@ -115,7 +110,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash, nameof(hash));
 
-        var entry = await _store.ShareAsync(projectId, hash, cancellationToken);
+        var entry = await store.ShareAsync(projectId, hash, cancellationToken);
         return new ShareResult(true, entry.Context);
     }
 
@@ -130,7 +125,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash, nameof(hash));
 
-        var deleted = await _store.DeleteAsync(projectId, hash, cancellationToken);
+        var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
         return new DeletedResult(deleted ? 1 : 0);
     }
 
@@ -145,7 +140,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(context, nameof(context));
 
-        var deleted = await _store.DeleteContextAsync(projectId, context, cancellationToken);
+        var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
         return new DeletedContextResult(deleted);
     }
 
@@ -162,7 +157,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path, nameof(path));
 
-        var indexed = await _store.IngestFileAsync(projectId, path, context, cancellationToken);
+        var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
         return new IngestResult(indexed);
     }
 
@@ -179,7 +174,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path, nameof(path));
 
-        var scanned = await _store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
+        var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
         return new ScannedResult(scanned);
     }
 
@@ -206,7 +201,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
                 "embedding-api-key-missing: set AIRACCOON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider");
         }
 
-        var config = await _store.ConfigureEmbeddingAsync(projectId, provider, model, resolvedKey, cancellationToken);
+        var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, resolvedKey, cancellationToken);
         return new ConfigureResult(config.Provider, config.Model, config.Engine);
     }
 
@@ -220,7 +215,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
     {
         RequireProjectId(projectId);
 
-        var result = await _store.EmbedPendingAsync(projectId, limit, cancellationToken);
+        var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
         return new EmbedResult(result.Processed, result.Pending);
     }
 
@@ -237,7 +232,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
     {
         RequireProjectId(projectId);
 
-        var workspace = await _workspaces.BeginAsync(projectId, cancellationToken);
+        var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
         return new WorkspaceBeginResult(workspace.Id, workspace.Context);
     }
 
@@ -251,7 +246,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
 
-        var entries = await _workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
+        var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
         return new WorkspaceStatusResult(entries, entries.Count);
     }
 
@@ -269,7 +264,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
         ArgumentNullException.ThrowIfNull(keep, nameof(keep));
 
-        var result = await _workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
+        var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
         return new ConsolidationToolResult(result.Promoted, result.Discarded);
     }
 
@@ -283,7 +278,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         RequireProjectId(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId, nameof(workspaceId));
 
-        var discarded = await _workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
+        var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
         return new DeletedContextResult(discarded);
     }
 
@@ -298,7 +293,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
     {
         RequireProjectId(projectId);
 
-        var outcome = await _sweeper.SweepAsync(projectId, 0.3, 30, dryRun, cancellationToken);
+        var outcome = await sweeper.SweepAsync(projectId, 0.3, 30, dryRun, cancellationToken);
         return new SweepResult(outcome.Candidates, outcome.DeletedHashes);
     }
 
@@ -313,7 +308,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
 
         try
         {
-            var result = await _sync.MemorySyncAsync(projectId, cancellationToken);
+            var result = await sync.MemorySyncAsync(projectId, cancellationToken);
             return new SyncToolResult(result.Sent, result.Received, result.Reindexed);
         }
         catch (SyncNotConfiguredException)

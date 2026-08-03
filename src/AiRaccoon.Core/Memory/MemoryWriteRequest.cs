@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -11,8 +11,8 @@ public sealed record MemoryWriteRequest
         string? agentId = null,
         string? workspaceId = null)
     {
-        Guard.NotNullOrWhiteSpace(projectId, nameof(projectId));
-        Guard.NotNullOrWhiteSpace(content, nameof(content));
+        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(content, nameof(content));
 
         ProjectId = projectId;
         Content = content;

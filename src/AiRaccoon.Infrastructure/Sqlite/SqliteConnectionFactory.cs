@@ -21,7 +21,7 @@ public sealed class SqliteConnectionFactory
     public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false,
         Action<SqliteConnection>? loadExtensions = null)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options;
         _loadCloudSync = loadCloudSync;
         _loadExtensions = loadExtensions ?? LoadNativeExtensions;
     }

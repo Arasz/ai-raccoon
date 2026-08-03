@@ -9,8 +9,8 @@ namespace AiRaccoon.Infrastructure.Degradation;
 /// <summary>Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec FR-MEM-1.15).</summary>
 public sealed class SweepService(IMemoryStore store, MetaStore meta)
 {
-    private readonly MetaStore _meta = meta ?? throw new ArgumentNullException(nameof(meta));
-    private readonly IMemoryStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly MetaStore _meta = meta;
+    private readonly IMemoryStore _store = store;
 
     public async Task<SweepOutcome> SweepAsync(
         string projectId, double threshold, double ttlDays, bool dryRun, CancellationToken cancellationToken = default)

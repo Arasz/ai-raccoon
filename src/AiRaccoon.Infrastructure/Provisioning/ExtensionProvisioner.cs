@@ -28,8 +28,8 @@ public sealed class ExtensionProvisioner
 
         _dataRoot = dataRoot;
         _rid = rid;
-        _http = http ?? throw new ArgumentNullException(nameof(http));
-        _sha256ForAsset = sha256ForAsset ?? throw new ArgumentNullException(nameof(sha256ForAsset));
+        _http = http;
+        _sha256ForAsset = sha256ForAsset;
         _includeCloudSync = includeCloudSync;
     }
 

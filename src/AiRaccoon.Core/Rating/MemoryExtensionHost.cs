@@ -10,10 +10,9 @@ namespace AiRaccoon.Core.Rating;
 public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryExtension> extensions)
     : IMemoryStore
 {
-    private readonly IReadOnlyList<IMemoryExtension> _extensions =
-        extensions?.ToList() ?? throw new ArgumentNullException(nameof(extensions));
+    private readonly IReadOnlyList<IMemoryExtension> _extensions = extensions.ToList();
 
-    private readonly IMemoryStore _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    private readonly IMemoryStore _inner = inner;
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {

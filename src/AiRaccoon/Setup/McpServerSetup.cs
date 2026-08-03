@@ -11,10 +11,16 @@ internal static class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
 
-    private static readonly Lazy<IReadOnlyCollection<McpTransport>> ConfiguredTransport = new(() =>
-        Enum.TryParse<McpTransport>(Environment.GetEnvironmentVariable("MCP_TRANSPORT"), out var mcpTransport)
+    /// <summary>Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http" (case-insensitive) runs stdio.</summary>
+    internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport)
+    {
+        return Enum.TryParse<McpTransport>(transport, out var mcpTransport)
             ? [mcpTransport]
-            : DefaultTransport);
+            : DefaultTransport;
+    }
+
+    private static readonly Lazy<IReadOnlyCollection<McpTransport>> ConfiguredTransport = new(() =>
+        SelectTransports(Environment.GetEnvironmentVariable("MCP_TRANSPORT")));
 
     extension(WebApplication webApplication)
     {

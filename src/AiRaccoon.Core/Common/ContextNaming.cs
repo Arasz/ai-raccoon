@@ -1,3 +1,5 @@
+using CommunityToolkit.Diagnostics;
+
 namespace AiRaccoon.Core.Common;
 
 /// <summary>Builds the context strings that partition memory inside the bank.</summary>
@@ -7,13 +9,13 @@ public static class ContextNaming
 
     public static string ProjectContext(string projectId)
     {
-        Guard.NotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
         return $"project:{projectId}";
     }
 
     public static string WorkspaceContext(string workspaceId)
     {
-        Guard.NotNullOrWhiteSpace(workspaceId, nameof(workspaceId));
+        Guard.IsNotNullOrWhiteSpace(workspaceId, nameof(workspaceId));
         return $"workspace:{workspaceId}";
     }
 }
