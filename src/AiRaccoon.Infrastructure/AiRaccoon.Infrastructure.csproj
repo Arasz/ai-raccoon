@@ -7,7 +7,10 @@
     <ItemGroup>
         <PackageReference Include="Dapper"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
+        <PackageReference Include="Microsoft.Bcl.Memory"/>
         <PackageReference Include="Microsoft.Data.Sqlite"/>
+        <PackageReference Include="Microsoft.ML.Tokenizers"/>
+        <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
     </ItemGroup>
 
