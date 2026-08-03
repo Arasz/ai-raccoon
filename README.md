@@ -90,26 +90,30 @@ extensions.
 
 ## Embedding benchmark
 
-`benchmarks/AiRaccoon.Benchmarks` compares retrieval quality and latency across
-embedding backends (local GGUF via LLamaSharp vs LM Studio via the OpenAI SDK,
-both behind the official `Microsoft.Extensions.AI` abstraction). The default
-corpus is real-world: 174 docs from this machine's other repositories
-(job-search-ai-assistant, ai-badger, arasz-home-page ADRs/invariants/skills +
-`.remember` notes) with 68 judged queries; `--synthetic` runs the original
-48-doc regression set:
+**Do you need a bigger embedding model, or is the smallest one good enough?
+Measured answer: the smallest one is good enough for most uses.** We benchmarked
+three options on 174 real documents (68 judged queries):
 
-```bash
-AIRACCOON_TEST_GGUF=$HOME/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf \
-LMSTUDIO_BASE_URL=http://localhost:1234 \
-LMSTUDIO_MODELS="text-embedding-qwen3-embedding-0.6b,text-embedding-embeddinggemma-300m" \
-dotnet run --project benchmarks/AiRaccoon.Benchmarks
-```
+| Model | Size | Quality (MRR) | Speed (per query) |
+|---|---:|---:|---:|
+| all-MiniLM-L6-v2 (local, in-process) | **~21 MB** | 0.836 | **~9 ms** |
+| EmbeddingGemma-300m (LM Studio, network) | ~334 MB | 0.858 | ~37 ms |
+| Qwen3-Embedding-0.6b (LM Studio, network) | ~639 MB | 0.854 | ~90 ms |
 
-Latest results (real-world corpus, macos-arm64): EmbeddingGemma-300m leads
-(R@5 0.34 / nDCG@10 0.70), Qwen3-0.6b and local all-MiniLM are close behind
-(MRR 0.84–0.86); local in-process inference is ~9 ms/query vs 37–90 ms over
-the network. The real corpus differentiates models the synthetic one couldn't.
-Full methodology and numbers in `benchmarks/README.md`.
+The 21 MB local model finds the right memory first essentially as often as the
+served models (MRR 0.836 vs 0.854–0.858), is **4–10× faster per query** (no
+network round-trip), costs nothing to run, and works offline. The served models
+only pull ahead on one metric — nDCG@10 (0.70 vs 0.61), i.e. how well the whole
+top-10 is ordered — which matters only when the *ranking of lower hits*, not the
+first hit, decides the outcome.
+
+**Recommendation:** start with the local model (`scripts/download-embedding-model.sh
+all-minilm`). Move to a served LM Studio model only if retrieval quality on your
+own corpus proves insufficient — you trade 4–10× latency and 15–30× disk for a
+quality gain visible only in top-10 ordering.
+
+Full numbers, metric definitions (R@5, R@10, MRR, nDCG@10, dim, latency),
+methodology and the runnable harness: [`docs/reference/embedding-benchmark.md`](docs/reference/embedding-benchmark.md).
 
 ## Quickstart — run it
 

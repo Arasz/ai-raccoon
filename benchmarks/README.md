@@ -73,6 +73,13 @@ Environment:
 | lmstudio:text-embedding-qwen3-embedding-0.6b | 1024 | 0.326 | 0.378 | 0.854 | 0.606 |
 | lmstudio:text-embedding-embeddinggemma-300m | 768 | 0.343 | 0.404 | 0.858 | 0.704 |
 
+What each column means (all are averages over the 68 queries; 1.0 = perfect):
+
+- **dim** — embedding vector length; higher = more information per doc, more storage/comparison cost.
+- **R@5 / R@10 (Recall@k)** — fraction of the documents that *should* be found for a query that appear in the top-k results (top-5 / top-10).
+- **MRR (Mean Reciprocal Rank)** — how high the *first* relevant document ranks; 1/(rank) averaged over queries; 1.0 = best match always first.
+- **nDCG@10 (normalized Discounted Cumulative Gain)** — rewards relevant docs being in the top-10 *and* ranked high; the most complete single quality number.
+
 ### Quality — synthetic regression corpus (48 docs, 16 queries, top-10)
 
 | embedder | dim | R@5 | R@10 | MRR | nDCG@10 |
@@ -81,6 +88,10 @@ Environment:
 | lmstudio:text-embedding-qwen3-embedding-0.6b | 1024 | 0.833 | 1.000 | 1.000 | 0.998 |
 | lmstudio:text-embedding-embeddinggemma-300m | 768 | 0.823 | 1.000 | 1.000 | 0.998 |
 
+(Column meanings as above. This synthetic set is too easy to tell the models
+apart — everything reaches R@10 = 1.0 — which is why the real-world corpus is
+the default.)
+
 ### Latency — single-query search (BenchmarkDotNet ShortRun, synthetic corpus)
 
 | Method | Embedder | Mean | Allocated |
@@ -88,6 +99,11 @@ Environment:
 | Search | local:all-MiniLM-L6-v2.Q5_K_M.gguf | 9.2 ms | 25.9 KB |
 | Search | lmstudio:…embeddinggemma-300m | 36.8 ms | 143.8 KB |
 | Search | lmstudio:…qwen3-embedding-0.6b | 90.4 ms | 183.9 KB |
+
+What each column means:
+
+- **Mean** — average wall-clock time for one search (embed the query + rank + return top-10); lower is better.
+- **Allocated** — managed memory used per search; lower means fewer GC pauses under sustained load.
 
 ### Reading
 
