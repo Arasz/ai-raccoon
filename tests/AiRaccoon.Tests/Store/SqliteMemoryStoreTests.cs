@@ -317,6 +317,81 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         second.ShouldBe(0);
     }
 
+    [Fact]
+    public void SearchContexts_AllScope_SpansSharedProjectAndNamedWorkspace()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.All, "ws-1");
+
+        SearchContexts.For(query).ShouldBe(
+        [
+            ContextNaming.SharedContext, ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")
+        ]);
+    }
+
+    [Fact]
+    public void SearchContexts_AllScope_WithoutWorkspace_SpansSharedAndProject()
+    {
+        var query = new SearchQuery("acme", "q");
+
+        SearchContexts.For(query).ShouldBe(
+            [ContextNaming.SharedContext, ContextNaming.ProjectContext("acme")]);
+    }
+
+    [Fact]
+    public void SearchContexts_ProjectScope_SpansProjectAndNamedWorkspace()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Project, "ws-1");
+
+        SearchContexts.For(query).ShouldBe(
+            [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
+    }
+
+    [Fact]
+    public void SearchContexts_ProjectScope_WithoutWorkspace_IsProjectOnly()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Project);
+
+        SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
+    }
+
+    [Fact]
+    public void SearchContexts_SharedScope_IsSharedOnly_EvenWhenWorkspaceNamed()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Shared, "ws-1");
+
+        SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
+    }
+
+    // The interim merger keeps the best ranking per hash; the RRF rework (P6) rewrites these.
+    [Fact]
+    public void Merge_KeepsBestRankingPerHash_AcrossContextBatches()
+    {
+        var shared = new[]
+            { new MemorySearchResult("h1", 1, 0.8, "a.md", "s"), new MemorySearchResult("h2", 2, 0.6, "b.md", "s") };
+        var project = new[]
+            { new MemorySearchResult("h1", 1, 0.9, "a.md", "s"), new MemorySearchResult("h3", 3, 0.5, "c.md", "s") };
+
+        var merged = SearchResultMerger.Merge([shared, project], 10);
+
+        merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
+        merged[0].Ranking.ShouldBe(0.9);
+    }
+
+    [Fact]
+    public void Merge_SortsByRankingDescending_AndLimits()
+    {
+        var results = new[]
+        {
+            new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
+            new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
+            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
+        };
+
+        var merged = SearchResultMerger.Merge([results], 2);
+
+        merged.Select(r => r.Hash).ShouldBe(["h2", "h3"]);
+    }
+
     private async Task<EntryRow?> ReadRowAsync(string hash)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
