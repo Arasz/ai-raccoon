@@ -116,7 +116,10 @@ public sealed class SqliteMemoryStore(
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
             var parameters = new DynamicParameters();
             parameters.Add("query", ftsExpression);
-            parameters.Add("limit", query.Limit);
+            // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
+            // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
+            // the caller's limit and minScore still apply in the final merger pass.
+            parameters.Add("limit", CandidateWindowFor(query.Limit));
             if (queryVector is not null)
             {
                 parameters.Add("queryVector", queryVector);
@@ -144,6 +147,13 @@ public sealed class SqliteMemoryStore(
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
     }
+
+    /// <summary>
+    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
+    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
+    /// </summary>
+    internal static int CandidateWindowFor(int limit) =>
+        (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
         SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)

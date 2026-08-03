@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -65,6 +66,40 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Path.ShouldBe(entry.Path);
         hit.Snippet.ShouldNotBeNullOrWhiteSpace();
         hit.Ranking.ShouldBeInRange(0.0, 1.0);
+    }
+
+    [Fact]
+    public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
+    {
+        // ADOPT (P6b plan §8): per-modality candidate window K = max(limit*3, 100) — a doc
+        // ranked #2 in BOTH modalities must survive fusion for a limit-1 query, even though
+        // neither per-modality top-1 is that doc. a is written before the engine exists so it
+        // is FTS-only (rank 1 by exact restatement); c and x embed, and x is vec-rank 2.
+        var a = await _store.AddContentAsync("acme", "a.md",
+            "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
+            TestContext.Current.CancellationToken);
+
+        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
+            "test-key-123", TestContext.Current.CancellationToken);
+
+        var c = await _store.AddContentAsync("acme", "c.md",
+            "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"),
+            TestContext.Current.CancellationToken);
+        var x = await _store.AddContentAsync("acme", "x.md",
+            "lazy dog sleeps on the warm rug", ContextNaming.ProjectContext("acme"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "the quick brown fox jumps over the lazy dog", SearchScope.Project,
+                limit: 1, minScore: 0.0, rrfK: 60, ftsWeight: 1, vectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        // x is rank 2 in both lists: with K = max(1*3, 100) = 100 both lists carry it and
+        // 1/62 + 1/62 beats the per-modality rank-1 docs' 1/61 each; a limit-1 query returns it.
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(x.Hash);
+        hit.Hash.ShouldNotBe(a.Hash);
+        hit.Hash.ShouldNotBe(c.Hash);
     }
 
     [Fact]
