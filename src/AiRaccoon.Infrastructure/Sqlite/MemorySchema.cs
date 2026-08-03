@@ -77,6 +77,27 @@ internal static class MemorySchema
                                    INSERT INTO entries_fts(rowid, value) VALUES (new.id, new.value);
                                END;
 
+                               -- vec0 has no triggers: embedding rows follow embed_state.
+                               -- Marking embedded upserts the vec row (delete-then-insert so a
+                               -- re-embed replaces rather than duplicates); marking pending or
+                               -- deleting the entry removes it.
+                               CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
+                               WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                               BEGIN
+                                   DELETE FROM vec_entries WHERE rowid = NEW.id;
+                                   INSERT INTO vec_entries(rowid, embedding) VALUES (NEW.id, NEW.embedding);
+                               END;
+
+                               CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                               WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                               BEGIN
+                                   DELETE FROM vec_entries WHERE rowid = OLD.id;
+                               END;
+
+                               CREATE TRIGGER IF NOT EXISTS vec_entries_ad AFTER DELETE ON entries BEGIN
+                                   DELETE FROM vec_entries WHERE rowid = OLD.id;
+                               END;
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);

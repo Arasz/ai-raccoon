@@ -73,6 +73,17 @@ internal static class MemorySql
     public const string PendingCount =
         "SELECT count(*) FROM entries WHERE embed_state = 'pending' AND project_id = @projectId";
 
+    public const string SelectPendingForEmbed =
+        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' AND project_id = @projectId " +
+        "ORDER BY id LIMIT @limit";
+
+    public const string MarkEmbedded =
+        "UPDATE entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id";
+
+    public const string SelectEmbeddedForProject =
+        "SELECT id AS Id, value AS Value FROM entries WHERE project_id = @projectId AND embed_state = 'embedded' " +
+        "ORDER BY id";
+
     public const string CommittedContexts = """
                                             SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
                                             FROM entries

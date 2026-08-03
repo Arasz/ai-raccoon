@@ -26,7 +26,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             loadExtensions: _ => { });
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker());
+        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
+            new AiRaccoon.Infrastructure.Embedding.EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -309,14 +310,14 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
-        result.Processed.ShouldBe(0); // embeddings land in P4
+        result.Processed.ShouldBe(0); // no engine configured → nothing can be embedded (FR-NM-3 s4)
         result.Pending.ShouldBe(1);
     }
 
     [Fact]
     public async Task ConfigureEmbedding_StoresProviderAndModel_InSettings()
     {
-        var config = await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", null,
+        var config = await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", null, null,
             TestContext.Current.CancellationToken);
 
         config.Provider.ShouldBe("openai");
@@ -327,8 +328,11 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "SELECT value FROM settings WHERE key = 'embedding.provider'");
         var model = await connection.QueryFirstOrDefaultAsync<string>(
             "SELECT value FROM settings WHERE key = 'embedding.model'");
+        var engine = await connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
         provider.ShouldBe("openai");
         model.ShouldBe("nomic-embed-text");
+        engine.ShouldBe("openai:nomic-embed-text@https://api.openai.com/v1");
     }
 
     [Fact]

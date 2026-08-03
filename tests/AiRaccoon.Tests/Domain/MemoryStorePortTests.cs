@@ -58,10 +58,10 @@ public class MemoryStorePortTests
         var store = new RecordingStore();
 
         var config = await store.ConfigureEmbeddingAsync(
-            "acme", "local", "/models/nomic.gguf", null, TestContext.Current.CancellationToken);
+            "acme", "local", "/models/custom.onnx", null, null, TestContext.Current.CancellationToken);
 
         config.Engine.ShouldBe("local");
-        store.Configured.ShouldBe(("local", "/models/nomic.gguf", null));
+        store.Configured.ShouldBe(("local", "/models/custom.onnx", null, null));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class MemoryStorePortTests
 
         public (string Path, string? Context)? IngestedDirectory { get; private set; }
 
-        public (string Provider, string Model, string? ApiKey)? Configured { get; private set; }
+        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
 
         public string? ListedContext { get; private set; }
 
@@ -155,11 +155,11 @@ public class MemoryStorePortTests
         }
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-            string projectId, string provider, string model, string? apiKey,
+            string projectId, string provider, string? model, string? baseUrl, string? apiKey,
             CancellationToken cancellationToken = default)
         {
-            Configured = (provider, model, apiKey);
-            return Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
+            Configured = (provider, model, baseUrl, apiKey);
+            return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
         }
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

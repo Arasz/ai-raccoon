@@ -79,9 +79,9 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         CancellationToken cancellationToken = default) =>
         await inner.IngestDirectoryAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
 
-    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-        string? apiKey, CancellationToken cancellationToken = default) =>
-        await inner.ConfigureEmbeddingAsync(projectId, provider, model, apiKey, cancellationToken)
+    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+        string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+        await inner.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, apiKey, cancellationToken)
             .ConfigureAwait(false);
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

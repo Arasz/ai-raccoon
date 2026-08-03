@@ -200,8 +200,8 @@ public class WorkspaceServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

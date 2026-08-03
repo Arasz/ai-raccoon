@@ -18,7 +18,9 @@ public sealed class EmbeddingService
 
     public const string OpenAiApiKeyEnvVar = "AIRACCOON_OPENAI_API_KEY";
 
-    private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _localEngines =
+    // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
+    // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
+    private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
         new(StringComparer.Ordinal);
 
     /// <summary>Stable engine identity recorded in settings; a change re-embeds the bank.</summary>
@@ -34,24 +36,26 @@ public sealed class EmbeddingService
     public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return settings.Provider.ToLowerInvariant() switch
+        var provider = settings.Provider.ToLowerInvariant();
+        return provider switch
         {
-            "local" => CreateLocal(settings),
-            "openai" => CreateOpenAi(settings),
+            "local" or "openai" => _engines.GetOrAdd(EngineFingerprint(provider, settings.Model, settings.BaseUrl),
+                _ => provider == "local" ? CreateLocal(settings) : CreateOpenAi(settings)),
             _ => throw new ArgumentOutOfRangeException(nameof(settings), settings.Provider,
                 "Unknown embedding provider; expected 'local' or 'openai'.")
         };
     }
 
-    // The ONNX session is expensive to build (23 MB model); cache one per resolved model path.
-    private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
+    private static OnnxEmbeddingGenerator CreateLocal(EmbeddingSettings settings)
     {
         var modelPath = string.IsNullOrWhiteSpace(settings.Model)
             ? BundledModel.ResolveModelPath()
             : Path.GetFullPath(settings.Model);
-        return _localEngines.GetOrAdd(modelPath, path => new OnnxEmbeddingGenerator(path, BundledModel.ResolveVocabPath()));
+        return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath());
     }
 
+    // Note: the api key resolves at generator creation (arg wins, then env); swapping the
+    // AIRACCOON_OPENAI_API_KEY env after first use requires a configure call to re-resolve.
     private static IEmbeddingGenerator<string, Embedding<float>> CreateOpenAi(EmbeddingSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.Model))

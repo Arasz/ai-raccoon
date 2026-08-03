@@ -131,9 +131,9 @@ public sealed class MemoryExtensionHostTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbeddingConfig(provider, model, "local"));
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", "local"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>

@@ -29,11 +29,12 @@ public interface IMemoryStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Sets the bank's embedding provider/model (and API key when remote); persists in dbmem_settings (spec §4.1
-    ///     memory_configure).
+    ///     Sets the bank's embedding provider/model/endpoint (and API key when remote); persists
+    ///     in the settings table (spec §4.1 memory_configure), records the engine fingerprint,
+    ///     and re-embeds previously embedded rows when the engine changes (FR-NM-3 s6).
     /// </summary>
-    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey,
-        CancellationToken cancellationToken = default);
+    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model, string? baseUrl,
+        string? apiKey, CancellationToken cancellationToken = default);
 
     /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

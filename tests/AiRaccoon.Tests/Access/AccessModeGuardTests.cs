@@ -163,9 +163,9 @@ public sealed class AccessModeGuardTests
         public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) => Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
