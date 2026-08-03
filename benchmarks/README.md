@@ -85,3 +85,16 @@ Environment:
 - Trade-off: local all-MiniLM (~21 MB on disk, offline, fastest, no API) vs
   LM Studio models (334–639 MB, needs the server) — for this corpus the
   quality gap is small, but real corpora with more topics may widen it.
+
+## Considered alternatives
+
+**Microsoft.Extensions.AI.Evaluation (10.8.0)** was evaluated for replacing
+the hand-rolled metrics: its shipped evaluators are LLM-as-judge *text-quality*
+checks (coherence, relevance, groundedness, fluency) over a chat response —
+they compute no Recall@K/MRR/nDCG and their `EvaluateAsync` shape doesn't fit
+ranked hit lists. Adopting them would add a chat-model dependency and
+non-determinism to what is deliberately a deterministic, offline, CI-runnable
+comparison. The existing `RetrievalMetricsEvaluator` implements the standard
+definitions, so this benchmark keeps it. The Evaluation libraries would only
+become relevant if the project later evaluates agent *answers* synthesized
+from retrieved memories (a RAG/chat path).
