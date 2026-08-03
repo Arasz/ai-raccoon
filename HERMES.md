@@ -2,9 +2,9 @@
 
 # AiRaccoon
 
-C# .NET 10 MCP server (stdio transport) exposing random-number generation tools to AI assistants, built on the ModelContextProtocol C# SDK.
+C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
-> Domain: Provides AI assistants with deterministic utility tools (random number generation) over the Model Context Protocol.
+> Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp
 > Scaffolded by ai-badger 0.76.0. Source of truth for this file: `.ai-badger/HERMES.md`.
 
