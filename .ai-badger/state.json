@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-03T00:40:00Z",
+  "lastUpdated": "2026-08-03T10:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "review-feedback",
+      "summary": "Applied 4 review-feedback items + 2 follow-ups + E2E test expansion on agent-memory-server. (1) TimeProvider injected into MetaStore/SweepService (UtcNow eliminated in prod; TimeProvider.System in DI; deterministic FakeTimeProvider tests). (2) Custom Guard.cs deleted; all guards are CommunityToolkit.Diagnostics; redundant ctor null-checks removed (NRT + DI guarantee non-null). (3) FluentValidation nested validators in SearchQuery/MemoryWriteRequest, invoked at the MCP boundary, camelCase property paths (ADR-0001). (4) Workspace begin/close records persisted in the meta DB via IWorkspaceStore/SqliteWorkspaceStore for crash traceability. f: high-perf LoggerMessage logging replaces Console.Error; official FakeTimeProvider/FakeLogger packages. e: xunit traits (Category Unit/Integration/E2E + Speed Fast/Slow, filterable) + E2E suite over WebApplicationFactory+McpClient (save, worktree lifecycle, isolation, move-to-shared, sync-not-configured, embeddings). E2E exposed+fixed a real bug: SyncOptions was never registered in DI. 182 tests, build 0 warnings.",
+      "hasNotes": false
+    },
     {
       "id": "docs-init",
       "summary": "Enabled all 8 opt-in ai-badger skills (config.include.skills + scaffold on master: debug-issue, evidence-first-research, explore-codebase, migrate-documentation, refactor-safely, review-changes, scaffold-documentation, update-documentation); scaffolded canonical docs/ tree (README compass + per-directory READMEs per scaffold-documentation skill); rewrote root README.md and added LICENSE (MIT) + SECURITY.md adapted from ai-badger repo templates; .gitignore hygiene (.DS_Store, __pycache__).",
@@ -27,6 +32,8 @@
     "MCP_TRANSPORT=http selects the Streamable HTTP transport at /mcp; anything else runs stdio",
     "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
     "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
-    "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured"
+    "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
+    "The E2E server boot requires AIRACCOON_DATA_ROOT + MCP_TRANSPORT env set BEFORE host build; E2E tests mutate env so they run in a serial collection",
+    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)"
   ]
 }
