@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-03T11:50:00Z",
+  "lastUpdated": "2026-08-03T12:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "benchmark-embedding-models",
+      "summary": "Retrieval benchmark for embedding-model comparison (BenchmarkDotNet project at benchmarks/AiRaccoon.Benchmarks). Backends are official packages behind Microsoft.Extensions.AI IEmbeddingGenerator: local GGUF via LLamaSharp (adapter over GetEmbeddings — 0.27's interface GenerateAsync touches a disposed handle), LM Studio via OpenAI SDK AsIEmbeddingGenerator; cosine via BCL TensorPrimitives. Quality metrics Recall@5/Recall@10/MRR/nDCG@10 + BenchmarkDotNet latency. Real-world corpus (default): 174 docs verbatim from job-search-ai-assistant/ai-badger/arasz-home-page ADRs, invariants, skills + .remember notes, 68 queries with // judgment relevance comments; generator scripts/generate-benchmark-corpus.py (idempotent, read-only over sources). --synthetic keeps the 48-doc regression set. Results (macos-arm64, LM Studio on 192.168.50.102): real corpus differentiates models — EmbeddingGemma-300m leads (R@5 0.343, nDCG 0.704), all-MiniLM 0.325/0.607, qwen3 0.326/0.606; local in-process ~9ms/query vs 37-90ms network. Subagent research: Microsoft.Extensions.AI.Evaluation libraries skipped (LLM-judge text-quality, no Recall@K; documented in README). Merged to main.",
+      "hasNotes": false
+    },
     {
       "id": "local-embedding-model",
       "summary": "Researched and shipped the small local GGUF embedding model for AIRACCOON_TEST_GGUF. Verified all-MiniLM-L6-v2 Q5_K_M (~21 MB, Apache-2.0) end-to-end against sqlite-memory 1.3.5's llama.cpp local engine (nomic-embed-text-v1.5 Q8_0 ~139 MB documented as the reference alternative). scripts/download-embedding-model.sh pins SHA-256 and installs under <data-root>/models/. Running the previously-skipped embedding tests uncovered + fixed a real Dapper bug: memory_search's blob-affinity columns defeated record-ctor matching (now a settable SearchRow DTO). With AIRACCOON_TEST_GGUF set, all 185 tests pass with 0 skips. Docs document the honest engine matrix: local (provider=local + GGUF path) and vectors.space remote (provider=openai + key); LM Studio/Ollama are NOT configurable — the pinned extension hardcodes the vectors.space URL. Everything merged to main.",
