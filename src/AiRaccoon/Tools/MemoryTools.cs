@@ -203,13 +203,19 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = "memory_configure")]
     [Description(
-        "Configures the bank's embedding model: provider 'local' with a GGUF model path, or a remote provider name with a model id. Remote requires an API key (env AIRACCOON_VECTORSSPACE_API_KEY or api_key).")]
+        "Configures the bank's embedding engine. provider 'local' embeds in-process with the bundled " +
+        "int8 ONNX model (optional model path overrides it); provider 'openai' routes through any " +
+        "OpenAI-compatible baseUrl (default https://api.openai.com/v1) with a model id. Remote requires " +
+        "an API key (env AIRACCOON_OPENAI_API_KEY or api_key). Changing the engine re-embeds the bank.")]
     public async Task<ConfigureResult> Configure(
-        [Description("The project id.")] string projectId,
-        [Description("Embedding provider: 'local' or a remote provider name.")]
+        [Description("The project id; every memory operation is scoped to a project.")]
+        string projectId,
+        [Description("Embedding provider: 'local' (bundled ONNX) or 'openai' (OpenAI-compatible endpoint).")]
         string provider,
-        [Description("GGUF model path (local) or remote model id.")]
-        string model,
+        [Description("Endpoint base URL for provider 'openai' (e.g. http://localhost:11434/v1); defaults to the OpenAI API.")]
+        string? baseUrl = null,
+        [Description("Model id (openai) or ONNX model path (local); defaults to the bundled model for local.")]
+        string? model = null,
         [Description("Optional API key for remote embeddings; never persisted.")]
         string? apiKey = null,
         CancellationToken cancellationToken = default)
@@ -217,15 +223,32 @@ public sealed class MemoryTools(
         RequireProjectId(projectId);
         await RequireAsync(projectId, AccessRequirement.Write, "memory_configure", cancellationToken);
 
-        var isRemote = !string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
-        var resolvedKey = apiKey ?? Environment.GetEnvironmentVariable("AIRACCOON_VECTORSSPACE_API_KEY");
-        if (isRemote && string.IsNullOrWhiteSpace(resolvedKey))
+        var isLocal = string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
+        var isOpenAi = string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase);
+        if (!isLocal && !isOpenAi)
         {
-            throw new McpException(
-                "embedding-api-key-missing: set AIRACCOON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider");
+            throw new McpException($"invalid-params: provider must be 'local' or 'openai', got '{provider}'");
         }
 
-        var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, resolvedKey, cancellationToken);
+        var resolvedKey = apiKey;
+        if (isOpenAi)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                throw new McpException("invalid-params: model is required for provider 'openai'");
+            }
+
+            resolvedKey = apiKey ?? Environment.GetEnvironmentVariable(
+                AiRaccoon.Infrastructure.Embedding.EmbeddingService.OpenAiApiKeyEnvVar);
+            if (string.IsNullOrWhiteSpace(resolvedKey))
+            {
+                throw new McpException(
+                    "embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'");
+            }
+        }
+
+        var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, resolvedKey,
+            cancellationToken);
         return new ConfigureResult(config.Provider, config.Model, config.Engine);
     }
 
