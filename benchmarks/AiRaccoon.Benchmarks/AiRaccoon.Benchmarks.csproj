@@ -12,11 +12,15 @@
 
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet"/>
+        <PackageReference Include="LLamaSharp"/>
+        <PackageReference Include="LLamaSharp.Backend.Cpu"/>
+        <PackageReference Include="Microsoft.Extensions.AI"/>
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI"/>
+        <PackageReference Include="OpenAI"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="../../src/AiRaccoon.Core/AiRaccoon.Core.csproj"/>
-        <ProjectReference Include="../../src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
     </ItemGroup>
 
 </Project>

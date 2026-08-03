@@ -25,7 +25,7 @@ public sealed class MetaStoreTests : IDisposable
         _store = new MetaStore(_factory, new FakeTimeProvider(FixedNow));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task UpsertAccess_TimestampsComeFromInjectedClock()
@@ -41,8 +41,8 @@ public sealed class MetaStoreTests : IDisposable
     public async Task UpsertAccess_OnMissingEntry_CreatesRowWithProvenance()
     {
         var entry = await _store.UpsertAccessAsync(
-            "acme", "abc123", agentId: "agent-1", context: "project:acme",
-            cancellationToken: TestContext.Current.CancellationToken);
+            "acme", "abc123", "agent-1", "project:acme",
+            TestContext.Current.CancellationToken);
 
         entry.AccessCount.ShouldBe(1);
         entry.AgentId.ShouldBe("agent-1");
@@ -85,8 +85,8 @@ public sealed class MetaStoreTests : IDisposable
     [Fact]
     public async Task GetEntry_ReturnsStoredRow()
     {
-        await _store.UpsertAccessAsync("acme", "abc123", agentId: "agent-1", context: "project:acme",
-            cancellationToken: TestContext.Current.CancellationToken);
+        await _store.UpsertAccessAsync("acme", "abc123", "agent-1", "project:acme",
+            TestContext.Current.CancellationToken);
 
         var entry = await _store.GetEntryAsync("acme", "abc123", TestContext.Current.CancellationToken);
 

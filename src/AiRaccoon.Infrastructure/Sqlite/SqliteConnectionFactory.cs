@@ -4,7 +4,10 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>Opens the install's memory bank (one DB per install scope) with the shared PRAGMA policy and loads native extensions (spec §6.3).</summary>
+/// <summary>
+///     Opens the install's memory bank (one DB per install scope) with the shared PRAGMA policy and loads native
+///     extensions (spec §6.3).
+/// </summary>
 public sealed class SqliteConnectionFactory
 {
     private readonly bool _loadCloudSync;
@@ -33,7 +36,7 @@ public sealed class SqliteConnectionFactory
             InstallScope.User => _options.DataRoot,
             InstallScope.Project => Path.Combine(_options.DataRoot, ".ai-raccoon"),
             _ => throw new ArgumentOutOfRangeException(nameof(_options.Scope), _options.Scope,
-                "Unknown install scope."),
+                "Unknown install scope.")
         };
 
     public string BankPath => Path.Combine(BankDirectory, "memory.db");

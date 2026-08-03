@@ -5,7 +5,10 @@ using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;
 
 namespace AiRaccoon.Infrastructure.Workspace;
 
-/// <summary>Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox), discard (spec §3.2).</summary>
+/// <summary>
+///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
+///     discard (spec §3.2).
+/// </summary>
 public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider)
 {
     public async Task<WorkspaceRecord> BeginAsync(string projectId, CancellationToken cancellationToken = default)

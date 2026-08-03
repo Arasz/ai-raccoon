@@ -60,14 +60,14 @@ public class MemoryToolsTests
     public async Task Search_WithInvalidScope_ThrowsMcpException()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "q", scope: "bogus", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", "q", "bogus", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("scope");
     }
 
     [Fact]
     public async Task Search_WithAllScope_DelegatesWithSearchScopeAll()
     {
-        await _tools.Search("acme", "query", scope: "all", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "query", "all", cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.Scope.ShouldBe(SearchScope.All);
         _store.LastQuery.ProjectId.ShouldBe("acme");
@@ -78,7 +78,7 @@ public class MemoryToolsTests
     {
         _store.SharedEntry = new MemoryEntry("h1", "p.md", ContextNaming.SharedContext, "v", 1);
 
-        var result = await _tools.Share("acme", "h1", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Share("acme", "h1", TestContext.Current.CancellationToken);
 
         result.Shared.ShouldBeTrue();
         result.Context.ShouldBe(ContextNaming.SharedContext);
@@ -91,7 +91,7 @@ public class MemoryToolsTests
         _sync.Exception = new SyncNotConfiguredException();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Sync("acme", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("sync-not-configured");
     }
@@ -101,7 +101,7 @@ public class MemoryToolsTests
     {
         _sync.Result = new SyncResult(3, 2, 5);
 
-        var result = await _tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Sync("acme", TestContext.Current.CancellationToken);
 
         result.Sent.ShouldBe(3);
         result.Received.ShouldBe(2);
@@ -111,7 +111,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceBegin_ReturnsWorkspaceIdAndContext()
     {
-        var result = await _tools.WorkspaceBegin("acme", agentId: "agent-a",
+        var result = await _tools.WorkspaceBegin("acme", "agent-a",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.WorkspaceId.ShouldNotBeNullOrWhiteSpace();
@@ -124,11 +124,11 @@ public class MemoryToolsTests
         _store.EntriesByContext["workspace:ws-1"] =
         [
             new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
-            new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2),
+            new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2)
         ];
 
         var result = await _tools.WorkspaceConsolidate("acme", "ws-1", ["all"],
-            cancellationToken: TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(2);
     }
@@ -138,7 +138,7 @@ public class MemoryToolsTests
     {
         _store.Stats = new MemoryStats(5, 2, ["shared", "project:acme"]);
 
-        var result = await _tools.Stats("acme", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Stats("acme", TestContext.Current.CancellationToken);
 
         result.Entries.ShouldBe(5);
         result.Pending.ShouldBe(2);
@@ -190,15 +190,13 @@ public class MemoryToolsTests
             return Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
         }
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Stats);
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(Stats);
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
@@ -207,8 +205,7 @@ public class MemoryToolsTests
             return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
         }
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{\"root\":\"\"}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
@@ -255,8 +252,7 @@ public class MemoryToolsTests
 
     private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) =>
-            throw new NotImplementedException();
+        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FakeMetaStore() : MetaStore(null!, TimeProvider.System)
@@ -275,9 +271,11 @@ public class MemoryToolsTests
     private sealed class FakeWorkspaceStore : IWorkspaceStore
     {
         public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

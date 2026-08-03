@@ -15,8 +15,5 @@ public class McpServerSetupTests
     [InlineData("stdio", McpTransport.Stdio)]
     [InlineData("", McpTransport.Stdio)]
     [InlineData(null, McpTransport.Stdio)]
-    public void SelectTransports_ResolvesEnvironmentValue(string? transport, McpTransport expected)
-    {
-        McpServerSetup.SelectTransports(transport).ShouldBe([expected]);
-    }
+    public void SelectTransports_ResolvesEnvironmentValue(string? transport, McpTransport expected) => McpServerSetup.SelectTransports(transport).ShouldBe([expected]);
 }

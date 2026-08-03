@@ -28,8 +28,5 @@ public static class ExtensionManifest
         ["cloudsync-windows-x86_64-1.1.2.tar.gz"] = "6916f97b19256c5eca0254c77552ca4420b2535a6c2fad0ea4b4447da9e3a130"
     };
 
-    public static string? Sha256(string assetFileName)
-    {
-        return Hashes.GetValueOrDefault(assetFileName);
-    }
+    public static string? Sha256(string assetFileName) => Hashes.GetValueOrDefault(assetFileName);
 }

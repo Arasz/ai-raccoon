@@ -16,7 +16,7 @@ public sealed class MemoryExtensionHostTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task Search_RunsExtensionHooksInRegistrationOrder()
@@ -48,12 +48,12 @@ public sealed class MemoryExtensionHostTests : IDisposable
     {
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadCloudSync: false, loadExtensions: _ => { });
+            false, _ => { });
         var meta = new MetaStore(factory, TimeProvider.System);
         var extension = new RetrievalRatingExtension(meta);
         var results = new List<MemorySearchResult>
         {
-            new("h1", 0, 0.9, "note.md", "snippet"),
+            new("h1", 0, 0.9, "note.md", "snippet")
         };
         var inner = new StubStore(results);
         var host = new MemoryExtensionHost(inner, [extension]);
@@ -127,22 +127,19 @@ public sealed class MemoryExtensionHostTests : IDisposable
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_results);
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryStats(0, 0, []));
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry(hash, "shared/note.md", ContextNaming.SharedContext, "v", 1));
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{}");
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>

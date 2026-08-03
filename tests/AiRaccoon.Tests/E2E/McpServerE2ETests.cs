@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AiRaccoon.Tests.E2E;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
@@ -8,21 +7,21 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-/// Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client):
-/// the tools, the store, the native sqlite-memory extension and the JSON-RPC transport
-/// all run together. Requires the host RID's native extensions to be provisioned
-/// (~/.ai-raccoon/extensions/&lt;rid&gt;) — otherwise they skip honestly, like the store
-/// integration tests. See the E2E collection: env mutation forces serial execution.
-/// Assertions use stats/status/list (no embeddings required) except the dedicated
-/// embeddings test, which needs AIRACCOON_TEST_GGUF.
+///     Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client):
+///     the tools, the store, the native sqlite-memory extension and the JSON-RPC transport
+///     all run together. Requires the host RID's native extensions to be provisioned
+///     (~/.ai-raccoon/extensions/&lt;rid&gt;) — otherwise they skip honestly, like the store
+///     integration tests. See the E2E collection: env mutation forces serial execution.
+///     Assertions use stats/status/list (no embeddings required) except the dedicated
+///     embeddings test, which needs AIRACCOON_TEST_GGUF.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(E2ETestCollection.Name)]
 public class McpServerE2ETests : IAsyncLifetime
 {
-    private McpServerFactory _factory = null!;
     private McpClient _client = null!;
+    private McpServerFactory _factory = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -158,8 +157,8 @@ public class McpServerE2ETests : IAsyncLifetime
         var result = await _client.CallToolAsync(
             "memory_sync",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
-            progress: null,
-            options: null,
+            null,
+            null,
             CancellationToken.None);
         result.IsError.ShouldBe(true);
     }
@@ -189,7 +188,7 @@ public class McpServerE2ETests : IAsyncLifetime
     private async Task<CallToolResult> CallAsync(string tool, params (string Key, object? Value)[] arguments)
     {
         var dict = arguments.ToDictionary(a => a.Key, a => a.Value);
-        return await _client.CallToolAsync(tool, dict, progress: null, options: null, CancellationToken.None);
+        return await _client.CallToolAsync(tool, dict, null, null, CancellationToken.None);
     }
 
     private static string Text(CallToolResult result)

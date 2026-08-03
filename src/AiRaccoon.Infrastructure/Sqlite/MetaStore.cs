@@ -153,14 +153,15 @@ public class MetaStore(SqliteConnectionFactory factory, TimeProvider timeProvide
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MetaEntry ToEntry(MetaRow row)
-    {
-        return new MetaEntry(
+    private static MetaEntry ToEntry(MetaRow row) =>
+        new(
             row.Hash, row.ProjectId, row.Context, row.AgentId,
             row.CreatedAt, row.AccessCount, row.LastAccessedAt, row.Rating, row.TtlDays);
-    }
 
-    /// <summary>Dapper materialization target: settable properties map nullable columns cleanly (the record's nullable params do not).</summary>
+    /// <summary>
+    ///     Dapper materialization target: settable properties map nullable columns cleanly (the record's nullable params
+    ///     do not).
+    /// </summary>
     private sealed class MetaRow
     {
         public string Hash { get; set; } = "";

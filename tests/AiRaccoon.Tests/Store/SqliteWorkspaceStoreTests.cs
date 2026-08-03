@@ -2,7 +2,6 @@ using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
@@ -24,7 +23,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         _store = new SqliteWorkspaceStore(_factory);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task BeginAsync_InsertsActiveRow_WithCreatedAt()
@@ -81,6 +80,13 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
                 new { workspaceId }));
     }
 
+    private static string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "airaccoon-workspaces-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
     private sealed class WorkspaceRow
     {
         public string WorkspaceId { get; set; } = "";
@@ -92,12 +98,5 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         public long CreatedAt { get; set; }
 
         public long? ClosedAt { get; set; }
-    }
-
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-workspaces-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
     }
 }

@@ -6,7 +6,10 @@ using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Degradation;
 
-/// <summary>Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec FR-MEM-1.15).</summary>
+/// <summary>
+///     Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec
+///     FR-MEM-1.15).
+/// </summary>
 public sealed class SweepService(IMemoryStore store, MetaStore meta, TimeProvider timeProvider)
 {
     public async Task<SweepOutcome> SweepAsync(

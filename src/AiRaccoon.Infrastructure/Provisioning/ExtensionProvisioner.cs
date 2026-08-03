@@ -10,7 +10,10 @@ public sealed class ExtensionProvisioningException(string message) : Exception(m
 /// <summary>Absolute paths of the provisioned loadable extension modules.</summary>
 public sealed record ProvisionedExtensions(string Vector, string Memory, string? CloudSync);
 
-/// <summary>Downloads and verifies pinned native extensions into &lt;dataRoot&gt;/extensions/&lt;rid&gt;/ (spec §10, OQ-3).</summary>
+/// <summary>
+///     Downloads and verifies pinned native extensions into &lt;dataRoot&gt;/extensions/&lt;rid&gt;/ (spec §10,
+///     OQ-3).
+/// </summary>
 public sealed class ExtensionProvisioner
 {
     private readonly HttpClient _http;
@@ -69,10 +72,7 @@ public sealed class ExtensionProvisioner
         return specs;
     }
 
-    private string ModulePath(ExtensionSpec spec)
-    {
-        return Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));
-    }
+    private string ModulePath(ExtensionSpec spec) => Path.Combine(ExtensionDirectory, spec.ModulePrefix + RuntimePlatform.ModuleExtension(_rid));
 
     private async Task DownloadAndVerifyAsync(ExtensionSpec spec, string platform, string modulePath,
         CancellationToken cancellationToken)

@@ -3,9 +3,9 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Core.Rating;
 
 /// <summary>
-/// Runs registered IMemoryExtension hooks in order around every store operation (spec §6.2).
-/// The host implements IMemoryStore and decorates the real store, so hooks observe writes,
-/// searches, deletes, sweeps and consolidations without the MCP layer knowing they exist.
+///     Runs registered IMemoryExtension hooks in order around every store operation (spec §6.2).
+///     The host implements IMemoryStore and decorates the real store, so hooks observe writes,
+///     searches, deletes, sweeps and consolidations without the MCP layer knowing they exist.
 /// </summary>
 public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryExtension> extensions)
     : IMemoryStore
@@ -63,56 +63,36 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         return await inner.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-    {
-        return await inner.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
-    }
+    public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => await inner.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.ShareAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.ShareAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
 
-    public async Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
-    {
-        return await inner.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false);
-    }
+    public async Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => await inner.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false);
 
     public async Task<int> IngestFileAsync(string projectId, string path, string? context,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.IngestFileAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.IngestFileAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
 
     public async Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.IngestDirectoryAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.IngestDirectoryAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
 
     public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-        string? apiKey, CancellationToken cancellationToken = default)
-    {
-        return await inner.ConfigureEmbeddingAsync(projectId, provider, model, apiKey, cancellationToken)
+        string? apiKey, CancellationToken cancellationToken = default) =>
+        await inner.ConfigureEmbeddingAsync(projectId, provider, model, apiKey, cancellationToken)
             .ConfigureAwait(false);
-    }
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.EmbedPendingAsync(projectId, limit, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.EmbedPendingAsync(projectId, limit, cancellationToken).ConfigureAwait(false);
 
     public async Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.AddContentAsync(projectId, path, content, context, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.AddContentAsync(projectId, path, content, context, cancellationToken).ConfigureAwait(false);
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-        CancellationToken cancellationToken = default)
-    {
-        return await inner.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        await inner.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
 }

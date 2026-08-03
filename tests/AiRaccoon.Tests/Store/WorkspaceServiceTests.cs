@@ -70,7 +70,7 @@ public class WorkspaceServiceTests
         store.EntriesByContext["workspace:ws-1"] =
         [
             new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1),
-            new MemoryEntry("h2", "todo.md", "workspace:ws-1", "noise", 2),
+            new MemoryEntry("h2", "todo.md", "workspace:ws-1", "noise", 2)
         ];
         var service = Service(store, out var workspaceStore);
 
@@ -108,7 +108,7 @@ public class WorkspaceServiceTests
         store.EntriesByContext["workspace:ws-1"] =
         [
             new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
-            new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2),
+            new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2)
         ];
         var service = Service(store, out _);
 
@@ -175,8 +175,7 @@ public class WorkspaceServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default)
@@ -185,15 +184,13 @@ public class WorkspaceServiceTests
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries.Count : 0);
         }
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>

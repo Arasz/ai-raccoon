@@ -14,8 +14,7 @@ public class SweepServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    private static SweepService Service(IMemoryStore store, FakeMetaStore meta) =>
-        new(store, meta, new FakeTimeProvider(FixedNow));
+    private static SweepService Service(IMemoryStore store, FakeMetaStore meta) => new(store, meta, new FakeTimeProvider(FixedNow));
 
     [Fact]
     public async Task SweepAsync_DryRun_ReportsCandidates_WithoutDeleting()
@@ -24,7 +23,7 @@ public class SweepServiceTests
         var meta = new FakeMetaStore(rating: 0.1);
         var service = Service(store, meta);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: true, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, 30, true, TestContext.Current.CancellationToken);
 
         outcome.Candidates.Count.ShouldBe(1);
         outcome.Candidates[0].Hash.ShouldBe("old-low");
@@ -39,7 +38,7 @@ public class SweepServiceTests
         var meta = new FakeMetaStore(rating: 0.1);
         var service = Service(store, meta);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
         outcome.DeletedHashes.ShouldContain("old-low");
         store.Deleted.ShouldContain("old-low");
@@ -52,7 +51,7 @@ public class SweepServiceTests
         var meta = new FakeMetaStore(rating: 0.9);
         var service = Service(store, meta);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
         outcome.Candidates.ShouldBeEmpty();
         store.Deleted.ShouldBeEmpty();
@@ -67,7 +66,7 @@ public class SweepServiceTests
         store.SharedHashes.Add("old-low");
         var service = Service(store, meta);
 
-        await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
+        await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
         store.Deleted.ShouldBeEmpty();
     }
@@ -79,7 +78,7 @@ public class SweepServiceTests
         var meta = new FakeMetaStore(rating: null); // no meta row exists
         var service = Service(store, meta);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, dryRun: false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
 
         // Missing meta falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
         // entry must NOT be swept just because it was never searched (FR-MEM-1.15).
@@ -113,15 +112,13 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>

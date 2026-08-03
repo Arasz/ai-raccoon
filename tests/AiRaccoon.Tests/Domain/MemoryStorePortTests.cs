@@ -107,15 +107,13 @@ public class MemoryStorePortTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)

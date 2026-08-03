@@ -13,35 +13,24 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, recursive: true);
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) => new(
-        new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
-        loadExtensions: _ => { });
-
-    [Fact]
-    public void BankPath_UserScope_IsDataRootMemoryDb()
-    {
-        Factory().BankPath.ShouldBe(Path.Combine(_dataRoot, "memory.db"));
-    }
+    private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) =>
+        new(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
+            loadExtensions: _ => { });
 
     [Fact]
-    public void BankPath_ProjectScope_IsDataRootAiRaccoonMemoryDb()
-    {
-        Factory(InstallScope.Project).BankPath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db"));
-    }
+    public void BankPath_UserScope_IsDataRootMemoryDb() => Factory().BankPath.ShouldBe(Path.Combine(_dataRoot, "memory.db"));
 
     [Fact]
-    public void MetaDatabasePath_UserScope_IsDataRootRaccoonMetaDb()
-    {
-        Factory().MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, "raccoon_meta.db"));
-    }
+    public void BankPath_ProjectScope_IsDataRootAiRaccoonMemoryDb() => Factory(InstallScope.Project).BankPath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db"));
 
     [Fact]
-    public void MetaDatabasePath_ProjectScope_IsDataRootAiRaccoonRaccoonMetaDb()
-    {
-        Factory(InstallScope.Project).MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "raccoon_meta.db"));
-    }
+    public void MetaDatabasePath_UserScope_IsDataRootRaccoonMetaDb() => Factory().MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, "raccoon_meta.db"));
+
+    [Fact]
+    public void MetaDatabasePath_ProjectScope_IsDataRootAiRaccoonRaccoonMetaDb() => Factory(InstallScope.Project).MetaDatabasePath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "raccoon_meta.db"));
 
     [Fact]
     public async Task OpenBankAsync_CreatesDatabaseAtBankPath()
@@ -81,7 +70,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     [Fact]
     public void DefaultExtensionPaths_FollowDataRootExtensionsRidLayout()
     {
-        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", includeCloudSync: true);
+        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", true);
 
         paths.Vector.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "vector.dylib"));
         paths.Memory.ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "memory.dylib"));
@@ -91,7 +80,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     [Fact]
     public void DefaultExtensionPaths_WithoutCloudSync_OmitsSyncModule()
     {
-        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", includeCloudSync: false);
+        var paths = ExtensionPaths.For(_dataRoot, "osx-arm64", false);
 
         paths.CloudSync.ShouldBeNull();
     }
@@ -99,8 +88,8 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     [Fact]
     public void DefaultExtensionPaths_UsePlatformModuleSuffixes()
     {
-        ExtensionPaths.For(_dataRoot, "linux-x64", includeCloudSync: false).Vector.ShouldEndWith("vector.so");
-        ExtensionPaths.For(_dataRoot, "win-x64", includeCloudSync: false).Vector.ShouldEndWith("vector.dll");
+        ExtensionPaths.For(_dataRoot, "linux-x64", false).Vector.ShouldEndWith("vector.so");
+        ExtensionPaths.For(_dataRoot, "win-x64", false).Vector.ShouldEndWith("vector.dll");
     }
 
     private static string CreateTempRoot()

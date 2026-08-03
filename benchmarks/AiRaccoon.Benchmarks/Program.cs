@@ -14,9 +14,9 @@ public static class Program
     }
 
     /// <summary>
-    /// Retrieval-quality comparison across the configured embedding backends: same corpus,
-    /// same queries, same metrics — Recall@5, Recall@10, MRR, nDCG@10. One-shot (no
-    /// BenchmarkDotNet harness) so it can run in CI and against a live LM Studio server.
+    ///     Retrieval-quality comparison across the configured embedding backends: same corpus,
+    ///     same queries, same metrics — Recall@5, Recall@10, MRR, nDCG@10. One-shot (no
+    ///     BenchmarkDotNet harness) so it can run in CI and against a live LM Studio server.
     /// </summary>
     private static int RunQualityComparison()
     {

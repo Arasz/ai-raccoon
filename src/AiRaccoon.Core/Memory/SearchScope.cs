@@ -5,5 +5,5 @@ public enum SearchScope
 {
     All,
     Project,
-    Shared,
+    Shared
 }

@@ -28,7 +28,10 @@ public interface IMemoryStore
     Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Sets the bank's embedding provider/model (and API key when remote); persists in dbmem_settings (spec §4.1 memory_configure).</summary>
+    /// <summary>
+    ///     Sets the bank's embedding provider/model (and API key when remote); persists in dbmem_settings (spec §4.1
+    ///     memory_configure).
+    /// </summary>
     Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey,
         CancellationToken cancellationToken = default);
 
@@ -36,7 +39,10 @@ public interface IMemoryStore
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Indexes caller-provided file content under an explicit logical path and context (memory_add_content; consolidation, share).</summary>
+    /// <summary>
+    ///     Indexes caller-provided file content under an explicit logical path and context (memory_add_content;
+    ///     consolidation, share).
+    /// </summary>
     Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
         CancellationToken cancellationToken = default);
 

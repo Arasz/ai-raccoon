@@ -15,7 +15,9 @@ public sealed record ExtensionPaths(string Vector, string Memory, string? CloudS
             Module(ExtensionCatalog.Memory),
             includeCloudSync ? Module(ExtensionCatalog.Sync) : null);
 
-        string Module(ExtensionSpec spec) =>
-            Path.Combine(directory, $"{spec.ModulePrefix}{RuntimePlatform.ModuleExtension(rid)}");
+        string Module(ExtensionSpec spec)
+        {
+            return Path.Combine(directory, $"{spec.ModulePrefix}{RuntimePlatform.ModuleExtension(rid)}");
+        }
     }
 }

@@ -5,7 +5,10 @@ namespace AiRaccoon.Infrastructure.Sync;
 /// <summary>Outcome of one memory sync run.</summary>
 public sealed record SyncResult(int Sent, int Received, int Reindexed);
 
-/// <summary>Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;), serialized per spec §6.3.</summary>
+/// <summary>
+///     Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;),
+///     serialized per spec §6.3.
+/// </summary>
 public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connections)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);

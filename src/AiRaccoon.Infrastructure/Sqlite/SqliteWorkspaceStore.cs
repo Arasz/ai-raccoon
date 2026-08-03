@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Workspace;
 using Dapper;
-using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -24,7 +23,7 @@ public sealed class SqliteWorkspaceStore(SqliteConnectionFactory factory) : IWor
                     workspaceId,
                     projectId,
                     status = WorkspaceStatus.Active.ToString(),
-                    createdAt = startedAt.ToUnixTimeSeconds(),
+                    createdAt = startedAt.ToUnixTimeSeconds()
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
@@ -47,7 +46,7 @@ public sealed class SqliteWorkspaceStore(SqliteConnectionFactory factory) : IWor
                     workspaceId,
                     projectId,
                     status = status.ToString(),
-                    closedAt = closedAt.ToUnixTimeSeconds(),
+                    closedAt = closedAt.ToUnixTimeSeconds()
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }

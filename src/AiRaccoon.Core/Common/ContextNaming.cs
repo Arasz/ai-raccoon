@@ -9,13 +9,13 @@ public static class ContextNaming
 
     public static string ProjectContext(string projectId)
     {
-        Guard.IsNotNullOrWhiteSpace(projectId, nameof(projectId));
+        Guard.IsNotNullOrWhiteSpace(projectId);
         return $"project:{projectId}";
     }
 
     public static string WorkspaceContext(string workspaceId)
     {
-        Guard.IsNotNullOrWhiteSpace(workspaceId, nameof(workspaceId));
+        Guard.IsNotNullOrWhiteSpace(workspaceId);
         return $"workspace:{workspaceId}";
     }
 }
