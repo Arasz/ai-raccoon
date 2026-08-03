@@ -8,7 +8,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 
-namespace AiRaccoon;
+namespace AiRaccoon.Setup;
 
 public static class Dependencies
 {
@@ -28,8 +28,8 @@ public static class Dependencies
             Sync = new SyncOptions
             {
                 ManagedDatabaseId = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_DB_ID"),
-                ApiKey = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_API_KEY"),
-            },
+                ApiKey = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_API_KEY")
+            }
         };
 
         // Provision native extensions on first run (FR-MEM-1.19): download + verify the pinned
@@ -39,7 +39,7 @@ public static class Dependencies
         services.AddSingleton(options);
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
-            loadCloudSync: true));
+            true));
         services.AddSingleton<SqliteMemoryStore>();
         services.AddSingleton<MetaStore>();
         services.AddSingleton<IMemoryStore>(sp => new MemoryExtensionHost(
@@ -58,7 +58,7 @@ public static class Dependencies
         {
             using var http = new HttpClient();
             var provisioner = new ExtensionProvisioner(
-                options.DataRoot, options.Rid, http, ExtensionManifest.Sha256, includeCloudSync: true);
+                options.DataRoot, options.Rid, http, ExtensionManifest.Sha256, true);
             provisioner.EnsureProvisionedAsync().GetAwaiter().GetResult();
         }
         catch (Exception exception)
