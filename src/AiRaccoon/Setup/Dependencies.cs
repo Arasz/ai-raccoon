@@ -10,7 +10,7 @@ using AiRaccoon.Infrastructure.Workspace;
 
 namespace AiRaccoon.Setup;
 
-public static class Dependencies
+public static partial class Dependencies
 {
     public static void RegisterMemoryServices(this IServiceCollection services)
     {
@@ -34,8 +34,7 @@ public static class Dependencies
 
         // Provision native extensions on first run (FR-MEM-1.19): download + verify the pinned
         // vector/memory/cloudsync modules for the host RID before any connection opens them.
-        ProvisionExtensions(options);
-
+        // Runs post-build via ProvisionExtensions (needs ILoggerFactory from the container).
         services.AddSingleton(options);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => new SqliteConnectionFactory(
@@ -53,8 +52,11 @@ public static class Dependencies
         services.AddSingleton<SweepService>();
     }
 
-    private static void ProvisionExtensions(InfrastructureOptions options)
+    /// <summary>Downloads + verifies the pinned native extensions before the first connection opens them (FR-MEM-1.19).</summary>
+    public static void ProvisionExtensions(this IServiceProvider services)
     {
+        var options = services.GetRequiredService<InfrastructureOptions>();
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("AiRaccoon");
         try
         {
             using var http = new HttpClient();
@@ -65,8 +67,15 @@ public static class Dependencies
         catch (Exception exception)
         {
             // Do not crash the server on provisioning failure — the first tool call that opens the
-            // bank will surface the precise missing-module error. Log to stderr (stdio-safe).
-            Console.Error.WriteLine($"ai-raccoon: native extension provisioning failed: {exception.Message}");
+            // bank will surface the precise missing-module error.
+            Log.ExtensionProvisioningFailed(logger, exception.Message);
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 1, Level = LogLevel.Error,
+            Message = "ai-raccoon: native extension provisioning failed: {reason}")]
+        public static partial void ExtensionProvisioningFailed(ILogger logger, string reason);
     }
 }

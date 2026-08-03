@@ -7,7 +7,7 @@ namespace AiRaccoon.Setup;
 /// Decides which MCP transport the server should use from the MCP_TRANSPORT
 /// environment variable. Anything other than "http" (case-insensitive) runs stdio.
 /// </summary>
-internal static class McpServerSetup
+internal static partial class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
 
@@ -27,6 +27,11 @@ internal static class McpServerSetup
         public WebApplication ConfigureMcpEndpoints()
         {
             var transport = ConfiguredTransport.Value;
+            if (transport.Contains(McpTransport.Https))
+            {
+                Log.HttpsTransportNotSupported(webApplication.Logger);
+            }
+
             if (transport.Contains(McpTransport.Http))
             {
                 webApplication.MapMcp("/mcp");
@@ -95,9 +100,16 @@ internal static class McpServerSetup
 
         private IMcpServerBuilder HandleHttpsTransport()
         {
-            Console.Error.WriteLine("ai-raccoon: https transport is not supported");
+            // Unsupported: no transport is configured for https; the warning is emitted
+            // once in ConfigureMcpEndpoints where the app logger is available.
             return mcpServerBuilder;
         }
+    }
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "ai-raccoon: https transport is not supported")]
+        public static partial void HttpsTransportNotSupported(ILogger logger);
     }
 }
 
