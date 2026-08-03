@@ -84,10 +84,11 @@
       "branch": "task/benchmark-embedding-models",
       "risk": false,
       "startedAt": "2026-08-03T09:57:45.249644+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-03T10:51:33.538229+00:00",
+      "state": "FINISHED",
       "resumeCommand": "claude --resume hermes-benchmark-embedding-20260803",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }
