@@ -89,6 +89,35 @@
       "resumeCommand": "claude --resume hermes-benchmark-embedding-20260803",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "native-memory-store",
+      "title": "Native .NET memory store replacing the pinned sqlite-memory extension",
+      "sessionId": "20260803_162437_9ae3d6",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/native-memory-store",
+      "risk": false,
+      "startedAt": "2026-08-03T16:11:18.742729+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume 20260803_162437_9ae3d6",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "autocompletion-system-prompt-for-qween-3.5-9B-locall",
+      "title": "System prompt for local Qwen3.5-9B optimized for Rider autocompletion in this codebase",
+      "sessionId": "20260803_204723_befddd",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/autocompletion-system-prompt",
+      "risk": false,
+      "startedAt": "2026-08-03T18:54:36.943572+00:00",
+      "finishedAt": "2026-08-03T18:57:42.678766+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260803_204723_befddd",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

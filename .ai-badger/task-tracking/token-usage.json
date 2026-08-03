@@ -385,6 +385,133 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "native-memory-store",
+      "subagents": [
+        {
+          "description": "P5 chunking: IChunker + MarkdownChunker (Core, pure) + TokenizerChunker (Infrastructure, o200k_base); 27 tests; commit a5818bc",
+          "totalTokens": 0,
+          "at": "2026-08-03T16:45:01.559957+00:00"
+        },
+        {
+          "description": "P7 harness: nDCG/MRR/Recall/Kendall-tau metrics, vendored reference assets (fail-not-skip), self-contained old-extension reference runner + golden topk, RRF sweep scaffold; 31 tests; commits bae5cdd..731c3b6",
+          "totalTokens": 0,
+          "at": "2026-08-03T16:45:01.605398+00:00"
+        },
+        {
+          "description": "P1 foundation: single memory.db schema (entries+workspaces+settings+FTS5+vec0), raccoon_meta.db deleted, managed store w/ interim FTS5 search + on-row rating rewire, ingest via P5 chunker, sqlite-vec NuGet pin; 240/0/0; commits 0ad905f..442d2ad",
+          "totalTokens": 0,
+          "at": "2026-08-03T17:58:46.236794+00:00"
+        },
+        {
+          "description": "P3 content identity: ContentHash (Core, SHA-256 UTF8(path)+UTF8(value)), global dedup on write, share creates distinct-hash shared row, consolidation path preserved; 45/45 targeted; commit 286e5fb",
+          "totalTokens": 0,
+          "at": "2026-08-03T18:49:19.165378+00:00"
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260803_162437_9ae3d6",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-03T16:11:18.742352+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-03T16:11:18.742352+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "autocompletion-system-prompt-for-qween-3.5-9B-locall",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260803_204723_befddd",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-03T18:54:36.943148+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-03T18:57:42.678762+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-03T18:57:42.678762+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
     }
   ]
 }
