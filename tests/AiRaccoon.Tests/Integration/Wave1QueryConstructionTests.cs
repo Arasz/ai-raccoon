@@ -50,7 +50,57 @@ public sealed class Wave1QueryConstructionTests : IDisposable
             new TokenizerChunker(), new EmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose()
+    {
+        foreach (var root in _extraRoots)
+        {
+            Directory.Delete(root, true);
+        }
+
+        Directory.Delete(_dataRoot, true);
+    }
+
+    private readonly List<string> _extraRoots = [];
+
+    /// <summary>
+    ///     Fallback boundary (Wave 1 review NIT): an AND primary that matches exactly
+    ///     max(TokenCount, limit) rows must NOT trigger the OR fallback — a list that size is
+    ///     a usable ranked signal on its own. The probe chunk (only 'alpha') would surface
+    ///     under the OR fallback and must stay absent.
+    /// </summary>
+    [Fact]
+    public async Task AndPrimary_AtThreshold_DoesNotFallBack()
+    {
+        var store = NewEmptyStore();
+        for (var i = 0; i < 5; i++)
+        {
+            await store.AddContentAsync("acme", $"docs/probe-{i}.md", $"alpha beta chunk {i}", null,
+                TestContext.Current.CancellationToken);
+        }
+
+        await store.AddContentAsync("acme", "docs/probe-alpha.md", "alpha only chunk", null,
+            TestContext.Current.CancellationToken);
+
+        var results = await store.SearchAsync(
+            new SearchQuery("acme", "alpha beta", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.ShouldNotBeEmpty();
+        results.ShouldNotContain(r => r.Path == "docs/probe-alpha.md",
+            "exactly max(2, 5) AND matches is a usable signal; the OR fallback must not fire");
+    }
+
+    private SqliteMemoryStore NewEmptyStore()
+    {
+        var dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+        _extraRoots.Add(dataRoot);
+
+        var factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
+        return new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
+            new TokenizerChunker(), new EmbeddingService());
+    }
 
     /// <summary>
     ///     An AND primary that matches fewer rows than it has terms is over-constrained: A6's
