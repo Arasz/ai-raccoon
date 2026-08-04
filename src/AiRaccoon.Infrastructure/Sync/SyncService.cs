@@ -8,6 +8,7 @@ public partial class SyncService(
     ICloudStore cloud,
     Func<CancellationToken, Task<SqliteConnection>> openBank,
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
+    TimeProvider timeProvider,
     ILogger<SyncService> logger)
 {
     private const int MaxPushRetries = 3;
@@ -285,7 +286,7 @@ public partial class SyncService(
                 }
 
                 // Record last pull timestamp.
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
                 await using (var updateWatermark = conn.CreateCommand())
                 {
                     updateWatermark.CommandText =

@@ -77,6 +77,7 @@ public static partial class Dependencies
                 await conn.OpenAsync(ct);
                 return conn;
             },
+            sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
         services.AddSingleton<WorkspaceService>();
         services.AddSingleton<SweepService>();

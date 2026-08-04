@@ -81,12 +81,12 @@ public sealed class RetrievalBaselineTests : IDisposable
         totalWithResults.ShouldBeGreaterThanOrEqualTo(1,
             "at least one query should return results from the pre-built database");
 
-        var baseline = new BaselineReport("jsaa", DateTimeOffset.UtcNow,
+        var baseline = new BaselineReport("jsaa", FixedNow,
             queries.Length, totalWithResults, 0, scored);
-        var reportPath = Path.Combine(_dataRoot, "scored-baseline.json");
-        await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(baseline, _jsonOptions),
+        var binPath = Path.Combine(AppContext.BaseDirectory, "scored-baseline.json");
+        await File.WriteAllTextAsync(binPath, JsonSerializer.Serialize(baseline, _jsonOptions),
             TestContext.Current.CancellationToken);
-        _output.WriteLine($"Baseline written to {reportPath}");
+        _output.WriteLine($"Baseline written to {binPath}");
     }
 
     private static string ResolveBundledDbPath()

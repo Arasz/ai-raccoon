@@ -71,7 +71,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
@@ -92,7 +92,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -140,7 +140,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -212,7 +212,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -279,7 +279,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -341,7 +341,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -387,7 +387,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -457,7 +457,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -485,7 +485,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, null!);
+            }, TimeProvider.System, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 

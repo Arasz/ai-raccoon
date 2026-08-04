@@ -375,7 +375,7 @@ public class MemoryToolsTests
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult((SqliteConnection)null!),
-        (_, _) => Task.FromResult((SqliteConnection)null!), null!)
+        (_, _) => Task.FromResult((SqliteConnection)null!), TimeProvider.System, null!)
     {
         public SyncResult Result { get; set; } = new(0, 0, 0);
 

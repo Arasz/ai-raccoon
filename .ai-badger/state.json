@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-04T10:50:00Z",
+  "lastUpdated": "2026-08-04T13:16:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "test-fix",
+      "summary": "Fixed RunAllBaselineQueries_ReportsMatchStatistics to save report only to bin (removed duplicate _dataRoot write that was cleaned up on Dispose). Eliminated all direct DateTimeOffset.UtcNow access: injected TimeProvider into SyncService, updated DI registration, fixed 11 constructor call sites across 4 test files.",
+      "hasNotes": false
+    },
     {
       "id": "fix-test-issues",
       "summary": "Simplified test setup across 16 test files: extracted shared TestData helper (InfrastructureOptions, NullKeyProvider, FakeTimeProvider, SqliteConnectionFactory) eliminating ~40 lines of duplicated constructor setup per test class. Clean refactor, no behavioral changes.",
