@@ -5,7 +5,7 @@
 **Do not open a public issue for a security problem.**
 
 Report privately through GitHub's [private vulnerability reporting][pvr] (the
-**Security → Report a vulnerability** tab) once this repository is hosted there. If
+**Security -> Report a vulnerability** tab) once this repository is hosted there. If
 private reporting is unavailable, email **araszkiewiczrafal@gmail.com** with
 `ai-raccoon security` in the subject.
 
@@ -37,14 +37,20 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 |---|---|---|
 | stdio transport (default) | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr | The MCP client that launched the process |
 | HTTP transport (opt-in) | Serves MCP over Streamable HTTP at `/mcp` on `localhost` | Any process that can reach the listening port |
-| `get_random_number` tool | Generates a random integer from `Random.Shared`; touches no files, network, or secrets | The calling assistant |
+| Memory tools (17 tools) | Read/write/search/manage the SQLite memory bank; configure embeddings; begin/consolidate/discard workspaces; run degradation sweeps; sync to S3 | The calling MCP client |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed | The pack/push commands and feed contents |
+| Embedded ONNX model | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled) | The model file shipped with the binary |
+| S3-compatible sync (opt-in) | Pushes/pulls VACUUM snapshots to/from an S3-compatible object store | Credentials from environment variables |
 
 **The dangerous direction is the client that launches the process.** A stdio MCP server
 inherits the privileges of whatever starts it and trusts the protocol messages it reads —
-a malicious client can invoke tools, and (for any future tool) anything a tool does runs
-with the server's privileges. Keep the HTTP endpoint opt-in and loopback-only for the same
-reason: an unauthenticated `localhost` listener is reachable by any local process.
+a malicious client can invoke tools, and anything a tool does runs with the server's
+privileges. Keep the HTTP endpoint opt-in and loopback-only for the same reason: an
+unauthenticated `localhost` listener is reachable by any local process.
+
+**Access modes provide a defence-in-depth layer:** `ro` mode allows only reads; `rw`
+(default) adds writes; `full` enables destructive operations (delete, sweep, forget).
+Per-project modes override the global setting, stored in the bank's `settings` table.
 
 ## What is deliberately not here yet
 
