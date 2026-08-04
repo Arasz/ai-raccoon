@@ -27,8 +27,6 @@ public static class BundledModel
     public const string VocabUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt";
 
-    public const string ModelEnvOverrideKey = "AIRACCOON_EMBEDDING_MODEL";
-
     /// <summary>
     ///     The ONNX model to embed with: the merged configured path (--embedding-model /
     ///     AIRACCOON_EMBEDDING_MODEL, null-or-whitespace = unset), else the bundled copy next

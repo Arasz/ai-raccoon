@@ -81,6 +81,20 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_Version_ReturnsShowVersion()
+    {
+        // Direct pin of the load-bearing type-name detection at CliArgs.cs:71 — if a future
+        // System.CommandLine bump renames VersionOptionAction, --version would silently start
+        // the server instead of printing the version; this test catches that.
+        var parsed = CliArgs.Parse(["--version"]);
+
+        parsed.ShowVersion.ShouldBeTrue();
+        parsed.ShowHelp.ShouldBeFalse();
+        parsed.Errors.ShouldBeEmpty();
+        parsed.Options.ShouldBeNull();
+    }
+
+    [Fact]
     public void Parse_TransportHttps_ParsesToHttps()
     {
         // https is a declared enum member; the unsupported warning is emitted downstream.
