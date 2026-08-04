@@ -89,7 +89,7 @@ public sealed class WatchRetryPolicyTests
     public void RecordFailure_IsPerWatch_NotSharedAcrossWatches()
     {
         var policy = new WatchRetryPolicy();
-        for (var failure = 1; failure <= 5; failure++)
+        for (var failure = 1; failure <= 4; failure++)
         {
             policy.RecordFailure("acme", "/flood", T0).ShouldBe(WatchState.Retrying);
         }

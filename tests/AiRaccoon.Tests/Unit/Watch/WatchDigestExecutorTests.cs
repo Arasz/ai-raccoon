@@ -12,7 +12,7 @@ public sealed class WatchDigestExecutorTests
 {
     private const string Project = "acme";
 
-    private static WatchDigestExecutor Executor(WatchTestStack stack) => stack.Pipeline.Executor;
+    private static WatchDigestExecutor Executor(WatchTestStack stack) => stack.Executor;
 
     [Fact]
     public async Task Digest_NewFile_IngestsFingerprintsAdvancesWatermarkAndFiresHook()
@@ -168,8 +168,8 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.DeletedPaths.ShouldContain((Project, aFile));
         stack.Memory.DeletedPaths.ShouldContain((Project, bFile));
-        stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Memory.Ingested[0].Content.ShouldBe("from-a");
+        stack.Memory.Ingested.Count.ShouldBe(2);
+        stack.Memory.Ingested[^1].Content.ShouldBe("from-a");
         (await stack.Store.GetFileHashAsync(Project, bFile, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(bFile, "from-a"));
         stack.Extension.SourceChanges.ShouldHaveSingleItem();

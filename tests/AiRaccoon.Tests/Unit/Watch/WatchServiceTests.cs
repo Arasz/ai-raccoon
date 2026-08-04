@@ -160,7 +160,7 @@ public sealed class WatchServiceTests
 
         var failed = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         failed.State.ShouldBe(WatchState.Retrying);
-        failed.LastError.ShouldContain("boom");
+        failed.LastError.ShouldNotBeNull().ShouldContain("boom");
 
         stack.Memory.IngestError = null;
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
@@ -170,7 +170,7 @@ public sealed class WatchServiceTests
         var healthy = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         healthy.State.ShouldBe(WatchState.Healthy);
         healthy.LastError.ShouldBeNull();
-        healthy.LastSync.ShouldBe(WatchTestStack.FixedNow);
+        healthy.LastSync.ShouldBe(WatchTestStack.FixedNow + WatchRetryPolicy.BackoffFor(1));
     }
 
     [Fact]

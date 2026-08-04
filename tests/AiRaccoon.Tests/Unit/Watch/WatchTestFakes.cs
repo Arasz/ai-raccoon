@@ -32,7 +32,7 @@ internal sealed class WatchTestStack
         var host = new MemoryExtensionHost(Memory, [Extension]);
         Executor = new WatchDigestExecutor(host, Store, host, Time);
         Pipeline = new WatchPipeline(
-            new WatchScheduler(), Executor, new WatchRetryPolicy(), Store, Memory, Time,
+            new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time,
             NullLogger<WatchPipeline>.Instance);
         Service = new WatchService(Store, Memory, Pipeline, Time);
     }
@@ -162,7 +162,6 @@ internal sealed class FakeMemoryStore : IMemoryStore
     public async Task<int> IngestFileAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default)
     {
-        FirstIngestTcs.TrySetResult();
         if (IngestError is not null)
         {
             throw IngestError;
@@ -170,6 +169,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
         var content = await File.ReadAllTextAsync(path, cancellationToken);
         Ingested.Add((projectId, path, content));
+        FirstIngestTcs.TrySetResult();
         if (OnIngest is not null)
         {
             await OnIngest(path);

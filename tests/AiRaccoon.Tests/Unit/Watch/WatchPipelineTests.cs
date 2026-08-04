@@ -218,7 +218,7 @@ public sealed class WatchPipelineTests
 
         var failed = stack.Pipeline.GetStatuses(Project).Single();
         failed.State.ShouldBe(WatchState.Retrying);
-        failed.LastError.ShouldContain("disk boom");
+        failed.LastError.ShouldNotBeNull().ShouldContain("disk boom");
 
         stack.Memory.IngestError = null;
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
@@ -319,7 +319,7 @@ public sealed class WatchPipelineTests
 
         var failed = stack.Pipeline.GetStatuses(Project).Single();
         failed.State.ShouldBe(WatchState.Retrying);
-        failed.LastError.ShouldContain("hook boom");
+        failed.LastError.ShouldNotBeNull().ShouldContain("hook boom");
 
         stack.Extension.ThrowOnSourceChanged = false;
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
@@ -342,25 +342,43 @@ public sealed class WatchPipelineTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var run = stack.Pipeline.RunAsync(cts.Token);
 
-        await stack.Time.AdvanceAsync(WatchPipeline.TickInterval);
-        await stack.Memory.FirstIngestTcs.Task.WaitAsync(cts.Token);
+        // First tick (~1s): the initial create is ingested.
+        await AdvanceUntilAsync(stack, () => stack.Memory.FirstIngestTcs.Task.IsCompleted, cts.Token);
         stack.Memory.Ingested.ShouldHaveSingleItem();
 
         // A digest failure must not kill the loop: the next tick still runs and succeeds.
+        // (Content changes so the digest is not hash-skipped and reaches the failing ingest.)
         stack.Memory.IngestError = new IOException("boom");
+        await File.WriteAllTextAsync(file, "v2", TestContext.Current.CancellationToken);
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
-        await stack.Time.AdvanceAsync(WatchPipeline.TickInterval);
-        await EventuallyAsync(() => stack.Pipeline.GetStatuses(Project).Single().State == WatchState.Retrying,
-            cts.Token);
+        await AdvanceUntilAsync(stack,
+            () => stack.Pipeline.GetStatuses(Project).Single().State == WatchState.Retrying, cts.Token);
 
         stack.Memory.IngestError = null;
+        await File.WriteAllTextAsync(file, "v3", TestContext.Current.CancellationToken);
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
-        await stack.Time.AdvanceAsync(WatchPipeline.TickInterval + WatchRetryPolicy.BackoffFor(1));
-        await EventuallyAsync(() => stack.Pipeline.GetStatuses(Project).Single().State == WatchState.Healthy,
-            cts.Token);
+        await AdvanceUntilAsync(stack,
+            () => stack.Pipeline.GetStatuses(Project).Single().State == WatchState.Healthy, cts.Token);
 
         await cts.CancelAsync();
         await run;
+    }
+
+    /// <summary>Drives the fake clock forward in small steps until the condition holds (loop cadence is real-async).</summary>
+    private static async Task AdvanceUntilAsync(WatchTestStack stack, Func<bool> condition,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition not met while advancing the fake clock.");
+            }
+
+            stack.Time.Advance(TimeSpan.FromMilliseconds(100));
+            await Task.Delay(10, cancellationToken);
+        }
     }
 
     private static async Task EventuallyAsync(Func<bool> condition, CancellationToken cancellationToken)
