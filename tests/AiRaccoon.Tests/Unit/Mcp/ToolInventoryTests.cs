@@ -41,6 +41,50 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_sync");
     }
 
+    /// <summary>MS4: Assert that every [McpServerTool].Name has a matching const tag in MemoryTools.</summary>
+    [Fact]
+    public void McpToolNames_MatchConstStrings()
+    {
+        // Gather all TN_* const field values from MemoryTools.
+        var constFields = typeof(MemoryTools)
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.Name.StartsWith("TN_"))
+            .ToList();
+
+        var constValues = new Dictionary<string, string>();
+        foreach (var f in constFields)
+        {
+            var val = f.GetRawConstantValue() as string;
+            if (val is not null)
+            {
+                constValues[val] = f.Name;
+            }
+        }
+
+        // Gather all [McpServerTool].Name values.
+        var toolMethods = typeof(MemoryTools)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Select(m => new
+            {
+                Method = m,
+                Attr = m.GetCustomAttribute<McpServerToolAttribute>()
+            })
+            .Where(x => x.Attr is not null)
+            .ToList();
+
+        toolMethods.Count.ShouldBe(17);
+
+        foreach (var tm in toolMethods)
+        {
+            var toolName = tm.Attr!.Name!;
+            constValues.ShouldContainKey(toolName,
+                $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
+
+            // Verify the const field exists and is prefixed with TN_
+            constValues[toolName].ShouldStartWith("TN_");
+        }
+    }
+
     [Fact]
     public void MemoryPrompts_ExposesBothSpecPrompts()
     {

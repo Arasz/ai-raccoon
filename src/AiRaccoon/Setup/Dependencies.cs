@@ -11,6 +11,7 @@ using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Observability;
 
 namespace AiRaccoon.Setup;
 
@@ -84,5 +85,6 @@ public static partial class Dependencies
         services.AddSingleton<ForgettingPolicyService>();
         services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
             sp.GetRequiredService<IMemoryStore>()));
+        services.AddSingleton<ToolCallMetrics>();
     }
 }
