@@ -267,6 +267,22 @@ stratification, corpus integrity checks. Structural queries S1-S6 scored.
    Section-level hit@5 over A1–A7 ≥ 4/6 on the clean corpus. No regression on content-only
    file-level ranks.
 
+**Gate amendments (Wave 6 integration, 2026-08-04 — measured on the merged W1+W2+W6 state):**
+- (b) measured: S4 Consequences-chunk ≤ 3 ✓; S2 file rank 1 ✓ but the Decision chunk ranks 5
+  (top-1 is the ADR's metadata header — within-file sibling competition). **S2's decision-chunk
+  ≤ 3 target moves to Wave 3's gate** (source-affinity/document-first ranking is the mechanism).
+  Section-level hit@5 measured 5/6 ≥ 4/6 ✓.
+- File-level trade (bounded, content-verified): A1 and A4 expected files move 1 → 2 — the
+  rank-1 results are same-knowledge alternatives (A1: frontend-architecture.md#3 is the
+  evidence section ADR-0011 links to; A4: behaviour-specification.md#3 states "The MCP server
+  was deleted; see ADR-0060" — both chunks read and verified). A3 decision chunk 1 → 3
+  (file rank 1 held). **Improvements from the same change: C2 hybrid restored to rank 1 (the
+  Wave 4 C2 acceptance criterion is already satisfied), A6 file 4 → 2, A7 exact chunk restored
+  to rank 4, ADR recall@5 0.559 → 0.581.**
+- Open question (follow-up, not blocking): `structureAlpha` is read from settings but
+  `memory_configure` cannot write it — the constant is effectively fixed at 0.5; expose the
+  setting (or a dedicated tool) when α tuning is next needed.
+
 **Research backing**: On the old (polluted 6675-chunk) corpus, the dual-vector with fixed-α=0.5
 lifted section hits from 4/6 (content-only) to 6/6 and MRR(section) from 0.37 to 0.46–0.56.
 FTS alone achieved 1/6. The heading-path information is present in the corpus markdown — storing
