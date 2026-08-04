@@ -101,11 +101,13 @@ and embedding them is a schema + pipeline change.
 2. **Bigram phrase extraction**: for queries with ≥3 content tokens, add adjacent token pairs as
    quoted FTS5 phrases (e.g. `"shadcn ui"`). Under AND semantics (short queries), bigrams add no
    constraint — skip them.
-3. **AND with OR fallback**: join remaining tokens with AND when ≤4 tokens; if the MATCH returns
-   zero rows, retry with OR-join. The OR retry **includes bigrams** when the original content
-   had ≥3 tokens (don't lose the precision signal when falling back). This captures AND's
-   precision benefit for short queries while preventing the zero-match regression measured on
-   the old corpus (A2, A6).
+3. **AND with OR fallback**: join remaining tokens with AND when ≤4 tokens; if the MATCH
+   returns fewer rows than `max(content-token count, requested limit)` — an AND list that
+   small cannot be a useful ranked signal on its own (A6/C2 measured cases) — retry with
+   OR-join. The OR retry **includes bigrams** when the original content had ≥3 tokens (don't
+   lose the precision signal when falling back). This captures AND's precision benefit for
+   short queries while preventing the zero-match/under-match regression measured on the old
+   corpus (A2, A6).
 4. **Re-run full baseline** against the clean corpus, including the diagnostic triplet: Q1 "What
    is ADR-0070 about?" (full question), Q2 "ADR-0070" (identifier-only), Q3 "documentation
    structure trust model" (content-only).

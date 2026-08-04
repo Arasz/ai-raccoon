@@ -112,38 +112,64 @@ public sealed class SqliteMemoryStore(
             queryVector = EmbeddingBlob.ToBytes(embedding[0].Vector);
         }
 
-        var ftsExpression = FtsQueryNormalizer.Normalize(query.Query);
+        var plan = FtsQueryNormalizer.BuildPlan(query.Query);
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
-        foreach (var context in SearchContexts.For(query))
+        var contexts = SearchContexts.For(query).ToList();
+
+        foreach (var context in contexts)
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
-            var parameters = new DynamicParameters();
-            parameters.Add("query", ftsExpression);
-            // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
-            // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
-            // the caller's limit and minScore still apply in the final merger pass.
-            parameters.Add("limit", CandidateWindowFor(query.Limit));
-            if (queryVector is not null)
+            var limit = CandidateWindowFor(query.Limit);
+
+            // FTS modality: primary expression first; a per-context under-match — fewer rows
+            // than the query has terms, or fewer than the caller asked for (a list that small
+            // cannot be a useful ranked signal on its own; A6/C2 measured cases) — retries
+            // with the OR fallback. Decided per context so one weak context cannot force the
+            // fallback on the others; skipped when the keyword weight is zero (a weight-0
+            // list contributes nothing to RRF).
+            IReadOnlyList<MemorySearchResult> ftsResults = [];
+            if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
-                parameters.Add("queryVector", queryVector);
+                ftsResults = await QueryFtsBatchAsync(connection, filter,
+                    SearchParameters(plan.Expression), cancellationToken).ConfigureAwait(false);
+                if (plan.Fallback is not null && ftsResults.Count < Math.Max(plan.TokenCount, query.Limit))
+                {
+                    ftsResults = await QueryFtsBatchAsync(connection, filter,
+                        SearchParameters(plan.Fallback), cancellationToken).ConfigureAwait(false);
+                }
             }
 
-            foreach (var (key, value) in values)
-            {
-                parameters.Add(key, value);
-            }
-
-            var ftsResults = ftsExpression.Length == 0
-                ? []
-                : await QueryFtsBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+            // Vector modality: independent of the FTS expression — run once per context.
             var vectorResults = queryVector is null
                 ? []
-                : await QueryVectorBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+                : await QueryVectorBatchAsync(connection, filter,
+                    SearchParameters(""), cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
                 [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
                 query.RrfK, minScore: 0, limit: int.MaxValue));
+
+            DynamicParameters SearchParameters(string ftsExpression)
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("query", ftsExpression);
+                // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
+                // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
+                // the caller's limit and minScore still apply in the final merger pass.
+                parameters.Add("limit", limit);
+                if (queryVector is not null)
+                {
+                    parameters.Add("queryVector", queryVector);
+                }
+
+                foreach (var (key, value) in values)
+                {
+                    parameters.Add(key, value);
+                }
+
+                return parameters;
+            }
         }
 
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
