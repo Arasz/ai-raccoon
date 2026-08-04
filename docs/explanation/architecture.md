@@ -1,418 +1,461 @@
-# Architecture
+# AiRaccoon architecture
 
-How the AiRaccoon memory system is built: a single-file SQLite bank, a managed .NET
-store layer, hybrid FTS5+vec0 search, S3-compatible sync, workspace sandboxes, and a
-degradation policy. This page explains the *shape* of the system — for the tool contract
-see `docs/reference/agent-memory-server.md`, for the design decisions that led here see
-`docs/explanation/agent-memory-architecture.md`.
+How the native .NET memory store works: the single-file SQLite schema, data flows,
+search pipeline, sync cycle, workspace lifecycle, access control, and the algorithms
+that power them. For the *why* behind the design decisions, see
+[agent-memory-architecture.md](agent-memory-architecture.md). For the mechanical
+contract (tool names, parameters, env vars), see
+[`docs/reference/agent-memory-server.md`](../reference/agent-memory-server.md).
 
 ## Data model
 
-One SQLite file per install scope. Four core tables plus two virtual tables (FTS5, vec0)
-and sync metadata.
+All tables live in a single `memory.db` file — no external extensions, no meta
+database, no provisioning. The schema is idempotent (IF NOT EXISTS on every DDL
+statement) and safe to run on every bank open.
 
 ```mermaid
 erDiagram
-  workspaces {
-    text id PK
-    text project_id
-    text agent_id
-    text name
-    text status
-    integer created_at
-    integer closed_at
-  }
-  entries {
-    integer id PK
-    text hash
-    text path
-    text value
-    text scope
-    text project_id
-    text context_label
-    text workspace_id FK
-    text agent_id
-    integer created_at
-    integer updated_at
-    integer access_count
-    integer last_accessed_at
-    real rating
-    integer ttl_days
-    text embed_state
-    blob embedding
-  }
-  settings {
-    text key PK
-    text value
-  }
-  sync_meta {
-    text key PK
-    text value
-  }
-  sync_tombstones {
-    text hash
-    text scope
-    integer deleted_at
-  }
-  workspaces ||--o{ entries : "workspace_id (isolated)"
+    workspaces {
+        TEXT id PK
+        TEXT project_id
+        TEXT agent_id
+        TEXT name
+        TEXT status
+        INTEGER created_at
+        INTEGER closed_at
+    }
+
+    entries {
+        INTEGER id PK
+        TEXT hash
+        TEXT path
+        TEXT value
+        TEXT scope
+        TEXT project_id
+        TEXT context_label
+        TEXT workspace_id FK
+        TEXT agent_id
+        INTEGER created_at
+        INTEGER updated_at
+        INTEGER access_count
+        INTEGER last_accessed_at
+        REAL rating
+        INTEGER ttl_days
+        TEXT embed_state
+        BLOB embedding
+    }
+
+    settings {
+        TEXT key PK
+        TEXT value
+    }
+
+    sync_meta {
+        TEXT key PK
+        TEXT value
+    }
+
+    sync_tombstones {
+        TEXT hash
+        TEXT scope
+        INTEGER deleted_at
+    }
+
+    workspaces ||--o{ entries : "workspace_id"
 ```
 
-- **`entries`** holds every piece of stored content. Scope (`shared`, `project`, or `custom`)
-  partitions committed rows; `workspace_id` isolates sandbox rows. The `CHECK` constraint
-  enforces mutual exclusion: a row is either committed (scope set, workspace null) or
-  isolated (workspace set, scope null).
-- **`settings`** stores access modes, embedding configuration, and sweep thresholds as
-  key-value pairs.
-- **`sync_meta`** tracks sync watermarks (last ETag, last pull timestamp).
-- **`sync_tombstones`** records deletions so remote merges can replicate them.
-- **`entries_fts`** is an external-content FTS5 virtual table over `entries(value)` with
-  triggers keeping it in sync on insert/update/delete.
-- **`vec_entries`** is a vec0 virtual table (`float[384]`) populated via trigger when
-  `embed_state` transitions to `embedded`. Marking `pending` or deleting the row removes
-  the vec entry.
+### Context partitioning
 
-## Layers
+The `scope` + `project_id` + `context_label` + `workspace_id` columns partition
+entries into five logical contexts:
 
-```mermaid
-flowchart TD
-  subgraph Presentation["Presentation (AiRaccoon)"]
-    TOOLS["Tools/MemoryTools.cs\n17 MCP tools"]
-    ACCESS["Access/MemoryAccessGuard\nmode enforcement"]
-  end
-  subgraph Core["Core (AiRaccoon.Core)"]
-    PORT["IMemoryStore port"]
-    RATING["Rating/RatingPolicy"]
-    DEG["Degradation/DegradationPolicy"]
-    CHUNK["Chunking/MarkdownChunker"]
-    ACCESS_POL["Access/AccessModePolicy"]
-    WS["Workspace/"]
-  end
-  subgraph Infrastructure["Infrastructure (AiRaccoon.Infrastructure)"]
-    STORE["Sqlite/SqliteMemoryStore\nmanaged store"]
-    WS_SVC["Workspace/WorkspaceService"]
-    SWEEP["Degradation/SweepService"]
-    EMBED["Embedding/EmbeddingService\nONNX + remote"]
-    CHUNK_IMPL["Chunking/TokenizerChunker\no200k_base"]
-    SYNC["Sync/SyncService\nS3-compatible"]
-    RRF["Sqlite/ReciprocalRankFusion"]
-  end
-  TOOLS --> ACCESS
-  ACCESS --> PORT
-  PORT --> STORE
-  STORE --> RRF
-  STORE --> EMBED
-  STORE --> CHUNK_IMPL
-  WS_SVC --> PORT
-  SWEEP --> PORT
-  SYNC --> PORT
-```
+| Context | scope | workspace_id | Synced | Swept |
+|---|---|---|---|---|
+| `shared` | `'shared'` | NULL | yes | exempt |
+| `project:<id>` | `'project'` | NULL | yes | yes |
+| `workspace:<id>` | NULL | set | never | no |
+| `custom` (e.g. `docs:api`) | `'custom'` | NULL | yes | project sweep only |
+
+The CHECK constraint `(workspace_id IS NULL AND scope IN ('shared','project','custom'))
+OR (workspace_id IS NOT NULL AND scope IS NULL)` enforces the mutual exclusion at
+the schema level.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:21-119`
+
+### Indexes and virtual tables
+
+- `entries_fts` — FTS5 external-content index over `entries(value)` with triggers
+  for INSERT, DELETE, and UPDATE of `value`.
+- `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
+  for semantic search. Triggers sync it with `embed_state` changes.
+- `idx_entries_scope_project` — the primary lookup path for context-filtered queries.
+- `idx_entries_hash` — content dedup and per-hash lookups.
+- `idx_entries_workspace` — workspace-scoped queries.
+- `idx_entries_embed_state` — pending-embed queue scans.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
 
 ## Write path
 
-Every write flows through content-hash dedup, chunk-aware ingestion with token-bounded
-splitting, and embedding when an engine is configured.
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant M as MemoryTools
+    participant S as SqliteMemoryStore
+    participant H as ContentHash
+    participant K as MarkdownChunker
+    participant E as EmbeddingService
+    participant D as SQLite (memory.db)
+
+    C->>M: memory_write(projectId, content)
+    M->>S: WriteAsync(request)
+    S->>S: Resolve context (project/shared/workspace/custom)
+    S->>H: Of(path, value) -> SHA-256 hash
+    S->>D: SELECT committed rows by value (global dedup)
+    alt existing row found
+        D-->>S: existing entry
+        S-->>M: return existing entry
+    else new row
+        S->>D: INSERT entry (embed_state='pending')
+        D-->>S: last_insert_rowid
+        S->>D: SELECT embedding settings
+        alt engine configured
+            S->>E: Generate embedding
+            E-->>S: float[384]
+            S->>D: UPDATE embed_state='embedded', embedding=blob
+        else no engine
+            Note right of S: stays pending — embed later
+        end
+        S-->>M: return new entry
+    end
+```
+
+For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), the path
+diverges: the file content is split into **token-aware chunks** before hashing
+and insertion. The chunker uses the o200k_base tokenizer with code-fence-aware
+splitting and an overlay window for context continuity between chunks.
+
+**Chunk bounds** are clamped to the configured embedding engine's maximum input
+tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.
+When no engine is configured, the default is 256 tokens per chunk with a 48-token
+overlay.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:41-93`
+> (write), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:652-716`
+> (chunk insertion), `src/AiRaccoon.Core/Memory/ContentHash.cs:12-23`
+> (hashing), `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:11-46`
+> (splitting), `src/AiRaccoon.Infrastructure/Chunking/TokenizerChunker.cs:7-14`
+> (tokenizer)
+
+## Query flow
 
 ```mermaid
 sequenceDiagram
-  participant CLIENT as MCP Client
-  participant TOOL as MemoryTools
-  participant STORE as SqliteMemoryStore
-  participant DB as SQLite Bank
-  participant EMBED as EmbeddingService
+    participant C as MCP Client
+    participant M as MemoryTools
+    participant S as SqliteMemoryStore
+    participant E as EmbeddingService
+    participant F as FTS5
+    participant V as vec0
+    participant R as ReciprocalRankFusion
+    participant D as SQLite
 
-  CLIENT->>TOOL: memory_write(projectId, content)
-  TOOL->>STORE: WriteAsync(request)
-  STORE->>STORE: resolve context (workspace or project)
-  STORE->>STORE: derive path = SHA-256(content).md
-  STORE->>STORE: hash = ContentHash.Of(path, content)
-  STORE->>DB: SELECT committed row by value
-  alt global dedup hit
-    DB-->>STORE: existing row
-    STORE-->>TOOL: return existing entry
-  else new content
-    STORE->>DB: INSERT into entries
-    opt embedding engine configured
-      STORE->>EMBED: generate embedding
-      EMBED-->>STORE: float[384]
-      STORE->>DB: UPDATE embed_state, embedding
-      DB->>DB: trigger syncs vec_entries
+    C->>M: memory_search(projectId, query, scope, workspaceId)
+    M->>S: SearchAsync(query)
+    S->>D: Read embedding settings
+    alt engine configured
+        S->>E: Embed query -> float[384]
+        E-->>S: query vector
+    else no engine
+        Note right of S: vector modality absent
     end
-    STORE-->>TOOL: return new entry
-  end
-  TOOL-->>CLIENT: WriteResult(hash, path, context)
-```
-
-### Content identity (FR-NM-7)
-
-Hashes are path-scoped SHA-256: `SHA256(UTF8(path) || UTF8(value))` with no separator.
-Identical content under different paths produces different hashes. For `memory_write`
-(which carries no caller path), the path is derived from the content itself:
-`SHA256(content).md` — so identical content always maps to the same slot.
-
-### Dedup
-
-Before inserting a new row, the store checks committed rows (`workspace_id IS NULL`)
-within the same project for identical content (`value = @value`). A hit returns the
-existing entry — no duplicate row. This is per-project, not cross-project.
-
-### Token-aware chunking
-
-File ingestion (`memory_ingest_file`, `memory_ingest_directory`) chunks content through
-a line-granular markdown splitter backed by the `o200k_base` tokenizer. Fenced code
-blocks (` ``` ` and `~~~`) are atomic units — a boundary never falls inside one.
-Chunk size is clamped to the configured embedding engine's token window (default
-256 tokens, overlay 48). Content is indexed only from `.md`, `.markdown`, and `.txt`
-files; hidden files (dot-prefixed) are skipped.
-
-## Search flow
-
-Hybrid search fuses two ranked lists per in-scope context, then merges across contexts.
-
-```mermaid
-sequenceDiagram
-  participant CLIENT as MCP Client
-  participant TOOL as MemoryTools
-  participant STORE as SqliteMemoryStore
-  participant DB as SQLite Bank
-  participant FTS as entries_fts (FTS5)
-  participant VEC as vec_entries (vec0)
-
-  CLIENT->>TOOL: memory_search(query, scope)
-  TOOL->>STORE: SearchAsync(query)
-  STORE->>STORE: normalize query to FTS5 OR-expression
-  opt embedding configured
-    STORE->>STORE: embed query text
-  end
-  loop per context (shared, project, workspace)
-    par FTS5 keyword search
-      STORE->>FTS: MATCH normalized query, bm25 ranking
-      FTS-->>STORE: ranked results + snippets
-    and vec0 semantic search
-      STORE->>VEC: vec_distance_cosine KNN
-      VEC-->>STORE: ranked results
+    Note right of S: For each context in scope
+    loop per context (shared, project, workspace)
+        S->>D: Pending-count filter
+        S->>F: FTS5 search (keyword modality)
+        F-->>S: ranked list (snippet)
+        opt query vector available
+            S->>V: vec0 KNN search (semantic modality)
+            V-->>S: ranked list (distance)
+        end
+        S->>R: Fuse(ftsList, vectorList, k, weights)
+        R-->>S: per-context fused results
     end
-    STORE->>STORE: ReciprocalRankFusion.Fuse(FTS, vec0, k=60, weights)
-  end
-  STORE->>STORE: SearchResultMerger.Merge(context batches, minScore, limit)
-  STORE->>DB: bump access_count, update rating per RatingPolicy
-  STORE-->>TOOL: fused results
-  TOOL-->>CLIENT: SearchResultList
+    S->>S: SearchResultMerger.Merge(batches)
+    S->>D: Bump access_count, rating (per hash)
+    S-->>M: merged results (sorted by ranking)
+    M-->>C: SearchResultList
 ```
 
-### RRF fusion
+### Hybrid fusion
 
-Reciprocal rank fusion (RRF) combines the FTS5 keyword list and the vec0 semantic list.
-Each result's score is a weighted sum:
+The search pipeline runs **one query per in-scope context** (`shared`,
+`project:<id>`, and optionally `workspace:<id>`). Within each context, two
+modalities produce ranked lists:
 
-```
-score(hash) = Σ weight / (k + rank)
-```
+1. **FTS5 (keyword):** the normalized query expression is matched against the
+   `entries_fts` external-content index. Results carry a snippet from
+   `snippet()`. If the FTS5 tokenizer rejects a pathological query, the
+   keyword modality silently returns an empty list — search degrades, never
+   crashes.
 
-where `k` defaults to 60, weights default to 1 for each modality, and ranks are
-1-based. The fused score is normalized so the top result is 1.0. The FTS5 list's
-`snippet()` payload wins when both modalities retrieve the same entry.
+2. **vec0 (semantic):** when an embedding engine is configured, the query is
+   embedded and a KNN search runs against the `vec_entries` table. Without
+   an engine, this modality is simply absent.
 
-The per-modality candidate window is `max(limit * 3, 100)` — wider than the caller's
-limit — so overlap candidates ranked 20–100 are not starved. The caller's `minScore`
-(0.7 default) and `limit` apply at the final merger pass.
+**Per-modality candidate window:** `K = max(limit × 3, 100)` — this prevents
+overlap candidates ranked beyond the caller's limit (e.g. rank 30 when
+`limit=10`) from being starved out of the fusion.
 
-When no embedding engine is configured, the vec0 modality is absent and search
-degrades to FTS5-only (never a crash). A pathological FTS5 query that trips the
-tokenizer similarly degrades to vector-only.
+Each context's two lists are fused with **Reciprocal Rank Fusion (RRF)**:
+`score = Σ weight / (k + rank)`, then normalized to the max so the top result
+is 1.0. The per-context batches are then merged with a second RRF pass at
+uniform weight, and `minScore` + `limit` are applied.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:95-152`
+> (search), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
+> (RRF), `src/AiRaccoon.Infrastructure/Sqlite/SearchResultMerger.cs:12-24`
+> (merger), `src/AiRaccoon.Infrastructure/Sqlite/SearchContexts.cs:9-29`
+> (context resolution)
 
 ## Sync cycle
 
-Sync produces a VACUUM snapshot of the local bank, strips workspace rows, pulls the
-remote snapshot, merges via ATTACH, and pushes with If-Match for conflict detection.
+Sync pushes and pulls the bank's committed contexts (`shared` + every
+`project:<id>`) to S3-compatible object storage. Workspace rows are stripped
+before they leave the bank — they are never synced. The cycle is serialised
+by a `SemaphoreSlim(1,1)` gate.
 
 ```mermaid
 sequenceDiagram
-  participant TOOL as MemoryTools
-  participant SYNC as SyncService
-  participant CLOUD as S3 Cloud Store
-  participant DB as Local SQLite Bank
+    participant C as MCP Client
+    participant T as MemoryTools
+    participant S as SyncService
+    participant L as Local SQLite
+    participant R as S3 Cloud Store
 
-  TOOL->>SYNC: MemorySyncAsync(projectId, objectKey)
-  SYNC->>SYNC: acquire semaphore (single writer)
-  SYNC->>DB: VACUUM INTO temp snapshot
-  SYNC->>DB: DELETE workspace rows from snapshot
-  SYNC->>DB: PRAGMA quick_check
-  SYNC->>CLOUD: PullAsync(objectKey)
-  CLOUD-->>SYNC: remote snapshot + ETag
-  alt remote exists
-    SYNC->>DB: ATTACH remote snapshot
-    SYNC->>DB: INSERT OR IGNORE entries (skip dupes, skip tombstones)
-    SYNC->>DB: UPSERT settings (LWW)
-    SYNC->>DB: INSERT OR IGNORE sync_tombstones
-    SYNC->>DB: DELETE tombstoned local rows
-    SYNC->>DB: DETACH remote
-    SYNC->>DB: reindex merged rows (embed_state = 'pending')
-  end
-  SYNC->>DB: VACUUM INTO merged snapshot
-  loop up to 3 retries
-    SYNC->>CLOUD: PushAsync(objectKey, snapshot, If-Match ETag)
-    alt conflict (412)
-      CLOUD-->>SYNC: conflict
-      SYNC->>CLOUD: PullAsync (re-fetch)
-      SYNC->>DB: ATTACH + merge + DETACH
-      SYNC->>DB: VACUUM INTO new snapshot
-    else success
-      CLOUD-->>SYNC: new ETag
-      SYNC->>DB: store last_etag in sync_meta
+    C->>T: memory_sync(projectId)
+    T->>S: MemorySyncAsync(projectId, objectKey)
+    Note right of S: acquire gate (SemaphoreSlim)
+
+    Note over S,L: 1. Snapshot
+    S->>L: VACUUM INTO temp snapshot
+    S->>L: DELETE workspace entries from snapshot
+    S->>L: VACUUM (compact snapshot)
+    S->>L: PRAGMA quick_check
+
+    Note over S,R: 2. Pull
+    S->>R: PullAsync(objectKey)
+    R-->>S: remote snapshot (or null)
+    alt remote exists
+        S->>L: PRAGMA quick_check on remote
+        S->>L: ATTACH DATABASE remote
+        S->>L: INSERT OR IGNORE entries (merge)
+        S->>L: INSERT ... ON CONFLICT settings (merge)
+        S->>L: INSERT OR IGNORE sync_tombstones (merge)
+        S->>L: DELETE FROM entries WHERE hash IN tombstones
+        S->>L: GC old tombstones
+        S->>L: Record last_pull_at watermark
+        S->>L: Reindex: mark merged rows pending
+        S->>L: DETACH DATABASE remote
+        S->>L: WAL checkpoint TRUNCATE
+        S->>L: VACUUM INTO merged snapshot
     end
-  end
-  SYNC-->>TOOL: SyncResult(sent, received, reindexed)
+
+    Note over S,R: 3. Push (If-Match, max 3 retries)
+    S->>R: PushAsync(objectKey, snapshot, if-match=remoteETag)
+    R-->>S: new ETag
+    S->>L: UPSERT sync_meta.last_etag = new ETag
+    alt 412 conflict
+        Note right of S: re-pull, re-merge, re-push
+    end
+
+    Note right of S: release gate
+    S-->>T: SyncResult(sent, received, reindexed)
 ```
 
-### Merge strategy
+**Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
+merge — they've done their job and the cloud copy has the deletion record.
 
-- **Entries**: `INSERT OR IGNORE` by content-hash, skipping workspace rows and
-  tombstoned hashes. Incoming embeddings are reset to `pending` so the local
-  engine re-embeds them.
-- **Settings**: `INSERT ON CONFLICT DO UPDATE` (last-writer-wins).
-- **Tombstones**: `INSERT OR IGNORE`, then `DELETE` local rows matching remote
-  tombstones. Tombstones older than the last pull watermark are garbage-collected.
+**If-Match push:** the push carries the `remoteETag` from the pull. If another
+client pushed in between, the store returns 412 Precondition Failed. The
+service re-pulls, re-merges, and re-pushes up to 3 times before surfacing a
+`SyncConflictException`.
 
-### Cloud store
-
-Sync goes through an S3-compatible object store (`ICloudStore`). Configuration
-is via environment variables: `AIRACCOON_SYNC_ENDPOINT`, `AIRACCOON_SYNC_BUCKET`,
-`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`. When unconfigured,
-a `NullCloudStore` is used and `memory_sync` returns a "not configured" error.
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:42-187`
+> (cycle), `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:189-339`
+> (merge), `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs`
+> (S3 backend)
 
 ## Workspace lifecycle
 
-Workspaces are sandboxed contexts that isolate an agent's in-flight work. They
-never sync to the cloud and are never swept.
-
 ```mermaid
 stateDiagram-v2
-  [*] --> Active: memory_workspace_begin
-  Active --> Active: memory_write(workspace_id)
-  Active --> Consolidating: memory_workspace_consolidate
-  Active --> Closed: memory_workspace_discard
-  Consolidating --> Closed: promote hashes, delete workspace context
-  Closed --> [*]
+    [*] --> Active: memory_workspace_begin
+    state Active {
+        [*] --> Writing
+        Writing --> Writing: memory_write(workspaceId)
+        Writing --> Reviewing: memory_workspace_status
+        Reviewing --> Writing: more writes
+    }
+    Active --> Closed: memory_workspace_consolidate
+    Active --> Closed: memory_workspace_discard
+    Closed --> [*]
 ```
 
-1. **Begin** (`memory_workspace_begin`): Creates a v7 GUID workspace ID and
-   inserts a row into the `workspaces` table with `status = 'Active'`.
-2. **Write** (`memory_write` with `workspace_id`): Content lands in the
-   workspace's isolated context (`workspace:<id>`) — invisible to committed
-   searches and absent from sync.
-3. **Consolidate** (`memory_workspace_consolidate` with `keep` hashes or `['all']`):
-   Promotes each kept hash into the project's committed context via
-   `memory_add_content`, preserving the entry's logical path. Then deletes the
-   entire workspace context and marks the workspace `Closed`.
-4. **Discard** (`memory_workspace_discard`): Deletes the workspace context and
-   all its entries without promoting anything. Marks the workspace `Closed`.
+`memory_workspace_begin` inserts an `Active` row into the `workspaces` table and
+returns a **v7 (time-sortable) UUID** as the workspace id. The agent writes into
+the workspace by passing that id to `memory_write`; the write lands in
+`workspace:<id>`, fully isolated from the project's committed memory.
 
-A workspace that was begun but never closed survives a crash — the `workspaces`
-row persists with its `status = 'Active'` and entries remain queryable by
-`memory_workspace_status`.
+**Consolidate:** `memory_workspace_consolidate(keep=["all"])` promotes every
+entry from the workspace outbox into `project:<id>`. Passing specific hashes
+promotes only those; everything else in the workspace context is deleted. The
+workspace row is marked `Closed` with `closed_at` set — traceable after a
+crash.
+
+**Discard:** `memory_workspace_discard` deletes the entire workspace context
+and marks the workspace `Closed` — nothing promoted, nothing kept.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Workspace/WorkspaceService.cs:14-83`
+> (lifecycle), `src/AiRaccoon/Tools/MemoryTools.cs:279-344` (tool boundary)
 
 ## Access mode resolution
 
-Three access modes gate tool operations at the MCP boundary:
+Three-tier access control, enforced at the tool boundary before any store
+operation:
 
 ```mermaid
 flowchart TD
-  START["Tool call"] --> READ_CHECK{"Requirement = Read?"}
-  READ_CHECK -->|yes| ALLOW["Allow"]
-  READ_CHECK -->|no| RESOLVE["Resolve mode"]
-  RESOLVE --> PER_PROJ["per-project setting?"]
-  PER_PROJ -->|found| PER_PROJ_MODE["use per-project mode"]
-  PER_PROJ -->|not set| GLOBAL["global setting?"]
-  GLOBAL -->|found| GLOBAL_MODE["use global mode"]
-  GLOBAL -->|not set| DEFAULT["default: rw"]
-  PER_PROJ_MODE --> CHECK
-  GLOBAL_MODE --> CHECK
-  DEFAULT --> CHECK
-  CHECK{"Allows(mode, requirement)?"}
-  CHECK -->|yes| ALLOW
-  CHECK -->|no| DENY["throw access-denied"]
+    A["memory_* tool called"] --> B{"AccessRequirement?"}
+    B -->|Read| C[Always allowed]
+    B -->|Write| D{"Mode is rw or full?"}
+    B -->|Destructive| E{"Mode is full?"}
+    D -->|yes| C
+    D -->|no| F["throw McpException"]
+    E -->|yes| C
+    E -->|no| F
+
+    G["Mode Resolution"] --> H{"per-project setting?"}
+    H -->|yes| I["use per-project"]
+    H -->|no| J{"global setting?"}
+    J -->|yes| K["use global"]
+    J -->|no| L["default: rw"]
 ```
 
-| Mode | Allows | Setting key |
-|---|---|---|
-| `ro` | Read only | — |
-| `rw` | Read + Write (default) | — |
-| `full` | Read + Write + Destructive (delete, sweep, forget) | — |
+The global default is `rw`. On first bank open, the `AIRACCOON_ACCESS_MODE`
+environment variable seeds the global setting (`access.mode.global` in the
+settings table) but never overwrites an operator-set value. A per-project
+override (`access.mode.project:<id>`) takes precedence over the global setting.
 
-The default mode is `rw`. Per-project settings (`access.mode.project:<id>`) override
-the global setting (`access.mode.global`). Forgetting knobs (sweep threshold, per-entry
-TTL overrides) require `full` mode.
+| Mode | Reads | Writes | Destructive (delete, sweep, consolidate) |
+|---|---|---|---|
+| `ro` | ✓ | ✗ | ✗ |
+| `rw` (default) | ✓ | ✓ | ✗ |
+| `full` | ✓ | ✓ | ✓ |
+
+> **Evidence:** `src/AiRaccoon.Core/Access/AccessMode.cs:6-8` (enum),
+> `src/AiRaccoon.Core/Access/AccessModePolicy.cs:14-22` (resolution),
+> `src/AiRaccoon/Access/MemoryAccessGuard.cs` (enforcement)
 
 ## Algorithms
 
-### Reciprocal rank fusion (RRF)
+### Path-scoped SHA-256 content identity
+
+`ContentHash.Of(path, value)` computes `SHA-256(UTF8(path) || UTF8(value))`
+with **no separator** between path and value bytes. This means identical content
+under different paths yields different hashes — the logical path is part of the
+identity. The result is lowercase hex.
+
+For `memory_write` (which has no caller-supplied path), a stable path is derived
+from the content itself: `SHA-256(UTF8(content)).md`. This keeps the slot
+stable — identical content written twice maps to the same logical path.
+
+> **Evidence:** `src/AiRaccoon.Core/Memory/ContentHash.cs:12-23`
+
+### Reciprocal Rank Fusion (RRF)
+
+Each modality list contributes `weight / (k + rank)` to a result's fused score.
+Default `k = 60`, default weights = 1:1. The fused scores are normalised to
+their maximum so the top result is always 1.0. Results below `minScore` (default
+0.7) are filtered out.
+
+The first modality list that carries a result supplies the payload (so FTS5's
+`snippet()` wins when both modalities retrieve the same hash). An empty list
+contributes nothing — a result is scored by whichever modality retrieved it.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
+
+### Rating and degradation
+
+**Rating** follows a half-life decay model:
 
 ```
-score(hash) = Σ weight_m / (k + rank_m)
+rating = baseScore × 0.5^(ageDays / halfLifeDays) × (1 + accessCount × multiplier)
 ```
 
-- `weight_m`: modality weight (default 1 for both FTS5 and vec0).
-- `k`: RRF cutoff (default 60). Higher `k` dilutes rank differences.
-- `rank_m`: 1-based position in the modality's ranked list.
-- Final scores are normalized: `score / max_score` so the top result is 1.0.
+Defaults: `baseScore = 0.5`, `halfLifeDays = 30`, `multiplier = 0.1`. The rating
+is recalculated each time a search returns the entry (via `BumpAccessAsync`).
 
-### Path-scoped SHA-256
+**Degradation** (`memory_sweep`) evaluates each entry against two thresholds:
 
 ```
-ContentHash.Of(path, value) = SHA256(UTF8(path) || UTF8(value))
+ShouldDegrade = rating < 0.3 AND age > 30 days
 ```
 
-No separator between path and value bytes — the concatenation boundary is implicit.
-This is safe because identical content under different paths yields different hashes.
+Entries are only candidates when they are both old enough *and* rated low
+enough — a frequently accessed entry stays even past its TTL. `shared` entries
+are never swept.
 
-### Rating policy
-
-```
-rating = baseScore * 0.5^(ageDays / halfLifeDays) * (1 + accessCount * accessMultiplier)
-```
-
-- `baseScore`: 0.5
-- `halfLifeDays`: 30 (rating halves every 30 days without access)
-- `accessMultiplier`: 0.1 (each access adds 10% of the base)
-- Age is computed from `created_at`, access count from `access_count`
-- Rating caps at the natural ceiling dictated by access count — no artificial clamp
-
-Rating is computed on every search hit (`BumpAccessAsync`), written to the on-row
-`rating` column.
-
-### Degradation policy
-
-An entry degrades when **both** conditions hold:
-
-```
-ShouldDegrade(rating, ageDays, threshold, ttlDays) = rating < threshold AND ageDays > ttlDays
-```
-
-- Default sweep: `threshold = 0.3`, `ttlDays = 30`
-- Per-entry TTL overrides (`ttl_days` column) replace the global TTL
-- Shared-context entries are **never** sweep candidates (FR-MEM-1.15)
-- `memory_sweep` with `dry_run = true` (default) lists candidates; with
-  `dry_run = false` deletes them
+> **Evidence:** `src/AiRaccoon.Core/Rating/RatingPolicy.cs:12-24` (rating),
+> `src/AiRaccoon.Core/Degradation/DegradationPolicy.cs:6-7` (degradation),
+> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:718-740` (bump)
 
 ### Token-aware chunking
 
-The `MarkdownChunker` splits text by lines, grouping fenced code blocks as atomic
-units. It builds chunks greedily up to `maxTokens` (default 256), sliding an overlay
-of `overlayTokens` (default 48) into each subsequent chunk so boundaries don't sever
-context. The `TokenizerChunker` wraps this with an `o200k_base` tokenizer — the
-chunk size is clamped to the configured embedding engine's documented token window
-when the engine knows it.
+File ingestion splits content into chunks bounded by the configured embedding
+engine's maximum input tokens:
 
-### FTS5 query normalization
+1. **Normalise** line endings (`\r\n` → `\n`, `\r` → `\n`).
+2. **Build units:** each line is a unit; code fences (``` ``` and `~~~`) are
+   atomic — their boundaries never split a fence block.
+3. **Token-count** each unit using the `o200k_base` Tiktoken tokenizer.
+4. **Accumulate** units until adding the next would exceed `maxTokens`, then
+   emit a chunk.
+5. **Overlay** the tail of the previous chunk (up to `overlayTokens`) onto the
+   start of the next, so context carries across chunk boundaries.
 
-User query text is tokenized into alphanumeric runs (`[\p{L}\p{N}_]+`), FTS5
-reserved words (`and`, `or`, `not`, `near`) are dropped, and tokens are joined
-with `OR` for high recall. Punctuation never reaches the FTS5 grammar — a user
-query cannot make `MATCH` throw.
+> **Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:11-46` (split),
+> `src/AiRaccoon.Infrastructure/Chunking/TokenizerChunker.cs:7-14` (tokenizer)
 
-### Snippet fallback
+## Layering
 
-Vector-only hits have no FTS5 snippet. The `SnippetFallback` extracts a ~200-char
-window from the entry value. The window start is derived from the entry hash
-(`SHA256(hash) % maxStart`), so the same entry always yields the same snippet
-and long values don't always open on their head.
+```
+src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
+  Tools/MemoryTools.cs      17 [McpServerTool] methods, no business logic
+  Access/MemoryAccessGuard  Enforces access modes at the tool boundary
+  Setup/McpServerSetup.cs   MCP_TRANSPORT env → stdio/HTTP
+
+src/AiRaccoon.Core/         Pure domain layer — zero framework deps
+  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery
+  Chunking/                 IChunker port, MarkdownChunker (pure splitter)
+  Access/                   AccessMode enum, AccessModePolicy, AccessRequirement
+  Rating/                   RatingPolicy, IMemoryExtension pipeline
+  Degradation/              DegradationPolicy
+  Workspace/                Workspace record, ConsolidationResult
+  Common/                   ContextNaming
+
+src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
+  Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
+                            SearchContexts, SearchResultMerger
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel
+  Sync/                     SyncService, S3CloudStore, FakeCloudStore
+  Chunking/                 TokenizerChunker (o200k_base)
+  Workspace/                WorkspaceService
+  Degradation/              SweepService
+  Rating/                   RetrievalRatingExtension (no-op, kept for extension host)
+  Options/                  SyncOptions, InfrastructureOptions
+```
+
+> **Evidence:** `src/AiRaccoon/Tools/MemoryTools.cs:17` (thin MCP layer),
+> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:20-25` (store
+> constructor), `src/AiRaccoon.Core/Memory/IMemoryStore.cs` (port)
