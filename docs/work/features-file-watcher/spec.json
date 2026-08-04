@@ -1,0 +1,135 @@
+{
+    "name": "file-watcher",
+    "title": "File watcher — part 2 of native-memory: watch a path and mirror the filesystem into memory",
+    "status": "agreed",
+    "specFile": "docs/features/file-watcher/file-watcher.feature",
+    "gate": {
+        "ownerGateReview": {
+            "form": "inline elicitation rulings 2026-08-04 (working draft: docs/work/features-file-watcher/file-watcher.feature, provenance comments)",
+            "feedback": "docs/work/features-file-watcher/file-watcher.feature",
+            "answered": 10,
+            "open": 0,
+            "note": "All decision cards ruled inline by the owner during elicitation; a formal owner-gate ceremony was offered and deferred. Closes D9 (file-watcher tools, part 2) of the part-1 native-memory gate."
+        }
+    },
+    "cards": [
+        {
+            "id": "D1",
+            "card": "Missed events while the server is down",
+            "ruling": "Each watch keeps a last-change timestamp; on restart, targets changed since it are re-ingested (catch-up). No stale state — goes straight to processing."
+        },
+        {
+            "id": "D2",
+            "card": "Rename onto an existing path",
+            "ruling": "Overwrite — the incoming content wins; the target's previous chunks are replaced."
+        },
+        {
+            "id": "D3",
+            "card": "Path normalization for watch identity",
+            "ruling": "OS-agnostic: Path.GetFullPath (absolute, separators and '..' resolved, trailing separator stripped); case comparison follows the host OS filesystem."
+        },
+        {
+            "id": "D4",
+            "card": "Status states",
+            "ruling": "scanning / healthy / retrying / stopped."
+        },
+        {
+            "id": "D5",
+            "card": "Unit-level scenarios (concurrency, watcher-loop containment, hash-skip internals)",
+            "ruling": "Keep as implementation tests."
+        },
+        {
+            "id": "D6",
+            "card": "Watch scope",
+            "ruling": "Project-scoped only; no global/workspace-scoped watches; all three tools take projectId."
+        },
+        {
+            "id": "D7",
+            "card": "Access tiers",
+            "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)."
+        },
+        {
+            "id": "D8",
+            "card": "Are watches 'settings that affect other agents'?",
+            "ruling": "No — rw may add/remove watches; the ro tier may not."
+        },
+        {
+            "id": "D9",
+            "card": "Watch path boundary",
+            "ruling": "Opt-in: watching disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path covers the directory and all subdirectories; no '*' needed)."
+        },
+        {
+            "id": "D10",
+            "card": "Config channel for watch enable/scope",
+            "ruling": "CLI-only, user-facing (no MCP tools, no env/args, no config-file edits; no access-tier checks). Format: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}; '*' matches all projects, more specific entry wins. Single-channel principle (f:): added CLI options remove other config channels."
+        }
+    ],
+    "scope": {
+        "in": [
+            "Three MCP tools: memory_watch_add / memory_watch_status / memory_watch_remove, all project-scoped (projectId), identified per (projectId, path)",
+            "Watches are project-scoped only; no global or workspace-scoped watches",
+            "Watching is opt-in: disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path, covers directory + all subdirectories)",
+            "Watch configuration is CLI-only and user-facing: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}; '*' matches all projects, more specific entry wins; no access-tier checks; persisted across restarts",
+            "Watches accept both single files and directories; a directory watch covers its subtree",
+            "Initial scan is asynchronous: add returns immediately, status reports scanning until the seed digest completes",
+            "All four filesystem event types (created/changed/renamed/deleted) enter the pipeline",
+            "Mirror semantics 1:1: delete removes the file's chunks from memory; rename removes old-path chunks and re-digests under the new path (overwrite on collision)",
+            "SmartRAG-inspired mechanics: debounce (1s tick), hash-skip (path+content SHA-256), initial scan, retry (exponential backoff; after 5 failures stop checking but keep registration/status)",
+            "Pipeline: single channel of events -> per-path pending aggregation -> 1s tick -> per-path digests with configured concurrency limit (default 4), round-robin across watches",
+            "Missed-event catch-up: per-watch last-change timestamp; on restart, targets changed since it are re-ingested",
+            "Containment: watch failures never fail the MCP server; errors surface through memory_watch_status",
+            "Idempotency: add on an already-watched (projectId, path) is a no-op; remove on a non-existent watch is a no-op",
+            "Access tiers: add/remove require rw+; status open to every tier; background mirroring runs regardless of tier",
+            "Status states: scanning / healthy / retrying / stopped; status returns watch states, last error, last sync"
+        ],
+        "out": [
+            "MCP-tool-based watch configuration (enable/scope are CLI-only, not agent tools)",
+            "Global or workspace-scoped watches",
+            "Wildcard path scopes ('*' at the end of a path)",
+            "Stale status state (removed; catch-up replaces it)",
+            "env/args config channels for watch settings (--watch-enable / --watch-scope) — converted by the CLI-config task (f: single channel)",
+            "memory_inspect introspection tool and metrics/tracing (part-2 siblings, already deferred in part-1)",
+            "Full CLI config surface for all server options — separate task (design subagent 2026-08-04, docs/work/2026-08-04-cli-config-findings.md)"
+        ]
+    },
+    "nonFunctional": [
+        "Watch operation failures are contained: no watch failure ever fails the MCP server or its other tools",
+        "Concurrency: per-path digests, global limit default 4, round-robin across watches (fairness, no starvation)",
+        "Debounce: 1s processing tick",
+        "Retry: exponential backoff, max 5 attempts, then stop checking but keep status",
+        "Persistence: watches table and watch configuration survive restarts (restart re-watches; catch-up ingests missed changes)",
+        "TDD mandatory: scenario tests pin mirror/delete/rename semantics; unit-level scenarios (concurrency, loop containment, hash-skip) kept as implementation tests",
+        "TreatWarningsAsErrors; dotnet build + dotnet test green",
+        "No hardcoded secrets; watch configuration via CLI only"
+    ],
+    "constraints": {
+        "packages": [],
+        "targets": {
+            "feature": "docs/features/file-watcher/file-watcher.feature",
+            "manifest": "docs/features/file-watcher/spec.json",
+            "implementation": "src/AiRaccoon.Infrastructure (watches table, watcher pipeline) + src/AiRaccoon.Core (domain) + src/AiRaccoon (CLI commands, MCP tools)",
+            "tests": "tests/AiRaccoon.Tests (scenario + unit)"
+        },
+        "risks": [
+            "Delete/rename propagation is destructive and irreversible — mirror removal is the highest-risk merge surface; dedicated scenario tests required",
+            "Filesystem event loss/coalescing differs per OS (FileSystemWatcher semantics) — catch-up timestamp is the safety net; verify on linux/macOS/windows",
+            "Initial scan of a large directory is unbounded work — async by contract; status must report scanning and errors",
+            "Hash-skip correctness: a real content change must never be skipped (path+content SHA-256 per D8 identity)",
+            "Concurrency limit + round-robin fairness need unit-level verification (not black-box observable)"
+        ]
+    },
+    "deferred": [
+        {
+            "id": "D11",
+            "decision": "Conversion of legacy watch config channels (env/args) to CLI-only",
+            "fallback": "Background work of the CLI-config task; watch config is CLI-only from day one (f: 2026-08-04)",
+            "tag": "deferred"
+        },
+        {
+            "id": "D12",
+            "decision": "Full CLI command surface for all server config options (sync, access modes, model, data root, ...)",
+            "fallback": "Separate task fed by the CLI-config design subagent findings (docs/work/2026-08-04-cli-config-findings.md)",
+            "tag": "deferred"
+        }
+    ]
+}

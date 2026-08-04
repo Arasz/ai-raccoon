@@ -345,6 +345,36 @@
       "resumeCommand": "hermes --resume 20260804_194821_c45db4",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "file-watcher",
+      "title": "File watcher \u2014 part 2 of native-memory (spec: docs/features/file-watcher)",
+      "sessionId": "20260804_221230_6e37d2",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/file-watcher",
+      "risk": false,
+      "startedAt": "2026-08-04T20:14:00.744940+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260804_221230_6e37d2",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "cli-config",
+      "title": "CLI as single config channel (findings + owner rulings)",
+      "sessionId": "20260804_222008_5a143c",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/cli-config",
+      "risk": false,
+      "startedAt": "2026-08-04T20:28:38.610309+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260804_222008_5a143c",
+      "resumeAttempts": []
     }
   ]
 }
