@@ -179,6 +179,21 @@
       "resumeCommand": "claude --resume 20260804_095231_7165e9",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "fix-test-issues",
+      "title": "Review and simplify tests, fix xunit3 console output",
+      "sessionId": "20260804_122928_c7dc7b",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/fix-test-issues-simplify-tests",
+      "risk": false,
+      "startedAt": "2026-08-04T10:31:42.090135+00:00",
+      "finishedAt": "2026-08-04T10:36:49.921554+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_122928_c7dc7b",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

@@ -40,8 +40,8 @@ public sealed class RetrievalBaselineTests : IDisposable
 
     private readonly string _dataRoot;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
-    private readonly SqliteMemoryStore _store;
     private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public RetrievalBaselineTests(ITestOutputHelper output)
     {
@@ -109,13 +109,6 @@ public sealed class RetrievalBaselineTests : IDisposable
         await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(baseline, _jsonOptions),
             TestContext.Current.CancellationToken);
         _output.WriteLine($"Baseline written to {reportPath}");
-
-        // Also copy to project root for external analysis
-        var projectRoot = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-        var copyPath = Path.Combine(projectRoot, "scored-baseline.json");
-        File.Copy(reportPath, copyPath, overwrite: true);
-        _output.WriteLine($"Also copied to {copyPath}");
 
         matchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
             "at least one expected source should match at rank ≤3 after seeding");
@@ -620,8 +613,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         return AppContext.BaseDirectory;
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("ai-raccoon-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-tests");
 
     public sealed record BaselineQuery(
         string Id,

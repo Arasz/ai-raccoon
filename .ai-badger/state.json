@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-04T09:50:00Z",
+  "lastUpdated": "2026-08-04T10:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "fix-test-issues",
+      "summary": "Simplified test setup across 16 test files: extracted shared TestData helper (InfrastructureOptions, NullKeyProvider, FakeTimeProvider, SqliteConnectionFactory) eliminating ~40 lines of duplicated constructor setup per test class. Clean refactor, no behavioral changes.",
+      "hasNotes": false
+    },
     {
       "id": "doc-ingestion-and-tests",
       "summary": "Implemented document ingestion pipeline + retrieval test suite: ingest-jsaa-docs.py (1090 lines) walks job-search-ai-assistant (196 files, 762 typed chunks), writes to AiRaccoon via MCP HTTP/SSE; baseline-queries.json (35 queries, 8 categories); run-baseline-queries.py (hash-map-based isExpectedSource matching); scoring-form.html (self-contained scoring UI). Pipeline verified: 35/35 queries return results, 6/10 expected-source matches at rank ≤3. Key findings: AiRaccoon MCP Streamable HTTP uses SSE (event/data format); memory_write context param sets scope=custom (invisible to project search); SHA256 content hashing requires matching written content prefix.",
