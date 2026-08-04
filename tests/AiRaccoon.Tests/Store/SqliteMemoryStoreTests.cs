@@ -24,7 +24,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public SqliteMemoryStoreTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
             new AiRaccoon.Infrastructure.Embedding.EmbeddingService());
     }

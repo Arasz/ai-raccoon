@@ -23,7 +23,8 @@ public sealed class MemoryFeatureContext : IDisposable
     {
         DataRoot = CreateTempRoot();
         Factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64" });
+            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
         Store = new SqliteMemoryStore(Factory, TimeProvider, new StubChunker(),
             new Infrastructure.Embedding.EmbeddingService());
     }

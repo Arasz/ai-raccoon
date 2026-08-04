@@ -18,7 +18,8 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) =>
         new(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
+            new NullKeyProvider());
 
     [Fact]
     public void BankPath_UserScope_IsDataRootMemoryDb() => Factory().BankPath.ShouldBe(Path.Combine(_dataRoot, "memory.db"));

@@ -34,7 +34,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     {
         await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new EmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);

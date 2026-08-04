@@ -16,3 +16,9 @@ public static class TestCategories
     public const string Fast = "Fast";
     public const string Slow = "Slow";
 }
+
+/// <summary>Returns null — no encryption. Use for existing unencrypted-DB tests.</summary>
+public sealed class NullKeyProvider : AiRaccoon.Infrastructure.Sqlite.IEncryptionKeyProvider
+{
+    public string? GetPassphrase() => null;
+}

@@ -26,7 +26,8 @@ public sealed class WorkspaceIsolationTests : IDisposable
     public WorkspaceIsolationTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
