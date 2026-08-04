@@ -45,4 +45,14 @@ public sealed class SourcePathQueryTests
 
         expression.ShouldBe("{source_file section} : (docs AND \"and\" AND md AND \"or\")");
     }
+
+    [Fact]
+    public void TryBuild_MixedCaseReservedWord_IsQuoted()
+    {
+        // Tokens are lowercased before the Reserved check, so casing never reaches the
+        // set — the contract that lets it use Ordinal comparison.
+        SourcePathQuery.TryBuild("docs/AND.md#OR", out var expression).ShouldBeTrue();
+
+        expression.ShouldBe("{source_file section} : (docs AND \"and\" AND md AND \"or\")");
+    }
 }
