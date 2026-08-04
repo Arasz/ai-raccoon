@@ -2,13 +2,7 @@ using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
-public sealed record SearchQuery(
-    string ProjectId,
-    string Query,
-    SearchScope Scope = SearchScope.All,
-    string? WorkspaceId = null,
-    int Limit = 20,
-    double MinScore = 0.7)
+public sealed record SearchQuery
 {
     public const int DefaultRrfK = 60;
 

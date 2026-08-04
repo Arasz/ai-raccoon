@@ -11,7 +11,7 @@ public class SearchQueryTests
     [Fact]
     public void Constructor_WithValidValues_KeepsThem()
     {
-        var query = new SearchQuery("acme", "vector search", WorkspaceId: "ws-1", Limit: 5, MinScore: 0.9);
+        var query = new SearchQuery("acme", "vector search", workspaceId: "ws-1", limit: 5, minScore: 0.9);
 
         query.ProjectId.ShouldBe("acme");
         query.Query.ShouldBe("vector search");
@@ -89,7 +89,7 @@ public class SearchQueryTests
     [InlineData(-1)]
     public void Validator_WithNonPositiveLimit_ReportsCamelCaseProperty(int limit)
     {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", Limit: limit));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", limit: limit));
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "limit");
@@ -100,7 +100,7 @@ public class SearchQueryTests
     [InlineData(1.1)]
     public void Validator_WithMinScoreOutsideUnitInterval_ReportsCamelCaseProperty(double minScore)
     {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", MinScore: minScore));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", minScore: minScore));
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "minScore");
@@ -132,7 +132,7 @@ public class SearchQueryTests
     [Fact]
     public void Validator_WithValidValues_Passes()
     {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", Limit: 5, MinScore: 0.9));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", limit: 5, minScore: 0.9));
 
         result.IsValid.ShouldBeTrue();
     }
