@@ -68,7 +68,12 @@ gained a `baseUrl` parameter for any OpenAI-compatible endpoint.
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per
   modality, then normalized so the top result is 1.0 (range 0..1). `rrfK=60` (default),
   `ftsWeight=1`, `vectorWeight=1` (default 1:1). When no engine is configured, search
-  degrades to FTS5-only — never crashes.
+  degrades to FTS5-only — never crashes. The FTS5 MATCH expression is constructed per
+  query (plan C Wave 1): stopwords are stripped and the remaining content tokens joined
+  with AND when there are ≤4 (precision), with an OR fallback — all query tokens plus
+  quoted adjacent-token bigram phrases — whenever the AND under-matches (zero rows,
+  fewer rows than terms, or fewer than the requested limit); longer queries keep the
+  plain OR join of all tokens. Punctuation never reaches the FTS5 grammar.
 - **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
