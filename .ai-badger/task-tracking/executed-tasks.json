@@ -295,10 +295,11 @@
       "branch": "task/retrieval-improvement-c-implementation",
       "risk": false,
       "startedAt": "2026-08-04T15:40:52.772573+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-04T21:38:41.904923+00:00",
+      "state": "FINISHED",
       "resumeCommand": "claude --resume cli-20260804-174052",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "generate-logo-for-ai-raccoon",
