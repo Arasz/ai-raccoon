@@ -18,12 +18,12 @@ public sealed class RetrievalBaselineTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Wave 0 corpus-exclusion markers (plan C step 5): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
-    /// <remarks>Matched against the '## Source: &lt;structured_path&gt;' header only — a bare substring scan would
-    /// false-positive on legitimate prose mentions (e.g. skills that reference state.json).</remarks>
+    /// <remarks>Wave 2 moved provenance into the source_file column, so the markers are matched
+    /// against source_file — a bare value scan would false-positive on legitimate prose mentions.</remarks>
     private static readonly string[] ExcludedContentMarkers =
     [
-        "docs:work", "docs:state.json", "docs:now.md",
-        "ai-badger:state.json", "remember:now.md",
+        "docs/work/", "docs/state.json", "docs/now.md",
+        ".ai-badger/state.json", ".remember/now.md",
     ];
 
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
@@ -165,7 +165,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         foreach (var marker in ExcludedContentMarkers)
         {
-            var count = await CountValueContainingAsync(connection, marker);
+            var count = await CountSourceFileLikeAsync(connection, marker);
             count.ShouldBe(0,
                 $"corpus must not contain excluded content marker '{marker}' (plan C step 5); found {count} rows");
         }
@@ -197,15 +197,23 @@ public sealed class RetrievalBaselineTests : IDisposable
                 "scripts/chunk-hash-map.json");
         }
 
-        // The regenerated corpus stores '## Source: <structured_path>' inside the value, so each
-        // expected source must appear in at least one entry (included files present).
+        // The regenerated corpus stores provenance in the source_file column (Wave 2, plan C
+        // §3 2d), so each expected source's file must appear as a source_file in at least one
+        // entry (included files present).
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         foreach (var query in expected)
         {
-            var count = await CountValueContainingAsync(connection, query.ExpectedSource!);
+            var count = await CountSourceFileLikeAsync(connection, SourceFileMarker(query.ExpectedSource!));
             count.ShouldBeGreaterThanOrEqualTo(1,
                 $"{query.Id}: expectedSource '{query.ExpectedSource}' not found in the corpus");
         }
+    }
+
+    /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → '0011-frontend-chassis-stack.md' (the file's tail).</summary>
+    private static string SourceFileMarker(string expectedSource)
+    {
+        var filePart = expectedSource.Split('#')[0];
+        return filePart.Split(':')[^1];
     }
 
     private static (bool ExactMatch, bool FileMatch, int? FirstExactRank, int? FirstFileRank) MapResults(
@@ -270,13 +278,10 @@ public sealed class RetrievalBaselineTests : IDisposable
     /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → 'docs:adr:0011-frontend-chassis-stack.md'.</summary>
     private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
 
-    private static async Task<int> CountValueContainingAsync(SqliteConnection connection, string marker)
+    private static async Task<int> CountSourceFileLikeAsync(SqliteConnection connection, string marker)
     {
         using var command = connection.CreateCommand();
-        // Match the '## Source: <structured_path>' header only (plan C step 5: excluded dirs absent).
-        // A bare-substring scan would false-positive on legitimate prose mentions (e.g. a skill
-        // document that mentions .ai-badger/state.json in its body).
-        command.CommandText = "SELECT count(*) FROM entries WHERE value LIKE '%## Source: ' || $marker || '%'";
+        command.CommandText = "SELECT count(*) FROM entries WHERE source_file LIKE '%' || $marker || '%'";
         command.Parameters.AddWithValue("$marker", marker);
         var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         return Convert.ToInt32(result);

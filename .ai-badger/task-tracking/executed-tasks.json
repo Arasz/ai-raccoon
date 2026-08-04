@@ -285,6 +285,50 @@
       "resumeCommand": "claude --resume 20260804_165711_e2b235",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "retrieval-improvement-c-implementation",
+      "title": "Plan C implementation - Waves 1/2/6 parallel",
+      "sessionId": "cli-20260804-174052",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/retrieval-improvement-c-implementation",
+      "risk": false,
+      "startedAt": "2026-08-04T15:40:52.772573+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume cli-20260804-174052",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "generate-logo-for-ai-raccoon",
+      "title": "Generate AiRaccoon brand logo \u2014 3 propositions",
+      "sessionId": "hermes-1785858129",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/generate-logo-for-ai-raccoon",
+      "risk": false,
+      "startedAt": "2026-08-04T15:42:09.460847+00:00",
+      "finishedAt": "2026-08-04T17:33:15.043319+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume hermes-1785858129",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "add-command-line-args-parsing",
+      "title": "Add CLI args parsing to the ai-raccoon MCP server \u2014 options exploration, .mcp.json defaults, implementation, docs + global-tool test",
+      "sessionId": "20260804_192411_ee30d1",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/add-command-line-args-parsing",
+      "risk": false,
+      "startedAt": "2026-08-04T17:31:34.621141+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260804_192411_ee30d1",
+      "resumeAttempts": []
     }
   ]
 }

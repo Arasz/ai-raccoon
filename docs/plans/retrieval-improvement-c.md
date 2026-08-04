@@ -101,11 +101,13 @@ and embedding them is a schema + pipeline change.
 2. **Bigram phrase extraction**: for queries with ≥3 content tokens, add adjacent token pairs as
    quoted FTS5 phrases (e.g. `"shadcn ui"`). Under AND semantics (short queries), bigrams add no
    constraint — skip them.
-3. **AND with OR fallback**: join remaining tokens with AND when ≤4 tokens; if the MATCH returns
-   zero rows, retry with OR-join. The OR retry **includes bigrams** when the original content
-   had ≥3 tokens (don't lose the precision signal when falling back). This captures AND's
-   precision benefit for short queries while preventing the zero-match regression measured on
-   the old corpus (A2, A6).
+3. **AND with OR fallback**: join remaining tokens with AND when ≤4 tokens; if the MATCH
+   returns fewer rows than `max(content-token count, requested limit)` — an AND list that
+   small cannot be a useful ranked signal on its own (A6/C2 measured cases) — retry with
+   OR-join. The OR retry **includes bigrams** when the original content had ≥3 tokens (don't
+   lose the precision signal when falling back). This captures AND's precision benefit for
+   short queries while preventing the zero-match/under-match regression measured on the old
+   corpus (A2, A6).
 4. **Re-run full baseline** against the clean corpus, including the diagnostic triplet: Q1 "What
    is ADR-0070 about?" (full question), Q2 "ADR-0070" (identifier-only), Q3 "documentation
    structure trust model" (content-only).
@@ -119,6 +121,16 @@ prevents any zero-match.
 ---
 
 ### Wave 2 — Source as First-Class Citizen (structural foundation)
+
+> **Status: DONE ✓ (2026-08-04, branch task/w2-source-identity, ADR 0003).** Delivered:
+> `source_file` + `section` columns (migrated on open), weighted FTS (bm25 1.0/8.0/16.0),
+> source identity on `MemorySearchResult`, provenance removed from chunk content,
+> source-path queries matched against the source columns, searchable `contextLabel`.
+> Measured deviations from the gate as written: (1) S2's Decision chunk ranks ~13
+> FTS-only / beyond top-30 hybrid — FTS5 has no stemming (`decide`≠`decision`) and bm25's
+> document-length normalization crushes the 13.8 KB decision chunk; the section-level ≤3
+> target is Wave 6's dual-vector signal. (2) C2's hybrid rank collapsed (vector >100 on
+> clean content); it holds at FTS-only rank 1, fusion weighting is Wave 4's sweep.
 
 Schema changes to give the system document-level self-awareness.
 
@@ -206,7 +218,11 @@ Select the Pareto-optimal point on nDCG@5 and MRR. Document in an ADR with sweep
 
 **Gate**: Chosen parameters beat the current defaults (k=60, 1:1, minScore=0.0) on nDCG@5
 without regressing invariants. RRF hybrid ≥ max(FTS-only, vector-only) for every expected-source
-query (no fusion regression). Sweep results committed alongside ADR.
+query (no fusion regression). Sweep results committed alongside ADR. **C2 acceptance (from the
+Wave 2 integration analysis, 2026-08-04): C2 hybrid rank ≤ 3 after the sweep — restoring the
+invariant's hybrid visibility lost when the 2d provenance cleanup removed the vector crutch
+(hybrid 18 / FTS-only 1 / vector >100 at k=60, 1:1). If no sweep point achieves it, the fusion
+design (weights/minScore/candidate window) is revisited before Wave 5b.**
 
 ---
 

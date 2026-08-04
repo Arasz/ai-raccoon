@@ -32,12 +32,12 @@ public sealed class SqliteMemoryStore(
     private const int DefaultOverlayTokens = 48;
     private const int EmbedBatchSize = 32;
 
+    private static readonly HashSet<string> IndexableExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
+
     // The remote API key is held for the process lifetime only — never persisted (tool contract).
     // After a restart the operator's env var provides it again at embed time.
     private string? _remoteApiKey;
-
-    private static readonly HashSet<string> IndexableExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -72,6 +72,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = request.Content,
+                        sourceFile = request.SourceFile,
+                        section = request.Section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -113,7 +115,17 @@ public sealed class SqliteMemoryStore(
             queryVector = EmbeddingBlob.ToBytes(embedding[0].Vector);
         }
 
-        var ftsExpression = FtsQueryNormalizer.Normalize(query.Query);
+        var plan = FtsQueryNormalizer.BuildPlan(query.Query);
+        if (SourcePathQuery.TryBuild(query.Query, out var pathExpression))
+        {
+            // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
+            // with AND semantics so the exact chunk ranks first (see SourcePathQuery); the
+            // OR fallback does not apply — the path expression is exact by construction.
+            plan = plan with { Expression = pathExpression, Fallback = null };
+        }
+
+        // Wave 6 (plan C §3): dual-vector fusion alpha — the fixed blend between the content
+        // and structure (heading-path) similarities, read once per search from settings.
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
@@ -121,36 +133,65 @@ public sealed class SqliteMemoryStore(
         }
 
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
-        foreach (var context in SearchContexts.For(query))
+        var contexts = SearchContexts.For(query).ToList();
+
+        foreach (var context in contexts)
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
-            var parameters = new DynamicParameters();
-            parameters.Add("query", ftsExpression);
-            // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
-            // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
-            // the caller's limit and minScore still apply in the final merger pass.
-            parameters.Add("limit", CandidateWindowFor(query.Limit));
-            if (queryVector is not null)
+            var limit = CandidateWindowFor(query.Limit);
+
+            // FTS modality: primary expression first; a per-context under-match — at most as
+            // many rows as the query has terms, or at most as many as the caller asked for (a
+            // list that small cannot be a useful ranked signal on its own; A4/A6/C2 measured
+            // cases) — retries with the OR fallback. The boundary fires too: A4's AND primary
+            // matches exactly max(TokenCount, limit) rows yet excludes the target chunk.
+            // Decided per context so one weak context cannot force the fallback on the others;
+            // skipped when the keyword weight is zero (a weight-0 list contributes nothing to
+            // RRF).
+            IReadOnlyList<MemorySearchResult> ftsResults = [];
+            if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
-                parameters.Add("queryVector", queryVector);
+                ftsResults = await QueryFtsBatchAsync(connection, filter,
+                    SearchParameters(plan.Expression), cancellationToken).ConfigureAwait(false);
+                if (plan.Fallback is not null && ftsResults.Count <= Math.Max(plan.TokenCount, query.Limit))
+                {
+                    ftsResults = await QueryFtsBatchAsync(connection, filter,
+                        SearchParameters(plan.Fallback), cancellationToken).ConfigureAwait(false);
+                }
             }
 
-            foreach (var (key, value) in values)
-            {
-                parameters.Add(key, value);
-            }
-
-            var ftsResults = ftsExpression.Length == 0
-                ? []
-                : await QueryFtsBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+            // Vector modality: independent of the FTS expression — run once per context;
+            // the dual-vector pass fuses the content and structure (heading-path) lists.
             var vectorResults = queryVector is null
                 ? []
-                : await QueryDualVectorBatchAsync(connection, filter, parameters, alpha, cancellationToken).ConfigureAwait(false);
+                : await QueryDualVectorBatchAsync(connection, filter,
+                    SearchParameters(""), alpha, cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
                 [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
                 query.RrfK, minScore: 0, limit: int.MaxValue));
+
+            DynamicParameters SearchParameters(string ftsExpression)
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("query", ftsExpression);
+                // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
+                // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
+                // the caller's limit and minScore still apply in the final merger pass.
+                parameters.Add("limit", limit);
+                if (queryVector is not null)
+                {
+                    parameters.Add("queryVector", queryVector);
+                }
+
+                foreach (var (key, value) in values)
+                {
+                    parameters.Add(key, value);
+                }
+
+                return parameters;
+            }
         }
 
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
@@ -203,7 +244,8 @@ public sealed class SqliteMemoryStore(
                     .ConfigureAwait(false))
                 .Select(row => new MemorySearchResult(
                     row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
                 .ToList();
         }
         catch (SqliteException)
@@ -247,7 +289,8 @@ public sealed class SqliteMemoryStore(
 
         return fused
             .Select(rank => byHash.TryGetValue(rank.Hash, out var row)
-                ? new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash))
+                ? new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks)
                 : null)
             .Where(result => result is not null)
             .Select(result => result!)
@@ -508,6 +551,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
+                        sourceFile = (string?)null,
+                        section = (string?)null,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -741,6 +786,8 @@ public sealed class SqliteMemoryStore(
                             hash,
                             path,
                             value = chunk,
+                            sourceFile = path,
+                            section = (string?)null,
                             scope = bucket.Scope,
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
@@ -809,6 +856,22 @@ public sealed class SqliteMemoryStore(
                 new Dictionary<string, object?> { ["workspaceId"] = context["workspace:".Length..], ["projectId"] = projectId });
         }
 
+        if (context.StartsWith("label:", StringComparison.Ordinal))
+        {
+            // Wave 2 (plan C §3 2e): the label context contributes the label's custom-scoped
+            // rows only — project-scoped rows are already in the project batch (SearchContexts),
+            // and a union here would double-count them in RRF.
+            var rest = context["label:".Length..];
+            var colon = rest.IndexOf(':');
+            if (colon > 0)
+            {
+                var label = rest[(colon + 1)..];
+                return (
+                    $"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
+                    new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
+            }
+        }
+
         return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
             new Dictionary<string, object?> { ["contextLabel"] = context, ["projectId"] = projectId });
     }
@@ -834,8 +897,7 @@ public sealed class SqliteMemoryStore(
         return ("custom", projectId, context, null);
     }
 
-    private static MemoryEntry ToEntry(EntryRow row) =>
-        new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
+    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
 
     private static string ContextStringOf(EntryRow row)
     {
@@ -854,11 +916,9 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7).</summary>
-    private static string WritePathFor(string value) =>
-        $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
+    private static string WritePathFor(string value) => $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
-    private static bool IsIndexableFile(string path) =>
-        !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
+    private static bool IsIndexableFile(string path) => !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
 
     private static bool IsHidden(string path)
     {
@@ -928,6 +988,12 @@ public sealed class SqliteMemoryStore(
         public string Snippet { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed class VectorRow
@@ -941,6 +1007,12 @@ public sealed class SqliteMemoryStore(
         public string Value { get; set; } = "";
 
         public double Distance { get; set; }
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed record SourceRow(string Path, string Value);

@@ -18,4 +18,12 @@ public static class ContextNaming
         Guard.IsNotNullOrWhiteSpace(workspaceId);
         return $"workspace:{workspaceId}";
     }
+
+    /// <summary>Context string selecting a project's custom-scoped rows under one label.</summary>
+    public static string LabelContext(string projectId, string contextLabel)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        Guard.IsNotNullOrWhiteSpace(contextLabel);
+        return $"label:{projectId}:{contextLabel}";
+    }
 }

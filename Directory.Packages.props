@@ -11,7 +11,7 @@
     <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0" />
     <!-- encryption-at-rest: e_sqlite3mc enables Password support; downgrade to 2.1.11 train (no 3.x e_sqlite3mc yet).
          TODO: remove override when Microsoft.Data.Sqlite 11.0+ ships with e_sqlite3mc built-in. -->
-    <PackageVersion Include="SQLitePCLRaw.core" Version="2.1.11" />
+    <PackageVersion Include="SQLitePCLRaw.core" Version="3.0.5" />
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3mc" Version="2.1.11" />
     <PackageVersion Include="SQLitePCLRaw.provider.e_sqlite3mc" Version="2.1.11" />
     <PackageVersion Include="Dapper" Version="2.1.79" />
@@ -28,10 +28,10 @@
     <!-- In-process local embedding engine (P4): pinned; re-run the retrieval harness on upgrade. -->
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
     <!-- Microsoft.ML.Tokenizers.Data.O200kBase pulls Bcl.Memory 9.0.4 transitively; 9.0.14 patches GHSA-73j8-2gch-69rq. -->
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="9.0.14" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.10" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />
     <PackageVersion Include="OpenAI" Version="2.12.0" />
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.0.0" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.101.6" />
   </ItemGroup>
 </Project>

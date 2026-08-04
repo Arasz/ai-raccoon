@@ -28,11 +28,18 @@ import fcntl
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-CLAUDE_SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
+# Session sources: how the tracker identifies the current session and reads its token
+# usage. Every agent registers its own source the same way — an adjustment
+# (features/<agent>/adjustments/) installs a `<agent>_session_source.py` module beside this
+# file that calls register_session_source() (see features/claude/adjustments/ and
+# features/hermes/adjustments/). There is no built-in default: the registry is the only
+# thing the common scripts know.
+SESSION_SOURCES: dict = {}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -371,38 +378,19 @@ def _own_pid_ancestry(max_depth: int = 12) -> list[int]:
 
 
 def resolve_own_session() -> dict:
-    """Best-effort identification of the session invoking this process.
+    """Ask every registered session source to identify the session invoking this process.
 
-    Tried in order:
-    1. CLAUDE_CODE_SESSION_ID env var — Claude Code sets this on every tool subprocess, so
-       it identifies the calling session exactly, with no ambiguity even when several
-       sessions run concurrently against the same project.
-    2. This process's PID ancestry matched against a recorded session's pid (covers CLI
-       versions without the env var).
-    3. A unique cwd match among active sessions (last resort; only used if exactly one
-       active session shares this process's cwd, since a shared cwd is otherwise ambiguous).
-
-    Returns {} if nothing resolves — callers should then require explicit --session-id.
+    Each source owns its resolution (env var, hook-recorded sessions, process ancestry —
+    however that agent identifies its sessions); the first source that resolves wins, in
+    registration order. A source that cannot identify the session returns {} and the next
+    is asked. Returns {} when nothing resolves — callers should then require explicit
+    --session-id.
     """
-    sessions = load_current_sessions()
-
-    env_id = os.environ.get(CLAUDE_SESSION_ENV)
-    if env_id:
-        if env_id in sessions:
-            return {"sessionId": env_id, **sessions[env_id]}
-        return {"sessionId": env_id, "transcriptPath": None}  # exact id, hook just hasn't fired yet
-
-    ancestry = set(_own_pid_ancestry())
-    for sid, info in sessions.items():
-        if info.get("pid") in ancestry:
-            return {"sessionId": sid, **info}
-
-    cwd = str(Path.cwd())
-    cwd_matches = [(sid, info) for sid, info in sessions.items() if info.get("cwd") == cwd]
-    if len(cwd_matches) == 1:
-        sid, info = cwd_matches[0]
-        return {"sessionId": sid, **info}
-
+    for name, source in SESSION_SOURCES.items():
+        resolved = source["resolve"]()
+        if resolved.get("sessionId"):
+            resolved["source"] = name
+            return resolved
     return {}
 
 
@@ -517,6 +505,44 @@ def make_checkpoint(transcript_path: str) -> dict:
         "byModel": usage["byModel"],
         "cumulative": usage["cumulative"],
     }
+
+
+def register_session_source(name: str, *, env_var: str, resolve, checkpoint, resume,
+                      delegation_usage=None, transcript: bool = False) -> None:
+    """Register a session source (called by an agent adjustment's session source module).
+
+    `resolve()` identifies the invoking session for this agent, returning
+    {"sessionId", "transcriptPath"} or {}; `checkpoint(session)` returns the checkpoint
+    dict for a session; `resume(session_id)` returns the resume command;
+    `delegation_usage(delegation_id)` returns a delegation's token record or None;
+    `transcript=True` marks the source that reads JSONL transcripts (the one an explicit
+    --session-id is attributed to).
+    """
+    SESSION_SOURCES[name] = {
+        "env_var": env_var,
+        "resolve": resolve,
+        "checkpoint": checkpoint,
+        "resume": resume,
+        "delegation_usage": delegation_usage,
+        "transcript": transcript,
+    }
+
+
+def session_source(name: str):
+    """Descriptor for a registered session source; None when no such source is registered."""
+    return SESSION_SOURCES.get(name)
+
+
+def transcript_source():
+    """Name of the registered source that reads transcripts, or None.
+
+    An explicit --session-id is a transcript id: the CLI attributes it to this source so the
+    right checkpoint maker is chosen. None when nothing transcript-capable is registered.
+    """
+    for name, source in SESSION_SOURCES.items():
+        if source.get("transcript"):
+            return name
+    return None
 
 
 def compute_usage(start_cp: dict, finish_cp: dict, subagents: list) -> dict:
@@ -645,3 +671,18 @@ def state_json_updated_since(started_at: str) -> bool:
     except FileNotFoundError:
         return False
     return mtime > parse_iso(started_at)
+
+
+# Optional agent-specific session sources. Agent adjustments (features/<agent>/adjustments/)
+# install a `<agent>_session_source.py` module beside this file (e.g. claude_session_source.py,
+# hermes_session_source.py); each exposes register() that wires that agent's source into the
+# registry above. Discovery by filename pattern rather than a fixed name, so any number of
+# agents can coexist — and absent all of them, the tracker has no session source at all. The
+# import must never fail the tracker over a module that was never installed.
+try:
+    import importlib
+    for _path in sorted(SCRIPT_DIR.glob("*_session_source.py")):
+        importlib.import_module(_path.stem)
+        sys.modules[_path.stem].register(sys.modules[__name__])
+except ImportError:
+    pass

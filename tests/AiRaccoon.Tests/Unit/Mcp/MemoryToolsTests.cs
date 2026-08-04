@@ -106,6 +106,25 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task Write_ForwardsSourceFile_ToStore()
+    {
+        await _tools.Write("acme", "content", sourceFile: "docs/adr/0001-test.md", section: "decision",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastRequest!.SourceFile.ShouldBe("docs/adr/0001-test.md");
+        _store.LastRequest.Section.ShouldBe("decision");
+    }
+
+    [Fact]
+    public async Task Search_ForwardsContextLabel_ToStore()
+    {
+        await _tools.Search("acme", "query", contextLabel: "docs:adr",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.ContextLabel.ShouldBe("docs:adr");
+    }
+
+    [Fact]
     public async Task Share_DelegatesToStore_AndReportsSharedContext()
     {
         _store.SharedEntry = new MemoryEntry("h1", "p.md", ContextNaming.SharedContext, "v", 1);

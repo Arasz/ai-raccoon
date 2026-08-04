@@ -1205,6 +1205,177 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "retrieval-improvement-c-implementation",
+      "subagents": [
+        {
+          "description": "W1 query construction implementation",
+          "at": "2026-08-04T17:12:18.088003+00:00",
+          "totalTokens": 268977
+        },
+        {
+          "description": "W2 source identity implementation",
+          "at": "2026-08-04T17:12:18.125931+00:00",
+          "totalTokens": 511461
+        },
+        {
+          "description": "W6 dual-vector implementation",
+          "at": "2026-08-04T17:12:18.161389+00:00",
+          "totalTokens": 412087
+        }
+      ],
+      "grade": null,
+      "sessionId": "cli-20260804-174052",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-04T15:40:52.772297+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-04T15:40:52.772297+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 1192525,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "generate-logo-for-ai-raccoon",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "hermes-1785858129",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-04T15:42:09.460567+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-04T17:33:15.043314+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-04T17:33:15.043314+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "add-command-line-args-parsing",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260804_192411_ee30d1",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-04T17:31:34.620869+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 8,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 55725,
+              "outputTokens": 9420,
+              "cacheReadTokens": 328064,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 7
+            }
+          },
+          "cumulative": {
+            "inputTokens": 55725,
+            "outputTokens": 9420,
+            "cacheReadTokens": 328064,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-04T17:31:34.620869+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 8,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 55725,
+              "outputTokens": 9420,
+              "cacheReadTokens": 328064,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 7
+            }
+          },
+          "cumulative": {
+            "inputTokens": 55725,
+            "outputTokens": 9420,
+            "cacheReadTokens": 328064,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
     }
   ]
 }

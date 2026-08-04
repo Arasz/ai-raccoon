@@ -1,0 +1,1217 @@
+{
+  "version": "0.1.0",
+  "generated_at": "2026-08-04T16:58:34Z",
+  "sources": [
+    {
+      "name": "dotnet-sdk",
+      "status": "ok",
+      "tools": {
+        "dotnet_solution": {
+          "tags": [
+            "dotnet",
+            "write"
+          ],
+          "intent": "Manage solution files and project membership. A solution file organizes multiple related projects. This is a consolidated tool that routes to specific solution operations based on the action parameter",
+          "origin": "manual"
+        },
+        "dotnet_help": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "Get help for a specific dotnet command. Use this to discover available options for any dotnet command.",
+          "origin": "manual"
+        },
+        "dotnet_server_metrics": {
+          "tags": [
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Get or reset in-memory telemetry metrics for MCP tool invocations. Returns per-tool counts, average durations, and success/failure rates. Metrics are collected automatically via a message filter — no ",
+          "origin": "manual"
+        },
+        "dotnet_dev_certs": {
+          "tags": [
+            "dotnet",
+            "run"
+          ],
+          "intent": "Manage developer certificates and user secrets for secure local development. Provides a consolidated interface for certificate trust/management and user secrets storage.",
+          "origin": "manual"
+        },
+        "dotnet_server_info": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "Get detailed human-readable information about .NET MCP Server capabilities, including supported features, concurrency safety, and available resources. Provides guidance for AI orchestrators on paralle",
+          "origin": "manual"
+        },
+        "dotnet_workload": {
+          "tags": [
+            "build",
+            "dotnet"
+          ],
+          "intent": "Manage .NET workloads for specialized development scenarios (MAUI, WASM, etc.). Provides a consolidated interface for installing, updating, listing, searching, and uninstalling workloads.",
+          "origin": "manual"
+        },
+        "dotnet_package": {
+          "tags": [
+            "dotnet",
+            "write"
+          ],
+          "intent": "Manage NuGet packages and project references. Provides a unified interface for all package and reference operations including adding/removing packages, searching NuGet.org, updating packages, managing",
+          "origin": "manual"
+        },
+        "dotnet_server_capabilities": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "Get a machine-readable JSON snapshot of server capabilities, versions, and supported features for agent orchestration and discovery.",
+          "origin": "manual"
+        },
+        "dotnet_project": {
+          "tags": [
+            "build",
+            "dotnet",
+            "run"
+          ],
+          "intent": "Manage .NET project lifecycle including creation, building, testing, running, and publishing. Provides a unified interface for all project operations including new project creation, building, running,",
+          "origin": "manual"
+        },
+        "dotnet_ef": {
+          "tags": [
+            "database",
+            "dotnet",
+            "run"
+          ],
+          "intent": "Manage Entity Framework Core operations including migrations, database updates, and DbContext scaffolding. Provides a unified interface for all EF Core CLI operations. Note: Requires dotnet-ef tool to",
+          "origin": "manual"
+        },
+        "dotnet_sdk": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "Query .NET SDK, runtime, template, and framework information. Provides a unified interface for all SDK-related queries including version info, installed SDKs and runtimes, template discovery, framewor",
+          "origin": "manual"
+        },
+        "dotnet_tool": {
+          "tags": [
+            "dotnet",
+            "run"
+          ],
+          "intent": "Manage .NET tools (global, local, and tool manifests). Provides a unified interface for all .NET tool operations including installation, updates, searching, running, and manifest management.",
+          "origin": "manual"
+        }
+      }
+    },
+    {
+      "name": "glider",
+      "status": "ok",
+      "tools": {
+        "unload": {
+          "tags": [
+            "dotnet",
+            "run"
+          ],
+          "intent": "Unloads the current in-memory workspace and stops file watching. Use before external builds or IDE work when analyzer/source-generator locks need to be released.",
+          "origin": "manual"
+        },
+        "write_file": {
+          "tags": [
+            "files",
+            "write"
+          ],
+          "intent": "Writes a .cs file under the loaded root. Uses preview-first behavior by default and explicitly updates or reloads the workspace after applyChanges=true. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "find_code": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Recommended first-call code navigation router. Symbol-first by default; delegates to semantic tools, outlines, or literal text search. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "get_outgoing_calls": {
+          "tags": [
+            "navigation",
+            "semantic"
+          ],
+          "intent": "Finds methods called by a method body with depth-limited expansion and paging. May return partial results for large graphs/timeouts. Requires symbolKey. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "find_unused_symbols": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Finds likely-unused source symbols with zero non-self references. Skips generated code, overrides/interface implementations, and reflection-sensitive symbols by default. Scope selects definitions to a",
+          "origin": "heuristic"
+        },
+        "find_external_dependency_usages": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Finds source usages of symbols that come from an external referenced assembly, keyed by simple assembly name or full metadata reference identity. Returns project, file, and symbol summaries to help pl",
+          "origin": "heuristic"
+        },
+        "get_project_format_summary": {
+          "tags": [
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Summarizes project formats/kinds for SDK-style migration planning. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "server_status": {
+          "tags": [
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Returns server readiness, workspace state and loading ETA, cache revision, file-watcher stats, scout availability, and lastLoadError when the most recent load failed. Use before solution-scoped tools.",
+          "origin": "manual"
+        },
+        "load": {
+          "tags": [
+            "dotnet",
+            "run"
+          ],
+          "intent": "Loads a C# solution/project into the in-memory workspace. Run before semantic tools. Watches the git repo root by default; see workingDirectory and noWatch.",
+          "origin": "manual"
+        },
+        "find_references": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Primary semantic reference search. Use instead of searching identifier text. Supports scope, kind filters, grouping, and paging. Requires symbolKey. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "move_type": {
+          "tags": [
+            "refactoring"
+          ],
+          "intent": "Moves a type to another file and/or namespace, updates references/usings, and returns a diff. Use applyChanges=false to preview before writing files. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "get_structure": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Gets a compact C# file outline. Use instead of reading whole files when you need types, members, or declarations. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "format_document": {
+          "tags": [
+            "csharp",
+            "refactoring",
+            "write"
+          ],
+          "intent": "Formats a C# document and returns a diff. Use after code edits/refactors to normalize layout/style. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "find_implementations": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Finds implementations of an interface/abstract type or member. Requires a symbolKey. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "sync": {
+          "tags": [
+            "csharp",
+            "write"
+          ],
+          "intent": "Syncs content-only .cs edits from disk into the loaded workspace. If paths are omitted, runs only for pending watcher changes unless forceSync=true. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_cascade_impact": {
+          "tags": [
+            "diagnostic",
+            "semantic"
+          ],
+          "intent": "Builds on analyze_change_impact to expand callers, implementations, and overrides transitively up to a requested depth. Returns blast-radius summaries by depth, project, and file, plus paged impacted ",
+          "origin": "manual"
+        },
+        "move_member": {
+          "tags": [
+            "csharp",
+            "refactoring",
+            "write"
+          ],
+          "intent": "Moves a member between types, updates references, and returns a diff. Use applyChanges=false to preview before applying. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "organize_usings": {
+          "tags": [
+            "csharp",
+            "refactoring",
+            "write"
+          ],
+          "intent": "Removes unnecessary usings and sorts the rest, returning a diff. Use for cleanup after edits/refactors. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "find_callers": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Finds methods that invoke a target method, with caller aggregation and paging. May return partial results on timeout. Requires symbolKey. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "reload": {
+          "tags": [
+            "dotnet",
+            "run"
+          ],
+          "intent": "Fully reloads workspace state from disk. Use after structural/project/reference changes. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "view_external_definition": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Returns source for external symbols from referenced assemblies (SourceLink first, decompile fallback), with metadata. Use when symbol source is outside the loaded workspace. Requires a loaded solution",
+          "origin": "manual"
+        },
+        "rename_symbol": {
+          "tags": [
+            "refactoring",
+            "search",
+            "semantic"
+          ],
+          "intent": "Renames a symbol across the loaded workspace and returns a diff. Prefer symbolKey input for precise targeting; use applyChanges=false for preview-first flow. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "get_method_source": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Gets source for a specific method with location metadata. Use maxLines/bodyOnly to control output size. For external types, use view_external_definition. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_symbol_info": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Gets normalized symbol details by symbolKey (signature, docs, locations, and structured method/type payloads when applicable). Prefer after discovery or whenever exact symbol identity matters. Require",
+          "origin": "heuristic"
+        },
+        "find_unused_parameters": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Finds likely-unused parameters with zero references inside their declaring method or constructor. Skips generated code, overrides/interface implementations, and reflection-sensitive members by default",
+          "origin": "heuristic"
+        },
+        "search_text": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Fallback literal/regex search for comments, strings, config-like text, or non-symbol text. Do not use for C# references/navigation. Delegates to scout when installed (see data.backend).",
+          "origin": "heuristic"
+        },
+        "find_member_in_hierarchy": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Walks a member override chain and returns the declared origin plus chain nodes. Requires symbolKey for a method/property/event. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "find_package_consolidation_candidates": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find package version drift. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "get_project_graph": {
+          "tags": [
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Analyzes the loaded workspace at the project-reference level. Returns direct edges, roots/leaves, transitive reachability counts, and cycle groups. Use for architecture review and project-reference im",
+          "origin": "manual"
+        },
+        "get_type_dependencies": {
+          "tags": [
+            "diagnostic",
+            "semantic"
+          ],
+          "intent": "Analyzes type dependencies in both directions (uses/used_by). Use for architecture review and refactor impact checks. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_type_info": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Gets semantic details for a type (members, inheritance, docs) from the loaded workspace. For external types, use view_external_definition.",
+          "origin": "manual"
+        },
+        "batch": {
+          "tags": [
+            "batch",
+            "run"
+          ],
+          "intent": "Runs multiple independent tool calls sequentially in one request to reduce round-trips. Returns per-operation results in order. Nested batch calls are not allowed.",
+          "origin": "manual"
+        },
+        "get_type_source": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Gets source for a type declaration with span metadata from the loaded workspace. For external types, use view_external_definition. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_file_contents": {
+          "tags": [
+            "files"
+          ],
+          "intent": "Gets text content for a file under the loaded root, with optional line-window limits. Supports files outside the loaded workspace when they are still inside the loaded root. Requires a loaded solution",
+          "origin": "heuristic"
+        },
+        "semantic_query": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Finds structural C# code patterns by semantic predicates. Use instead of regex for modifiers, types, attributes, or symbol shape. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_diagnostics": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Gets structured compiler/analyzer diagnostics with locations and severity. Prefer for incremental analysis loops instead of full CLI builds.",
+          "origin": "heuristic"
+        },
+        "find_unused_project_references": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Tests each direct ProjectReference by removing it in memory and checking whether new compiler errors appear in the referencing project. First pass is limited to ProjectReference entries and does not a",
+          "origin": "heuristic"
+        },
+        "get_derived_types": {
+          "tags": [
+            "csharp",
+            "navigation"
+          ],
+          "intent": "Derived-only convenience subset of get_type_hierarchy with simpler paging. Prefer get_type_hierarchy when you also need base types or interfaces. Requires symbolKey. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_symbol_at_position": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Resolves the symbol at a file position and returns its symbolKey. Use when you have file/line/column context from code or text search. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "find_package_usages": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Maps a NuGet package from project.assets.json to compile assemblies and metadata reference identities, then summarizes semantic source usages of that package. Use when you need package-level impact ra",
+          "origin": "heuristic"
+        },
+        "analyze_complexity": {
+          "tags": [
+            "csharp",
+            "diagnostic"
+          ],
+          "intent": "Analyzes cyclomatic complexity and size metrics per type/method. Use to prioritize refactoring candidates. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_method_signature": {
+          "tags": [
+            "csharp",
+            "read"
+          ],
+          "intent": "Gets a method signature (parameters, return type, docs) by method name or symbolKey (which disambiguates overloads). Fully qualified names work when containingTypeName is omitted. Requires a loaded so",
+          "origin": "manual"
+        },
+        "find_overrides": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Finds overrides of a virtual/abstract member. Fails for non-overridable members. Requires symbolKey. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "search_symbols": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Primary C# symbol discovery by name/pattern. Use instead of text/grep for identifiers before selecting a symbolKey. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "diagnostic_hotspots": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Groups diagnostics into hotspots by file, project, category, or ID with severity counts and optional example diagnostics. Use when you want grouped cleanup targets before drilling into raw diagnostics",
+          "origin": "heuristic"
+        },
+        "analyze_change_impact": {
+          "tags": [
+            "diagnostic",
+            "semantic"
+          ],
+          "intent": "Summarizes refactor blast radius for a symbol (references, callers, implementations, overrides). Use before rename/move operations. Requires symbolKey. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "resolve_symbol": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Shortest semantic path from known name/pattern to candidate symbolKeys for follow-up tools. Requires a loaded solution.",
+          "origin": "heuristic"
+        },
+        "consolidate_package_version": {
+          "tags": [
+            "dotnet",
+            "write"
+          ],
+          "intent": "Rewrite one package version. Requires a loaded solution.",
+          "origin": "manual"
+        },
+        "get_type_hierarchy": {
+          "tags": [
+            "csharp",
+            "navigation"
+          ],
+          "intent": "Primary type hierarchy tool. Gets base types, interfaces, and derived types for a type in one call, with separate paging for derived types. Use get_derived_types only when you want the derived list al",
+          "origin": "manual"
+        }
+      }
+    },
+    {
+      "name": "glider-trace",
+      "status": "ok",
+      "tools": {
+        "trace_compare_sessions": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Compares two stored GliderTrace sessions and highlights fixed, new, and persisting evidence.",
+          "origin": "manual"
+        },
+        "trace_run_tests": {
+          "tags": [
+            "run"
+          ],
+          "intent": "Runs dotnet test under the workspace, captures stdout/stderr/TRX evidence, optionally reruns safe failures, and stores a GliderTrace test session.",
+          "origin": "heuristic"
+        },
+        "trace_get_session": {
+          "tags": [
+            "opentelemetry",
+            "read",
+            "tracing"
+          ],
+          "intent": "Returns GliderTrace session metadata, compact summary, artifact references, and optional top findings.",
+          "origin": "manual"
+        },
+        "trace_export": {
+          "tags": [
+            "opentelemetry",
+            "tracing",
+            "write"
+          ],
+          "intent": "Exports a compact GliderTrace agent summary or zip artifact reference for a session.",
+          "origin": "manual"
+        },
+        "trace_stop": {
+          "tags": [
+            "opentelemetry",
+            "run",
+            "tracing"
+          ],
+          "intent": "Stops an active trace_start session, terminates the launched process, and finalizes stored evidence.",
+          "origin": "manual"
+        },
+        "trace_capture_gcdump": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Captures an explicit sensitive GC dump artifact from an already-running local .NET process.",
+          "origin": "manual"
+        },
+        "trace_list_processes": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Lists local .NET processes published through the diagnostics IPC channel for trace_attach.",
+          "origin": "manual"
+        },
+        "trace_remove_workspace": {
+          "tags": [
+            "opentelemetry",
+            "tracing",
+            "write"
+          ],
+          "intent": "Removes a workspace root that was registered at runtime via trace_add_workspace (narrowing the sandbox). Admin-configured --workspace roots cannot be removed.",
+          "origin": "manual"
+        },
+        "trace_correlate_code": {
+          "tags": [
+            "opentelemetry",
+            "semantic",
+            "tracing"
+          ],
+          "intent": "Maps stored GliderTrace stack-frame evidence to Glider-compatible C# symbol references.",
+          "origin": "manual"
+        },
+        "trace_status": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Returns GliderTrace readiness, workspace/artifact configuration, package expiration, retention/redaction defaults, and optional local diagnostic capability details.",
+          "origin": "manual"
+        },
+        "trace_add_workspace": {
+          "tags": [
+            "opentelemetry",
+            "tracing",
+            "write"
+          ],
+          "intent": "Registers an additional trusted workspace root at runtime (like glider load) so trace tools can target a sibling repository without restarting the server. Requires the server to be started with --allo",
+          "origin": "manual"
+        },
+        "trace_import_otlp": {
+          "tags": [
+            "opentelemetry",
+            "tracing",
+            "write"
+          ],
+          "intent": "Imports bounded OpenTelemetry JSON or NDJSON evidence from a workspace file into a GliderTrace session.",
+          "origin": "manual"
+        },
+        "trace_counters": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Summarizes collected dotnet-counters CSV artifacts for a GliderTrace session.",
+          "origin": "manual"
+        },
+        "trace_hotspots": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Summarizes CPU sample hotspots from collected runtime.nettrace artifacts for a GliderTrace session.",
+          "origin": "manual"
+        },
+        "trace_start": {
+          "tags": [
+            "opentelemetry",
+            "run",
+            "tracing"
+          ],
+          "intent": "Starts a long-running command under the workspace and stores an active GliderTrace runtime session.",
+          "origin": "manual"
+        },
+        "trace_import_artifacts": {
+          "tags": [
+            "opentelemetry",
+            "tracing",
+            "write"
+          ],
+          "intent": "Imports existing workspace or artifact-root TRX, log, counters, nettrace, dump, or GC dump files into a GliderTrace session.",
+          "origin": "manual"
+        },
+        "trace_attach": {
+          "tags": [
+            "opentelemetry",
+            "run",
+            "tracing"
+          ],
+          "intent": "Collects a bounded runtime.nettrace artifact from an already-running local .NET process.",
+          "origin": "manual"
+        },
+        "trace_exceptions": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Groups exception evidence for a GliderTrace session by type, message, and first stack frame.",
+          "origin": "manual"
+        },
+        "trace_capture_dump": {
+          "tags": [
+            "diagnostic",
+            "opentelemetry",
+            "tracing"
+          ],
+          "intent": "Captures an explicit sensitive process dump artifact from an already-running local .NET process.",
+          "origin": "manual"
+        },
+        "trace_query_events": {
+          "tags": [
+            "opentelemetry",
+            "search",
+            "tracing"
+          ],
+          "intent": "Queries normalized GliderTrace evidence events by session, kind, text, severity, and cursor.",
+          "origin": "manual"
+        },
+        "trace_run": {
+          "tags": [
+            "run"
+          ],
+          "intent": "Runs a command under the workspace, captures stdout/stderr evidence, and stores a GliderTrace runtime session.",
+          "origin": "heuristic"
+        }
+      }
+    },
+    {
+      "name": "playwright",
+      "status": "ok",
+      "tools": {
+        "browser_close": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Close the page",
+          "origin": "heuristic"
+        },
+        "browser_resize": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Resize the browser window",
+          "origin": "heuristic"
+        },
+        "browser_console_messages": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Returns all console messages",
+          "origin": "heuristic"
+        },
+        "browser_handle_dialog": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Handle a dialog",
+          "origin": "heuristic"
+        },
+        "browser_evaluate": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Evaluate JavaScript expression on page or element",
+          "origin": "heuristic"
+        },
+        "browser_file_upload": {
+          "tags": [
+            "browser",
+            "files"
+          ],
+          "intent": "Upload one or multiple files",
+          "origin": "heuristic"
+        },
+        "browser_drop": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Drop files or MIME-typed data onto an element, as if dragged from outside the page. At least one of \"paths\" or \"data\" must be provided.",
+          "origin": "heuristic"
+        },
+        "browser_find": {
+          "tags": [
+            "browser",
+            "search"
+          ],
+          "intent": "Search the accessibility snapshot of the current page for text or a regular expression. Returns matching snapshot nodes with a few lines of surrounding context (like search snippets), each shown under",
+          "origin": "heuristic"
+        },
+        "browser_fill_form": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Fill multiple form fields",
+          "origin": "heuristic"
+        },
+        "browser_press_key": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Press a key on the keyboard",
+          "origin": "heuristic"
+        },
+        "browser_type": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Type text into editable element",
+          "origin": "heuristic"
+        },
+        "browser_navigate": {
+          "tags": [
+            "browser",
+            "navigation"
+          ],
+          "intent": "Navigate to a URL",
+          "origin": "heuristic"
+        },
+        "browser_navigate_back": {
+          "tags": [
+            "browser",
+            "navigation"
+          ],
+          "intent": "Go back to the previous page in the history",
+          "origin": "heuristic"
+        },
+        "browser_network_requests": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Returns a numbered list of network requests since loading the page. Use browser_network_request with the number to get full details.",
+          "origin": "heuristic"
+        },
+        "browser_network_request": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Returns full details (headers and body) of a single network request, or a single part if `part` is set. Use the number from browser_network_requests.",
+          "origin": "heuristic"
+        },
+        "browser_run_code_unsafe": {
+          "tags": [
+            "browser",
+            "run"
+          ],
+          "intent": "Run a Playwright code snippet. Unsafe: executes arbitrary JavaScript in the Playwright server process and is RCE-equivalent.",
+          "origin": "heuristic"
+        },
+        "browser_take_screenshot": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
+          "origin": "heuristic"
+        },
+        "browser_snapshot": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Capture accessibility snapshot of the current page, this is better than screenshot",
+          "origin": "heuristic"
+        },
+        "browser_click": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Perform click on a web page",
+          "origin": "heuristic"
+        },
+        "browser_drag": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Perform drag and drop between two elements",
+          "origin": "heuristic"
+        },
+        "browser_hover": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Hover over element on page",
+          "origin": "heuristic"
+        },
+        "browser_select_option": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Select an option in a dropdown",
+          "origin": "heuristic"
+        },
+        "browser_tabs": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "List, create, close, or select a browser tab.",
+          "origin": "heuristic"
+        },
+        "browser_wait_for": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Wait for text to appear or disappear or a specified time to pass",
+          "origin": "heuristic"
+        }
+      }
+    },
+    {
+      "name": "code-review-graph",
+      "status": "ok",
+      "tools": {
+        "build_or_update_graph_tool": {
+          "tags": [
+            "build"
+          ],
+          "intent": "Build or incrementally update the code knowledge graph.\n\nCall this first to initialize the graph, or after making changes.\nBy default performs an incremental update (only changed files).\nSet full_rebu",
+          "origin": "heuristic"
+        },
+        "run_postprocess_tool": {
+          "tags": [
+            "run"
+          ],
+          "intent": "Run post-processing on existing graph (flows, communities, FTS index).\n\nUse after building with postprocess=\"none\" or \"minimal\", or to re-run\nexpensive steps independently. Signatures are always compu",
+          "origin": "heuristic"
+        },
+        "get_minimal_context_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Get ultra-compact context for any task (~100 tokens). Always call this first.\n\nReturns graph stats, risk score, top communities/flows, and suggested\nnext tools in a single compact response. Use this a",
+          "origin": "manual"
+        },
+        "get_impact_radius_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Blast radius of editing a symbol: everything downstream that a change to it can reach.",
+          "origin": "catalog"
+        },
+        "query_graph_tool": {
+          "tags": [
+            "navigation",
+            "search"
+          ],
+          "intent": "Trace a known symbol's callers, callees, imports or covering tests — the structural answer a text search cannot give.",
+          "origin": "catalog"
+        },
+        "get_review_context_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Generate a focused, token-efficient review context for code changes.\n\nCombines impact analysis with source snippets and review guidance.\nUse this for comprehensive code reviews.",
+          "origin": "manual"
+        },
+        "semantic_search_nodes_tool": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Find code by describing what it does, when you do not know the file or symbol name. The entry point for 'where is X handled?'.",
+          "origin": "catalog"
+        },
+        "embed_graph_tool": {
+          "tags": [
+            "build",
+            "semantic"
+          ],
+          "intent": "Compute vector embeddings for all graph nodes to enable semantic search.\n\nRequires: pip install code-review-graph[embeddings] (local provider only;\ncloud providers use stdlib urllib).\nDefault provider",
+          "origin": "manual"
+        },
+        "list_graph_stats_tool": {
+          "tags": [
+            "diagnostic",
+            "read"
+          ],
+          "intent": "Get aggregate statistics about the code knowledge graph.\n\nShows total nodes, edges, languages, files, and last update time.\nUseful for checking if the graph is built and up to date.",
+          "origin": "manual"
+        },
+        "get_docs_section_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Get a specific section from the LLM-optimized documentation reference.\n\nReturns only the requested section content for minimal token usage.\nUse this before answering any user question about the plugin",
+          "origin": "manual"
+        },
+        "find_large_functions_tool": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find functions, classes, or files exceeding a line-count threshold.\n\nUseful for decomposition audits, code quality checks, and enforcing\nsize limits during code review. Results are ordered by line cou",
+          "origin": "heuristic"
+        },
+        "list_flows_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "List execution flows in the codebase, sorted by criticality.\n\nEach flow represents a call chain starting from an entry point\n(HTTP handler, CLI command, test function, etc.). Use this to\nunderstand th",
+          "origin": "manual"
+        },
+        "get_flow_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Get detailed information about a single execution flow.\n\nReturns the full call path with each step's function name, file, and\nline numbers. Optionally includes source code snippets for each step.\n\nPro",
+          "origin": "manual"
+        },
+        "get_affected_flows_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Find execution flows affected by changed files.\n\nIdentifies which execution flows pass through nodes in the changed files.\nUseful during code review to understand which user-facing or critical paths\na",
+          "origin": "manual"
+        },
+        "list_communities_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "List detected code communities in the codebase.\n\nEach community represents a cluster of related code entities (functions,\nclasses) detected via the Leiden algorithm or file-based grouping.\nUse this to",
+          "origin": "manual"
+        },
+        "get_community_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Get detailed information about a single code community.\n\nReturns community metadata including size, cohesion, dominant language,\nand member list. Optionally includes full node details for each member.",
+          "origin": "manual"
+        },
+        "get_architecture_overview_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Orientation in an unfamiliar repository — its structure and major components — before reading any single file.",
+          "origin": "catalog"
+        },
+        "detect_changes_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "List what changed since the last graph update, as the starting point of a review rather than a git diff.",
+          "origin": "catalog"
+        },
+        "refactor_tool": {
+          "tags": [
+            "refactoring"
+          ],
+          "intent": "Graph-powered refactoring operations.\n\nUnified entry point for rename previews, dead code detection, and\nrefactoring suggestions.\n\nModes:\n- rename: Preview renaming a symbol. Returns an edit list and ",
+          "origin": "heuristic"
+        },
+        "apply_refactor_tool": {
+          "tags": [
+            "refactoring"
+          ],
+          "intent": "Apply a previously previewed refactoring to source files.\n\nTakes a refactor_id from a prior refactor_tool(mode=\"rename\") call and\napplies the exact string replacements to the target files. Previews\nex",
+          "origin": "heuristic"
+        },
+        "generate_wiki_tool": {
+          "tags": [
+            "build",
+            "write"
+          ],
+          "intent": "Generate a markdown wiki from the code community structure.\n\nCreates a wiki page for each detected community and an index page.\nPages are written to .code-review-graph/wiki/ inside the repository.\nOnl",
+          "origin": "manual"
+        },
+        "get_wiki_page_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "Retrieve a specific wiki page by community name.\n\nReturns the markdown content of the wiki page for the given community.\nThe wiki must have been generated first via generate_wiki_tool.",
+          "origin": "manual"
+        },
+        "get_hub_nodes_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Find the most connected nodes in the codebase (architectural hotspots).\n\nHub nodes have the highest total degree (in + out edges). Changes to\nthem have disproportionate blast radius. Excludes File nod",
+          "origin": "manual"
+        },
+        "get_bridge_nodes_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Find architectural chokepoints via betweenness centrality.\n\nBridge nodes sit on shortest paths between many node pairs.\nIf they break, multiple code regions lose connectivity.\nUses sampling approximat",
+          "origin": "manual"
+        },
+        "get_knowledge_gaps_tool": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Identify structural weaknesses in the codebase graph.\n\nFinds isolated nodes (disconnected), thin communities (< 3 members),\nuntested hotspots (high-degree nodes without test coverage), and\nsingle-file",
+          "origin": "manual"
+        },
+        "get_surprising_connections_tool": {
+          "tags": [
+            "diagnostic",
+            "navigation"
+          ],
+          "intent": "Find unexpected architectural coupling via composite surprise scoring.\n\nScores edges by: cross-community (+0.3), cross-language (+0.2),\nperipheral-to-hub (+0.2), cross-test-boundary (+0.15), and\nunusu",
+          "origin": "manual"
+        },
+        "get_suggested_questions_tool": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Auto-generate review questions from graph analysis.\n\nProduces prioritized questions about: bridge nodes needing tests,\nuntested hub nodes, surprising cross-community coupling, thin\ncommunities, and un",
+          "origin": "manual"
+        },
+        "traverse_graph_tool": {
+          "tags": [
+            "navigation",
+            "search"
+          ],
+          "intent": "BFS/DFS traversal from best-matching node with token budget.\n\nFree-form graph exploration: finds the node best matching your\nquery, then traverses outward via BFS or DFS up to the given\ndepth, collect",
+          "origin": "manual"
+        },
+        "list_repos_tool": {
+          "tags": [
+            "navigation",
+            "read"
+          ],
+          "intent": "List all registered repositories in the multi-repo registry.\n\nReturns the list of repos registered at ~/.code-review-graph/registry.json.\nUse the CLI 'register' command to add repos.",
+          "origin": "manual"
+        },
+        "cross_repo_search_tool": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search for code entities across all registered repositories.\n\nRuns hybrid search on each registered repo's graph database and merges\nthe results by score. Register repos first with the CLI 'register' ",
+          "origin": "heuristic"
+        }
+      }
+    },
+    {
+      "name": "hermes",
+      "status": "ok",
+      "tools": {
+        "conversations_list": {
+          "tags": [
+            "search",
+            "read"
+          ],
+          "intent": "List active messaging conversations, optionally filtered by platform or name.",
+          "origin": "catalog"
+        },
+        "conversation_get": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Inspect one conversation's details using its session key.",
+          "origin": "catalog"
+        },
+        "messages_read": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Read recent message history from a selected conversation.",
+          "origin": "catalog"
+        },
+        "attachments_fetch": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch non-text attachments from a specific message.",
+          "origin": "catalog"
+        },
+        "events_poll": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Poll for new conversation or approval events after a cursor.",
+          "origin": "catalog"
+        },
+        "events_wait": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Wait for the next conversation or approval event with a bounded timeout.",
+          "origin": "catalog"
+        },
+        "messages_send": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Send a text message through a connected platform target.",
+          "origin": "catalog"
+        },
+        "channels_list": {
+          "tags": [
+            "search",
+            "read"
+          ],
+          "intent": "List available messaging targets across connected platforms.",
+          "origin": "catalog"
+        },
+        "permissions_list_open": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List pending approval requests observed by the bridge session.",
+          "origin": "catalog"
+        },
+        "permissions_respond": {
+          "tags": [
+            "write",
+            "unsafe"
+          ],
+          "intent": "Allow or deny a pending approval request.",
+          "origin": "catalog"
+        }
+      }
+    },
+    {
+      "name": "microsoft-docs",
+      "status": "ok",
+      "url": "https://learn.microsoft.com/api/mcp",
+      "tools": {
+        "microsoft_docs_search": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search official Microsoft/Azure documentation to find the most relevant and trustworthy content for a user's query. This tool returns up to 10 high-quality content chunks (each max 500 tokens), extrac",
+          "origin": "heuristic"
+        },
+        "microsoft_code_sample_search": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search for code snippets and examples in official Microsoft Learn documentation. This tool retrieves relevant code samples from Microsoft documentation pages providing developers with practical implem",
+          "origin": "heuristic"
+        },
+        "microsoft_docs_fetch": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch and convert a Microsoft Learn documentation webpage to markdown format. This tool retrieves the latest complete content of Microsoft documentation webpages including Azure, .NET, Microsoft 365, ",
+          "origin": "manual"
+        }
+      }
+    },
+    {
+      "name": "rider",
+      "status": "unknown",
+      "url": "http://127.0.0.1:64342/stream",
+      "tools": {}
+    }
+  ]
+}

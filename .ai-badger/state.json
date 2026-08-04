@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-04T15:27:54Z",
+  "lastUpdated": "2026-08-04T19:24:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "generate-logo-for-ai-raccoon",
+      "summary": "Logo/brand work landed on main via brand commits: keep memory-keeper mark, drop B/C propositions and previews, remove remaining AiRaccoon brand assets (2eaf9b5, 1928192). No separate logo deliverables remain in the repo.",
+      "hasNotes": false
+    },
     {
       "id": "hook-metrics-and-traces",
       "summary": "OpenTelemetry-compatible observability on all 17 MCP tool paths. BCL-only (System.Diagnostics.Metrics + ActivitySource) — no OTel SDK, works with dotnet-counters. ToolCallMetrics class (Meter 'AiRaccoon.MemoryTools' + Counter<long>/Histogram<double> + ActivitySource). All 17 MemoryTools methods instrumented: MCP tool-name tags, duration buckets [1..30000]ms, per-catch-block error_type tagging for Sync. ADR-0002 documents design, non-goals, future OTel SDK path. 13 new observability tests (MetricCollector<long> + ActivityListener). Full suite: 428 passed, 0 failed.",
