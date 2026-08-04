@@ -13,11 +13,9 @@ public sealed record StructureBackfillResult(
     int VectorsWritten);
 
 /// <summary>
-///     Wave 6 structure backfill: reads every entry, derives its heading-path context from the
-///     chunk content (HeadingPathParser), embeds each unique heading path with the configured
-///     local ONNX model, and writes heading_path + structure_embedding + the vec_structure row.
-///     Re-runnable and idempotent — chunk content and hashes are never touched, so re-running
-///     after a concurrent schema/ingest wave is safe (plan C Wave 6 coordination note).
+///     Structure backfill (plan C Wave 6): derives heading paths from chunk content, embeds
+///     them, writes heading_path + structure_embedding + vec_structure. Idempotent — never
+///     touches chunk content or hashes.
 /// </summary>
 public sealed class StructureBackfillService(EmbeddingService embeddings)
 {

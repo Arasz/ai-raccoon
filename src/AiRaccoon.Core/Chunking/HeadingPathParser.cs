@@ -1,12 +1,8 @@
 namespace AiRaccoon.Core.Chunking;
 
 /// <summary>
-///     Extracts the heading-path context a markdown chunk belongs to, e.g.
-///     "ADR-0011 > Decision"; "" when the chunk has no headings. The path is the heading
-///     stack at the chunk's last section heading (H1/H2): the H1 contributes only its
-///     identifier segment (text before ':' / '—' / '|') and sub-sections (H3+) are dropped —
-///     both measured requirements for the identifier signal to survive embedding (plan C
-///     Wave 6; docs/adr/0004).
+///     Heading-path context of a markdown chunk (e.g. "ADR-0011 > Decision"); "" when the
+///     chunk has no headings. Path rules per docs/adr/0004.
 /// </summary>
 public static class HeadingPathParser
 {

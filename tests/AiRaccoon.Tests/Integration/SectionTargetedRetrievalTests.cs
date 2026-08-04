@@ -12,12 +12,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 6 gates: section-targeted retrieval via the dual-vector structure signal
-///     (heading-path storage + structure embeddings + fixed-alpha fusion) against the committed
-///     jsaa corpus. S4 at rank ≤ 3, section-level hit@5 ≥ 4/6 over the A-queries with section
-///     ground truth, bounded file-level no-regression vs the content-only vector arm, and S2
-///     answered at file level with the Decision chunk found (exact-section rank documented in
-///     the report; see docs/adr/0004-dual-vector-structure-signal.md for the measured limits).
+///     Plan C Wave 6 section-targeting gates (S2/S4, section hit@5, bounded file-level
+///     no-regression) against the committed jsaa corpus; limits in docs/adr/0004.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -27,12 +23,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
-    /// <summary>
-    ///     Bounded no-regression tolerance (file-level rank positions). The strict rank-equality
-    ///     gate is not achievable with section-carrying heading paths on this corpus (measured:
-    ///     A1/A3/A4 flip by 1-2 positions when structure-carrying sections of relevant documents
-    ///     overtake — docs/adr/0004). All expected files still land in the top 5.
-    /// </summary>
+    /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (docs/adr/0004).</summary>
     private const int MaxFileRankRegression = 2;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
@@ -223,12 +214,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             $"section-level hit@5 over A1-A7 must be >= 4/6; got {hits.Count}/6");
     }
 
-    /// <summary>
-    ///     Wave 6 gate (b): no regression on content-only file-level ranks. Every expected-file
-    ///     query (A1–A7 + C1/C2/C5) must keep its expected file in the top 5, and no query may lose
-    ///     more than <see cref="MaxFileRankRegression"/> rank positions vs the content-only arm
-    ///     (alpha=1.0). Strict rank equality is a documented deviation (docs/adr/0004).
-    /// </summary>
+    /// <summary>Wave 6 gate (b): no content-only file-level rank regression beyond the bounded tolerance (docs/adr/0004).</summary>
     [Fact]
     public async Task FileLevelRanks_FusedArm_NoRegressionBeyondTolerance()
     {

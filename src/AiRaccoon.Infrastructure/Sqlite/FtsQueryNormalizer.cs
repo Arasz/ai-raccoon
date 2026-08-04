@@ -4,11 +4,8 @@ using System.Text.RegularExpressions;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Turns a free-text query into a safe FTS5 MATCH plan (plan C Wave 1): ≤4 content
-///     tokens join with AND (precision) plus an OR-join fallback of all query tokens with
-///     quoted bigram phrases when the AND under-matches; longer queries keep the plain OR
-///     join of all tokens (the proven pre-Wave-1 expression). Punctuation never reaches
-///     the FTS5 grammar — every term comes from the token regex.
+///     Free-text query -> safe FTS5 MATCH plan (plan C Wave 1): AND-join with OR fallback
+///     for short queries, plain OR for long ones; terms come only from the token regex.
 /// </summary>
 internal static partial class FtsQueryNormalizer
 {
@@ -83,9 +80,5 @@ internal static partial class FtsQueryNormalizer
     private static partial Regex TokenRegex();
 }
 
-/// <summary>
-///     FTS5 MATCH expression to run plus the OR-join fallback to retry when the primary
-///     expression under-matches (null when there is nothing to fall back to), and the
-///     content-token count used with the caller's limit to detect an under-matched AND.
-/// </summary>
+/// <summary>Primary FTS5 MATCH expression, the OR-join fallback (null when none), and the content-token count for the under-match check.</summary>
 internal sealed record FtsQueryPlan(string Expression, string? Fallback, int TokenCount);

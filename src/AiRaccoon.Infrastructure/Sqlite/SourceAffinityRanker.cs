@@ -3,11 +3,8 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Wave 3 source-affinity ranking (plan C §3): adjacent-chunk boost, source consolidation
-///     and document-first tie-breaking over the fused candidate list. A chunk at index N±1 of
-///     the same source gains λ per counted sibling; only siblings scoring within
-///     <paramref name="consolidationThreshold"/> of the top raw score count, and a weak adjacent
-///     sibling (gap ≥ threshold) is merged into the source's best chunk. A zero λ is a no-op.
+///     Source-affinity ranking (plan C Wave 3; docs/adr/0005): adjacent-chunk boost, source
+///     consolidation, document-first tie-break over the fused list. λ = 0 is a no-op.
 /// </summary>
 internal static class SourceAffinityRanker
 {

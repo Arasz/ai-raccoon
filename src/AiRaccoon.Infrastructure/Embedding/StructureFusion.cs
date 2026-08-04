@@ -7,10 +7,8 @@ public readonly record struct VectorHit(string Hash, double Sim);
 public sealed record FusedRank(string Hash, double Score);
 
 /// <summary>
-///     Fixed-alpha fusion of the content and structure vector modalities (plan C Wave 6):
-///     score = alpha * sim(q, content) + (1 - alpha) * sim(q, structure). Chunks without a
-///     structure vector contribute zero structure similarity; alpha is a constant per the
-///     measured query-invariance (spike mean 0.58, default 0.5).
+///     Fixed-alpha fusion of content and structure similarities (plan C Wave 6;
+///     docs/adr/0004): score = alpha * content + (1 - alpha) * structure, alpha default 0.5.
 /// </summary>
 public static class StructureFusion
 {

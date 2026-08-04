@@ -3,11 +3,8 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Reciprocal rank fusion (FR-NM-4): a result's score is the weighted sum over the ranked
-///     lists that retrieved it of weight / (k + rank); the fused scores are normalized to their
-///     max so the top result is 1.0 (contract: ranking in 0..1). An empty list contributes
-///     nothing — a result is scored by whichever modality retrieved it (COALESCE). The first
-///     list carrying a result also supplies its payload, so the FTS list's snippet() wins.
+///     Reciprocal rank fusion (FR-NM-4): score = sum of weight / (k + rank) per retrieving
+///     list, normalized to max 1.0; the first list carrying a result supplies its payload.
 /// </summary>
 internal static class ReciprocalRankFusion
 {

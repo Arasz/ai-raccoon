@@ -4,10 +4,8 @@ using System.Text;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Deterministic snippet for hits without an FTS5 snippet (FR-NM-4 s1): a ~200-char
-///     window of the entry value with '…' marking both cuts. The window start is derived
-///     from the entry hash, so the same entry always yields the same snippet and long values
-///     do not always open on their head.
+///     Deterministic ~200-char snippet for hits without an FTS5 snippet (FR-NM-4 s1); the
+///     window start derives from the entry hash so long values do not always open on their head.
 /// </summary>
 internal static class SnippetFallback
 {

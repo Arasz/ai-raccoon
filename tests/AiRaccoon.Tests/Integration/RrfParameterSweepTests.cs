@@ -13,15 +13,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 4 sweep: RRF k, weight ratio, minScore and candidate window against the
-///     committed jsaa baseline. Runs the real search pipeline (SearchAsync -> FTS/vector
-///     batches -> RRF -> source-affinity ranker -> merger) over the 96-point RrfGrid,
-///     writes the matrix to docs/work/2026-08-04-wave4-rrf-sweep.md, and pins the chosen
-///     configuration (the SearchQuery defaults) to the Wave 4 gates: no fusion regression,
-///     C2 hybrid <= 3, every Wave 3 rank gate held, and grid-optimality — no point beats
-///     the chosen configuration on nDCG@5 while holding the gates (measured: the pre-sweep
-///     defaults are the unique optimum; see ADR 0006). Wave 3 parameters (lambda 0.1 /
-///     threshold 0.1 / Max) are fixed.
+///     Plan C Wave 4 sweep: RRF k, weight ratio, minScore, candidate window over the
+///     96-point grid through the real pipeline; pins the chosen configuration (the
+///     defaults — measured grid optimum, ADR-0006) to the Wave 4 gates. W3 params fixed.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

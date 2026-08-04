@@ -4,12 +4,9 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Our single-file bank schema (plan §2.2): entries with on-row metadata, workspaces,
-///     settings, an FTS5 external-content index over entries(value, source_file, section)
-///     and vec0 tables for the content embedding (P4) and the Wave 6 structure embedding
-///     (heading-path vector). Idempotent — safe to run on every bank open. Wave 2 (plan
-///     C §3): source_file carries the original file path so the FTS index can weight source
-///     matches above body-text matches; legacy banks are migrated on open (see MigrateAsync).
+///     Single-file bank schema (plan §2.2): entries, workspaces, settings, an FTS5
+///     external-content index (value, source_file, section) and content + structure vec0
+///     tables. Idempotent on every bank open; legacy banks migrate (see MigrateAsync).
 /// </summary>
 internal static class MemorySchema
 {
@@ -22,11 +19,9 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Wave 2 + Wave 6 migration: legacy banks lack source_file, section (Wave 2) and
-    ///     heading_path, structure_embedding (Wave 6). The columns are added when missing;
-    ///     the FTS index is rebuilt with the three-column shape (value, source_file, section)
-    ///     when it still carries an old shape. Fresh banks created by Ddl already have the
-    ///     new shape and are untouched.
+    ///     Adds the Wave 2 (source_file, section) and Wave 6 (heading_path, structure_embedding)
+    ///     columns when missing and rebuilds the FTS index when it predates the three-column
+    ///     shape. Fresh banks are untouched.
     /// </summary>
     private static async Task MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
