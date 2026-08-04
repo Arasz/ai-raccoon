@@ -359,6 +359,48 @@ public sealed class WatchIntegrationTests
     }
 
     [Fact]
+    public async Task Restart_SingleFileWatch_FileChangedWhileDown_IsReIngestedOnCatchUp()
+    {
+        using var first = new Stack(name: "restart-single", now: FixedNow, deleteDataRoot: false);
+        await first.EnableAsync(TestContext.Current.CancellationToken);
+        await first.AllowScopeAsync(TestContext.Current.CancellationToken);
+        first.Write("readme.md", "zephyrsingle v1");
+        first.Age("readme.md", TimeSpan.FromMinutes(1));
+        await first.Service.AddAsync(Project, first.File("readme.md"), TestContext.Current.CancellationToken);
+        await first.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (first.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        (await first.StepUntilAsync(async () =>
+            (await first.SearchAsync("zephyrsingle", TestContext.Current.CancellationToken))
+            .Any(r => r.SourceFile == first.File("readme.md")), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the single-file watch did not ingest its file on the initial scan");
+
+        // "Server down": watcher off, downtime passes, the watched file changes while down.
+        first.EventSource.StopAll();
+        first.Time.Advance(TimeSpan.FromMinutes(5));
+        first.Write("readme.md", "zephyrsingle v2");
+
+        using var second = new Stack(name: "restart-single", now: first.Time.GetUtcNow(), deleteDataRoot: true);
+        await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (second.CatchUp.LastScan is { } scan)
+        {
+            await scan;
+        }
+
+        (await second.StepUntilAsync(async () =>
+        {
+            var results = await second.SearchAsync("zephyrsingle", TestContext.Current.CancellationToken);
+            return results.Any(r => r.SourceFile == second.File("readme.md"));
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue(
+            "catch-up did not re-ingest the single-file watch target changed while down");
+        (await second.CountEntriesAsync(second.File("readme.md"), "v1", TestContext.Current.CancellationToken))
+            .ShouldBe(0, "mirror semantics: the old content must be replaced on re-ingest");
+    }
+
+    [Fact]
     public async Task UnreadableFile_DigestFails_StatusShowsError_PipelineKeepsRunning()
     {
         if (OperatingSystem.IsWindows())

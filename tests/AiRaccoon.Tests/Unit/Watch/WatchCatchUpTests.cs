@@ -69,6 +69,45 @@ public sealed class WatchCatchUpTests
     }
 
     [Fact]
+    public void EnumerateFiles_OnAFileTarget_ReturnsTheFileWhenItIsDue()
+    {
+        using var dir = TempDir.New("catchup-file-target");
+        var file = dir.File("a.md");
+        File.WriteAllText(file, "zephyrone");
+        Stamp(file, new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero));
+
+        WatchCatchUp.EnumerateFiles(file, sinceWatermark: null).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(file,
+                new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds())
+            .ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(file,
+                new DateTimeOffset(2026, 1, 15, 13, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds())
+            .ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_OnSingleFileTarget_IngestsTheFile()
+    {
+        using var dir = TempDir.New("catchup-single");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        // The fake's Ingested list is not thread-safe; serialize digests (concurrency 1 is a
+        // valid config — the concurrency behavior itself is pinned by S4's scheduler tests).
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        await stack.Service.AddAsync(Project, file, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, file);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.Select(i => i.Path).ShouldContain(file);
+    }
+
+    [Fact]
     public async Task EnqueueInitialScan_IngestsEveryFile_AndAdvancesTheWatermark()
     {
         using var dir = TempDir.New("catchup-full");
