@@ -14,6 +14,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Setup;
 
@@ -90,5 +91,25 @@ public static partial class Dependencies
         services.AddSingleton<WatchScheduler>();
         services.AddSingleton<WatchPipeline>();
         services.AddSingleton<IWatchService, WatchService>();
+
+        // S5 watcher lifecycle: catch-up scans, the FileSystemWatcher adapter (adapter
+        // failures surface as synthetic WatchEventError events — logged, never thrown),
+        // and the hosted re-watch loop that starts/stops watchers on a poll.
+        services.AddSingleton<WatchCatchUp>();
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();
+            return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
+                error => Log.WatchEventSourceError(logger, error.ProjectId, error.WatchPath, error.Message), logger);
+        });
+        services.AddHostedService<WatchHostedService>();
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 330, Level = LogLevel.Error,
+            Message = "Watch event source error for {ProjectId} on {WatchPath}: {Message}")]
+        public static partial void WatchEventSourceError(ILogger logger, string projectId, string watchPath,
+            string message);
     }
 }
