@@ -51,6 +51,12 @@ internal static class CliArgs
         root.Add(new Option<string>("--sync-bucket") { Description = "S3 bucket name", HelpName = "name" });
         root.Add(new Option<string>("--sync-region") { Description = "S3 region", HelpName = "name" });
         root.Add(new Option<string>("--sync-object-key") { Description = "S3 object key", HelpName = "key" });
+        // WebApplicationFactory bootstraps the entry point with these host-config flags;
+        // declared hidden so the E2E host builds — values are intentionally never consumed
+        // (CreateBuilder([]) drops generic host flags by design).
+        root.Add(new Option<string>("--environment") { Hidden = true });
+        root.Add(new Option<string>("--contentRoot") { Hidden = true });
+        root.Add(new Option<string>("--applicationName") { Hidden = true });
         return root;
     }
 

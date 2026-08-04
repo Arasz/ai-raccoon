@@ -17,27 +17,17 @@ namespace AiRaccoon.Setup;
 
 public static partial class Dependencies
 {
-    public static void RegisterMemoryServices(this IServiceCollection services)
+    public static void RegisterMemoryServices(this IServiceCollection services, InfrastructureOptions options)
     {
-        // Options come from environment variables only — never hardcoded credentials.
-        var scope = string.Equals(
-            Environment.GetEnvironmentVariable("AIRACCOON_INSTALL_SCOPE"), "project",
-            StringComparison.OrdinalIgnoreCase)
-            ? InstallScope.Project
-            : InstallScope.User;
-
-        var options = new InfrastructureOptions
+        // Sync credentials stay environment-only: layered here (the composition root),
+        // never via CLI options and never in ServerConfig.Build. All other options are
+        // pre-merged by ServerConfig.Build (CLI > env > default).
+        options = options with
         {
-            DataRoot = InfrastructureOptions.DefaultDataRoot(),
-            Scope = scope,
-            Sync = new SyncOptions
+            Sync = options.Sync with
             {
-                Endpoint = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ENDPOINT"),
-                Bucket = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_BUCKET"),
                 AccessKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ACCESS_KEY"),
-                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY"),
-                Region = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_REGION"),
-                ObjectKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_OBJECT_KEY")
+                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY")
             }
         };
 

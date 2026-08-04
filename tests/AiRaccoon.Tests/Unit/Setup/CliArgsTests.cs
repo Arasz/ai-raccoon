@@ -120,4 +120,16 @@ public class CliArgsTests
         parsed.Options.ShouldBeNull();
         parsed.Errors.ShouldHaveSingleItem().ShouldContain("--data-root");
     }
+
+    [Fact]
+    public void Parse_HostBootstrapFlags_AreAcceptedAndIgnored()
+    {
+        // WebApplicationFactory bootstraps the entry point with these host-config flags;
+        // declared hidden so the E2E host builds, values never consumed.
+        var parsed = CliArgs.Parse(
+            ["--environment=Development", "--contentRoot=/tmp/x", "--applicationName=AiRaccoon"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.Options.ShouldBeNull();
+    }
 }
