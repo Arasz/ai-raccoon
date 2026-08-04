@@ -21,8 +21,9 @@ Every tool requires `projectId` (camelCase — all parameters are camelCase). Wr
 land in `project:<id>` by default; naming a `workspaceId` routes them into that
 workspace's isolated context.
 
-All 17 tools are unchanged in name from the prior release. `memory_configure`
-gained a `baseUrl` parameter for any OpenAI-compatible endpoint.
+All 18 tools are unchanged in name from the prior release except one addition.
+`memory_configure` gained a `baseUrl` parameter for any OpenAI-compatible endpoint;
+`memory_set_structure_alpha` is new (Wave 6 — dual-vector fusion tuning).
 
 | Tool | Parameters | Returns |
 |---|---|---|
@@ -37,6 +38,7 @@ gained a `baseUrl` parameter for any OpenAI-compatible endpoint.
 | `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned: n}` |
 | `memory_configure` | `projectId`, `provider`, `baseUrl?`, `model?`, `apiKey?` | `{provider, model, engine}` |
 | `memory_embed_pending` | `projectId`, `limit?` | `{processed, pending}` |
+| `memory_set_structure_alpha` | `projectId`, `alpha` (0..1) | `{key, value}` |
 | `memory_workspace_begin` | `projectId`, `agentId?`, `name?` | `{workspaceId, context}` |
 | `memory_workspace_status` | `projectId`, `workspaceId` | `{entries, count}` |
 | `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep` | `{promoted, discarded}` |
@@ -63,6 +65,10 @@ gained a `baseUrl` parameter for any OpenAI-compatible endpoint.
   Changing the engine re-embeds the bank. The `engine` field in the result is the
   stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
+- **`memory_set_structure_alpha`:** writes the dual-vector fusion alpha
+  (`retrieval.structureAlpha`, 0..1; default 0.5) used by search as
+  `score = alpha × content + (1 − alpha) × heading-path structure`. Requires rw-tier
+  access; applies to subsequent searches, no re-embedding.
 - **`memory_search`:** hybrid fusion from two modalities: FTS5 (keyword) and vec0
   (semantic, when an embedding engine is configured). The two ranked lists are fused
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per

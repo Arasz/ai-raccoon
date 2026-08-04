@@ -282,6 +282,8 @@ stratification, corpus integrity checks. Structural queries S1-S6 scored.
 - Open question (follow-up, not blocking): `structureAlpha` is read from settings but
   `memory_configure` cannot write it — the constant is effectively fixed at 0.5; expose the
   setting (or a dedicated tool) when α tuning is next needed.
+  **RESOLVED 2026-08-04: `memory_set_structure_alpha(projectId, alpha)` — writes
+  `retrieval.structureAlpha`, rw-tier access, validated [0,1], applied to subsequent searches.**
 
 **Research backing**: On the old (polluted 6675-chunk) corpus, the dual-vector with fixed-α=0.5
 lifted section hits from 4/6 (content-only) to 6/6 and MRR(section) from 0.37 to 0.46–0.56.
