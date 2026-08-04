@@ -23,6 +23,9 @@ public interface IWatchStore
 
     Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists every fingerprinted file path for the project (catch-up reconciliation).</summary>
+    Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts).</summary>
@@ -85,5 +88,16 @@ public sealed class WatchStore(SqliteConnectionFactory factory) : IWatchStore
                 new CommandDefinition(MemorySql.UpsertWatchFile,
                     new { projectId, path, fileHash, updatedAt }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<string>(
+                new CommandDefinition(MemorySql.SelectWatchFilesByProject, new { projectId },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return rows.ToArray();
     }
 }

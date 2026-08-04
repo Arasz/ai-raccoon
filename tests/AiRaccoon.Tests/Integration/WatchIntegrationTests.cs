@@ -290,6 +290,7 @@ public sealed class WatchIntegrationTests
             await initial;
         }
 
+        Directory.CreateDirectory(stack.File("sub"));
         stack.Write("sub/a.md", "zephyrnest one");
         stack.Write("sub/b.md", "zephyrnest two");
         stack.Write("top.md", "zephyrtop root");
@@ -469,7 +470,7 @@ public sealed class WatchIntegrationTests
                 NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);
-            CatchUp = new WatchCatchUp(Pipeline, NullLogger<WatchCatchUp>.Instance);
+            CatchUp = new WatchCatchUp(Pipeline, WatchStore, NullLogger<WatchCatchUp>.Instance);
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 NullLogger<WatchHostedService>.Instance);
             Service = new WatchService(WatchStore, Memory, Pipeline, Time);

@@ -132,6 +132,13 @@ internal sealed class FakeWatchStore : IWatchStore
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(FileHashes.Keys
+            .Where(k => k.StartsWith(projectId + "\u0000", StringComparison.Ordinal))
+            .Select(k => k[(projectId.Length + 1)..])
+            .ToArray());
+
     /// <summary>Mirrors the real DeleteSourcePathAsync transaction: chunks + fingerprint die together.</summary>
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
 

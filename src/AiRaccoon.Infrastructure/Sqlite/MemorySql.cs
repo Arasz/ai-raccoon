@@ -124,14 +124,21 @@ internal static class MemorySql
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
 
-    // Mirror delete/rename: committed chunks of one source file only (workspace scratch is
-    // transient and stays), plus the per-path watch fingerprint so a delete-then-recreate
-    // cycle cannot hash-skip its way back to stale chunks. The watch registration survives.
-    public const string DeleteBySourcePath =
-        "DELETE FROM entries WHERE project_id = @projectId AND source_file = @path AND workspace_id IS NULL";
+    // Mirror delete/rename: committed chunks of the source path AND everything under it
+    // (a deleted directory cascades to its subtree; workspace scratch is transient and
+    // stays), plus the per-path watch fingerprints so a delete-then-recreate cycle cannot
+    // hash-skip its way back to stale chunks. The watch registration survives.
+    public const string DeleteBySourcePath = """
+                                              DELETE FROM entries
+                                              WHERE project_id = @projectId AND workspace_id IS NULL
+                                                AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
+                                              """;
 
-    public const string DeleteWatchFilesByProjectPath =
-        "DELETE FROM watch_files WHERE project_id = @projectId AND path = @path";
+    public const string DeleteWatchFilesByProjectPathCascade = """
+                                                               DELETE FROM watch_files
+                                                               WHERE project_id = @projectId
+                                                                 AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                               """;
 
     public const string InsertWatchIfAbsent = """
                                                INSERT INTO watches (project_id, path, created_at, last_change_ts)
@@ -169,6 +176,9 @@ internal static class MemorySql
                                           WHERE project_id = @projectId AND path = @path
                                           LIMIT 1
                                           """;
+
+    public const string SelectWatchFilesByProject =
+        "SELECT path FROM watch_files WHERE project_id = @projectId";
 
     public const string CountProjectEntries =
         "SELECT count(*) FROM entries WHERE scope = 'project' AND project_id = @projectId";

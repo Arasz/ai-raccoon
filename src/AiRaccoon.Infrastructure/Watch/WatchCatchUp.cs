@@ -7,9 +7,13 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     D1 catch-up: a never-synced watch (watermark 0) gets a full initial scan; otherwise only
 ///     files with mtime strictly after the watermark are re-queued. Scans run in the background
 ///     so memory_watch_add returns immediately (feature rule 4); the watermark advances as
-///     digests complete (executor side).
+///     digests complete (executor side). Every scan also reconciles: fingerprinted files missing
+///     on disk were deleted while the server was down — their chunks are removed on restart.
 /// </summary>
-public sealed partial class WatchCatchUp(WatchPipeline pipeline, ILogger<WatchCatchUp> logger)
+public sealed partial class WatchCatchUp(
+    WatchPipeline pipeline,
+    IWatchStore watchStore,
+    ILogger<WatchCatchUp> logger)
 {
     /// <summary>Task of the most recently enqueued scan (tests await it for determinism).</summary>
     internal Task? LastScan { get; private set; }
@@ -41,10 +45,25 @@ public sealed partial class WatchCatchUp(WatchPipeline pipeline, ILogger<WatchCa
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Created));
             }
+
+            await ReconcileMissingAsync(projectId, path);
         }
         catch (Exception ex)
         {
             Log.ScanError(logger, path, ex);
+        }
+    }
+
+    /// <summary>Restart reconciliation: a fingerprinted file missing on disk is a delete that
+    /// happened while the server was down — enqueue Deleted so its chunks are removed.</summary>
+    private async Task ReconcileMissingAsync(string projectId, string watchPath)
+    {
+        foreach (var file in await watchStore.ListFilesAsync(projectId))
+        {
+            if (WatchPath.IsWithinScope(file, watchPath) && !File.Exists(file))
+            {
+                pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
+            }
         }
     }
 

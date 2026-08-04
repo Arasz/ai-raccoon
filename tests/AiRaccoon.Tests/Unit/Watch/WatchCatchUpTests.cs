@@ -18,7 +18,7 @@ public sealed class WatchCatchUpTests
     private const string Project = "acme";
 
     private static WatchCatchUp NewCatchUp(WatchTestStack stack) =>
-        new(stack.Pipeline, NullLogger<WatchCatchUp>.Instance);
+        new(stack.Pipeline, stack.Store, NullLogger<WatchCatchUp>.Instance);
 
     private static void Stamp(string path, DateTimeOffset at) =>
         File.SetLastWriteTimeUtc(path, at.UtcDateTime);
