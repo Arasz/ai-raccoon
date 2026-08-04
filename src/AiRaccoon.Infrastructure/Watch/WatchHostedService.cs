@@ -39,6 +39,10 @@ public sealed partial class WatchHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // The 1s digest tick is a second loop beside reconciliation: without it, events
+        // enqueue into the channel but nothing drains them in production.
+        var pipelineLoop = _pipeline.RunAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -63,6 +67,8 @@ public sealed partial class WatchHostedService : BackgroundService
                 break;
             }
         }
+
+        await pipelineLoop.ConfigureAwait(false);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
