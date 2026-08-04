@@ -1,151 +1,158 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="AiRaccoon logo proposition A: a raccoon keeping a glowing memory brain">
-  <title>AiRaccoon — The Memory Keeper</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img"
+     aria-label="AiRaccoon logo proposition A: a raccoon keeping a glowing memory brain">
+    <title>AiRaccoon — The Memory Keeper</title>
 
-  <defs>
-    <clipPath id="a-head">
-      <path d="M128 38c40 0 70 22 78 56 6 28-8 52-28 66-12 9-26 14-50 14s-38-5-50-14c-20-14-34-38-28-66 8-34 38-56 78-56z"/>
-    </clipPath>
-    <linearGradient id="a-field" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16202C"/>
-      <stop offset="1" stop-color="#0A1017"/>
-    </linearGradient>
-    <linearGradient id="a-fur" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F2F5F8"/>
-      <stop offset="1" stop-color="#C0CCD9"/>
-    </linearGradient>
-    <radialGradient id="a-brain-glow" cx="0.5" cy="0.45" r="0.6">
-      <stop offset="0" stop-color="#FF8C42" stop-opacity=".4"/>
-      <stop offset="1" stop-color="#FF8C42" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="a-brain" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1C2634"/>
-      <stop offset="1" stop-color="#111823"/>
-    </linearGradient>
-  </defs>
+    <defs>
+        <clipPath id="a-head">
+            <path
+                d="M128 38c40 0 70 22 78 56 6 28-8 52-28 66-12 9-26 14-50 14s-38-5-50-14c-20-14-34-38-28-66 8-34 38-56 78-56z"/>
+        </clipPath>
+        <linearGradient id="a-field" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#16202C"/>
+            <stop offset="1" stop-color="#0A1017"/>
+        </linearGradient>
+        <linearGradient id="a-fur" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#F2F5F8"/>
+            <stop offset="1" stop-color="#C0CCD9"/>
+        </linearGradient>
+        <radialGradient id="a-brain-glow" cx="0.5" cy="0.45" r="0.6">
+            <stop offset="0" stop-color="#FF8C42" stop-opacity=".4"/>
+            <stop offset="1" stop-color="#FF8C42" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="a-brain" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#1C2634"/>
+            <stop offset="1" stop-color="#111823"/>
+        </linearGradient>
+    </defs>
 
-  <rect width="256" height="256" rx="56" fill="url(#a-field)"/>
-  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#FF8C42" stroke-opacity=".3" stroke-width="3"/>
+    <rect width="256" height="256" rx="56" fill="url(#a-field)"/>
+    <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#FF8C42" stroke-opacity=".3"
+          stroke-width="3"/>
 
-  <!-- circuitry in the field, flanking the head -->
-  <g stroke="#FF8C42" stroke-opacity=".4" stroke-width="3" fill="none" stroke-linecap="round">
-    <path d="M26 96V64h26"/>
-    <path d="M230 96V64h-26"/>
-  </g>
-  <g fill="#FF8C42" fill-opacity=".55">
-    <circle cx="52" cy="64" r="4"/><circle cx="204" cy="64" r="4"/>
-  </g>
-
-  <!-- the raccoon, peeking over the brain -->
-  <g transform="translate(43.5,-2) scale(0.66)">
-    <!-- ears: sharp taper, high, upright -->
-    <g stroke="#0A1017" stroke-width="5">
-      <g transform="rotate(-16 72 42)">
-        <ellipse cx="72" cy="42" rx="13" ry="26" fill="url(#a-fur)"/>
-        <ellipse cx="72" cy="44" rx="6.5" ry="13.5" fill="#1B232E" stroke="none"/>
-        <circle cx="72" cy="45" r="3.4" fill="#FF8C42" stroke="none"/>
-      </g>
-      <g transform="rotate(16 184 42)">
-        <ellipse cx="184" cy="42" rx="13" ry="26" fill="url(#a-fur)"/>
-        <ellipse cx="184" cy="44" rx="6.5" ry="13.5" fill="#1B232E" stroke="none"/>
-        <circle cx="184" cy="45" r="3.4" fill="#FF8C42" stroke="none"/>
-      </g>
+    <!-- circuitry in the field, flanking the head -->
+    <g stroke="#FF8C42" stroke-opacity=".4" stroke-width="3" fill="none" stroke-linecap="round">
+        <path d="M26 96V64h26"/>
+        <path d="M230 96V64h-26"/>
+    </g>
+    <g fill="#FF8C42" fill-opacity=".55">
+        <circle cx="52" cy="64" r="4"/>
+        <circle cx="204" cy="64" r="4"/>
     </g>
 
-    <!-- head -->
-    <path d="M128 38c40 0 70 22 78 56 6 28-8 52-28 66-12 9-26 14-50 14s-38-5-50-14c-20-14-34-38-28-66 8-34 38-56 78-56z" fill="url(#a-fur)"/>
+    <!-- the raccoon, peeking over the brain -->
+    <g transform="translate(43.5,-2) scale(0.66)">
+        <!-- ears: sharp taper, high, upright -->
+        <g stroke="#0A1017" stroke-width="5">
+            <g transform="rotate(-16 72 42)">
+                <ellipse cx="72" cy="42" rx="13" ry="26" fill="url(#a-fur)"/>
+                <ellipse cx="72" cy="44" rx="6.5" ry="13.5" fill="#1B232E" stroke="none"/>
+                <circle cx="72" cy="45" r="3.4" fill="#FF8C42" stroke="none"/>
+            </g>
+            <g transform="rotate(16 184 42)">
+                <ellipse cx="184" cy="42" rx="13" ry="26" fill="url(#a-fur)"/>
+                <ellipse cx="184" cy="44" rx="6.5" ry="13.5" fill="#1B232E" stroke="none"/>
+                <circle cx="184" cy="45" r="3.4" fill="#FF8C42" stroke="none"/>
+            </g>
+        </g>
 
-    <g clip-path="url(#a-head)">
-      <!-- white forehead patch, above the mask -->
-      <ellipse cx="128" cy="56" rx="36" ry="15" fill="#F7FAFC"/>
+        <!-- head -->
+        <path
+            d="M128 38c40 0 70 22 78 56 6 28-8 52-28 66-12 9-26 14-50 14s-38-5-50-14c-20-14-34-38-28-66 8-34 38-56 78-56z"
+            fill="url(#a-fur)"/>
 
-      <!-- the bandit mask: one continuous band, nose to between the ears, down the cheeks -->
-      <path d="M54 100 Q58 64 96 58 L160 58 Q198 64 202 100 L206 118 Q202 146 178 152 Q160 156 146 146 Q136 138 128 138 Q120 138 110 146 Q96 156 78 152 Q54 146 50 118 Z" fill="#161C24"/>
+        <g clip-path="url(#a-head)">
+            <!-- white forehead patch, above the mask -->
+            <ellipse cx="128" cy="56" rx="36" ry="15" fill="#F7FAFC"/>
 
-      <!-- white spectacles around the eyes, small so the mask stays continuous -->
-      <circle cx="104" cy="112" r="8" fill="#F2F5F8"/>
-      <circle cx="152" cy="112" r="8" fill="#F2F5F8"/>
+            <!-- the bandit mask: one continuous band, nose to between the ears, down the cheeks -->
+            <path
+                d="M54 100 Q58 64 96 58 L160 58 Q198 64 202 100 L206 118 Q202 146 178 152 Q160 156 146 146 Q136 138 128 138 Q120 138 110 146 Q96 156 78 152 Q54 146 50 118 Z"
+                fill="#161C24"/>
 
-      <!-- circuit traces through the mask: kept simple, thin, geometric -->
-      <g fill="none" stroke="#FF8C42" stroke-width="2.8" stroke-linecap="round">
-        <path d="M62 74Q96 66 128 66Q160 66 194 74"/>
-        <path d="M58 132Q96 124 128 124Q160 124 198 132"/>
-      </g>
-      <g fill="#FF8C42">
-        <circle cx="128" cy="66" r="3.4"/>
-        <circle cx="62" cy="74" r="3.4"/><circle cx="194" cy="74" r="3.4"/>
-        <circle cx="58" cy="132" r="3.4"/><circle cx="198" cy="132" r="3.4"/>
-      </g>
+            <!-- white spectacles around the eyes, small so the mask stays continuous -->
+            <circle cx="104" cy="112" r="8" fill="#F2F5F8"/>
+            <circle cx="152" cy="112" r="8" fill="#F2F5F8"/>
 
-      <!-- eyes: bigger, closer together (bandit-mask depth) -->
-      <g>
-        <circle cx="104" cy="112" r="10" fill="#0B1017"/>
-        <circle cx="152" cy="112" r="10" fill="#0B1017"/>
-        <circle cx="104" cy="112" r="7" fill="#FF8C42"/>
-        <circle cx="152" cy="112" r="7" fill="#FF8C42"/>
-        <circle cx="104" cy="112" r="3.4" fill="#3A1A05"/>
-        <circle cx="152" cy="112" r="3.4" fill="#3A1A05"/>
-        <circle cx="107" cy="109" r="2.5" fill="#FFFFFF"/>
-        <circle cx="155" cy="109" r="2.5" fill="#FFFFFF"/>
-      </g>
+            <!-- circuit traces through the mask: kept simple, thin, geometric -->
+            <g fill="none" stroke="#FF8C42" stroke-width="2.8" stroke-linecap="round">
+                <path d="M62 74Q96 66 128 66Q160 66 194 74"/>
+                <path d="M58 132Q96 124 128 124Q160 124 198 132"/>
+            </g>
+            <g fill="#FF8C42">
+                <circle cx="128" cy="66" r="3.4"/>
+                <circle cx="62" cy="74" r="3.4"/>
+                <circle cx="194" cy="74" r="3.4"/>
+                <circle cx="58" cy="132" r="3.4"/>
+                <circle cx="198" cy="132" r="3.4"/>
+            </g>
+
+            <!-- eyes: bigger, closer together (bandit-mask depth) -->
+            <g>
+                <circle cx="104" cy="112" r="10" fill="#0B1017"/>
+                <circle cx="152" cy="112" r="10" fill="#0B1017"/>
+                <circle cx="104" cy="112" r="7" fill="#FF8C42"/>
+                <circle cx="152" cy="112" r="7" fill="#FF8C42"/>
+                <circle cx="104" cy="112" r="3.4" fill="#3A1A05"/>
+                <circle cx="152" cy="112" r="3.4" fill="#3A1A05"/>
+                <circle cx="107" cy="109" r="2.5" fill="#FFFFFF"/>
+                <circle cx="155" cy="109" r="2.5" fill="#FFFFFF"/>
+            </g>
+        </g>
+
+        <!-- muzzle: white bridge between the eyes, tapering to the nose -->
+        <path d="M108 134 Q128 122 148 134 L156 166 Q154 184 128 186 Q102 184 100 166 Z" fill="#F7FAFC"/>
+        <path d="M117 168h22q4 0 4 4q0 10-15 14-15-4-15-14q0-4 4-4z" fill="#161C24"/>
+        <g fill="none" stroke="#161C24" stroke-width="3.4" stroke-linecap="round">
+            <path d="M124 184q4 4 8 0"/>
+        </g>
+
+        <!-- whiskers: thin, spaced -->
+        <g fill="none" stroke="#F7FAFC" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".65">
+            <path d="M112 158Q84 152 62 160"/>
+            <path d="M110 170Q80 170 58 180"/>
+            <path d="M144 158Q172 152 194 160"/>
+            <path d="M146 170Q176 170 198 180"/>
+        </g>
     </g>
 
-    <!-- muzzle: white bridge between the eyes, tapering to the nose -->
-    <path d="M108 134 Q128 122 148 134 L156 166 Q154 184 128 186 Q102 184 100 166 Z" fill="#F7FAFC"/>
-    <path d="M117 168h22q4 0 4 4q0 10-15 14-15-4-15-14q0-4 4-4z" fill="#161C24"/>
-    <g fill="none" stroke="#161C24" stroke-width="3.4" stroke-linecap="round">
-      <path d="M124 184q4 4 8 0"/>
+    <!-- the memory chip: the store, replacing the console -->
+    <circle cx="128" cy="184" r="88" fill="url(#a-brain-glow)"/>
+    <g>
+        <!-- chip body -->
+        <rect x="48" y="136" width="160" height="92" rx="12" fill="url(#a-brain)"/>
+        <rect x="48" y="136" width="160" height="92" rx="12" fill="none" stroke="#FF8C42" stroke-opacity=".5"
+              stroke-width="3"/>
+        <!-- die -->
+        <rect x="66" y="154" width="124" height="56" rx="6" fill="#0D141D"/>
+        <rect x="66" y="154" width="124" height="56" rx="6" fill="none" stroke="#FF8C42" stroke-opacity=".35"
+              stroke-width="2.5"/>
+        <!-- die: MEM wordmark, traced from Helvetica Bold (outlined, centered, small) -->
+        <!-- pins/pads: uniform grid, 16x22, 24px pitch -->
+        <g fill="#1C2634" stroke="#FF8C42" stroke-opacity=".5" stroke-width="2.5">
+            <rect x="32" y="152" width="16" height="22" rx="5"/>
+            <rect x="32" y="176" width="16" height="22" rx="5"/>
+            <rect x="32" y="200" width="16" height="22" rx="5"/>
+            <rect x="208" y="152" width="16" height="22" rx="5"/>
+            <rect x="208" y="176" width="16" height="22" rx="5"/>
+            <rect x="208" y="200" width="16" height="22" rx="5"/>
+        </g>
+        <!-- bottom pads: 16x20, aligned to the die -->
+        <g fill="#1C2634" stroke="#FF8C42" stroke-opacity=".5" stroke-width="2.5">
+            <rect x="67" y="228" width="16" height="20" rx="5"/>
+            <rect x="93" y="228" width="16" height="20" rx="5"/>
+            <rect x="119" y="228" width="16" height="20" rx="5"/>
+            <rect x="145" y="228" width="16" height="20" rx="5"/>
+            <rect x="171" y="228" width="16" height="20" rx="5"/>
+        </g>
     </g>
 
-    <!-- whiskers: thin, spaced -->
-    <g fill="none" stroke="#F7FAFC" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".65">
-      <path d="M112 158Q84 152 62 160"/>
-      <path d="M110 170Q80 170 58 180"/>
-      <path d="M144 158Q172 152 194 160"/>
-      <path d="M146 170Q176 170 198 180"/>
+    <!-- paws hooked over the chip's edge -->
+    <g fill="#E4EBF3" stroke="#0A1017" stroke-width="4.5" stroke-linejoin="round">
+        <path d="M40 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7H40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
+        <path d="M176 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7h-40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
     </g>
-  </g>
-
-  <!-- the memory chip: the store, replacing the console -->
-  <circle cx="128" cy="184" r="88" fill="url(#a-brain-glow)"/>
-  <g>
-    <!-- chip body -->
-    <rect x="48" y="136" width="160" height="92" rx="12" fill="url(#a-brain)"/>
-    <rect x="48" y="136" width="160" height="92" rx="12" fill="none" stroke="#FF8C42" stroke-opacity=".5" stroke-width="3"/>
-    <!-- die -->
-    <rect x="66" y="154" width="124" height="56" rx="6" fill="#0D141D"/>
-    <rect x="66" y="154" width="124" height="56" rx="6" fill="none" stroke="#FF8C42" stroke-opacity=".35" stroke-width="2.5"/>
-    <!-- die: MEM wordmark, traced from Helvetica Bold (outlined, centered, small) -->
-    <g transform="translate(93.36,173.98) scale(0.0145)">
-      <path d="M438 0H151V1474H599L867 315L1133 1474H1576V0H1289V997Q1289 1040 1290.0 1117.5Q1291 1195 1291 1237L1012 0H713L436 1237Q436 1195 437.0 1117.5Q438 1040 438 997Z" fill="#FF8C42"/>
-      <path d="M1182 644H466V265H1282V0H165V1474H1246V1213H466V900H1182Z" fill="#FF8C42"/>
-      <path d="M438 0H151V1474H599L867 315L1133 1474H1576V0H1289V997Q1289 1040 1290.0 1117.5Q1291 1195 1291 1237L1012 0H713L436 1237Q436 1195 437.0 1117.5Q438 1040 438 997Z" fill="#FF8C42"/>
+    <g fill="none" stroke="#0A1017" stroke-width="3.5" stroke-linecap="round" stroke-opacity=".5">
+        <path d="M53 126v16M67 126v16"/>
+        <path d="M189 126v16M203 126v16"/>
     </g>
-    <!-- pins/pads: uniform grid, 16x22, 24px pitch -->
-    <g fill="#1C2634" stroke="#FF8C42" stroke-opacity=".5" stroke-width="2.5">
-      <rect x="32" y="152" width="16" height="22" rx="5"/>
-      <rect x="32" y="176" width="16" height="22" rx="5"/>
-      <rect x="32" y="200" width="16" height="22" rx="5"/>
-      <rect x="208" y="152" width="16" height="22" rx="5"/>
-      <rect x="208" y="176" width="16" height="22" rx="5"/>
-      <rect x="208" y="200" width="16" height="22" rx="5"/>
-    </g>
-    <!-- bottom pads: 16x20, aligned to the die -->
-    <g fill="#1C2634" stroke="#FF8C42" stroke-opacity=".5" stroke-width="2.5">
-      <rect x="67" y="228" width="16" height="20" rx="5"/>
-      <rect x="93" y="228" width="16" height="20" rx="5"/>
-      <rect x="119" y="228" width="16" height="20" rx="5"/>
-      <rect x="145" y="228" width="16" height="20" rx="5"/>
-      <rect x="171" y="228" width="16" height="20" rx="5"/>
-    </g>
-  </g>
-
-  <!-- paws hooked over the chip's edge -->
-  <g fill="#E4EBF3" stroke="#0A1017" stroke-width="4.5" stroke-linejoin="round">
-    <path d="M40 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7H40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
-    <path d="M176 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7h-40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
-  </g>
-  <g fill="none" stroke="#0A1017" stroke-width="3.5" stroke-linecap="round" stroke-opacity=".5">
-    <path d="M53 126v16M67 126v16"/>
-    <path d="M189 126v16M203 126v16"/>
-  </g>
 </svg>
