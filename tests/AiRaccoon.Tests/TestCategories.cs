@@ -11,6 +11,7 @@ public static class TestCategories
     public const string Unit = "Unit";
     public const string Integration = "Integration";
     public const string E2E = "E2E";
+    public const string Retrieval = "Retrieval";
 
     public const string Speed = "Speed";
     public const string Fast = "Fast";
