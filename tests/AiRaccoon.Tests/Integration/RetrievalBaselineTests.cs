@@ -209,6 +209,84 @@ public sealed class RetrievalBaselineTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CorpusIntegrity_HashMapMatchesDatabaseCounts()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
+        var hashMap = LoadChunkHashMap();
+
+        // The map is keyed by structured path; CLAUDE.md/HERMES.md share 10 identical section
+        // chunks, so 762 keys alias to 752 distinct hashes — the count invariant is over hashes.
+        var mapHashes = hashMap.Values.ToHashSet(StringComparer.Ordinal);
+        mapHashes.Count.ShouldBe(rows.Count,
+            "hash-map distinct hashes must equal the committed DB entry count (Wave 5a)");
+        rows.Select(r => r.Hash).ToHashSet(StringComparer.Ordinal).SetEquals(mapHashes).ShouldBeTrue(
+            "DB entry hashes and hash-map values must be the same set — drift means a stale map or corpus (Wave 5a)");
+        stats.EntryCount.ShouldBe(rows.Count, "store-reported entry count must match the entries table");
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_HashContractContentHashMatches()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
+
+        // FR-NM-7 contract: stored hash == ContentHash.Of(path, value), where the committed
+        // corpus's path is the hash-derived filename (SHA256(content).hex() + ".md").
+        var mismatches = rows
+            .Where(r => !string.Equals(ContentHash.Of(r.Path, r.Value), r.Hash, StringComparison.Ordinal))
+            .Select(r => $"{r.Path}: stored {r.Hash[..12]}… != ContentHash.Of {ContentHash.Of(r.Path, r.Value)[..12]}…")
+            .ToList();
+        mismatches.ShouldBeEmpty("every stored entry hash must satisfy ContentHash.Of(path, value); "
+            + string.Join("; ", mismatches.Take(3)));
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_SourceFileAndSectionPopulated()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
+        var hashMap = LoadChunkHashMap();
+
+        rows.Count(r => string.IsNullOrWhiteSpace(r.SourceFile)).ShouldBe(0,
+            "every entry must carry source_file provenance (Wave 2)");
+        var withSection = rows.Count(r => !string.IsNullOrWhiteSpace(r.Section));
+        _output.WriteLine(
+            $"Source identity: {rows.Count} entries, {withSection} with section, "
+            + $"{rows.Count - withSection} without, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files");
+
+        // section populated ⟺ the entry's hash maps to a structured path with a '#section' part.
+        var keysByHash = hashMap
+            .GroupBy(kv => kv.Value, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToArray(), StringComparer.Ordinal);
+        var mismatches = rows.Count(r =>
+        {
+            var hasSectionKey = keysByHash.TryGetValue(r.Hash, out var keys)
+                && keys.Any(k => k.Contains('#'));
+            return hasSectionKey != !string.IsNullOrWhiteSpace(r.Section);
+        });
+        mismatches.ShouldBe(0, "section column must mirror the hash-map '#section' structured-path part");
+    }
+
+    [Fact]
+    public async Task NegativeTests_H1H3_CorpusExcludesTargetContent()
+    {
+        var queries = LoadQueries();
+        var negatives = queries.Where(q => q.NegativeTest).ToArray();
+        negatives.Length.ShouldBe(3, "H1-H3 are the committed negative tests");
+        negatives.Select(q => q.Id).OrderBy(id => id, StringComparer.Ordinal).ShouldBe(["H1", "H2", "H3"]);
+
+        // H1/H2 targets (state.json, now.md) are pinned by CorpusIntegrity_ExcludedContentAbsent;
+        // H3 targets the jsaa AppHost configuration — no AppHost/program-code files may be ingested.
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await CountSourceFileLikeAsync(connection, "%apphost%")).ShouldBe(0,
+            "AppHost configuration must stay out of the corpus (H3 non-evidential)");
+        (await CountSourceFileLikeAsync(connection, "%.cs")).ShouldBe(0,
+            "program-code files must stay out of the corpus (H3 non-evidential)");
+    }
+
     /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → '0011-frontend-chassis-stack.md' (the file's tail).</summary>
     private static string SourceFileMarker(string expectedSource)
     {
@@ -285,6 +363,27 @@ public sealed class RetrievalBaselineTests : IDisposable
         command.Parameters.AddWithValue("$marker", marker);
         var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         return Convert.ToInt32(result);
+    }
+
+    /// <summary>All entry hashes/paths/values with provenance — the raw material for the Wave 5a integrity assertions.</summary>
+    private static async Task<List<EntryRow>> ReadEntryRowsAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var rows = new List<EntryRow>();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT hash, path, value, section, source_file FROM entries";
+        using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new EntryRow(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        }
+
+        return rows;
     }
 
     private static Dictionary<string, string> LoadChunkHashMap()
@@ -388,6 +487,14 @@ public sealed class RetrievalBaselineTests : IDisposable
         string Snippet,
         bool IsExpectedSource,
         bool IsExpectedSourceFile);
+
+    /// <summary>One committed-corpus row: identity, content, and provenance (Wave 5a integrity assertions).</summary>
+    public sealed record EntryRow(
+        string Hash,
+        string Path,
+        string Value,
+        string? Section,
+        string? SourceFile);
 
     public sealed record BaselineReport(
         string ProjectId,
