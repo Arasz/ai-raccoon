@@ -58,13 +58,13 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         return connection;
     }
 
-    // FR-NM-2: the global access mode is seeded once from the AIRACCOON_ACCESS_MODE env value
-    // (ro|rw|full); an operator-set settings row is never overwritten by the seed.
-    private static async Task SeedGlobalAccessModeAsync(SqliteConnection connection,
+    // FR-NM-2: the global access mode is seeded once from the merged options.AccessMode
+    // value (ro|rw|full, CLI > env); an operator-set settings row is never overwritten by
+    // the seed.
+    private async Task SeedGlobalAccessModeAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
-        var env = Environment.GetEnvironmentVariable("AIRACCOON_ACCESS_MODE");
-        if (AccessModePolicy.Parse(env) is not { } mode)
+        if (AccessModePolicy.Parse(options.AccessMode) is not { } mode)
         {
             return;
         }
