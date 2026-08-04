@@ -42,6 +42,9 @@
         <ReqnrollFeatureFiles Include="..\..\docs\work\features-native-memory\native-memory.feature">
             <Link>BDD\features-native-memory\native-memory.feature</Link>
         </ReqnrollFeatureFiles>
+        <ReqnrollFeatureFiles Include="..\..\docs\features\file-watcher\file-watcher.feature">
+            <Link>BDD\features-file-watcher\file-watcher.feature</Link>
+        </ReqnrollFeatureFiles>
     </ItemGroup>
 
     <ItemGroup>

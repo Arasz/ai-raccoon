@@ -8,7 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace AiRaccoon.Tests.BDD;
 
 /// <summary>Shared state for Reqnroll feature scenarios — one instance per scenario.</summary>
-public sealed class MemoryFeatureContext : IDisposable
+public class MemoryFeatureContext : IDisposable
 {
     public static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
@@ -30,7 +30,14 @@ public sealed class MemoryFeatureContext : IDisposable
 
     public SqliteMemoryStore Store { get; }
 
-    public void Dispose() => Directory.Delete(DataRoot, true);
+    /// <summary>Idempotent so scenario-container disposal and the AfterScenario hook can both run it.</summary>
+    public void Dispose()
+    {
+        if (Directory.Exists(DataRoot))
+        {
+            Directory.Delete(DataRoot, true);
+        }
+    }
 
     /// <summary>Opens the bank and returns the connection for raw SQL queries.</summary>
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) => await Factory.OpenBankAsync(cancellationToken);
