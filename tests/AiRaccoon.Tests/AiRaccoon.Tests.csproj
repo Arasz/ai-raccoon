@@ -32,6 +32,7 @@
 
     <ItemGroup>
         <Content Include="unit/retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="Resources/jsaa-memory.db" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
