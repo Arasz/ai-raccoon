@@ -97,6 +97,35 @@ public sealed class WatchSchedulerTests
     }
 
     [Fact]
+    public async Task RunBatch_LimitRaisedBetweenBatches_NextBatchUsesTheNewLimit()
+    {
+        var scheduler = new WatchScheduler();
+        var first = new GatedRunner { Expected = 1 };
+        var jobs = Jobs("acme", "/w", 2);
+
+        // Batch 1 at limit 1: only the first job is admitted until released.
+        var firstBatch = scheduler.RunBatchAsync(jobs, Concurrency(("acme", 1)), first.Run,
+            TestContext.Current.CancellationToken);
+        await first.AllExpectedStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        first.Started.ShouldBe(1);
+        first.Release();
+        await firstBatch.WaitAsync(TestContext.Current.CancellationToken);
+        first.Completed.ShouldBe(2);
+
+        // Batch 2 after the limit was raised to 2: both jobs admit WITHOUT any release —
+        // a gate cached from the first batch would still serialize them.
+        var second = new GatedRunner { Expected = 2 };
+        var secondBatch = scheduler.RunBatchAsync(jobs, Concurrency(("acme", 2)), second.Run,
+            TestContext.Current.CancellationToken);
+        await second.AllExpectedStarted.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        second.Started.ShouldBe(2, "the raised limit must apply to the next batch");
+        second.Release();
+        await secondBatch.WaitAsync(TestContext.Current.CancellationToken);
+        second.Completed.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task RunBatch_EmptyBatch_RunsNothing()
     {
         var scheduler = new WatchScheduler();
