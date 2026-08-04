@@ -1,359 +1,743 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Job Search AI Assistant — Memory Retrieval Scoring</title>
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #18181b; --surface: #27272a; --surface2: #3f3f46;
-  --border: #52525b; --text: #f4f4f5; --text2: #a1a1aa;
-  --accent: #22d3ee; --green: #34d399; --red: #f87171;
-  --amber: #fbbf24; --radius: 8px;
-}
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
-#app { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 60px 1fr 40px; height: 100vh; }
-header { grid-column: 1 / -1; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; }
-header h1 { font-size: 16px; font-weight: 600; }
-header .meta { font-size: 12px; color: var(--text2); }
-header .spacer { flex: 1; }
-header button { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 12px; }
-header button:hover { background: var(--border); }
-nav { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
-nav .cat-link { display: block; padding: 8px 12px; border-radius: var(--radius); color: var(--text2); cursor: pointer; text-decoration: none; font-size: 13px; margin-bottom: 2px; }
-nav .cat-link:hover, nav .cat-link.active { background: var(--surface2); color: var(--text); }
-nav .cat-count { float: right; font-size: 11px; opacity: 0.6; }
-nav .progress-bar { margin-top: 16px; padding: 8px 12px; background: var(--surface2); border-radius: var(--radius); font-size: 12px; }
-nav .progress-fill { height: 4px; background: var(--accent); border-radius: 2px; margin-top: 4px; transition: width 0.2s; }
-main { overflow-y: auto; padding: 20px; }
-.query-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; padding: 20px; }
-.query-card .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; }
-.query-card .card-id { font-size: 11px; color: var(--accent); font-weight: 600; }
-.query-card .category { font-size: 12px; color: var(--text2); }
-.query-card .query-text { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
-.query-card .expected { font-size: 12px; color: var(--text2); margin-bottom: 16px; }
-.query-card .expected em { color: var(--amber); font-style: normal; }
-.results { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
-.result-row { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
-.result-row:last-child { border-bottom: none; }
-.result-row .rank { font-weight: 700; color: var(--accent); margin-right: 8px; }
-.result-row .score { font-size: 11px; color: var(--text2); margin-right: 8px; }
-.result-row .path { font-family: monospace; font-size: 11px; color: var(--text2); display: block; margin-top: 2px; }
-.result-row .snippet { font-size: 12px; color: var(--text); margin-top: 4px; line-height: 1.4; }
-.result-row .match { color: var(--green); font-size: 11px; font-weight: 600; }
-.scoring { display: flex; gap: 20px; align-items: start; }
-.score-group { display: flex; gap: 4px; align-items: center; }
-.score-group label { display: flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text2); }
-.score-group label:hover { border-color: var(--accent); }
-.score-group input[type="radio"] { display: none; }
-.score-group input[type="radio"]:checked + span { color: var(--accent); }
-.score-group input[type="radio"]:checked ~ span { border-color: var(--accent); }
-.score-group .checked { border-color: var(--accent) !important; color: var(--accent) !important; }
-.score-group .score-1.checked { border-color: var(--red); color: var(--red); }
-.reason-area { flex: 1; }
-.reason-area textarea { width: 100%; min-height: 48px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px; font-size: 12px; font-family: inherit; resize: vertical; }
-.nav-buttons { display: flex; justify-content: space-between; margin-top: 12px; }
-.nav-buttons button { padding: 6px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 12px; }
-.nav-buttons button:hover { background: var(--border); }
-footer { grid-column: 1 / -1; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; font-size: 12px; color: var(--text2); justify-content: space-between; }
-#summary { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 20px; }
-#summary h2 { font-size: 14px; margin-bottom: 12px; }
-#summary table { width: 100%; border-collapse: collapse; font-size: 12px; }
-#summary th, #summary td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-#summary th { color: var(--text2); font-weight: 500; }
-#summary .avg-good { color: var(--green); }
-#summary .avg-ok { color: var(--amber); }
-#summary .avg-bad { color: var(--red); }
-#compare { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 20px; display: none; }
-#compare h2 { font-size: 14px; margin-bottom: 12px; }
-#compare .regression { color: var(--red); }
-#compare .improvement { color: var(--green); }
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Job Search AI Assistant — Memory Retrieval Scoring</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-@media print {
-  nav, header button, footer, .nav-buttons { display: none; }
-  #app { grid-template-columns: 1fr; }
-}
-</style>
+        :root {
+            --bg: #18181b;
+            --surface: #27272a;
+            --surface2: #3f3f46;
+            --border: #52525b;
+            --text: #f4f4f5;
+            --text2: #a1a1aa;
+            --accent: #22d3ee;
+            --green: #34d399;
+            --red: #f87171;
+            --amber: #fbbf24;
+            --radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #app {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            grid-template-rows: 60px 1fr 40px;
+            height: 100vh;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+        }
+
+        header h1 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        header .meta {
+            font-size: 12px;
+            color: var(--text2);
+        }
+
+        header .spacer {
+            flex: 1;
+        }
+
+        header button {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        header button:hover {
+            background: var(--border);
+        }
+
+        nav {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        nav .cat-link {
+            display: block;
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            color: var(--text2);
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        nav .cat-link:hover, nav .cat-link.active {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        nav .cat-count {
+            float: right;
+            font-size: 11px;
+            opacity: 0.6;
+        }
+
+        nav .progress-bar {
+            margin-top: 16px;
+            padding: 8px 12px;
+            background: var(--surface2);
+            border-radius: var(--radius);
+            font-size: 12px;
+        }
+
+        nav .progress-fill {
+            height: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+            margin-top: 4px;
+            transition: width 0.2s;
+        }
+
+        main {
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .query-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+            padding: 20px;
+        }
+
+        .query-card .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .query-card .card-id {
+            font-size: 11px;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .query-card .category {
+            font-size: 12px;
+            color: var(--text2);
+        }
+
+        .query-card .query-text {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .query-card .expected {
+            font-size: 12px;
+            color: var(--text2);
+            margin-bottom: 16px;
+        }
+
+        .query-card .expected em {
+            color: var(--amber);
+            font-style: normal;
+        }
+
+        .results {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .result-row {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .result-row:last-child {
+            border-bottom: none;
+        }
+
+        .result-row .rank {
+            font-weight: 700;
+            color: var(--accent);
+            margin-right: 8px;
+        }
+
+        .result-row .score {
+            font-size: 11px;
+            color: var(--text2);
+            margin-right: 8px;
+        }
+
+        .result-row .path {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--text2);
+            display: block;
+            margin-top: 2px;
+        }
+
+        .result-row .snippet {
+            font-size: 12px;
+            color: var(--text);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .result-row .match {
+            color: var(--green);
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .scoring {
+            display: flex;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .score-group {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .score-group label {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text2);
+        }
+
+        .score-group label:hover {
+            border-color: var(--accent);
+        }
+
+        .score-group input[type="radio"] {
+            display: none;
+        }
+
+        .score-group input[type="radio"]:checked + span {
+            color: var(--accent);
+        }
+
+        .score-group input[type="radio"]:checked ~ span {
+            border-color: var(--accent);
+        }
+
+        .score-group .checked {
+            border-color: var(--accent) !important;
+            color: var(--accent) !important;
+        }
+
+        .score-group .score-1.checked {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .reason-area {
+            flex: 1;
+        }
+
+        .reason-area textarea {
+            width: 100%;
+            min-height: 48px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            padding: 8px;
+            font-size: 12px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+        }
+
+        .nav-buttons button {
+            padding: 6px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .nav-buttons button:hover {
+            background: var(--border);
+        }
+
+        footer {
+            grid-column: 1 / -1;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 12px;
+            color: var(--text2);
+            justify-content: space-between;
+        }
+
+        #summary {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        #summary h2 {
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        #summary table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        #summary th, #summary td {
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        #summary th {
+            color: var(--text2);
+            font-weight: 500;
+        }
+
+        #summary .avg-good {
+            color: var(--green);
+        }
+
+        #summary .avg-ok {
+            color: var(--amber);
+        }
+
+        #summary .avg-bad {
+            color: var(--red);
+        }
+
+        #compare {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        #compare h2 {
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        #compare .regression {
+            color: var(--red);
+        }
+
+        #compare .improvement {
+            color: var(--green);
+        }
+
+        @media print {
+            nav, header button, footer, .nav-buttons {
+                display: none;
+            }
+
+            #app {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
 <div id="app">
-<header>
-  <h1>Job Search AI Assistant — Memory Retrieval Scoring</h1>
-  <span class="meta" id="meta-info">Project: job-search-ai-assistant</span>
-  <span class="spacer"></span>
-  <button onclick="exportBaseline()">Export Baseline</button>
-  <button onclick="document.getElementById('load-input').click()">Load Baseline</button>
-  <button onclick="document.getElementById('compare-input').click()">Compare</button>
-  <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadBaseline(event)">
-  <input type="file" id="compare-input" style="display:none" accept=".json" onchange="compareBaseline(event)">
-</header>
+    <header>
+        <h1>Job Search AI Assistant — Memory Retrieval Scoring</h1>
+        <span class="meta" id="meta-info">Project: job-search-ai-assistant</span>
+        <span class="spacer"></span>
+        <button onclick="exportBaseline()">Export Baseline</button>
+        <button onclick="document.getElementById('load-input').click()">Load Baseline</button>
+        <button onclick="document.getElementById('compare-input').click()">Compare</button>
+        <input accept=".json" id="load-input" onchange="loadBaseline(event)" style="display:none" type="file">
+        <input accept=".json" id="compare-input" onchange="compareBaseline(event)" style="display:none" type="file">
+    </header>
 
-<nav id="sidebar">
-  <div id="category-nav"></div>
-  <div class="progress-bar">
-    <div id="progress-text">0/35 scored</div>
-    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-  </div>
-</nav>
+    <nav id="sidebar">
+        <div id="category-nav"></div>
+        <div class="progress-bar">
+            <div id="progress-text">0/35 scored</div>
+            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+    </nav>
 
-<main id="content"></main>
+    <main id="content"></main>
 
-<footer>
-  <span>Score key: 1=Poor, 2=Weak, 3=Adequate, 4=Good, 5=Excellent</span>
-  <button onclick="saveAllScores()" style="padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;">Save All Scores</button>
-</footer>
+    <footer>
+        <span>Score key: 1=Poor, 2=Weak, 3=Adequate, 4=Good, 5=Excellent</span>
+        <button onclick="saveAllScores()"
+                style="padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;">
+            Save All Scores
+        </button>
+    </footer>
 </div>
 
 <script>
-const STORAGE_KEY = 'jsaa-retrieval-scoring';
-let queries = [];
-let scores = {};
-let compareData = null;
+    const STORAGE_KEY = 'jsaa-retrieval-scoring';
+    let queries = [];
+    let scores = {};
+    let compareData = null;
 
-function loadFromStorage() {
-  try { const d = localStorage.getItem(STORAGE_KEY); if (d) scores = JSON.parse(d); } catch(e) {}
-}
-
-function saveToStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
-}
-
-function init() {
-  loadFromStorage();
-  // Load default baseline from embedded data if none loaded
-  if (!queries.length && typeof DEFAULT_QUERIES !== 'undefined') queries = DEFAULT_QUERIES;
-  render();
-}
-
-function loadBaseline(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (data.queryResults) {
-        queries = Object.entries(data.queryResults).map(([id, q]) => ({
-          id, category: q.category || '', query: q.query,
-          expectedSource: q.expectedSource || null,
-          expectedKnowledge: q.expectedKnowledge || '',
-          results: (q.results || []).map((r,i) => ({rank:i+1, hash:r.hash, ranking:r.ranking, path:r.path, snippet:r.snippet, isExpectedSource:r.isExpectedSource})),
-        }));
-      } else if (Array.isArray(data)) {
-        queries = data;
-      }
-      document.getElementById('meta-info').textContent =
-        `Project: ${data.projectId || 'job-search-ai-assistant'} | Ingested: ${data.ingestedAt || 'N/A'} | Engine: ${data.embeddingEngine || 'N/A'}`;
-      render();
-    } catch(err) { alert('Invalid JSON: ' + err.message); }
-  };
-  reader.readAsText(file);
-}
-
-function compareBaseline(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      compareData = JSON.parse(e.target.result);
-      renderCompare();
-      document.getElementById('compare').style.display = 'block';
-    } catch(err) { alert('Invalid comparison JSON: ' + err.message); }
-  };
-  reader.readAsText(file);
-}
-
-function scoreQuery(id, value) {
-  scores[id] = { score: value, reason: scores[id]?.reason || '', scoredAt: new Date().toISOString() };
-  const reasonEl = document.getElementById(`reason-${id}`);
-  if (reasonEl) scores[id].reason = reasonEl.value;
-  saveToStorage();
-  updateProgress();
-  updateScoreUI(id);
-}
-
-function saveReason(id) {
-  const reasonEl = document.getElementById(`reason-${id}`);
-  if (scores[id]) scores[id].reason = reasonEl?.value || '';
-  saveToStorage();
-}
-
-function updateScoreUI(id) {
-  const s = scores[id];
-  document.querySelectorAll(`[data-qid="${id}"] .score-group label`).forEach(l => l.classList.remove('checked'));
-  if (s?.score) {
-    const label = document.querySelector(`[data-qid="${id}"] .score-group input[value="${s.score}"]`)?.parentElement;
-    if (label) label.classList.add('checked', `score-${s.score}`);
-  }
-}
-
-function updateProgress() {
-  const scored = Object.values(scores).filter(s => s.score).length;
-  const total = queries.length || 1;
-  document.getElementById('progress-text').textContent = `${scored}/${total} scored`;
-  document.getElementById('progress-fill').style.width = `${(scored/total)*100}%`;
-}
-
-function getCategoryAvg(cat) {
-  const catQueries = queries.filter(q => q.category === cat);
-  const catScores = catQueries.map(q => scores[q.id]?.score).filter(Boolean);
-  return catScores.length ? (catScores.reduce((a,b)=>a+b,0) / catScores.length).toFixed(1) : '-';
-}
-
-function getCategoryCount(cat) {
-  return queries.filter(q => q.category === cat).length;
-}
-
-function getCategoryScored(cat) {
-  return queries.filter(q => q.category === cat && scores[q.id]?.score).length;
-}
-
-function render() {
-  const categories = [...new Set(queries.map(q => q.category))];
-  let navHtml = '';
-  categories.forEach(cat => {
-    navHtml += `<a class="cat-link" href="#cat-${cat.replace(/[^a-zA-Z0-9]/g,'-')}" onclick="scrollToCategory('${cat.replace(/'/g,"\\'")}')">${cat}<span class="cat-count">${getCategoryScored(cat)}/${getCategoryCount(cat)}</span></a>`;
-  });
-  document.getElementById('category-nav').innerHTML = navHtml;
-
-  let html = '';
-  queries.forEach((q, i) => {
-    const s = scores[q.id] || {};
-    html += `<div class="query-card" data-qid="${q.id}" id="cat-${q.category.replace(/[^a-zA-Z0-9]/g,'-')}">`;
-    html += `<div class="card-header"><div><span class="card-id">${q.id}</span> <span class="category">${q.category}</span></div></div>`;
-    html += `<div class="query-text">${esc(q.query)}</div>`;
-    if (q.expectedSource) html += `<div class="expected">Expected source: <em>${esc(q.expectedSource)}</em></div>`;
-    if (q.expectedKnowledge) html += `<div class="expected">Expected: ${esc(q.expectedKnowledge)}</div>`;
-    if (q.negativeTest) html += `<div class="expected"><em>⚠ Negative test — expected source should NOT appear in results</em></div>`;
-
-    if (q.results && q.results.length) {
-      html += `<div class="results">`;
-      q.results.forEach(r => {
-        html += `<div class="result-row">`;
-        html += `<span class="rank">#${r.rank}</span><span class="score">Score: ${r.ranking?.toFixed(3) || 'N/A'}</span>`;
-        if (r.isExpectedSource) html += `<span class="match">✓ Expected source</span>`;
-        html += `<span class="path">${esc(r.path || '')}</span>`;
-        html += `<span class="snippet">${esc(r.snippet || '')}</span>`;
-        html += `</div>`;
-      });
-      html += `</div>`;
+    function loadFromStorage() {
+        try {
+            const d = localStorage.getItem(STORAGE_KEY);
+            if (d) scores = JSON.parse(d);
+        } catch (e) {
+        }
     }
 
-    html += `<div class="scoring">`;
-    html += `<div class="score-group">`;
-    [1,2,3,4,5].forEach(v => {
-      html += `<label class="${s.score === v ? 'checked score-'+v : ''}"><input type="radio" name="score-${q.id}" value="${v}" ${s.score === v ? 'checked' : ''} onchange="scoreQuery('${q.id}',${v})"><span>${v}</span></label>`;
-    });
-    html += `</div>`;
-    html += `<div class="reason-area"><textarea id="reason-${q.id}" placeholder="Reason for score..." onchange="saveReason('${q.id}')">${esc(s.reason || '')}</textarea></div>`;
-    html += `</div>`;
-
-    html += `<div class="nav-buttons">`;
-    if (i > 0) html += `<button onclick="scrollToQuery('${queries[i-1].id}')">◄ Prev</button>`;
-    else html += `<span></span>`;
-    html += `<button onclick="saveQuery('${q.id}')">Save</button>`;
-    if (i < queries.length - 1) html += `<button onclick="scrollToQuery('${queries[i+1].id}')">Next ►</button>`;
-    else html += `<span></span>`;
-    html += `</div></div>`;
-  });
-
-  if (categories.length) {
-    html += `<div id="summary"><h2>Summary</h2><table><thead><tr><th>Category</th><th>Scored</th><th>Avg Score</th><th>Min</th><th>Max</th></tr></thead><tbody>`;
-    categories.forEach(cat => {
-      const catQueries = queries.filter(q => q.category === cat);
-      const catScores = catQueries.map(q => scores[q.id]?.score).filter(Boolean);
-      const avg = catScores.length ? (catScores.reduce((a,b)=>a+b,0) / catScores.length) : 0;
-      const cls = avg >= 4 ? 'avg-good' : avg >= 3 ? 'avg-ok' : 'avg-bad';
-      html += `<tr><td>${cat}</td><td>${catScores.length}/${catQueries.length}</td><td class="${cls}">${catScores.length ? avg.toFixed(1) : '-'}</td><td>${catScores.length ? Math.min(...catScores) : '-'}</td><td>${catScores.length ? Math.max(...catScores) : '-'}</td></tr>`;
-    });
-    html += `</tbody></table></div>`;
-  }
-
-  document.getElementById('content').innerHTML = html;
-  updateProgress();
-}
-
-function renderCompare() {
-  if (!compareData) return;
-  let html = '<h2>Baseline Comparison</h2>';
-  const compareResults = compareData.queryResults || {};
-  let regressions = [], improvements = [];
-
-  queries.forEach(q => {
-    const newScore = scores[q.id]?.score;
-    const oldEntry = compareResults[q.id];
-    const oldScore = oldEntry?.score;
-    if (newScore && oldScore && newScore !== oldScore) {
-      const delta = newScore - oldScore;
-      if (delta < 0) regressions.push({id: q.id, old: oldScore, new: newScore, delta});
-      else improvements.push({id: q.id, old: oldScore, new: newScore, delta});
+    function saveToStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
     }
-  });
 
-  if (regressions.length) {
-    html += '<h3 style="margin-top:12px">Regressions</h3>';
-    regressions.forEach(r => html += `<div class="regression">${r.id}: ${r.old}→${r.new} (${r.delta})</div>`);
-  }
-  if (improvements.length) {
-    html += '<h3 style="margin-top:12px">Improvements</h3>';
-    improvements.forEach(r => html += `<div class="improvement">${r.id}: ${r.old}→${r.new} (+${r.delta})</div>`);
-  }
-  if (!regressions.length && !improvements.length) html += '<div>No score changes detected.</div>';
+    function init() {
+        loadFromStorage();
+        // Load default baseline from embedded data if none loaded
+        if (!queries.length && typeof DEFAULT_QUERIES !== 'undefined') queries = DEFAULT_QUERIES;
+        render();
+    }
 
-  document.getElementById('compare').innerHTML = html;
-  document.getElementById('compare').style.display = 'block';
-}
+    function loadBaseline(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.queryResults) {
+                    queries = Object.entries(data.queryResults).map(([id, q]) => ({
+                        id, category: q.category || '', query: q.query,
+                        expectedSource: q.expectedSource || null,
+                        expectedKnowledge: q.expectedKnowledge || '',
+                        results: (q.results || []).map((r, i) => ({
+                            rank: i + 1,
+                            hash: r.hash,
+                            ranking: r.ranking,
+                            path: r.path,
+                            snippet: r.snippet,
+                            isExpectedSource: r.isExpectedSource
+                        })),
+                    }));
+                } else if (Array.isArray(data)) {
+                    queries = data;
+                }
+                document.getElementById('meta-info').textContent =
+                    `Project: ${data.projectId || 'job-search-ai-assistant'} | Ingested: ${data.ingestedAt || 'N/A'} | Engine: ${data.embeddingEngine || 'N/A'}`;
+                render();
+            } catch (err) {
+                alert('Invalid JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
 
-function scrollToCategory(cat) {
-  const el = document.getElementById(`cat-${cat.replace(/[^a-zA-Z0-9]/g,'-')}`);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+    function compareBaseline(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                compareData = JSON.parse(e.target.result);
+                renderCompare();
+                document.getElementById('compare').style.display = 'block';
+            } catch (err) {
+                alert('Invalid comparison JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
 
-function scrollToQuery(id) {
-  const el = document.querySelector(`[data-qid="${id}"]`);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+    function scoreQuery(id, value) {
+        scores[id] = {score: value, reason: scores[id]?.reason || '', scoredAt: new Date().toISOString()};
+        const reasonEl = document.getElementById(`reason-${id}`);
+        if (reasonEl) scores[id].reason = reasonEl.value;
+        saveToStorage();
+        updateProgress();
+        updateScoreUI(id);
+        updateSummary();
+    }
 
-function saveQuery(id) {
-  saveReason(id);
-  saveToStorage();
-}
+    function saveReason(id) {
+        const reasonEl = document.getElementById(`reason-${id}`);
+        if (scores[id]) scores[id].reason = reasonEl?.value || '';
+        saveToStorage();
+    }
 
-function saveAllScores() {
-  queries.forEach(q => {
-    const reasonEl = document.getElementById(`reason-${q.id}`);
-    if (scores[q.id]) scores[q.id].reason = reasonEl?.value || '';
-  });
-  saveToStorage();
-  updateProgress();
-}
+    function updateScoreUI(id) {
+        const s = scores[id];
+        document.querySelectorAll(`[data-qid="${id}"] .score-group label`).forEach(l => l.classList.remove('checked'));
+        if (s?.score) {
+            const label = document.querySelector(`[data-qid="${id}"] .score-group input[value="${s.score}"]`)?.parentElement;
+            if (label) label.classList.add('checked', `score-${s.score}`);
+        }
+    }
 
-function exportBaseline() {
-  const data = {
-    projectId: 'job-search-ai-assistant',
-    exportedAt: new Date().toISOString(),
-    queryResults: {}
-  };
-  queries.forEach(q => {
-    data.queryResults[q.id] = {
-      id: q.id, category: q.category, query: q.query,
-      expectedSource: q.expectedSource, expectedKnowledge: q.expectedKnowledge,
-      score: scores[q.id]?.score || null, reason: scores[q.id]?.reason || '',
-      scoredAt: scores[q.id]?.scoredAt || null, results: q.results || []
-    };
-  });
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `scored-baseline-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-}
+    function updateProgress() {
+        const scored = Object.values(scores).filter(s => s.score).length;
+        const total = queries.length || 1;
+        document.getElementById('progress-text').textContent = `${scored}/${total} scored`;
+        document.getElementById('progress-fill').style.width = `${(scored / total) * 100}%`;
+    }
 
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function updateSummary() {
+        const summaryEl = document.getElementById('summary-body');
+        if (!summaryEl) return;
+        const categories = [...new Set(queries.map(q => q.category))];
+        let html = '';
+        categories.forEach(cat => {
+            const catQueries = queries.filter(q => q.category === cat);
+            const catScores = catQueries.map(q => scores[q.id]?.score).filter(Boolean);
+            const avg = catScores.length ? (catScores.reduce((a, b) => a + b, 0) / catScores.length) : 0;
+            const cls = avg >= 4 ? 'avg-good' : avg >= 3 ? 'avg-ok' : avg >= 1 ? 'avg-bad' : '';
+            html += `<tr><td>${cat}</td><td>${catScores.length}/${catQueries.length}</td><td class="${cls}">${catScores.length ? avg.toFixed(1) : '-'}</td><td>${catScores.length ? Math.min(...catScores) : '-'}</td><td>${catScores.length ? Math.max(...catScores) : '-'}</td></tr>`;
+        });
+        summaryEl.innerHTML = html;
+    }
 
-init();
+    function getCategoryCount(cat) {
+        return queries.filter(q => q.category === cat).length;
+    }
+
+    function getCategoryScored(cat) {
+        return queries.filter(q => q.category === cat && scores[q.id]?.score).length;
+    }
+
+    function render() {
+        const categories = [...new Set(queries.map(q => q.category))];
+        let navHtml = '';
+        categories.forEach(cat => {
+            navHtml += `<a class="cat-link" href="#cat-${cat.replace(/[^a-zA-Z0-9]/g, '-')}" onclick="scrollToCategory('${cat.replace(/'/g, "\\'")}')">${cat}<span class="cat-count">${getCategoryScored(cat)}/${getCategoryCount(cat)}</span></a>`;
+        });
+        document.getElementById('category-nav').innerHTML = navHtml;
+
+        let html = '';
+        queries.forEach((q, i) => {
+            const s = scores[q.id] || {};
+            html += `<div class="query-card" data-qid="${q.id}" id="cat-${q.category.replace(/[^a-zA-Z0-9]/g, '-')}">`;
+            html += `<div class="card-header"><div><span class="card-id">${q.id}</span> <span class="category">${q.category}</span></div></div>`;
+            html += `<div class="query-text">${esc(q.query)}</div>`;
+            if (q.expectedSource) html += `<div class="expected">Expected source: <em>${esc(q.expectedSource)}</em></div>`;
+            if (q.expectedKnowledge) html += `<div class="expected">Expected: ${esc(q.expectedKnowledge)}</div>`;
+            if (q.negativeTest) html += `<div class="expected"><em>⚠ Negative test — expected source should NOT appear in results</em></div>`;
+
+            if (q.results && q.results.length) {
+                html += `<div class="results">`;
+                q.results.forEach(r => {
+                    html += `<div class="result-row">`;
+                    html += `<span class="rank">#${r.rank}</span><span class="score">Score: ${r.ranking?.toFixed(3) || 'N/A'}</span>`;
+                    if (r.isExpectedSource) html += `<span class="match">✓ Expected source</span>`;
+                    html += `<span class="path">${esc(r.path || '')}</span>`;
+                    html += `<span class="snippet">${esc(r.snippet || '')}</span>`;
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            }
+
+            html += `<div class="scoring">`;
+            html += `<div class="score-group">`;
+            [1, 2, 3, 4, 5].forEach(v => {
+                html += `<label class="${s.score === v ? 'checked score-' + v : ''}"><input type="radio" name="score-${q.id}" value="${v}" ${s.score === v ? 'checked' : ''} onchange="scoreQuery('${q.id}',${v})"><span>${v}</span></label>`;
+            });
+            html += `</div>`;
+            html += `<div class="reason-area"><textarea id="reason-${q.id}" placeholder="Reason for score..." onchange="saveReason('${q.id}')">${esc(s.reason || '')}</textarea></div>`;
+            html += `</div>`;
+
+            html += `<div class="nav-buttons">`;
+            if (i > 0) html += `<button onclick="scrollToQuery('${queries[i - 1].id}')">◄ Prev</button>`;
+            else html += `<span></span>`;
+            html += `<button onclick="saveQuery('${q.id}')">Save</button>`;
+            if (i < queries.length - 1) html += `<button onclick="scrollToQuery('${queries[i + 1].id}')">Next ►</button>`;
+            else html += `<span></span>`;
+            html += `</div></div>`;
+        });
+
+        if (categories.length) {
+            html += `<div id="summary"><h2>Summary</h2><table><thead><tr><th>Category</th><th>Scored</th><th>Avg Score</th><th>Min</th><th>Max</th></tr></thead><tbody id="summary-body">`;
+            categories.forEach(cat => {
+                const catQueries = queries.filter(q => q.category === cat);
+                const catScores = catQueries.map(q => scores[q.id]?.score).filter(Boolean);
+                const avg = catScores.length ? (catScores.reduce((a, b) => a + b, 0) / catScores.length) : 0;
+                const cls = avg >= 4 ? 'avg-good' : avg >= 3 ? 'avg-ok' : 'avg-bad';
+                html += `<tr><td>${cat}</td><td>${catScores.length}/${catQueries.length}</td><td class="${cls}">${catScores.length ? avg.toFixed(1) : '-'}</td><td>${catScores.length ? Math.min(...catScores) : '-'}</td><td>${catScores.length ? Math.max(...catScores) : '-'}</td></tr>`;
+            });
+            html += `</tbody></table></div>`;
+        }
+
+        document.getElementById('content').innerHTML = html;
+        updateProgress();
+    }
+
+    function renderCompare() {
+        if (!compareData) return;
+        let html = '<h2>Baseline Comparison</h2>';
+        const compareResults = compareData.queryResults || {};
+        let regressions = [], improvements = [];
+
+        queries.forEach(q => {
+            const newScore = scores[q.id]?.score;
+            const oldEntry = compareResults[q.id];
+            const oldScore = oldEntry?.score;
+            if (newScore && oldScore && newScore !== oldScore) {
+                const delta = newScore - oldScore;
+                if (delta < 0) regressions.push({id: q.id, old: oldScore, new: newScore, delta});
+                else improvements.push({id: q.id, old: oldScore, new: newScore, delta});
+            }
+        });
+
+        if (regressions.length) {
+            html += '<h3 style="margin-top:12px">Regressions</h3>';
+            regressions.forEach(r => html += `<div class="regression">${r.id}: ${r.old}→${r.new} (${r.delta})</div>`);
+        }
+        if (improvements.length) {
+            html += '<h3 style="margin-top:12px">Improvements</h3>';
+            improvements.forEach(r => html += `<div class="improvement">${r.id}: ${r.old}→${r.new} (+${r.delta})</div>`);
+        }
+        if (!regressions.length && !improvements.length) html += '<div>No score changes detected.</div>';
+
+        document.getElementById('compare').innerHTML = html;
+        document.getElementById('compare').style.display = 'block';
+    }
+
+    function scrollToCategory(cat) {
+        const el = document.getElementById(`cat-${cat.replace(/[^a-zA-Z0-9]/g, '-')}`);
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    function scrollToQuery(id) {
+        const el = document.querySelector(`[data-qid="${id}"]`);
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    function saveQuery(id) {
+        saveReason(id);
+        saveToStorage();
+    }
+
+    function saveAllScores() {
+        queries.forEach(q => {
+            const reasonEl = document.getElementById(`reason-${q.id}`);
+            if (scores[q.id]) scores[q.id].reason = reasonEl?.value || '';
+        });
+        saveToStorage();
+        updateProgress();
+        updateSummary();
+        const btn = document.querySelector('footer button');
+        if (btn) { btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = 'Save All Scores', 1500); }
+    }
+
+    function exportBaseline() {
+        if (!queries.length) {
+            alert('No data to export. Load a baseline JSON file first using "Load Baseline".');
+            return;
+        }
+        saveAllScores();
+        const data = {
+            projectId: 'job-search-ai-assistant',
+            exportedAt: new Date().toISOString(),
+            queryResults: {}
+        };
+        queries.forEach(q => {
+            data.queryResults[q.id] = {
+                id: q.id, category: q.category, query: q.query,
+                expectedSource: q.expectedSource, expectedKnowledge: q.expectedKnowledge,
+                score: scores[q.id]?.score || null, reason: scores[q.id]?.reason || '',
+                scoredAt: scores[q.id]?.scoredAt || null, results: q.results || []
+            };
+        });
+        const json = JSON.stringify(data, null, 2);
+        const filename = `scored-baseline-${new Date().toISOString().slice(0, 10)}.json`;
+
+        // Attempt download via a.click() — works on most browsers
+        const a = document.createElement('a');
+        a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // Reliable backup: dump JSON into a textarea, auto-selected for Cmd+C
+        let area = document.getElementById('export-textarea');
+        if (!area) {
+            area = document.createElement('textarea');
+            area.id = 'export-textarea';
+            area.readOnly = true;
+            area.style.cssText = 'width:100%;height:400px;margin-top:16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:monospace;font-size:12px;resize:vertical;';
+            let container = document.getElementById('export-area');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'export-area';
+                const summary = document.getElementById('summary');
+                if (summary) summary.parentNode.insertBefore(container, summary);
+            }
+            container.innerHTML = '<p style="font-size:13px;color:var(--accent);margin-bottom:8px;">📋 JSON ready — Cmd+A, Cmd+C to copy</p>';
+            container.appendChild(area);
+        }
+        area.value = json;
+        area.select();
+        area.scrollIntoView({behavior: 'smooth'});
+    }
+
+    function esc(s) {
+        return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    init();
 </script>
 </body>
 </html>
