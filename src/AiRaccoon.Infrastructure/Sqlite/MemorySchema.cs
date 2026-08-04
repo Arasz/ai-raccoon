@@ -5,10 +5,11 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Our single-file bank schema (plan §2.2): entries with on-row metadata, workspaces,
-///     settings, an FTS5 external-content index over entries(value, source_file) and an (empty
-///     until P4/P6) vec0 table. Idempotent — safe to run on every bank open. Wave 2 (plan C §3):
-///     source_file carries the original file path so the FTS index can weight source matches
-///     above body-text matches; legacy banks are migrated on open (see MigrateAsync).
+///     settings, an FTS5 external-content index over entries(value, source_file, section)
+///     and vec0 tables for the content embedding (P4) and the Wave 6 structure embedding
+///     (heading-path vector). Idempotent — safe to run on every bank open. Wave 2 (plan
+///     C §3): source_file carries the original file path so the FTS index can weight source
+///     matches above body-text matches; legacy banks are migrated on open (see MigrateAsync).
 /// </summary>
 internal static class MemorySchema
 {
@@ -21,10 +22,11 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Wave 2 migration: legacy banks lack source_file and section (and index only
-    ///     entries.value). The columns are added when missing; the FTS index is rebuilt with
-    ///     the three-column shape (value, source_file, section) when it still carries an old
-    ///     shape. Fresh banks created by Ddl are already in the new shape and are untouched.
+    ///     Wave 2 + Wave 6 migration: legacy banks lack source_file, section (Wave 2) and
+    ///     heading_path, structure_embedding (Wave 6). The columns are added when missing;
+    ///     the FTS index is rebuilt with the three-column shape (value, source_file, section)
+    ///     when it still carries an old shape. Fresh banks created by Ddl already have the
+    ///     new shape and are untouched.
     /// </summary>
     private static async Task MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -47,6 +49,24 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN section TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("heading_path"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN heading_path TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("structure_embedding"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }
@@ -166,6 +186,8 @@ internal static class MemorySchema
                                    ttl_days INTEGER NULL,
                                    embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                    embedding BLOB NULL,
+                                   heading_path TEXT NULL,
+                                   structure_embedding BLOB NULL,
                                    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
                                    CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
@@ -186,6 +208,15 @@ internal static class MemorySchema
                                -- vec0 stays empty until P4 embeds; P4 owns the embedding
                                -- dimension if the model is not all-MiniLM (384).
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
+
+                               -- Wave 6 structure modality: heading-path vectors, rowid = entry id.
+                               -- Written only by the re-runnable backfill (StructureBackfillService);
+                               -- the delete trigger keeps orphan rows out when an entry goes away.
+                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
+
+                               CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
+                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
+                               END;
 
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
                                    INSERT INTO entries_fts(rowid, value, source_file, section)

@@ -157,3 +157,60 @@ Exact-chunk @3: 6/11 (W0: 3/10 — improved). File-level @3: 9/11. Zero-match: 0
 - bm25 weights (1.0, 8.0, 16.0) documented in ADR-0003; context-label searches now include custom-scoped rows without double-counting project rows in RRF (review fix).
 - Migration is transactional with heal-on-reopen (review fix): a crash mid-rebuild cannot leave a bank without an FTS index.
 - **Verdict:** improvement on ADR metrics (nDCG +0.032, recall +0.015, exact@3 3/10 → 6/11) and all identifier/source gates pass; one documented invariant hybrid regression (C2) analyzed, attributed, and assigned to Wave 4.
+
+---
+
+## Post-Wave-6 Integration — 2026-08-04 (section-targeted retrieval: dual-vector structure signal)
+
+Corpus: jsaa-memory.db — 752 chunks (W2 state) + Wave 6 backfill: heading_path + structure_embedding
+on 746 chunks, 704 unique heading paths, vec_structure populated; chunk content/hashes unchanged
+(chunk-hash-map.json untouched). Commit: de648b4. Full suite 505 passed / 0 failed / 43 skipped.
+
+### Per-query (hybrid) — vs post-Wave-2
+
+| Query | W2 exact/file | W6 exact/file | Delta |
+|-------|--------------:|--------------:|-------|
+| A1 | 1 / 1 | 2 / 2 | file 1→2 — same-knowledge alt (see notes) |
+| A2 | 3 / 1 | 1 / 1 | exact 3→1 ✓ |
+| A3 | 1 / 1 | 3 / 1 | exact 1→3 (file =; ≤3) |
+| A4 | 4 / 1 | 5 / 2 | file 1→2 — same-knowledge alt (see notes) |
+| A5 | 1 / 1 | 1 / 1 | = |
+| A6 | — / 4 | — / 2 | file 4→2 ✓ (plan Wave-3 target, hit by W6) |
+| A7 | — / 1 | 4 / 1 | exact restored ✓ |
+| S2 | — / 1 | 5 / 1 | file ≤3 ✓; decision chunk 5 (Wave 3 gate) |
+| C1 | 1 / 1 | 1 / 1 | = |
+| C2 | — / — | 1 / 1 | RESTORED to hybrid rank 1 (Wave-4 criterion satisfied) |
+| C5 | 1 / 1 | 1 / 1 | = |
+
+### Metrics
+
+| Metric | W0 | W1 | W2 | W6 | Delta vs W2 |
+|--------|-----|-----|-----|-----|-------------|
+| nDCG@5 (ADR) | 0.642 | 0.652 | 0.674 | 0.650 | −0.024 (still > W0) |
+| MRR (ADR) | 0.893 | 0.893 | 0.893 | 0.786 | −0.107 (A1/A4 file slips) |
+| recall@5 (ADR) | 0.544 | 0.544 | 0.559 | 0.581 | +0.022 ✓ |
+| Invariants nDCG@5 | 1.000 | 1.000 | 0.667 | 1.000 | +0.333 ✓ (C2 restored) |
+| Section hit@5 (A1-A5,A7) | — | — | — | 6/6 | gate ≥4/6 ✓ |
+
+### Notes (content-verified per integration rule)
+
+- **A1/A4 rank-1 alternatives carry the same knowledge (chunks read and verified):** A1 —
+  frontend-architecture.md#3 "The gluestack → shadcn/ui pivot" states the evidence and links
+  "The formal decision record is ADR-0011 §1" (ADR-0011 links back "Full evidence:
+  docs/frontend-architecture.md §3"). A4 — behaviour-specification.md#3 "MCP tools — retired":
+  "The MCP server was deleted; see ADR-0060". Both expected files stay in the top-2; the MRR
+  cost reflects ground-truth rank movement, not answer-quality loss.
+- **A3** decision chunk 1→3 (file rank 1 held); rank-2 = docs:architecture#4-auth-security —
+  weakly relevant to "offer-page fetching security" (auth, not fetch security); bounded.
+- **A6 rank-1 = ADR-0069#consequences** (retention sweep, cross-links ADR-0068) — legitimate
+  erasure-adjacent answer; expected ADR-0067 file improved 4→2.
+- **S2** decision chunk ranks 5 — the top-1 is the ADR's metadata header (within-file sibling
+  competition); the plan's S2 ≤3 target moves to Wave 3's source-affinity gate.
+- **C2 restored by the structure signal** (invariant heading path matches the query embedding) —
+  the Wave-4 C2 acceptance criterion is already satisfied; Wave 4's sweep now only needs to
+  hold it.
+- α is bank-tunable via `memory_set_structure_alpha(projectId, alpha)` (rw tier; the
+  open question is resolved — see plan Wave 6 gate amendments).
+- **Verdict:** the wave delivers its purpose — section-targeted retrieval (S2 file-level, S4 ≤3,
+  section hit@5 6/6) plus C2/A6/A7/recall improvements — at bounded, content-verified file-rank
+  costs on A1/A4 (same-knowledge alternatives) and A3 (exact ≤3).
