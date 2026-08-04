@@ -4,7 +4,6 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.Unit.Retrieval;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -20,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class Wave1QueryConstructionTests : IDisposable
+public sealed class QueryConstructionTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
     private const string Adr0070File = "docs:adr:0070-documentation-structure-and-trust-model.md";
@@ -31,10 +30,12 @@ public sealed class Wave1QueryConstructionTests : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly string _dataRoot;
-    private readonly SqliteMemoryStore _store;
-    private readonly ITestOutputHelper _output;
 
-    public Wave1QueryConstructionTests(ITestOutputHelper output)
+    private readonly List<string> _extraRoots = [];
+    private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
+
+    public QueryConstructionTests(ITestOutputHelper output)
     {
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
@@ -50,56 +51,32 @@ public sealed class Wave1QueryConstructionTests : IDisposable
             new TokenizerChunker(), new EmbeddingService());
     }
 
-    public void Dispose()
-    {
-        foreach (var root in _extraRoots)
-        {
-            Directory.Delete(root, true);
-        }
-
-        Directory.Delete(_dataRoot, true);
-    }
-
-    private readonly List<string> _extraRoots = [];
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     Fallback boundary (Wave 1 review NIT): an AND primary that matches exactly
-    ///     max(TokenCount, limit) rows must NOT trigger the OR fallback — a list that size is
-    ///     a usable ranked signal on its own. The probe chunk (only 'alpha') would surface
-    ///     under the OR fallback and must stay absent.
+    ///     A4 boundary regression (Wave 1 integration review): 'What happened to the MCP
+    ///     server?' — the AND primary matches exactly max(3, 5) rows and excludes the ADR-0060
+    ///     decision chunk ('happened' does not occur in it). The boundary trigger must fire
+    ///     the OR fallback, restoring the decision chunk to the FTS-only top-8 (measured rank
+    ///     7 with bigrams; plain OR ranked it 8).
     /// </summary>
     [Fact]
-    public async Task AndPrimary_AtThreshold_DoesNotFallBack()
+    public async Task AndPrimary_AtBoundary_A4DecisionChunkRestoredByFallback()
     {
-        var store = NewEmptyStore();
-        for (var i = 0; i < 5; i++)
-        {
-            await store.AddContentAsync("acme", $"docs/probe-{i}.md", $"alpha beta chunk {i}", null,
-                TestContext.Current.CancellationToken);
-        }
+        await EnsureModelAsync();
+        var query = LoadQueries().First(q => q.Id == "A4");
+        var exactHash = LoadHashMap()[query.ExpectedSource!];
 
-        await store.AddContentAsync("acme", "docs/probe-alpha.md", "alpha only chunk", null,
+        var results = await _store.SearchAsync(new SearchQuery(
+                ProjectId, query.Query, SearchScope.Project,
+                Limit: 10, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
-        var results = await store.SearchAsync(
-            new SearchQuery("acme", "alpha beta", SearchScope.Project, Limit: 5, MinScore: 0.0),
-            TestContext.Current.CancellationToken);
-
-        results.ShouldNotBeEmpty();
-        results.ShouldNotContain(r => r.Path == "docs/probe-alpha.md",
-            "exactly max(2, 5) AND matches is a usable signal; the OR fallback must not fire");
-    }
-
-    private SqliteMemoryStore NewEmptyStore()
-    {
-        var dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
-        _extraRoots.Add(dataRoot);
-
-        var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
-        return new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService());
+        var rank = results.Select(r => r.Hash).ToList().IndexOf(exactHash) + 1;
+        rank.ShouldBeGreaterThan(0,
+            "the OR fallback must restore A4's decision chunk to the FTS-only results");
+        rank.ShouldBeLessThanOrEqualTo(8,
+            $"A4's decision chunk measured FTS-only rank 7 under the fallback (plain OR: 8), got {rank}");
     }
 
     /// <summary>
@@ -190,7 +167,7 @@ public sealed class Wave1QueryConstructionTests : IDisposable
     ///     hit@5 ≥ 6/7 on the ADR suite and file-level MRR ≥ 0.70 on the expected-source suite.
     /// </summary>
     [Fact]
-    public async Task FtsOnly_FileHitAt5AndMrr_MeetWave1Guard()
+    public async Task FtsOnly_FileHitAt5AndMrr_MeetGuard()
     {
         await EnsureModelAsync();
         var queries = LoadQueries();
@@ -262,7 +239,7 @@ public sealed class Wave1QueryConstructionTests : IDisposable
     {
         var ensured = await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
         ensured.AllPresent.ShouldBeTrue("bundled embedding model must be provisioned: "
-            + string.Join("; ", ensured.Errors));
+                                        + string.Join("; ", ensured.Errors));
     }
 
     private async Task<IReadOnlyList<string>> TopHashesAsync(
