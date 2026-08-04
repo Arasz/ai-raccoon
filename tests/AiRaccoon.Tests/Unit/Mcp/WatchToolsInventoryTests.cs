@@ -1,5 +1,9 @@
 using System.Reflection;
+using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
 using AiRaccoon.Tools;
+using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
@@ -68,5 +72,17 @@ public sealed class WatchToolsInventoryTests
                 $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
             constValues[toolName].ShouldStartWith("TN_");
         }
+    }
+
+    /// <summary>DI smoke (plan S6, TDD order 4): the composition root resolves IWatchService.</summary>
+    [Fact]
+    public void RegisterMemoryServices_ResolvesIWatchService()
+    {
+        var services = new ServiceCollection();
+        services.RegisterMemoryServices(new InfrastructureOptions());
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IWatchService>().ShouldNotBeNull();
     }
 }
