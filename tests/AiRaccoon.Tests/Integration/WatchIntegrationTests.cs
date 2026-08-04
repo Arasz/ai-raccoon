@@ -51,6 +51,49 @@ public sealed class WatchIntegrationTests
     }
 
     [Fact]
+    public async Task HostedService_StartsThePipelineTickLoop_FileBecomesSearchableWithoutManualTicks()
+    {
+        using var stack = new Stack();
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+
+        _ = stack.Hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            // Wait for the hosted reconcile to start the watcher + initial scan.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (stack.CatchUp.LastScan is null && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20, TestContext.Current.CancellationToken);
+            }
+
+            var scan = stack.CatchUp.LastScan.ShouldNotBeNull("the hosted reconcile did not start a catch-up scan");
+            await scan;
+
+            stack.Write("a.md", "zephyrloop token");
+
+            // No manual TickOnceAsync anywhere: the pipeline loop's own 1s tick (fired by
+            // advancing the fake clock) must drain the channel and digest the created file.
+            var pollDeadline = DateTime.UtcNow.AddSeconds(15);
+            var searchable = false;
+            while (!searchable && DateTime.UtcNow < pollDeadline)
+            {
+                stack.Time.Advance(TimeSpan.FromSeconds(1));
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+                searchable = (await stack.SearchAsync("zephyrloop", TestContext.Current.CancellationToken))
+                    .Any(r => r.SourceFile == stack.File("a.md"));
+            }
+
+            searchable.ShouldBeTrue("the hosted service never started the pipeline tick loop");
+        }
+        finally
+        {
+            await stack.Hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task ChangedFile_ReplacesItsContentInSearch()
     {
         using var stack = new Stack();
