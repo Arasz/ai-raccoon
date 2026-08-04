@@ -286,8 +286,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [When("^the user runs watch scope add \\* ([^ ]*)$")]
     public Task WhenUserRunsWatchScopeAdd(string path) => RunCliAsync("watch", "scope", "add", "*", Map(path));
 
-    [When("^the user runs watch disable ([^\"]*)$")]
-    public Task WhenUserRunsWatchDisable(string projectId) => RunCliAsync("watch", "disable", projectId);
+    [When("^the user runs watch disable ([^ ]*) (true|false)$")]
+    public Task WhenUserRunsWatchDisable(string projectId, string enabled) =>
+        RunCliAsync("watch", "disable", projectId, enabled);
 
     [When("^the user runs watch concurrency ([^ ]*) ([0-9]+)$")]
     public Task WhenUserRunsWatchConcurrency(string projectId, int value) =>
