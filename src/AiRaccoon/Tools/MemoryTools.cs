@@ -24,7 +24,7 @@ public sealed class MemoryTools(
     WorkspaceService workspaces,
     SweepService sweeper,
     IMemoryAccessGuard access,
-    SyncOptions syncOptions,
+    SyncCloudStoreFactory syncFactory,
     ForgettingPolicyService knobs,
     ToolCallMetrics observability)
 {
@@ -38,9 +38,7 @@ public sealed class MemoryTools(
     private const string TN_MEMORY_DELETE_CONTEXT = "memory_delete_context";
     private const string TN_MEMORY_INGEST_FILE = "memory_ingest_file";
     private const string TN_MEMORY_INGEST_DIRECTORY = "memory_ingest_directory";
-    private const string TN_MEMORY_CONFIGURE = "memory_configure";
     private const string TN_MEMORY_EMBED_PENDING = "memory_embed_pending";
-    private const string TN_MEMORY_SET_STRUCTURE_ALPHA = "memory_set_structure_alpha";
     private const string TN_MEMORY_WORKSPACE_BEGIN = "memory_workspace_begin";
     private const string TN_MEMORY_WORKSPACE_STATUS = "memory_workspace_status";
     private const string TN_MEMORY_WORKSPACE_CONSOLIDATE = "memory_workspace_consolidate";
@@ -377,105 +375,6 @@ public sealed class MemoryTools(
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_CONFIGURE)]
-    [Description(
-        "Configures the bank's embedding engine. provider 'local' embeds in-process with the bundled " +
-        "int8 ONNX model (optional model path overrides it); provider 'openai' routes through any " +
-        "OpenAI-compatible baseUrl (default https://api.openai.com/v1) with a model id. Remote requires " +
-        "an API key (env AIRACCOON_OPENAI_API_KEY or api_key). Changing the engine re-embeds the bank.")]
-    public async Task<ConfigureResult> Configure(
-        [Description("The project id; every memory operation is scoped to a project.")]
-        string projectId,
-        [Description("Embedding provider: 'local' (bundled ONNX) or 'openai' (OpenAI-compatible endpoint).")]
-        string provider,
-        [Description("Endpoint base URL for provider 'openai' (e.g. http://localhost:11434/v1); defaults to the OpenAI API.")]
-        string? baseUrl = null,
-        [Description("Model id (openai) or ONNX model path (local); defaults to the bundled model for local.")]
-        string? model = null,
-        [Description("Optional API key for remote embeddings; never persisted.")]
-        string? apiKey = null,
-        CancellationToken cancellationToken = default)
-    {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_CONFIGURE);
-        activity?.SetTag("tool", TN_MEMORY_CONFIGURE);
-        activity?.SetTag("project_id", projectId);
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_CONFIGURE, cancellationToken);
-
-            var isLocal = string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
-            var isOpenAi = string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase);
-            if (!isLocal && !isOpenAi)
-            {
-                throw new McpException($"invalid-params: provider must be 'local' or 'openai', got '{provider}'");
-            }
-
-            if (isOpenAi)
-            {
-                if (string.IsNullOrWhiteSpace(model))
-                {
-                    throw new McpException("invalid-params: model is required for provider 'openai'");
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(apiKey))
-            {
-                await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, apiKey, cancellationToken);
-            }
-
-            var config = await store.ConfigureEmbeddingAsync(provider, model, baseUrl, cancellationToken);
-            var result = new ConfigureResult(config.Provider, config.Model, config.Engine);
-            observability.RecordInvocation(TN_MEMORY_CONFIGURE, sw.Elapsed, false);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_CONFIGURE, sw.Elapsed, true, ex.GetType().Name);
-            throw;
-        }
-    }
-
-    [McpServerTool(Name = TN_MEMORY_SET_STRUCTURE_ALPHA)]
-    [Description(
-        "Sets the dual-vector fusion alpha (retrieval.structureAlpha, 0..1) for the bank: " +
-        "score = alpha * content similarity + (1 - alpha) * heading-path structure similarity. " +
-        "Default 0.5; higher favors content, lower favors structure. Applies to subsequent searches.")]
-    public async Task<SettingResult> SetStructureAlpha(
-        [Description("The project id; every memory operation is scoped to a project.")]
-        string projectId,
-        [Description("Fusion alpha in [0, 1].")]
-        double alpha,
-        CancellationToken cancellationToken = default)
-    {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SET_STRUCTURE_ALPHA);
-        activity?.SetTag("tool", TN_MEMORY_SET_STRUCTURE_ALPHA);
-        activity?.SetTag("project_id", projectId);
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_SET_STRUCTURE_ALPHA, cancellationToken);
-
-            if (alpha is < 0.0 or > 1.0)
-            {
-                throw new McpException($"invalid-params: alpha must be in [0, 1], got {alpha}");
-            }
-
-            var value = alpha.ToString(CultureInfo.InvariantCulture);
-            await store.SetSettingAsync(StructureFusion.AlphaSettingKey, value, cancellationToken);
-            observability.RecordInvocation(TN_MEMORY_SET_STRUCTURE_ALPHA, sw.Elapsed, false);
-            return new SettingResult(StructureFusion.AlphaSettingKey, value);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_SET_STRUCTURE_ALPHA, sw.Elapsed, true, ex.GetType().Name);
-            throw;
-        }
-    }
 
     [McpServerTool(Name = TN_MEMORY_EMBED_PENDING)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
@@ -636,7 +535,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TN_MEMORY_SWEEP)]
     [Description(
-        "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than the TTL. Shared entries are never swept.")]
+        "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than their per-entry TTL. Shared entries are never swept.")]
     public async Task<SweepResult> Sweep(
         [Description("The project id.")] string projectId,
         [Description("When true (default), report candidates without deleting.")]
@@ -653,8 +552,7 @@ public sealed class MemoryTools(
             await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TN_MEMORY_SWEEP, cancellationToken);
 
             var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
-            var ttlDays = await knobs.GetSweepTtlDaysAsync(projectId, cancellationToken);
-            var outcome = await sweeper.SweepAsync(projectId, threshold, ttlDays, dryRun, cancellationToken);
+            var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
             observability.RecordInvocation(TN_MEMORY_SWEEP, sw.Elapsed, false);
             return result;
@@ -685,17 +583,18 @@ public sealed class MemoryTools(
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_SYNC, cancellationToken);
 
-            if (!syncOptions.IsConfigured)
+            var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
+            if (!syncSettings.IsConfigured)
             {
                 var notConfigured = new McpException(
-                    "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
-                    "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name> " +
+                    "--access-key <key> --secret-key <key>'");
                 activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(McpException));
                 throw notConfigured;
             }
 
-            var objectKey = syncOptions.ObjectKey ?? $"memory-{projectId}.db";
+            var objectKey = syncSettings.ObjectKey ?? $"memory-{projectId}.db";
             try
             {
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
@@ -709,8 +608,8 @@ public sealed class MemoryTools(
                 activity?.SetTag("error_type", nameof(SyncNotConfiguredException));
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncNotConfiguredException));
                 throw new McpException(
-                    "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
-                    "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name> " +
+                    "--access-key <key> --secret-key <key>'");
             }
             catch (SyncAuthFailedException ex)
             {
@@ -718,7 +617,7 @@ public sealed class MemoryTools(
                 activity?.SetTag("error_type", nameof(SyncAuthFailedException));
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncAuthFailedException));
                 throw new McpException(
-                    "sync-auth-failed: verify AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+                    "sync-auth-failed: verify the keys with 'ai-raccoon sync show'");
             }
             catch (SyncConflictException ex)
             {
@@ -773,8 +672,6 @@ public sealed class MemoryTools(
     public sealed record IngestResult(int Indexed);
 
     public sealed record ScannedResult(int Scanned);
-
-    public sealed record ConfigureResult(string Provider, string Model, string Engine);
 
     public sealed record EmbedResult(int Processed, int Pending);
 

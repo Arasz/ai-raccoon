@@ -518,4 +518,26 @@ public class SyncServiceTests : IDisposable
             count.ShouldBe(1, "Local data must survive corrupt remote snapshot.");
         }
     }
+
+    [Fact]
+    public async Task MemorySync_ResolvesTheCloudStorePerCall()
+    {
+        // F13: the resolver runs inside each sync cycle, so `sync add/remove` (settings
+        // writes) take effect without a restart — two calls resolve twice.
+        var resolutions = 0;
+        var service = new SyncService(
+            _ => { resolutions++; return Task.FromResult<ICloudStore>(new FakeCloudStore()); },
+            ct => CreateAndOpenAsync(BankPath, ct),
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, null!);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        resolutions.ShouldBe(2);
+    }
 }

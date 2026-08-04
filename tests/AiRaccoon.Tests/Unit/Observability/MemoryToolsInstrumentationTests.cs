@@ -12,6 +12,7 @@ using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -86,7 +87,7 @@ public class MemoryToolsInstrumentationTests
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
 
         var store = new SimpleFakeStore();
-        var tools = CreateTools(store, metrics, configureSync: false);
+        var tools = CreateTools(store, metrics);
 
         var ex = await Should.ThrowAsync<ModelContextProtocol.McpException>(() =>
             tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
@@ -136,17 +137,13 @@ public class MemoryToolsInstrumentationTests
 
     private static MemoryTools CreateTools(
         SimpleFakeStore store,
-        ToolCallMetrics metrics,
-        bool configureSync = true)
+        ToolCallMetrics metrics)
     {
         var workspaces = new WorkspaceService(store, new SimpleFakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(store, new FakeTimeProvider(FixedNow));
-        var syncOptions = configureSync
-            ? new SyncOptions { Endpoint = "http://test", Bucket = "b", AccessKey = "k", SecretKey = "s" }
-            : new SyncOptions();
         return new MemoryTools(store, new SimpleFakeSyncService(), workspaces, sweeper,
             new MemoryAccessGuard(store),
-            syncOptions,
+            new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(store, new MemoryAccessGuard(store)),
             metrics);
     }

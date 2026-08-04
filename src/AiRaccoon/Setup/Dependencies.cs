@@ -20,15 +20,13 @@ public static partial class Dependencies
     public static void RegisterMemoryServices(this IServiceCollection services, InfrastructureOptions options)
     {
         services.AddSingleton(options);
-        // Startup sync options are inert until the per-call settings re-resolution lands;
-        // sync add/remove already write the settings rows the resolution will read.
-        services.AddSingleton(new SyncOptions());
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEncryptionKeyProvider>(_ =>
             new EnvEncryptionKeyProvider());
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
             sp.GetRequiredService<IEncryptionKeyProvider>()));
+        services.AddSingleton<SyncCloudStoreFactory>();
         services.AddSingleton<EmbeddingService>();
         services.AddSingleton<SqliteMemoryStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
@@ -38,19 +36,8 @@ public static partial class Dependencies
             sp.GetRequiredService<SqliteMemoryStore>(),
             [sp.GetRequiredService<RetrievalRatingExtension>()]));
         services.AddSingleton<RetrievalRatingExtension>();
-        services.AddSingleton<ICloudStore>(sp =>
-        {
-            var syncOpts = sp.GetRequiredService<SyncOptions>();
-            if (!syncOpts.IsConfigured)
-            {
-                return new NullCloudStore();
-            }
-
-            return new S3CloudStore(syncOpts,
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger<S3CloudStore>());
-        });
         services.AddSingleton(sp => new SyncService(
-            sp.GetRequiredService<ICloudStore>(),
+            ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
             async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
             async (path, ct) =>
             {

@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
@@ -35,7 +36,7 @@ public sealed class MemoryToolsAccessModeTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(_store), new SyncOptions(),
+            new MemoryAccessGuard(_store), new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
             new ToolCallMetrics());
     }
