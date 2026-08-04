@@ -58,10 +58,10 @@ public class MemoryStorePortTests
         var store = new RecordingStore();
 
         var config = await store.ConfigureEmbeddingAsync(
-            "acme", "local", "/models/custom.onnx", null, null, TestContext.Current.CancellationToken);
+            "local", "/models/custom.onnx", null, TestContext.Current.CancellationToken);
 
         config.Engine.ShouldBe("local");
-        store.Configured.ShouldBe(("local", "/models/custom.onnx", null, null));
+        store.Configured.ShouldBe(("local", "/models/custom.onnx", null));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class MemoryStorePortTests
 
         public (string Path, string? Context)? IngestedDirectory { get; private set; }
 
-        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
+        public (string Provider, string? Model, string? BaseUrl)? Configured { get; private set; }
 
         public string? ListedContext { get; private set; }
 
@@ -155,10 +155,10 @@ public class MemoryStorePortTests
         }
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-            string projectId, string provider, string? model, string? baseUrl, string? apiKey,
+            string provider, string? model, string? baseUrl,
             CancellationToken cancellationToken = default)
         {
-            Configured = (provider, model, baseUrl, apiKey);
+            Configured = (provider, model, baseUrl);
             return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
         }
 
@@ -186,6 +186,12 @@ public class MemoryStorePortTests
 
         public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

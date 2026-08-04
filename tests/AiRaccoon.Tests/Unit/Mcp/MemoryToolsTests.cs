@@ -235,40 +235,25 @@ public class MemoryToolsTests
     }
 
     [Fact]
-    public async Task Configure_OpenAi_WithoutApiKey_ThrowsMcpException()
-    {
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Configure("acme", "openai", model: "nomic-embed-text",
-                cancellationToken: TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("embedding-api-key-missing");
-    }
-
-    [Fact]
     public async Task Configure_OpenAi_WithApiKey_DelegatesProviderModelBaseUrl()
     {
         await _tools.Configure("acme", "openai", "http://localhost:11434/v1", "nomic-embed-text",
             "test-key-123", TestContext.Current.CancellationToken);
 
-        _store.Configured.ShouldBe(("openai", "nomic-embed-text", "http://localhost:11434/v1", "test-key-123"));
+        _store.Configured.ShouldBe(("openai", "nomic-embed-text", "http://localhost:11434/v1"));
+        _store.Settings[EmbeddingSettingsKeys.ApiKey].ShouldBe("test-key-123");
     }
 
     [Fact]
-    public async Task Configure_OpenAi_WithoutArgKey_FallsBackToEnvKey()
+    public async Task Configure_OpenAi_WithoutApiKey_DoesNotTouchTheEnvOrPersistAKey()
     {
-        var previous = Environment.GetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY");
-        Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", "env-key-456");
-        try
-        {
-            await _tools.Configure("acme", "openai", model: "nomic-embed-text",
-                cancellationToken: TestContext.Current.CancellationToken);
+        // The env channel is removed (single-channel ruling): no key argument means the
+        // engine configures without persisting a key.
+        await _tools.Configure("acme", "openai", model: "nomic-embed-text",
+            cancellationToken: TestContext.Current.CancellationToken);
 
-            _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "env-key-456"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", previous);
-        }
+        _store.Configured.ShouldBe(("openai", "nomic-embed-text", null));
+        _store.Settings.ShouldNotContainKey(EmbeddingSettingsKeys.ApiKey);
     }
 
     [Fact]
@@ -277,7 +262,8 @@ public class MemoryToolsTests
         await _tools.Configure("acme", "openai", model: "nomic-embed-text", apiKey: "test-key-123",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "test-key-123"));
+        _store.Configured.ShouldBe(("openai", "nomic-embed-text", null));
+        _store.Settings[EmbeddingSettingsKeys.ApiKey].ShouldBe("test-key-123");
     }
 
     [Fact]
@@ -285,7 +271,7 @@ public class MemoryToolsTests
     {
         await _tools.Configure("acme", "local", cancellationToken: TestContext.Current.CancellationToken);
 
-        _store.Configured.ShouldBe(("local", null, null, null));
+        _store.Configured.ShouldBe(("local", null, null));
     }
 
     [Fact]
@@ -350,7 +336,7 @@ public class MemoryToolsTests
 
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
-        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
+        public (string Provider, string? Model, string? BaseUrl)? Configured { get; private set; }
 
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
@@ -392,10 +378,10 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default)
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default)
         {
-            Configured = (provider, model, baseUrl, apiKey);
+            Configured = (provider, model, baseUrl);
             return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
         }
 
@@ -422,6 +408,18 @@ public class MemoryToolsTests
             Settings[key] = value;
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(
+                Settings.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            Settings.Remove(key);
+            return Task.CompletedTask;
+        }
+
 
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>

@@ -412,25 +412,20 @@ public sealed class MemoryTools(
                 throw new McpException($"invalid-params: provider must be 'local' or 'openai', got '{provider}'");
             }
 
-            var resolvedKey = apiKey;
             if (isOpenAi)
             {
                 if (string.IsNullOrWhiteSpace(model))
                 {
                     throw new McpException("invalid-params: model is required for provider 'openai'");
                 }
-
-                resolvedKey = apiKey ?? Environment.GetEnvironmentVariable(
-                    AiRaccoon.Infrastructure.Embedding.EmbeddingService.OpenAiApiKeyEnvVar);
-                if (string.IsNullOrWhiteSpace(resolvedKey))
-                {
-                    throw new McpException(
-                        "embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'");
-                }
             }
 
-            var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, resolvedKey,
-                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, apiKey, cancellationToken);
+            }
+
+            var config = await store.ConfigureEmbeddingAsync(provider, model, baseUrl, cancellationToken);
             var result = new ConfigureResult(config.Provider, config.Model, config.Engine);
             observability.RecordInvocation(TN_MEMORY_CONFIGURE, sw.Elapsed, false);
             return result;

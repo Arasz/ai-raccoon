@@ -1,6 +1,5 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
-using AiRaccoon.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Embeddings;
@@ -17,17 +16,12 @@ public sealed class EmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
-    public const string OpenAiApiKeyEnvVar = "AIRACCOON_OPENAI_API_KEY";
-
     /// <summary>Maximum input tokens of the bundled all-MiniLM-L6-v2 model (P6b plan §8).</summary>
     public const int BundledModelContextTokens = 256;
 
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
     public const int OpenAiEmbeddingContextTokens = 8191;
 
-    private readonly InfrastructureOptions _options;
-
-    public EmbeddingService(InfrastructureOptions? options = null) => _options = options ?? new InfrastructureOptions();
 
     /// <summary>
     ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
@@ -75,13 +69,11 @@ public sealed class EmbeddingService
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
         var modelPath = string.IsNullOrWhiteSpace(settings.Model)
-            ? BundledModel.ResolveModelPath(_options.EmbeddingModelPath)
+            ? BundledModel.ResolveModelPath()
             : Path.GetFullPath(settings.Model);
         return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath());
     }
 
-    // Note: the api key resolves at generator creation (arg wins, then env); swapping the
-    // AIRACCOON_OPENAI_API_KEY env after first use requires a configure call to re-resolve.
     private static IEmbeddingGenerator<string, Embedding<float>> CreateOpenAi(EmbeddingSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.Model))
@@ -89,12 +81,12 @@ public sealed class EmbeddingService
             throw new InvalidOperationException("OpenAI-compatible embeddings require a model id.");
         }
 
-        // The key is never persisted; the tool's api_key arg wins, else the env fallback.
-        var apiKey = settings.ApiKey ?? Environment.GetEnvironmentVariable(OpenAiApiKeyEnvVar);
+        // The key is a settings row (embedding.apiKey), written by `ai-raccoon model set openai`.
+        var apiKey = settings.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                $"OpenAI-compatible embeddings require an API key: pass api_key or set {OpenAiApiKeyEnvVar}.");
+                "OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'.");
         }
 
         var baseUrl = string.IsNullOrWhiteSpace(settings.BaseUrl) ? DefaultOpenAiEndpoint : settings.BaseUrl;

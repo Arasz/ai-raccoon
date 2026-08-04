@@ -19,20 +19,10 @@ public static partial class Dependencies
 {
     public static void RegisterMemoryServices(this IServiceCollection services, InfrastructureOptions options)
     {
-        // Sync credentials stay environment-only: layered here (the composition root),
-        // never via CLI options and never in ServerConfig.Build. All other options are
-        // pre-merged by ServerConfig.Build (CLI > env > default).
-        options = options with
-        {
-            Sync = options.Sync with
-            {
-                AccessKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ACCESS_KEY"),
-                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY")
-            }
-        };
-
         services.AddSingleton(options);
-        services.AddSingleton(options.Sync);
+        // Startup sync options are inert until the per-call settings re-resolution lands;
+        // sync add/remove already write the settings rows the resolution will read.
+        services.AddSingleton(new SyncOptions());
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEncryptionKeyProvider>(_ =>
             new EnvEncryptionKeyProvider());

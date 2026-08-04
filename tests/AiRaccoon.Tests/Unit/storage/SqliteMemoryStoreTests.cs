@@ -349,7 +349,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task ConfigureEmbedding_StoresProviderAndModel_InSettings()
     {
-        var config = await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", null, null,
+        var config = await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", null,
             TestContext.Current.CancellationToken);
 
         config.Provider.ShouldBe("openai");

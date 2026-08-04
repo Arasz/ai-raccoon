@@ -51,7 +51,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_ConfigureLocal_EmbedsWritesSynchronouslyWithoutASidecar()
     {
-        var config = await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        var config = await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
 
         config.Engine.ShouldBe("local:bundled");
@@ -77,7 +77,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         File.Copy(BundledModel.ResolveModelPath(), custom);
         try
         {
-            var config = await _store.ConfigureEmbeddingAsync("acme", "local", custom, null, null,
+            var config = await _store.ConfigureEmbeddingAsync("local", custom, null,
                 TestContext.Current.CancellationToken);
 
             config.Engine.ShouldBe($"local:{custom}");
@@ -99,8 +99,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_ConfigureOpenAi_RoutesWritesThroughTheBaseUrl()
     {
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl, "test-key-123",
-            TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "routed through an openai compatible endpoint"),
@@ -139,7 +139,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         // Configuring the engine does not vacuum the pending queue — embed_pending owns it.
-        await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
 
         var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
@@ -161,7 +161,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         var second = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "fact two for engine switch"),
             TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
@@ -169,8 +169,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         localVectors.Item1.EmbedState.ShouldBe("embedded");
 
         // New engine: any OpenAI-compatible provider (the fake endpoint).
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl, "test-key-123",
-            TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var reembedded = (await ReadRowAsync(first.Hash), await ReadRowAsync(second.Hash));
         reembedded.Item1.EmbedState.ShouldBe("embedded");
@@ -185,13 +185,13 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_Configure_SameEngineDoesNotReembed()
     {
-        await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "stable fact"),
             TestContext.Current.CancellationToken);
 
-        await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
 
         // Re-configuring the identical engine must not invalidate or touch existing rows.
@@ -204,7 +204,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_Delete_RemovesTheVectorRowToo()
     {
-        await _store.ConfigureEmbeddingAsync("acme", "local", null, null, null,
+        await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "fact with a vector"),
