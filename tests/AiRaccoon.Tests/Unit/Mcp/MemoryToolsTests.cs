@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
@@ -40,7 +41,8 @@ public class MemoryToolsTests
                 AccessKey = "test-key",
                 SecretKey = "test-secret"
             },
-            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)));
+            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
+            new ToolCallMetrics());
     }
 
     [Fact]

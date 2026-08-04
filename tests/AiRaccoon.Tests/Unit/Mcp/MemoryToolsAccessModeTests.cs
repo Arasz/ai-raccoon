@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
@@ -35,7 +36,8 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
             new MemoryAccessGuard(_store), new SyncOptions(),
-            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)));
+            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
+            new ToolCallMetrics());
     }
 
     private void SetMode(string? global = null, string? perProject = null)
