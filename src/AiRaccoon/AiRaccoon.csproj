@@ -10,6 +10,7 @@
         <PackageType>McpServer</PackageType>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>ai-raccoon</PackageId>
+        <ToolCommandName>ai-raccoon</ToolCommandName>
         <PackageVersion>0.1.0-beta</PackageVersion>
         <PackageTags>AI; MCP; server; stdio; http; sqlite; agent; memory; vector; rag</PackageTags>
         <Description>An MCP server that will expose memory API for your agent</Description>
