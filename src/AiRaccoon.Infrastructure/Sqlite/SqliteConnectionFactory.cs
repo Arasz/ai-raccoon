@@ -13,6 +13,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 public sealed class SqliteConnectionFactory
 {
     private readonly InfrastructureOptions _options;
+    private readonly IEncryptionKeyProvider _keyProvider;
 
     static SqliteConnectionFactory()
     {
@@ -21,9 +22,10 @@ public sealed class SqliteConnectionFactory
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
-    public SqliteConnectionFactory(InfrastructureOptions options)
+    public SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyProvider keyProvider)
     {
         _options = options;
+        _keyProvider = keyProvider;
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
@@ -42,7 +44,18 @@ public sealed class SqliteConnectionFactory
     {
         Directory.CreateDirectory(BankDirectory);
 
-        var connection = new SqliteConnection($"Data Source={BankPath}");
+        var passphrase = _keyProvider.GetPassphrase();
+        var csb = new SqliteConnectionStringBuilder
+        {
+            DataSource = BankPath,
+            Mode = SqliteOpenMode.ReadWriteCreate
+        };
+        if (passphrase is not null)
+        {
+            csb.Password = passphrase;
+        }
+
+        var connection = new SqliteConnection(csb.ToString());
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
 
         connection.EnableExtensions();

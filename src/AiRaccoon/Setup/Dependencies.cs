@@ -43,8 +43,11 @@ public static partial class Dependencies
         services.AddSingleton(options);
         services.AddSingleton(options.Sync);
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IEncryptionKeyProvider>(_ =>
+            new EnvEncryptionKeyProvider());
         services.AddSingleton(sp => new SqliteConnectionFactory(
-            sp.GetRequiredService<InfrastructureOptions>()));
+            sp.GetRequiredService<InfrastructureOptions>(),
+            sp.GetRequiredService<IEncryptionKeyProvider>()));
         services.AddSingleton<EmbeddingService>();
         services.AddSingleton<SqliteMemoryStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
