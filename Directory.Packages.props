@@ -9,7 +9,11 @@
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.0.0" />
     <PackageVersion Include="ModelContextProtocol.Core" Version="2.0.0" />
     <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0" />
-    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <!-- encryption-at-rest: e_sqlite3mc enables Password support; downgrade to 2.1.11 train (no 3.x e_sqlite3mc yet).
+         TODO: remove override when Microsoft.Data.Sqlite 11.0+ ships with e_sqlite3mc built-in. -->
+    <PackageVersion Include="SQLitePCLRaw.core" Version="2.1.11" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3mc" Version="2.1.11" />
+    <PackageVersion Include="SQLitePCLRaw.provider.e_sqlite3mc" Version="2.1.11" />
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <!-- sqlite-vec pre-v1 (vec0 virtual table); pinned — re-run the retrieval harness on upgrade (plan §6). -->
     <PackageVersion Include="HiraokaHyperTools.sqlite-vec" Version="0.1.9" />

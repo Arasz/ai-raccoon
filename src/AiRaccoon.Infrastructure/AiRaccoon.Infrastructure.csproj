@@ -2,6 +2,9 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
+        <!-- encryption-at-rest: 2.1.11 train has SQLite < 3.50.2 (CVE-2025-6965 / GHSA-2m69-gcr7-jv3q).
+             Suppress until we can switch to Microsoft.Data.Sqlite 11.0+ (which bundles e_sqlite3mc natively). -->
+        <NoWarn>$(NoWarn);NU1903</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,7 +19,9 @@
         <PackageReference Include="Microsoft.ML.Tokenizers"/>
         <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
         <PackageReference Include="OpenAI"/>
-        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
+        <PackageReference Include="SQLitePCLRaw.core"/>
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3mc"/>
+        <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3mc"/>
         <PackageReference Include="AWSSDK.S3"/>
     </ItemGroup>
 
