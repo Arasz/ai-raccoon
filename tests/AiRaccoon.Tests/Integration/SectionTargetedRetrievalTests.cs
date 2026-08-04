@@ -93,11 +93,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 6 gate (b), S2: "What does ADR-0011 decide?" is answered at the file level within
-    ///     the top 3, and the Decision-section chunk is found within the top 15. The exact-section
-    ///     rank is reported; the strict <= 3 target is not met on this corpus/model (measured
-    ///     deviation — docs/adr/0004): the Decision chunk's content embedding is diluted by its
-    ///     length (content sim 0.37) and the OR-normalized FTS list ranks it 30th (Wave 1 scope).
+    ///     Wave 6 gate (b) + Wave 3 amendment: "What does ADR-0011 decide?" is answered at the file
+    ///     level within the top 3, and the Decision-section chunk ranks ≤ 3 — the source-affinity
+    ///     ranking (plan C Wave 3) resolves the within-file sibling competition that left it at 5.
     /// </summary>
     [Fact]
     public async Task S2_WhatDoesAdr0011Decide_AnswersAtFileLevelAndFindsDecisionChunk()
@@ -118,9 +116,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         fileRank.ShouldBeGreaterThan(0, "S2: an ADR-0011 chunk must appear in the results.");
         fileRank.ShouldBeLessThanOrEqualTo(3,
             "S2: the ADR-0011 file must answer the query within the top 3.");
-        sectionRank.ShouldBeGreaterThan(0, "S2: the Decision chunk must be found in the top 15.");
-        sectionRank.ShouldBeLessThanOrEqualTo(15,
-            "S2: the Decision chunk must not regress beyond the top 15 (measured rank 5).");
+        sectionRank.ShouldBeGreaterThan(0, "S2: the Decision chunk must be found in the top 10.");
+        sectionRank.ShouldBeLessThanOrEqualTo(3,
+            "S2: the Decision chunk must rank <= 3 (Wave 3 source-affinity; measured 5 pre-Wave-3).");
     }
 
     /// <summary>

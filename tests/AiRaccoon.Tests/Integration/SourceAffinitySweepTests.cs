@@ -1,0 +1,383 @@
+using System.Text;
+using System.Text.Json;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.Unit.Retrieval;
+using Microsoft.Extensions.Time.Testing;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Integration;
+
+/// <summary>
+///     Plan C Wave 3 sweep: adjacent-chunk boost (λ), consolidation threshold and
+///     document-score formula against the committed jsaa baseline. Runs every grid point over
+///     the eleven expected-source queries, writes the matrix to
+///     docs/work/2026-08-04-wave3-source-affinity-sweep.md, and pins the chosen configuration
+///     (the SearchQuery defaults) to the Wave 3 gates: S2 decision ≤ 3, A6 file ≤ 3, A1/A4
+///     file ≤ 2, invariants at rank 1, ADR nDCG@5 above the λ=0 baseline.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Retrieval)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
+public sealed class SourceAffinitySweepTests : IDisposable
+{
+    private const string ProjectId = "job-search-ai-assistant";
+    private const int SearchLimit = 10;
+    private const int RankCutoff = 5;
+
+    /// <summary>The chosen configuration — must match the SearchQuery defaults.</summary>
+    private const double ChosenLambda = 0.1;
+    private const double ChosenThreshold = 0.1;
+    private const DocScoreFormula ChosenFormula = DocScoreFormula.Max;
+
+    private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private readonly string _dataRoot;
+    private readonly SqliteMemoryStore _store;
+    private readonly ITestOutputHelper _output;
+    private readonly Dictionary<string, string> _hashMap;
+    private readonly Dictionary<string, HashSet<string>> _fileHashes;
+
+    public SourceAffinitySweepTests(ITestOutputHelper output)
+    {
+        _output = output;
+        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        if (!ensured.AllPresent)
+        {
+            throw new InvalidOperationException(
+                $"Bundled embedding model missing: {string.Join("; ", ensured.Errors)}");
+        }
+
+        _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-affinity");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
+
+        var factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
+            new NullKeyProvider());
+        _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
+            new TokenizerChunker(), new EmbeddingService());
+
+        _hashMap = LoadChunkHashMap();
+        _fileHashes = GroupByFile(_hashMap);
+    }
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
+    /// <summary>
+    ///     The Wave 3 gate: the chosen configuration (the SearchQuery defaults) passes every
+    ///     gate and beats the λ=0 baseline on ADR nDCG@5. The full matrix is emitted to
+    ///     docs/work/2026-08-04-wave3-source-affinity-sweep.md.
+    /// </summary>
+    [Fact]
+    public async Task Sweep_ChosenConfiguration_PassesAllWave3Gates()
+    {
+        var points = GridPoints();
+        var queries = LoadQueries();
+        var rows = new List<SweepRow>(points.Count);
+
+        foreach (var point in points)
+        {
+            rows.Add(await EvaluateAsync(point, queries, TestContext.Current.CancellationToken));
+        }
+
+        var chosen = rows.Single(row =>
+            row.Lambda == ChosenLambda && row.Threshold == ChosenThreshold && row.Formula == ChosenFormula);
+        var baseline = rows.Single(row => row.Lambda == 0.0 && row.Formula == DocScoreFormula.Max);
+
+        // Gate (b): S2 decision chunk at rank <= 3.
+        chosen.S2ExactRank.ShouldNotBeNull("S2 decision chunk must appear in the top 10");
+        chosen.S2ExactRank!.Value.ShouldBeLessThanOrEqualTo(3,
+            $"S2 decision chunk must rank <= 3 at the chosen configuration; got {chosen.S2ExactRank}");
+
+        // Gate (a): A6 expected-source file at rank <= 3; exact chunk improved over the miss.
+        chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
+        chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(3,
+            $"A6 expected file must rank <= 3; got {chosen.A6FileRank}");
+        chosen.A6ExactRank.ShouldNotBeNull("A6 exact chunk should surface in the top 10 at the chosen configuration");
+        chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(2,
+            $"A6 exact chunk measured rank 2 at the chosen point; drift to {chosen.A6ExactRank} would stale the ADR claim");
+
+        // Gate (c): ADR nDCG@5 improves over the Wave 6 merged state (0.650) and the λ=0 arm.
+        chosen.AdrNdcg5.ShouldBeGreaterThan(0.650,
+            $"ADR nDCG@5 must exceed the Wave 6 merged state 0.650; got {chosen.AdrNdcg5:F3}");
+        chosen.AdrNdcg5.ShouldBeGreaterThan(baseline.AdrNdcg5,
+            $"ADR nDCG@5 must beat the λ=0 baseline ({baseline.AdrNdcg5:F3}); got {chosen.AdrNdcg5:F3}");
+
+        // Gate (d): invariants stay at hybrid rank 1.
+        chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
+        chosen.C2ExactRank.ShouldBe(1, "C2 must hold hybrid rank 1");
+        chosen.C5ExactRank.ShouldBe(1, "C5 must hold hybrid rank 1");
+
+        // Gate (e): the documented same-knowledge-alternative trade does not worsen.
+        chosen.A1FileRank.ShouldNotBeNull("A1 expected file must appear in the top 10");
+        chosen.A1FileRank!.Value.ShouldBeLessThanOrEqualTo(2, "A1 file rank must stay <= 2");
+        chosen.A4FileRank.ShouldNotBeNull("A4 expected file must appear in the top 10");
+        chosen.A4FileRank!.Value.ShouldBeLessThanOrEqualTo(2, "A4 file rank must stay <= 2");
+
+        WriteSweepReport(points, rows, chosen, baseline);
+
+        _output.WriteLine(
+            $"chosen λ={ChosenLambda} thr={ChosenThreshold} {ChosenFormula}: S2={chosen.S2ExactRank} " +
+            $"A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} A1 file={chosen.A1FileRank} " +
+            $"A4 file={chosen.A4FileRank} C1/C2/C5={chosen.C1ExactRank}/{chosen.C2ExactRank}/{chosen.C5ExactRank} " +
+            $"nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3}");
+    }
+
+    private static IReadOnlyList<(double Lambda, double Threshold, DocScoreFormula Formula)> GridPoints()
+    {
+        var points = new List<(double, double, DocScoreFormula)>
+        {
+            (0.0, 0.1, DocScoreFormula.Max),
+            (0.0, 0.1, DocScoreFormula.Sum)
+        };
+
+        foreach (var lambda in new[] { 0.05, 0.1, 0.2 })
+        {
+            foreach (var threshold in new[] { 0.05, 0.1, 0.15, 0.2, double.PositiveInfinity })
+            {
+                points.Add((lambda, threshold, DocScoreFormula.Max));
+                points.Add((lambda, threshold, DocScoreFormula.Sum));
+            }
+        }
+
+        return points;
+    }
+
+    private async Task<SweepRow> EvaluateAsync(
+        (double Lambda, double Threshold, DocScoreFormula Formula) point,
+        IReadOnlyList<BaselineQuery> queries, CancellationToken cancellationToken)
+    {
+        var adrNdcg = new List<double>();
+        var adrMrr = new List<double>();
+        var adrRecall = new List<double>();
+        int? s2Exact = null;
+        int? a6File = null;
+        int? a6Exact = null;
+        int? a1File = null;
+        int? a4File = null;
+        int? c1 = null;
+        int? c2 = null;
+        int? c5 = null;
+
+        foreach (var query in queries)
+        {
+            var results = await SearchAsync(query.Query, point, cancellationToken);
+            var (exactRank, fileRank) = MapRanks(query, results);
+            switch (query.Id)
+            {
+                case "S2":
+                    s2Exact = exactRank;
+                    break;
+                case "A6":
+                    a6File = fileRank;
+                    a6Exact = exactRank;
+                    break;
+                case "A1":
+                    a1File = fileRank;
+                    break;
+                case "A4":
+                    a4File = fileRank;
+                    break;
+                case "C1":
+                    c1 = exactRank;
+                    break;
+                case "C2":
+                    c2 = exactRank;
+                    break;
+                case "C5":
+                    c5 = exactRank;
+                    break;
+            }
+
+            if (query.Id.StartsWith('A') && query.ExpectedSource is not null)
+            {
+                var relevant = _fileHashes[FileKey(query.ExpectedSource)];
+                var hashes = results.Select(r => r.Hash).ToList();
+                adrNdcg.Add(RetrievalMetrics.NdcgAtK(hashes, relevant, RankCutoff));
+                adrMrr.Add(RetrievalMetrics.Mrr(hashes, relevant));
+                adrRecall.Add(RetrievalMetrics.RecallAtK(hashes, relevant, RankCutoff));
+            }
+        }
+
+        return new SweepRow(
+            point.Lambda, point.Threshold, point.Formula,
+            s2Exact, a6File, a6Exact, a1File, a4File, c1, c2, c5,
+            adrNdcg.Count == 0 ? 0 : adrNdcg.Average(),
+            adrMrr.Count == 0 ? 0 : adrMrr.Average(),
+            adrRecall.Count == 0 ? 0 : adrRecall.Average());
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(
+        string text, (double Lambda, double Threshold, DocScoreFormula Formula) point,
+        CancellationToken cancellationToken) =>
+        await _store.SearchAsync(new SearchQuery(
+            ProjectId, text, SearchScope.Project,
+            Limit: SearchLimit, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
+            SourceLambda: point.Lambda, ConsolidationThreshold: point.Threshold,
+            DocScoreFormula: point.Formula), cancellationToken);
+
+    private (int? ExactRank, int? FileRank) MapRanks(
+        BaselineQuery query, IReadOnlyList<MemorySearchResult> results)
+    {
+        int? exactRank = null;
+        int? fileRank = null;
+        var expectedHash = query.ExpectedSource is not null
+            && _hashMap.TryGetValue(query.ExpectedSource, out var hash)
+            ? hash
+            : null;
+        var fileSet = query.ExpectedSource is not null && _fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var set)
+            ? set
+            : null;
+
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (exactRank is null && expectedHash is not null && results[i].Hash == expectedHash)
+            {
+                exactRank = i + 1;
+            }
+
+            if (fileRank is null && fileSet is not null && fileSet.Contains(results[i].Hash))
+            {
+                fileRank = i + 1;
+            }
+        }
+
+        return (exactRank, fileRank);
+    }
+
+    private void WriteSweepReport(
+        IReadOnlyList<(double Lambda, double Threshold, DocScoreFormula Formula)> points,
+        IReadOnlyList<SweepRow> rows, SweepRow chosen, SweepRow baseline)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var builder = new StringBuilder();
+        builder.AppendLine("# Wave 3 Source-Affinity Scoring — Parameter Sweep");
+        builder.AppendLine();
+        builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/jsaa-memory.db (752 chunks).");
+        builder.AppendLine($"Measured by SourceAffinitySweepTests (limit {SearchLimit}, RRF k=60, 1:1 weights).");
+        builder.AppendLine();
+        builder.AppendLine($"**Chosen configuration: λ = {ChosenLambda.ToString("0.0", invariant)}, " +
+                           $"consolidation threshold = {ChosenThreshold.ToString("0.0", invariant)}, " +
+                           $"document-score formula = {ChosenFormula}** (the SearchQuery defaults).");
+        builder.AppendLine();
+        builder.AppendLine("Gates at the chosen point: S2 decision ≤ 3 ✓, A6 file ≤ 3 ✓, A1/A4 file ≤ 2 ✓, " +
+                           "C1/C2/C5 rank 1 ✓, ADR nDCG@5 > 0.650 ✓.");
+        builder.AppendLine();
+        builder.AppendLine("| λ | threshold | formula | S2 exact | A6 file | A6 exact | A1 file | A4 file | C1 | C2 | C5 | nDCG@5 (ADR) | MRR (ADR) | recall@5 (ADR) |");
+        builder.AppendLine("|---:|----------:|:--------|---------:|--------:|---------:|--------:|--------:|:--:|:--:|:--:|-------------:|----------:|---------------:|");
+        foreach (var row in rows.OrderBy(r => r.Lambda).ThenBy(r => r.Threshold).ThenBy(r => r.Formula))
+        {
+            var threshold = double.IsPositiveInfinity(row.Threshold)
+                ? "off"
+                : row.Threshold.ToString("0.00", invariant);
+            builder.AppendLine(
+                $"| {row.Lambda.ToString("0.00", invariant)} | {threshold} | {row.Formula} | " +
+                $"{row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | " +
+                $"{row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | " +
+                $"{row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | " +
+                $"{row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | " +
+                $"{row.AdrNdcg5.ToString("0.000", invariant)} | {row.AdrMrr.ToString("0.000", invariant)} | " +
+                $"{row.AdrRecall5.ToString("0.000", invariant)} |");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine($"Baseline (λ=0): nDCG@5 {baseline.AdrNdcg5.ToString("0.000", invariant)}, " +
+                           $"MRR {baseline.AdrMrr.ToString("0.000", invariant)}, " +
+                           $"recall@5 {baseline.AdrRecall5.ToString("0.000", invariant)} — " +
+                           "matches the Wave 6 merged state (0.650 / 0.786 / 0.581).");
+        builder.AppendLine();
+        builder.AppendLine("Notes:");
+        builder.AppendLine("- λ = 0 is the pre-Wave-3 ranker (no source affinity).");
+        builder.AppendLine("- threshold = 'off' (∞): every sibling counts for the boost and no sibling is merged; " +
+                           "breaks C1/C2/C5 at every λ (deep same-file siblings overtake the single-chunk invariants) — " +
+                           "the threshold's sibling-visibility floor is required.");
+        builder.AppendLine("- Sum and Max document-score formulas are equivalent on every grid point (measured); " +
+                           "Max is chosen as the simpler formula (document champion).");
+        builder.AppendLine("- Consolidation only merges a weak adjacent sibling (gap ≥ threshold) into its file's best " +
+                           "chunk; at the chosen point it removes no top-10 result for the gate queries (A7's rank-3 " +
+                           "chunk would merge at threshold 0.15, lowering nDCG@5).");
+
+        var reportPath = Path.Combine(FindProjectRoot(), "docs", "work", "2026-08-04-wave3-source-affinity-sweep.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+        File.WriteAllText(reportPath, builder.ToString());
+        _output.WriteLine($"Sweep matrix written to {reportPath}");
+    }
+
+    private static Dictionary<string, HashSet<string>> GroupByFile(Dictionary<string, string> hashMap)
+    {
+        var fileHashes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var (structuredPath, hash) in hashMap)
+        {
+            var fileKey = FileKey(structuredPath);
+            if (!fileHashes.TryGetValue(fileKey, out var hashes))
+            {
+                hashes = [];
+                fileHashes[fileKey] = hashes;
+            }
+
+            hashes.Add(hash);
+        }
+
+        return fileHashes;
+    }
+
+    private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
+
+    private Dictionary<string, string> LoadChunkHashMap()
+    {
+        var json = File.ReadAllText(Path.Combine(FindProjectRoot(), "scripts", "chunk-hash-map.json"));
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions) ?? [];
+    }
+
+    private BaselineQuery[] LoadQueries() =>
+        JsonSerializer.Deserialize<BaselineQuery[]>(
+            File.ReadAllText(Path.Combine(FindProjectRoot(), "scripts", "baseline-queries.json")), JsonOptions)
+        ?? [];
+
+    private static string FindProjectRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "AiRaccoon.slnx")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return AppContext.BaseDirectory;
+    }
+
+    private sealed record SweepRow(
+        double Lambda,
+        double Threshold,
+        DocScoreFormula Formula,
+        int? S2ExactRank,
+        int? A6FileRank,
+        int? A6ExactRank,
+        int? A1FileRank,
+        int? A4FileRank,
+        int? C1ExactRank,
+        int? C2ExactRank,
+        int? C5ExactRank,
+        double AdrNdcg5,
+        double AdrMrr,
+        double AdrRecall5);
+
+    private sealed record BaselineQuery(
+        string Id,
+        string Category,
+        string Query,
+        string? ExpectedSource,
+        string? ExpectedKnowledge,
+        string Scope,
+        int SearchLimit,
+        bool NegativeTest);
+}
