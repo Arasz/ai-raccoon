@@ -53,11 +53,13 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     [Fact]
     public async Task Write_WithWorkspaceId_LandsInWorkspaceContext()
     {
+        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "draft finding", workspaceId: "ws-1"),
+            new MemoryWriteRequest("acme", "draft finding", workspaceId: ws.Id),
             TestContext.Current.CancellationToken);
 
-        entry.Context.ShouldBe("workspace:ws-1");
+        entry.Context.ShouldBe($"workspace:{ws.Id}");
     }
 
     [Fact]
@@ -141,18 +143,20 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     [Fact]
     public async Task WorkspaceConsolidate_PromotesKeptHash_ThenEmptiesWorkspace()
     {
+        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+
         await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "workspace durable fact", workspaceId: "ws-1"),
+            new MemoryWriteRequest("acme", "workspace durable fact", workspaceId: ws.Id),
             TestContext.Current.CancellationToken);
 
-        var result = await _workspaces.ConsolidateAsync("acme", "ws-1", ["all"],
+        var result = await _workspaces.ConsolidateAsync("acme", ws.Id, ["all"],
             TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(1);
         var projectEntries = await _store.ListContextAsync("acme", "project:acme",
             TestContext.Current.CancellationToken);
         projectEntries.ShouldContain(e => e.Value == "workspace durable fact");
-        var workspaceEntries = await _store.ListContextAsync("acme", "workspace:ws-1",
+        var workspaceEntries = await _store.ListContextAsync("acme", $"workspace:{ws.Id}",
             TestContext.Current.CancellationToken);
         workspaceEntries.ShouldBeEmpty();
     }

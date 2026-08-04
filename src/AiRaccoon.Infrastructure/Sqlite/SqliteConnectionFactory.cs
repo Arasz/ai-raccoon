@@ -99,6 +99,10 @@ public sealed class SqliteConnectionFactory
     {
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        await using var fk = connection.CreateCommand();
+        fk.CommandText = "PRAGMA foreign_keys = ON";
+        await fk.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
         await using var wal = connection.CreateCommand();
         wal.CommandText = "PRAGMA journal_mode=WAL";
         await wal.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

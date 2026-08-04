@@ -32,6 +32,12 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
+    private async Task EnsureWorkspaceAsync(string workspaceId, string projectId = "acme")
+    {
+        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        await workspaceStore.BeginAsync(projectId, workspaceId, FixedNow, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task Write_CreatesRowInProjectScope_WithPendingEmbedState_AndOnRowDefaults()
     {
@@ -57,6 +63,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task Write_WithWorkspace_LandsInWorkspaceScope()
     {
+        await EnsureWorkspaceAsync("ws-1");
+
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "draft finding", workspaceId: "ws-1"),
             TestContext.Current.CancellationToken);
@@ -224,6 +232,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task DeleteContext_WorkspaceContext_RemovesWorkspaceRowsOnly()
     {
+        await EnsureWorkspaceAsync("ws-1");
         await _store.WriteAsync(new MemoryWriteRequest("acme", "workspace draft", workspaceId: "ws-1"),
             TestContext.Current.CancellationToken);
         await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
@@ -239,6 +248,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task Stats_CountsCommittedEntries_AndPendingFromEmbedState()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
+        await EnsureWorkspaceAsync("ws-1");
         await _store.WriteAsync(new MemoryWriteRequest("acme", "workspace draft", workspaceId: "ws-1"),
             TestContext.Current.CancellationToken);
 
@@ -297,6 +307,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task AddContent_ConsolidationPromotion_PreservesTheLogicalPath_InTheCommittedRow()
     {
+        await EnsureWorkspaceAsync("ws-1");
         // Consolidation (WorkspaceService) promotes via add_content with the workspace entry's
         // path: the committed row must keep that logical path and its path-scoped hash.
         await _store.AddContentAsync("acme", "docs/note.md", "workspace draft", "workspace:ws-1",

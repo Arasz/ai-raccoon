@@ -61,15 +61,17 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Isolation_WorkspaceWrite_IsNotVisibleInProjectScope()
     {
-        await CallAsync("memory_workspace_begin", ("projectId", "acme"));
+        var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
+        var wsId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("workspaceId").GetString()!;
+
         await CallAsync("memory_write",
             ("projectId", "acme"),
             ("content", "workspace secret"),
-            ("workspaceId", "ws-iso"));
+            ("workspaceId", wsId));
 
         // The write landed in the workspace outbox...
         var status = await CallAsync("memory_workspace_status",
-            ("projectId", "acme"), ("workspaceId", "ws-iso"));
+            ("projectId", "acme"), ("workspaceId", wsId));
         Text(status).ShouldContain("workspace secret");
 
         // ...and NOT in the project's committed context: stats counts only committed

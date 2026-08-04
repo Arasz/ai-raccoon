@@ -17,8 +17,18 @@ internal static class MemorySchema
     }
 
     // workspace_id exists now for the P8 structural-isolation wave; the FK and the
-    // "workspace XOR committed scope" CHECK land with P8, not here.
+    // "workspace XOR committed scope" CHECK land with P8.
     private const string Ddl = """
+                               CREATE TABLE IF NOT EXISTS workspaces (
+                                   id TEXT PRIMARY KEY,
+                                   project_id TEXT NOT NULL,
+                                   agent_id TEXT NULL,
+                                   name TEXT NULL,
+                                   status TEXT NOT NULL,
+                                   created_at INTEGER NOT NULL,
+                                   closed_at INTEGER NULL
+                               );
+
                                CREATE TABLE IF NOT EXISTS entries (
                                    id INTEGER PRIMARY KEY,
                                    hash TEXT,
@@ -36,17 +46,9 @@ internal static class MemorySchema
                                    rating REAL NOT NULL DEFAULT 0.5,
                                    ttl_days INTEGER NULL,
                                    embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
-                                   embedding BLOB NULL
-                               );
-
-                               CREATE TABLE IF NOT EXISTS workspaces (
-                                   id TEXT PRIMARY KEY,
-                                   project_id TEXT NOT NULL,
-                                   agent_id TEXT NULL,
-                                   name TEXT NULL,
-                                   status TEXT NOT NULL,
-                                   created_at INTEGER NOT NULL,
-                                   closed_at INTEGER NULL
+                                   embedding BLOB NULL,
+                                   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+                                   CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
 
                                CREATE TABLE IF NOT EXISTS settings (
