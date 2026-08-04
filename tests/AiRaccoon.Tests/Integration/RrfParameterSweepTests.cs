@@ -50,6 +50,10 @@ public sealed class RrfParameterSweepTests : IDisposable
     private const double FixedConsolidationThreshold = 0.1;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The 11 expected-source queries the Wave 4 gates were measured over (ADR 0006).</summary>
+    private static readonly string[] W4GateQueryIds =
+        ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly string _dataRoot;
@@ -93,7 +97,12 @@ public sealed class RrfParameterSweepTests : IDisposable
     [Fact]
     public async Task Sweep_ChosenConfiguration_PassesAllWave4Gates()
     {
-        var queries = LoadQueries().Where(q => q.ExpectedSource is not null).ToList();
+        // The Wave 4 gates were measured over the 11 expected-source queries that existed at
+        // sweep time (ADR 0006). Wave 5b catalog additions (A8-A10, S1/S3-S6) are scored by
+        // BaselineMetricsTests, not this sweep — otherwise every point's pinned numbers shift.
+        var queries = LoadQueries()
+            .Where(q => q.ExpectedSource is not null && W4GateQueryIds.Contains(q.Id))
+            .ToList();
         var rows = new List<SweepRow>(SweepMatrix.RrfGrid.Count);
 
         foreach (var point in SweepMatrix.RrfGrid)
