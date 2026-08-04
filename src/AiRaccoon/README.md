@@ -64,11 +64,85 @@ any OpenAI-compatible endpoint.
 
 Credentials are read from the environment only — never from tracked files.
 
+## Command-line options
+
+The server parses its own arguments (System.CommandLine 2.0.10) before the host
+builds. Precedence: **CLI args > environment variables > built-in defaults** —
+every option below mirrors an environment variable, so env-only setups keep
+working unchanged.
+
+| Option | Values | Default | Maps to |
+|---|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
+| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
+| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
+| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
+| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
+| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
+| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
+| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+
+Secrets are environment-only, never CLI options: `AIRACCOON_OPENAI_API_KEY`,
+`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE` —
+the parser's unknown-option error is the defense (`--sync-access-key x` fails).
+`--help`/`--version` and parse errors print to **stderr** (exit 0 / exit 1);
+stdout carries only MCP protocol frames. Generic host flags (`--environment`,
+`--contentRoot`, `--applicationName`) are accepted hidden and ignored.
+
+Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw):
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": { "command": "ai-raccoon" }
+  }
+}
+```
+
+Explicit equivalent (identical behavior, spelled out):
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": {
+      "command": "ai-raccoon",
+      "args": [
+        "--transport", "stdio",
+        "--data-root", "~/.ai-raccoon",
+        "--install-scope", "user",
+        "--access-mode", "rw"
+      ]
+    }
+  }
+}
+```
+
+Secrets go in the client's user-scoped config (e.g. Claude Code `~/.claude.json`
+`env`), never in a shared/tracked `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": {
+      "command": "ai-raccoon",
+      "env": {
+        "AIRACCOON_OPENAI_API_KEY": "sk-...",
+        "AIRACCOON_DB_PASSPHRASE": "change-me"
+      }
+    }
+  }
+}
+```
+
+Registry installs (`.mcp/server.json`) pass no args — `packageArguments` stays
+empty; `environmentVariables` is the secret channel.
+
 ## Transports
 
 - `stdio` (default) — MCP clients launch the server as a subprocess.
-- `http` — Streamable HTTP at `/mcp`, selected via `MCP_TRANSPORT=http`
-  (stateless per the 2026-07-28 spec revision).
+- `http` — Streamable HTTP at `/mcp`, selected via `MCP_TRANSPORT=http` or
+  `--transport http` (stateless per the 2026-07-28 spec revision).
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
