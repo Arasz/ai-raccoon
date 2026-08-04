@@ -1,0 +1,6 @@
+{
+  "skill": "task",
+  "extension": "github",
+  "requires": ["sourceControl.platform==github", "sourceControl.repoUrl"],
+  "optional": ["sourceControl.projectUrl"]
+}

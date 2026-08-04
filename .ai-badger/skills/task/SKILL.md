@@ -147,6 +147,9 @@ reduced rigor since high-reasoning delegation wasn't possible.
    the failing test first (TDD).
 2. Record each subagent's `total_tokens` on completion:
    `python3 .ai-badger/skills/task/scripts/task_tracker.py subagent <taskId> <total_tokens> --description "<what it did>"`.
+   To record a delegation by id instead of a manual count, pass `--delegation <id>`; the
+   session source that owns the task decides how the delegation's tokens are read. The two
+   are mutually exclusive.
 3. Review each result at the seams (matches plan? acceptance criteria?). Send follow-ups back
    rather than rewriting, unless the fix is a few lines.
 4. Commit and push per work package (small commits). If the source-control extension is active,

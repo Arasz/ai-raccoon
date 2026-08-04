@@ -210,11 +210,24 @@ def _session_or_die(args) -> dict:
         resolved = lib.resolve_own_session()
         session["sessionId"] = resolved.get("sessionId")
         session["transcriptPath"] = session["transcriptPath"] or resolved.get("transcriptPath")
+        session["source"] = resolved.get("source")
+    else:
+        # An explicit --session-id is a transcript id: attribute it to the transcript-reading
+        # source so the right checkpoint maker is chosen. No default — a session source must
+        # actually be registered (run welcome-ai-badger with one).
+        session["source"] = lib.transcript_source()
+        if session["source"] is None:
+            print(
+                "No session source that reads transcripts is registered (run "
+                "welcome-ai-badger with an agent that provides one); an explicit "
+                "--session-id cannot be attributed.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
     if not session["sessionId"]:
         print(
-            "No session reference. CLAUDE_CODE_SESSION_ID isn't set and no active session in "
-            "current-session.json matches this process's PID ancestry or cwd; pass "
-            "--session-id/--transcript-path explicitly.",
+            "No session reference. No session source resolved this process and no session "
+            "env var is set; pass --session-id/--transcript-path explicitly.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -223,7 +236,15 @@ def _session_or_die(args) -> dict:
 
 def cmd_start(args) -> int:
     session = _session_or_die(args)
-    checkpoint = lib.make_checkpoint(session["transcriptPath"] or "")
+    source = lib.session_source(session["source"])
+    if source is None:
+        print(
+            f"Session source {session['source']!r} is not registered (run welcome-ai-badger "
+            "with an agent that provides it); nothing can checkpoint this session.",
+            file=sys.stderr,
+        )
+        return 2
+    checkpoint = source["checkpoint"](session)
     with lib.locked_store():
         tasks = lib.load_tasks()
         conflict = lib.find_other_entry_with_session(tasks, session["sessionId"], args.task_id)
@@ -261,7 +282,10 @@ def cmd_start(args) -> int:
                 "startedAt": entry.get("startedAt") or lib.now_iso(),
                 "finishedAt": None,
                 "state": entry.get("state") or lib.STATE_STARTED,
-                "resumeCommand": f"claude --resume {session['sessionId']}",
+                # The session source that owns this session decides the resume invocation;
+                # recorded so finish (a later process) can pick the same checkpoint maker.
+                "trackingSource": session["source"],
+                "resumeCommand": source["resume"](session["sessionId"]),
                 "resumeAttempts": entry.get("resumeAttempts", []),
             }
         )
@@ -273,6 +297,7 @@ def cmd_start(args) -> int:
             usage_entry = {"taskId": args.task_id, "subagents": [], "grade": None}
             usage["tasks"].append(usage_entry)
         usage_entry["sessionId"] = session["sessionId"]
+        usage_entry["trackingSource"] = session["source"]
         checkpoints = usage_entry.setdefault("checkpoints", {})
         checkpoints.setdefault("start", checkpoint)  # keep the original start on re-runs
         checkpoints["latest"] = checkpoint
@@ -335,7 +360,19 @@ def cmd_finish(args) -> int:
             )
             return 3
 
-        checkpoint = lib.make_checkpoint(entry.get("transcriptPath") or "")
+        source = lib.session_source(entry.get("trackingSource") or lib.transcript_source() or "")
+        if source is None:
+            print(
+                f"Task {args.task_id} has no registered session source (trackingSource "
+                f"{entry.get('trackingSource')!r}); run welcome-ai-badger with an agent "
+                "that provides one.",
+                file=sys.stderr,
+            )
+            return 2
+        checkpoint = source["checkpoint"]({
+            "sessionId": entry.get("sessionId"),
+            "transcriptPath": entry.get("transcriptPath"),
+        })
         entry["state"] = lib.STATE_FINISHED
         entry["finishedAt"] = lib.now_iso()
         entry["stateJsonUpdated"] = lib.state_json_updated_since(entry["startedAt"])
@@ -413,17 +450,51 @@ def cmd_grade(args) -> int:
 
 
 def cmd_subagent(args) -> int:
+    if bool(args.total_tokens is not None) == bool(args.delegation):
+        print(
+            "Pass exactly one of <total_tokens> or --delegation <id>, not both.",
+            file=sys.stderr,
+        )
+        return 2
     with lib.locked_store():
         usage = lib.load_usage()
         entry = lib.find_entry(usage, args.task_id)
         if entry is None:
             print(f"Unknown task {args.task_id}. Run start first.", file=sys.stderr)
             return 2
-        entry.setdefault("subagents", []).append({
-            "description": args.description or "",
-            "totalTokens": args.total_tokens,
-            "at": lib.now_iso(),
-        })
+        record = {"description": args.description or "", "at": lib.now_iso()}
+        if args.delegation:
+            # The session source that recorded the task decides how delegation tokens are
+            # read (an installed source may read them from its session store; a source that
+            # records none yields None and the refusal below fires).
+            source = lib.session_source(entry.get("trackingSource") or lib.transcript_source() or "")
+            if source is None:
+                print(
+                    f"Task {args.task_id} has no registered session source (trackingSource "
+                    f"{entry.get('trackingSource')!r}); run welcome-ai-badger with an agent "
+                    "that provides one.",
+                    file=sys.stderr,
+                )
+                return 2
+            delegation_usage = source.get("delegation_usage")
+            usage_data = delegation_usage(args.delegation) if delegation_usage else None
+            if usage_data is None:
+                print(
+                    f"Delegation {args.delegation}: no token record in this session source "
+                    "(unknown, not completed, or the source records no delegation tokens). "
+                    "Refusing to record a fabricated number.",
+                    file=sys.stderr,
+                )
+                return 2
+            record.update({
+                "totalTokens": usage_data["totalTokens"],
+                "delegationId": args.delegation,
+                "model": usage_data["model"],
+                "apiCalls": usage_data["apiCalls"],
+            })
+        else:
+            record["totalTokens"] = args.total_tokens
+        entry.setdefault("subagents", []).append(record)
         # Recompute usage even if `finish` already ran — review-fix rounds and other subagent
         # work routinely land after the finish checkpoint, and usage must not go stale then.
         checkpoints = entry.get("checkpoints", {})
@@ -432,7 +503,7 @@ def cmd_subagent(args) -> int:
         if start_cp and end_cp:
             entry["usage"] = lib.compute_usage(start_cp, end_cp, entry["subagents"])
         lib.save_json(lib.TOKEN_USAGE, usage)
-    print(f"Recorded {args.total_tokens} subagent tokens for {args.task_id}.")
+    print(f"Recorded {record['totalTokens']} subagent tokens for {args.task_id}.")
     return 0
 
 
@@ -457,7 +528,16 @@ def cmd_reattach(args) -> int:
             return 2
         entry["sessionId"] = session["sessionId"]
         entry["transcriptPath"] = session["transcriptPath"]
-        entry["resumeCommand"] = f"claude --resume {session['sessionId']}"
+        entry["trackingSource"] = session["source"]
+        source = lib.session_source(session["source"])
+        if source is None:
+            print(
+                f"Session source {session['source']!r} is not registered (run welcome-ai-badger "
+                "with an agent that provides it); nothing can resume this session.",
+                file=sys.stderr,
+            )
+            return 2
+        entry["resumeCommand"] = source["resume"](session["sessionId"])
         if entry.get("state") != lib.STATE_FINISHED:
             entry["state"] = lib.STATE_IN_PROGRESS
         lib.save_json(lib.EXECUTED_TASKS, tasks)
@@ -652,7 +732,10 @@ def main() -> int:
 
     p_sub = sub.add_parser("subagent")
     p_sub.add_argument("task_id")
-    p_sub.add_argument("total_tokens", type=int)
+    p_sub.add_argument("total_tokens", nargs="?", type=int,
+                       help="Manual token count; mutually exclusive with --delegation.")
+    p_sub.add_argument("--delegation",
+                       help="Delegation id whose tokens the session source records.")
     p_sub.add_argument("--description", default="")
 
     p_re = sub.add_parser("reattach")
