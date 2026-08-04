@@ -17,6 +17,7 @@
         <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
         <PackageReference Include="OpenAI"/>
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
+        <PackageReference Include="AWSSDK.S3"/>
     </ItemGroup>
 
     <ItemGroup>

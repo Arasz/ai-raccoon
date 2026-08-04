@@ -33,7 +33,7 @@ public sealed class MemoryToolsAccessModeTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(_store));
+            new MemoryAccessGuard(_store), new SyncOptions());
     }
 
     private void SetMode(string? global = null, string? perProject = null)
@@ -238,17 +238,26 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())
+    private sealed class FakeSyncService : SyncService
     {
-        public override Task<SyncResult> MemorySyncAsync(string projectId,
+        public FakeSyncService() : base(new FakeCloudStore(), _ => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!),
+            (_, _) => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!), null!)
+        {
+        }
+
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new SyncResult(0, 0, 0));
     }
 
-    private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
+    private sealed class FakeCloudStore : ICloudStore
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) =>
-            throw new NotImplementedException();
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult<CloudObject?>(null);
+
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult("fake-etag");
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

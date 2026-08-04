@@ -32,7 +32,14 @@ public class MemoryToolsTests
     {
         _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store));
+        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store),
+            new SyncOptions
+            {
+                Endpoint = "http://test",
+                Bucket = "test-bucket",
+                AccessKey = "test-key",
+                SecretKey = "test-secret"
+            });
     }
 
     [Fact]
@@ -365,13 +372,18 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())
+    private sealed class FakeSyncService : SyncService
     {
+        public FakeSyncService() : base(new FakeCloudStore(), _ => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!),
+            (_, _) => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!), null!)
+        {
+        }
+
         public SyncResult Result { get; set; } = new(0, 0, 0);
 
         public SyncNotConfiguredException? Exception { get; set; }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
             CancellationToken cancellationToken = default)
         {
             if (Exception is not null)
@@ -383,9 +395,14 @@ public class MemoryToolsTests
         }
     }
 
-    private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
+    private sealed class FakeCloudStore : ICloudStore
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult<CloudObject?>(null);
+
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult("fake-etag");
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

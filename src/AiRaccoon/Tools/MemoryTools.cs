@@ -4,6 +4,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using FluentValidation;
@@ -18,7 +19,8 @@ public sealed class MemoryTools(
     SyncService sync,
     WorkspaceService workspaces,
     SweepService sweeper,
-    IMemoryAccessGuard access)
+    IMemoryAccessGuard access,
+    SyncOptions syncOptions)
 {
     private static void RequireProjectId(string? projectId)
     {
@@ -359,7 +361,9 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = "memory_sync")]
     [Description(
-        "Syncs the bank's committed contexts (shared + project:<id>) to the configured cloud database. Requires AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY.")]
+        "Syncs the bank's committed contexts (shared + project:<id>) to S3-compatible object storage. " +
+        "Requires AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY " +
+        "and AIRACCOON_SYNC_SECRET_KEY.")]
     public async Task<SyncToolResult> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
@@ -367,15 +371,42 @@ public sealed class MemoryTools(
         RequireProjectId(projectId);
         await RequireAsync(projectId, AccessRequirement.Write, "memory_sync", cancellationToken);
 
+        if (!syncOptions.IsConfigured)
+        {
+            throw new McpException(
+                "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
+                "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+
+        var objectKey = syncOptions.ObjectKey ?? $"memory-{projectId}.db";
         try
         {
-            var result = await sync.MemorySyncAsync(projectId, cancellationToken);
+            var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
             return new SyncToolResult(result.Sent, result.Received, result.Reindexed);
         }
         catch (SyncNotConfiguredException)
         {
             throw new McpException(
-                "sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY");
+                "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
+                "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+        catch (SyncAuthFailedException)
+        {
+            throw new McpException(
+                "sync-auth-failed: verify AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+        catch (SyncConflictException)
+        {
+            throw new McpException(
+                "sync-conflict: remote changed during merge — retry the sync");
+        }
+        catch (SyncNetworkException ex)
+        {
+            throw new McpException($"sync-network: {ex.Message}");
+        }
+        catch (SyncCorruptFileException ex)
+        {
+            throw new McpException($"sync-corrupt-file: {ex.Message}");
         }
     }
 

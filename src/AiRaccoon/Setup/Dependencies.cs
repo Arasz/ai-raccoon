@@ -32,8 +32,12 @@ public static partial class Dependencies
             Scope = scope,
             Sync = new SyncOptions
             {
-                ManagedDatabaseId = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_DB_ID"),
-                ApiKey = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_API_KEY")
+                Endpoint = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ENDPOINT"),
+                Bucket = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_BUCKET"),
+                AccessKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ACCESS_KEY"),
+                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY"),
+                Region = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_REGION"),
+                ObjectKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_OBJECT_KEY")
             }
         };
 
@@ -55,8 +59,27 @@ public static partial class Dependencies
             sp.GetRequiredService<SqliteMemoryStore>(),
             [sp.GetRequiredService<RetrievalRatingExtension>()]));
         services.AddSingleton<RetrievalRatingExtension>();
-        services.AddSingleton<ICloudSyncConnectionFactory, CloudSyncConnectionFactory>();
-        services.AddSingleton<SyncService>();
+        services.AddSingleton<ICloudStore>(sp =>
+        {
+            var syncOpts = sp.GetRequiredService<SyncOptions>();
+            if (!syncOpts.IsConfigured)
+            {
+                return new NullCloudStore();
+            }
+
+            return new S3CloudStore(syncOpts,
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger<S3CloudStore>());
+        });
+        services.AddSingleton(sp => new SyncService(
+            sp.GetRequiredService<ICloudStore>(),
+            async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
+            async (path, ct) =>
+            {
+                var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path}");
+                await conn.OpenAsync(ct);
+                return conn;
+            },
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
         services.AddSingleton<WorkspaceService>();
         services.AddSingleton<SweepService>();
         services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
