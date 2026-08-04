@@ -79,6 +79,9 @@ public sealed class WatchToolsInventoryTests
     public void RegisterMemoryServices_ResolvesIWatchService()
     {
         var services = new ServiceCollection();
+        // Mirror the host: WebApplication.CreateBuilder registers logging before
+        // RegisterMemoryServices runs (WatchPipeline takes ILogger<WatchPipeline>).
+        services.AddLogging();
         services.RegisterMemoryServices(new InfrastructureOptions());
 
         using var provider = services.BuildServiceProvider();
