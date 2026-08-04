@@ -10,4 +10,7 @@
     <Folder Name="/tests/">
         <Project Path="tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj"/>
     </Folder>
+    <Folder Name="/tools/">
+        <Project Path="tools/AiRaccoon.StructureBackfill/AiRaccoon.StructureBackfill.csproj"/>
+    </Folder>
 </Solution>
