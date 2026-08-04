@@ -6,7 +6,6 @@
         <IsTestProject>true</IsTestProject>
     </PropertyGroup>
 
-    <!-- WebApplicationFactory-based E2E tests need the ASP.NET Core shared framework. -->
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
     </ItemGroup>
@@ -31,37 +30,29 @@
         <ProjectReference Include="../../src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
     </ItemGroup>
 
-    <!-- Golden-retrieval harness: reuse the benchmark corpus (data-only C#
-         files, no benchmark packages) and copy the committed asset manifest. -->
     <ItemGroup>
-        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/CorpusModels.cs" Link="Corpus/CorpusModels.cs"/>
-        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs" Link="Corpus/RealWorldCorpus.cs"/>
-        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldQueries.cs" Link="Corpus/RealWorldQueries.cs"/>
-        <Compile Include="..\..\docs\work\features-agent-memory\agent-memory.feature.cs">
-          <Link>bdd\features-agent-memory\agent-memory.feature.cs</Link>
-        </Compile>
-        <Compile Include="..\..\docs\work\features-native-memory\native-memory.feature.cs">
-          <Link>bdd\features-native-memory\native-memory.feature.cs</Link>
-        </Compile>
         <Content Include="unit/retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
-    <!-- Reqnroll generated-test suite: feature files from docs/work/. -->
     <ItemGroup>
         <ReqnrollFeatureFiles Include="..\..\docs\work\features-agent-memory\agent-memory.feature">
-          <Link>bdd\features-agent-memory\agent-memory.feature</Link>
+            <Link>BDD\features-agent-memory\agent-memory.feature</Link>
         </ReqnrollFeatureFiles>
         <ReqnrollFeatureFiles Include="..\..\docs\work\features-native-memory\native-memory.feature">
-          <Link>bdd\features-native-memory\native-memory.feature</Link>
+            <Link>BDD\features-native-memory\native-memory.feature</Link>
         </ReqnrollFeatureFiles>
     </ItemGroup>
+
     <ItemGroup>
-      <ReqnrollFeatureFile Include="..\..\docs\work\features-agent-memory\agent-memory.feature">
-        <Link>bdd\features-agent-memory\agent-memory.feature</Link>
-      </ReqnrollFeatureFile>
-      <ReqnrollFeatureFile Include="..\..\docs\work\features-native-memory\native-memory.feature">
-        <Link>bdd\features-native-memory\native-memory.feature</Link>
-      </ReqnrollFeatureFile>
+        <Compile Include="..\..\benchmarks\AiRaccoon.Benchmarks\Corpus\CorpusModels.cs">
+            <Link>Unit\Retrieval\Corpus\CorpusModels.cs</Link>
+        </Compile>
+        <Compile Include="..\..\benchmarks\AiRaccoon.Benchmarks\Corpus\RealWorldCorpus.cs">
+            <Link>Unit\Retrieval\Corpus\RealWorldCorpus.cs</Link>
+        </Compile>
+        <Compile Include="..\..\benchmarks\AiRaccoon.Benchmarks\Corpus\RealWorldQueries.cs">
+            <Link>Unit\Retrieval\Corpus\RealWorldQueries.cs</Link>
+        </Compile>
     </ItemGroup>
 
 </Project>

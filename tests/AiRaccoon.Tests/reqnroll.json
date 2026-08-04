@@ -1,9 +1,13 @@
 {
-  "language": {
-    "feature": "en"
-  },
-  "generator": {
-    "allowDebugGeneratedFiles": false,
-    "addNonParallelizableMarkerForTags": ["integration", "slow", "e2e"]
-  }
+    "language": {
+        "feature": "en"
+    },
+    "generator": {
+        "allowDebugGeneratedFiles": false,
+        "addNonParallelizableMarkerForTags": [
+            "integration",
+            "slow",
+            "e2e"
+        ]
+    }
 }

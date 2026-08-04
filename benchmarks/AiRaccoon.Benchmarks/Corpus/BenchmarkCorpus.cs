@@ -1,5 +1,3 @@
-using AiRaccoon.Benchmarks.Corpus;
-
 namespace AiRaccoon.Benchmarks.Corpus;
 
 /// <summary>
@@ -13,9 +11,7 @@ public static class BenchmarkCorpus
     private static readonly bool UseSynthetic =
         Environment.GetCommandLineArgs().Contains("--synthetic");
 
-    public static IReadOnlyList<CorpusDocument> Documents =>
-        UseSynthetic ? SyntheticCorpus.Documents : RealWorldCorpus.Documents;
+    public static IReadOnlyList<CorpusDocument> Documents => UseSynthetic ? SyntheticCorpus.Documents : RealWorldCorpus.Documents;
 
-    public static IReadOnlyList<CorpusQuery> Queries =>
-        UseSynthetic ? SyntheticCorpus.Queries : RealWorldQueries.Queries;
+    public static IReadOnlyList<CorpusQuery> Queries => UseSynthetic ? SyntheticCorpus.Queries : RealWorldQueries.Queries;
 }
