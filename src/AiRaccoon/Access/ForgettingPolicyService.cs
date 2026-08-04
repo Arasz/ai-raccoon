@@ -25,6 +25,14 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
             : DefaultSweepThreshold;
     }
 
+    public async Task<double> GetSweepTtlDaysAsync(string projectId, CancellationToken cancellationToken = default)
+    {
+        var raw = await store.GetSettingAsync(SweepTtlDaysSettingKey, cancellationToken).ConfigureAwait(false);
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var ttl)
+            ? ttl
+            : DefaultSweepTtlDays;
+    }
+
     public async Task SetSweepThresholdAsync(string projectId, double threshold,
         CancellationToken cancellationToken = default)
     {

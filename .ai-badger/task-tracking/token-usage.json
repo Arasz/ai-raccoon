@@ -431,7 +431,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-03T16:11:18.742352+00:00",
+          "timestamp": "2026-08-04T07:02:27.070238+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-04T07:02:27.070238+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
@@ -491,6 +503,65 @@
         },
         "finish": {
           "timestamp": "2026-08-03T18:57:42.678762+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "integration-review",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260803_162437_9ae3d6",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-04T07:11:08.882361+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-04T07:12:04.069613+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-04T07:12:04.069613+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},

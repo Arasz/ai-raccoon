@@ -20,7 +20,8 @@ public sealed class MemoryTools(
     WorkspaceService workspaces,
     SweepService sweeper,
     IMemoryAccessGuard access,
-    SyncOptions syncOptions)
+    SyncOptions syncOptions,
+    ForgettingPolicyService knobs)
 {
     private static void RequireProjectId(string? projectId)
     {
@@ -355,7 +356,9 @@ public sealed class MemoryTools(
         RequireProjectId(projectId);
         await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, "memory_sweep", cancellationToken);
 
-        var outcome = await sweeper.SweepAsync(projectId, 0.3, 30, dryRun, cancellationToken);
+        var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
+        var ttlDays = await knobs.GetSweepTtlDaysAsync(projectId, cancellationToken);
+        var outcome = await sweeper.SweepAsync(projectId, threshold, ttlDays, dryRun, cancellationToken);
         return new SweepResult(outcome.Candidates, outcome.DeletedHashes);
     }
 

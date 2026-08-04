@@ -99,10 +99,11 @@
       "branch": "task/native-memory-store",
       "risk": false,
       "startedAt": "2026-08-03T16:11:18.742729+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-04T07:02:27.070242+00:00",
+      "state": "FINISHED",
       "resumeCommand": "claude --resume 20260803_162437_9ae3d6",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "autocompletion-system-prompt-for-qween-3.5-9B-locall",
@@ -116,6 +117,21 @@
       "finishedAt": "2026-08-03T18:57:42.678766+00:00",
       "state": "FINISHED",
       "resumeCommand": "claude --resume 20260803_204723_befddd",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "integration-review",
+      "title": "Integration review \u2014 code review + docs refresh",
+      "sessionId": "20260803_162437_9ae3d6",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/integration-review",
+      "risk": false,
+      "startedAt": "2026-08-04T07:11:08.882623+00:00",
+      "finishedAt": "2026-08-04T07:12:04.069617+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260803_162437_9ae3d6",
       "resumeAttempts": [],
       "stateJsonUpdated": true
     }

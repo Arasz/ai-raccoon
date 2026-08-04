@@ -39,7 +39,8 @@ public class MemoryToolsTests
                 Bucket = "test-bucket",
                 AccessKey = "test-key",
                 SecretKey = "test-secret"
-            });
+            },
+            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)));
     }
 
     [Fact]

@@ -33,7 +33,8 @@ public sealed class MemoryToolsAccessModeTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(_store), new SyncOptions());
+            new MemoryAccessGuard(_store), new SyncOptions(),
+            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)));
     }
 
     private void SetMode(string? global = null, string? perProject = null)
