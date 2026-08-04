@@ -23,8 +23,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
     public NativeMemoryFeatureTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

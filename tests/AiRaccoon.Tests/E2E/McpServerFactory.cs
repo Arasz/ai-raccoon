@@ -8,10 +8,8 @@ namespace AiRaccoon.Tests.E2E;
 /// <summary>
 ///     Boots the real HTTP MCP server (MCP_TRANSPORT=http) in-process over
 ///     WebApplicationFactory and exposes an MCP client bound to it. Each instance
-///     gets its own temp data root. Since P1 the managed store needs no sqliteai native
-///     extensions, so the E2E suite runs without provisioning; the developer's already
-///     provisioned cloudsync module is copied when present so ProvisionExtensions stays
-///     offline (sync itself is not exercised by these tests).
+///     gets its own temp data root. No sqliteai native extensions are needed —
+///     vec0 comes from the NuGet package and FTS5 from the bundled SQLite.
 ///     The server reads MCP_TRANSPORT / AIRACCOON_DATA_ROOT from the environment, so
 ///     those are set before the host starts and restored on dispose — E2E tests must
 ///     therefore run in a non-parallel collection (see E2ETestCollection).
@@ -33,7 +31,6 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("MCP_TRANSPORT", "http");
         Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", DataRoot);
         Environment.SetEnvironmentVariable("AIRACCOON_ACCESS_MODE", "full");
-        TryCopyCloudSyncModule();
     }
 
     /// <summary>The temp data root the server instance writes into.</summary>
@@ -81,29 +78,6 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         {
             // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
         }
-    }
-
-    /// <summary>
-    ///     Copies the developer's already-provisioned cloudsync module
-    ///     (~/.ai-raccoon/extensions/&lt;rid&gt;/cloudsync.dylib) into this instance's data root so
-    ///     the server's ProvisionExtensions step stays offline. Absent a module, the server logs
-    ///     a provisioning failure and sync calls fail loudly at call time — these tests never
-    ///     exercise sync with credentials.
-    /// </summary>
-    private void TryCopyCloudSyncModule()
-    {
-        var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
-        var source = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon", "extensions", rid,
-            "cloudsync.dylib");
-        if (!File.Exists(source))
-        {
-            return;
-        }
-
-        var targetDir = Path.Combine(DataRoot, "extensions", rid);
-        Directory.CreateDirectory(targetDir);
-        File.Copy(source, Path.Combine(targetDir, "cloudsync.dylib"), true);
     }
 
     private static string CreateTempRoot()

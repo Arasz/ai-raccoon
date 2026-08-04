@@ -55,8 +55,7 @@ public sealed class ManagedHarness
         var dataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-parity", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataRoot);
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" });
         var store = new SqliteMemoryStore(factory,
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)),
             new TokenizerChunker(), new EmbeddingService());

@@ -29,8 +29,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     public SqliteMemoryStoreIntegrationTests()
     {
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new AiRaccoon.Infrastructure.Embedding.EmbeddingService());
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(factory), new FakeTimeProvider(FixedNow));

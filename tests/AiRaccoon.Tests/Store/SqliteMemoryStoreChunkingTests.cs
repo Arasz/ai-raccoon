@@ -31,8 +31,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new EmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);

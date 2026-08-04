@@ -18,8 +18,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) =>
         new(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope });
 
     [Fact]
     public void BankPath_UserScope_IsDataRootMemoryDb() => Factory().BankPath.ShouldBe(Path.Combine(_dataRoot, "memory.db"));
@@ -75,20 +74,6 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         var dbFiles = Directory.EnumerateFiles(_dataRoot, "*.db").Select(Path.GetFileName).ToList();
         dbFiles.ShouldBe(["memory.db"]);
-    }
-
-    [Fact]
-    public void CloudSyncExtensionPath_FollowsDataRootExtensionsRidLayout()
-    {
-        ExtensionPaths.CloudSyncModulePath(_dataRoot, "osx-arm64")
-            .ShouldBe(Path.Combine(_dataRoot, "extensions", "osx-arm64", "cloudsync.dylib"));
-    }
-
-    [Fact]
-    public void CloudSyncExtensionPath_UsePlatformModuleSuffixes()
-    {
-        ExtensionPaths.CloudSyncModulePath(_dataRoot, "linux-x64").ShouldEndWith("cloudsync.so");
-        ExtensionPaths.CloudSyncModulePath(_dataRoot, "win-x64").ShouldEndWith("cloudsync.dll");
     }
 
     private static string CreateTempRoot()

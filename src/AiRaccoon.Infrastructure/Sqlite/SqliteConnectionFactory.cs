@@ -7,13 +7,11 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Opens the install's single memory bank (memory.db) with the shared PRAGMA policy, loads
-///     vec0 (NuGet) and — when enabled — the cloudsync extension, and initializes our schema on
-///     first open. There is no second meta database: every table lives in memory.db (FR-NM-1).
+///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
+///     every table lives in memory.db (FR-NM-1).
 /// </summary>
 public sealed class SqliteConnectionFactory
 {
-    private readonly bool _loadCloudSync;
-    private readonly Action<SqliteConnection> _loadExtensions;
     private readonly InfrastructureOptions _options;
 
     static SqliteConnectionFactory()
@@ -23,12 +21,9 @@ public sealed class SqliteConnectionFactory
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
-    public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false,
-        Action<SqliteConnection>? loadExtensions = null)
+    public SqliteConnectionFactory(InfrastructureOptions options)
     {
         _options = options;
-        _loadCloudSync = loadCloudSync;
-        _loadExtensions = loadExtensions ?? LoadNativeExtensions;
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
@@ -51,9 +46,8 @@ public sealed class SqliteConnectionFactory
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
 
         connection.EnableExtensions();
-        // vec0 ships in the NuGet package — always available, no provisioning (plan §4).
+        // vec0 ships in the NuGet package — always available, no provisioning.
         connection.LoadVector();
-        _loadExtensions(connection);
         await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
         await SeedGlobalAccessModeAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -77,22 +71,6 @@ public sealed class SqliteConnectionFactory
                     new { key = AccessModePolicy.GlobalSettingKey, value = AccessModePolicy.Serialize(mode) },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-    }
-
-    private void LoadNativeExtensions(SqliteConnection connection)
-    {
-        if (!_loadCloudSync)
-        {
-            return;
-        }
-
-        // Sync stays extension-backed until P9 replaces it. A missing module disables sync
-        // loudly at call time (no such function) rather than failing every bank open.
-        var syncPath = ExtensionPaths.CloudSyncModulePath(_options.DataRoot, _options.Rid);
-        if (File.Exists(syncPath))
-        {
-            connection.LoadExtension(syncPath);
-        }
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)

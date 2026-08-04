@@ -18,8 +18,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
     public SqliteWorkspaceStoreTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            loadExtensions: _ => { });
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" });
         _store = new SqliteWorkspaceStore(_factory);
     }
 
