@@ -69,13 +69,13 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
             $"observed nDCG@10 delta range across all sweep points: {bestDelta:+0.0000;-0.0000} .. " +
             $"{worstDelta:+0.0000;-0.0000} (positive = new side above the reference)");
 
-        var p95 = Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
+        var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
         p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
             $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget");
 
         output.WriteLine($"reference (golden k={golden.K}): nDCG@10 {reference.NdcgAt10:F4}, MRR {reference.Mrr:F4}, " +
                          $"Recall@10 {reference.RecallAt10:F4}");
-        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms " +
+        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms " +
                          $"over {fixture.Harness.QueryLatenciesMs.Count} queries");
         output.WriteLine(rows.ToString());
 
@@ -254,7 +254,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine();
         report.AppendLine($"| p50 | p95 | max | samples |");
         report.AppendLine($"|---|---|---|---|");
-        report.AppendLine($"| {Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | " +
+        report.AppendLine($"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | " +
                           $"{(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | " +
                           $"{fixture.Harness.QueryLatenciesMs.Count} |");
 
