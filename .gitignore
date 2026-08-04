@@ -24,5 +24,7 @@ src/AiRaccoon/Models/*.onnx
 # Reqnroll generated code-behind files (P12)
 **/*.feature.cs
 baseline-results.json
-scripts/chunk-hash-map.json
 scripts/baseline-results.json
+# SQLite WAL sidecars (journal_mode=WAL is forced by SqliteConnectionFactory)
+*.db-shm
+*.db-wal

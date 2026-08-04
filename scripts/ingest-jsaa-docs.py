@@ -11,6 +11,12 @@ Usage:
   python3 scripts/ingest-jsaa-docs.py --ingest-only    # full ingest, no spot-checks
   python3 scripts/ingest-jsaa-docs.py --verify         # full ingest + spot-checks
   python3 scripts/ingest-jsaa-docs.py --reset          # delete all contexts then re-ingest
+
+Exclusion list (plan C §0/§3 Wave 0 — the canonical corpus must be curated):
+  docs/work/, docs/state.json, docs/now.md, .ai-badger/state.json,
+  .remember/now.md, docs/brand/, and any other non-ADR, non-invariant
+  content — see EXCLUDE_GLOBS below. Ingest is pinned to JSAA_PINNED_COMMIT;
+  the script aborts if the jsaa tree HEAD does not match the pin.
 """
 
 from __future__ import annotations
@@ -20,7 +26,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -34,7 +42,10 @@ import httpx
 # ---------------------------------------------------------------------------
 
 JSAA_ROOT = Path("/Users/arasz/RiderProjects/job-search-ai-assistant")
-MCP_BASE = "http://localhost:5000/mcp"
+# Wave 0 reproducibility: ingest only the pinned jsaa tree (plan C §0/§3 Wave 0).
+JSAA_PINNED_COMMIT = "0bb8ff8a7af47efe248add0c16bcf79e96054e19"
+# Port 5000 is taken by macOS ControlCenter; override via MCP_URL env var.
+MCP_BASE = os.environ.get("MCP_URL", "http://localhost:5000/mcp")
 PROJECT_ID = "job-search-ai-assistant"
 HASH_MAP_PATH = Path(__file__).resolve().parent / "chunk-hash-map.json"
 BATCH_SIZE = 50
@@ -93,6 +104,8 @@ EXCLUDE_GLOBS: list[str] = [
     ".remember/logs/",
     "docs/work/",
     "docs/brand/",
+    "docs/state.json",
+    "docs/now.md",
     ".github/",
     "node_modules/",
     ".git/",
@@ -639,7 +652,9 @@ def chunk_heading(rel: str, text: str, _type_key: str, context: str) -> list[Chu
     for sec_name, sec_body in sections:
         if not sec_body.strip():
             continue
-        section_slug = re.sub(r"[^a-z0-9-]+", "-", sec_name.strip()).strip("-").lower()
+        # Lowercase BEFORE the regex — [^a-z0-9-] would otherwise eat leading
+        # capitals ("## Framework" -> "#ramework").
+        section_slug = re.sub(r"[^a-z0-9-]+", "-", sec_name.strip().lower()).strip("-")
         path = _chunk_path(rel, section_slug)
         body = f"# {title}\n\n## {sec_name}\n\n{sec_body}" if title else f"## {sec_name}\n\n{sec_body}"
         chunks.append(Chunk(structured_path=path, content=_make_chunk_content(body, path), context=context))
@@ -697,7 +712,7 @@ def chunk_remember(rel: str, text: str, _type_key: str, context: str) -> list[Ch
         if body:
             # Extract date slug from header
             date_match = re.search(r"(\d{4}-\d{2}-\d{2})", header_line)
-            section_slug = date_match.group(1) if date_match else re.sub(r"[^a-z0-9-]+", "-", header_line.strip("#").strip()).strip("-").lower()
+            section_slug = date_match.group(1) if date_match else re.sub(r"[^a-z0-9-]+", "-", header_line.strip("#").strip().lower()).strip("-")
             path = _chunk_path(rel, section_slug)
             chunks.append(Chunk(structured_path=path, content=_make_chunk_content(f"{header_line}\n\n{body}", path), context=context))
         i += 2
@@ -898,8 +913,22 @@ async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> N
     for query, expected in SPOT_CHECKS:
         result = await client.memory_search(http, PROJECT_ID, query, scope="project", limit=5, min_score=0.0)
         if isinstance(result, dict) and "results" in result:
+            # `path` is the hash-derived filename (WritePathFor), so the
+            # structured path only appears in the content/snippet — match
+            # expected against the snippet as well (hash-map contract:
+            # match by path prefix, not exact section).
             top3_paths = [r.get("path", "?") for r in result["results"][:3]]
-            found = any(expected.lower() in (p or "").lower() for p in top3_paths)
+            top3_snips = [(r.get("snippet", "") or "") for r in result["results"][:3]]
+
+            def _matches_expected(p: str, s: str) -> bool:
+                e = expected.lower()
+                if e in (p or "").lower() or e in s.lower():
+                    return True
+                # ADR literals use "ADR-0011" but stored paths use "docs:adr:0011-…"
+                m = re.search(r"adr-(\d{3,4})", e)
+                return bool(m and m.group(1) in s.lower())
+
+            found = any(_matches_expected(p, s) for p, s in zip(top3_paths, top3_snips))
             status = "✓" if found else "✗"
             log.info("  %s query=%r  expected=%s  top3=%s", status, query, expected, top3_paths)
         else:
@@ -922,6 +951,35 @@ async def reset_contexts(client: AiRaccoonClient, http: httpx.AsyncClient) -> No
 
 
 # ---------------------------------------------------------------------------
+# jsaa pin verification (plan C Wave 0 step 1)
+# ---------------------------------------------------------------------------
+
+
+def verify_jsaa_pin() -> None:
+    """Abort unless the jsaa tree is at JSAA_PINNED_COMMIT.
+
+    The canonical corpus must be reproducible on a clean checkout; ingesting
+    from a different jsaa commit would silently change every hash.
+    """
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(JSAA_ROOT), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise SystemExit(f"FATAL: cannot read jsaa HEAD at {JSAA_ROOT}: {exc}")
+    if head != JSAA_PINNED_COMMIT:
+        raise SystemExit(
+            f"FATAL: jsaa HEAD {head} != pinned {JSAA_PINNED_COMMIT}. "
+            f"Check out the pinned commit in {JSAA_ROOT} and re-run."
+        )
+    log.info("jsaa HEAD verified: %s (matches pin)", head)
+
+
+# ---------------------------------------------------------------------------
 # Main pipeline
 # ---------------------------------------------------------------------------
 
@@ -935,6 +993,9 @@ async def run_pipeline(
 ) -> None:
     """Execute the full ingestion pipeline."""
     t0 = time.monotonic()
+
+    # ── 0. Pin check (plan C Wave 0: reproducible corpus) ──
+    verify_jsaa_pin()
 
     # ── 1. Enumerate ──
     log.info("━━━ PHASE 1: File enumeration ━━━")
