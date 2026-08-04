@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
@@ -38,6 +40,7 @@ public sealed class MemoryTools(
     private const string TN_MEMORY_INGEST_DIRECTORY = "memory_ingest_directory";
     private const string TN_MEMORY_CONFIGURE = "memory_configure";
     private const string TN_MEMORY_EMBED_PENDING = "memory_embed_pending";
+    private const string TN_MEMORY_SET_STRUCTURE_ALPHA = "memory_set_structure_alpha";
     private const string TN_MEMORY_WORKSPACE_BEGIN = "memory_workspace_begin";
     private const string TN_MEMORY_WORKSPACE_STATUS = "memory_workspace_status";
     private const string TN_MEMORY_WORKSPACE_CONSOLIDATE = "memory_workspace_consolidate";
@@ -436,6 +439,45 @@ public sealed class MemoryTools(
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             observability.RecordInvocation(TN_MEMORY_CONFIGURE, sw.Elapsed, true, ex.GetType().Name);
+            throw;
+        }
+    }
+
+    [McpServerTool(Name = TN_MEMORY_SET_STRUCTURE_ALPHA)]
+    [Description(
+        "Sets the dual-vector fusion alpha (retrieval.structureAlpha, 0..1) for the bank: " +
+        "score = alpha * content similarity + (1 - alpha) * heading-path structure similarity. " +
+        "Default 0.5; higher favors content, lower favors structure. Applies to subsequent searches.")]
+    public async Task<SettingResult> SetStructureAlpha(
+        [Description("The project id; every memory operation is scoped to a project.")]
+        string projectId,
+        [Description("Fusion alpha in [0, 1].")]
+        double alpha,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SET_STRUCTURE_ALPHA);
+        activity?.SetTag("tool", TN_MEMORY_SET_STRUCTURE_ALPHA);
+        activity?.SetTag("project_id", projectId);
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            RequireProjectId(projectId);
+            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_SET_STRUCTURE_ALPHA, cancellationToken);
+
+            if (alpha is < 0.0 or > 1.0)
+            {
+                throw new McpException($"invalid-params: alpha must be in [0, 1], got {alpha}");
+            }
+
+            var value = alpha.ToString(CultureInfo.InvariantCulture);
+            await store.SetSettingAsync(StructureFusion.AlphaSettingKey, value, cancellationToken);
+            observability.RecordInvocation(TN_MEMORY_SET_STRUCTURE_ALPHA, sw.Elapsed, false);
+            return new SettingResult(StructureFusion.AlphaSettingKey, value);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            observability.RecordInvocation(TN_MEMORY_SET_STRUCTURE_ALPHA, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
