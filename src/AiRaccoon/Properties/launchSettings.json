@@ -2,17 +2,12 @@
     "$schema": "http://json.schemastore.org/launchsettings.json",
     "profiles": {
         "stdio": {
-            "commandName": "Project",
-            "environmentVariables": {
-                "MCP_TRANSPORT": "stdio"
-            }
+            "commandName": "Project"
         },
         "http": {
             "commandName": "Project",
-            "applicationUrl": "http://localhost:8080",
-            "environmentVariables": {
-                "MCP_TRANSPORT": "http"
-            }
+            "commandLineArgs": "--transport http",
+            "applicationUrl": "http://localhost:8080"
         }
     }
 }

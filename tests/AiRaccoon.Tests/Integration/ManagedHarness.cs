@@ -60,7 +60,7 @@ public sealed class ManagedHarness
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)),
             new TokenizerChunker(), new EmbeddingService());
 
-        await store.ConfigureEmbeddingAsync(ProjectId, "local", null, null, null, cancellationToken)
+        await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken)
             .ConfigureAwait(false);
 
         foreach (var doc in RealWorldCorpus.Documents)

@@ -21,14 +21,6 @@ public sealed record InfrastructureOptions
 
     public InstallScope Scope { get; init; } = InstallScope.User;
 
-    public SyncOptions Sync { get; init; } = new();
-
-    /// <summary>Global access-mode seed (ro|rw|full); null = no seed (validated by AccessModePolicy at seed time).</summary>
-    public string? AccessMode { get; init; }
-
-    /// <summary>Custom ONNX embedding model path; null = the bundled model.</summary>
-    public string? EmbeddingModelPath { get; init; }
-
     /// <summary>Data root fallback: ~/.ai-raccoon (spec §5.1); the caller resolves env/CLI overrides.</summary>
     public static string DefaultDataRoot() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");

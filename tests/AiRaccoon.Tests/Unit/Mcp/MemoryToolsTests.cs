@@ -13,6 +13,7 @@ using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 
@@ -35,15 +36,21 @@ public class MemoryToolsTests
         _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store),
-            new SyncOptions
-            {
-                Endpoint = "http://test",
-                Bucket = "test-bucket",
-                AccessKey = "test-key",
-                SecretKey = "test-secret"
-            },
+            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
             new ToolCallMetrics());
+    }
+
+    private void SeedSyncSettings(string? objectKey = null)
+    {
+        _store.Settings[SyncSettingsKeys.Endpoint] = "http://test";
+        _store.Settings[SyncSettingsKeys.Bucket] = "test-bucket";
+        _store.Settings[SyncSettingsKeys.AccessKey] = "test-key";
+        _store.Settings[SyncSettingsKeys.SecretKey] = "test-secret";
+        if (objectKey is not null)
+        {
+            _store.Settings[SyncSettingsKeys.ObjectKey] = objectKey;
+        }
     }
 
     [Fact]
@@ -140,8 +147,6 @@ public class MemoryToolsTests
     [Fact]
     public async Task Sync_WithoutCredentials_ThrowsMcpExceptionWithSyncNotConfigured()
     {
-        _sync.Exception = new SyncNotConfiguredException();
-
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.Sync("acme", TestContext.Current.CancellationToken));
 
@@ -151,6 +156,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Sync_DelegatesAndMapsResult()
     {
+        SeedSyncSettings();
         _sync.Result = new SyncResult(3, 2, 5);
 
         var result = await _tools.Sync("acme", TestContext.Current.CancellationToken);
@@ -158,6 +164,17 @@ public class MemoryToolsTests
         result.Sent.ShouldBe(3);
         result.Received.ShouldBe(2);
         result.Reindexed.ShouldBe(5);
+        _sync.LastObjectKey.ShouldBe("memory-acme.db");
+    }
+
+    [Fact]
+    public async Task Sync_UsesConfiguredObjectKeyFromSettings()
+    {
+        SeedSyncSettings(objectKey: "bank.db");
+
+        await _tools.Sync("acme", TestContext.Current.CancellationToken);
+
+        _sync.LastObjectKey.ShouldBe("bank.db");
     }
 
     [Fact]
@@ -214,123 +231,6 @@ public class MemoryToolsTests
         result.Deleted.Count.ShouldBe(0);
     }
 
-    [Fact]
-    public async Task Configure_WithUnknownProvider_ThrowsMcpException()
-    {
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Configure("acme", "vectorspace", cancellationToken: TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("provider must be 'local' or 'openai'");
-        _store.Configured.ShouldBeNull();
-    }
-
-    [Fact]
-    public async Task Configure_OpenAi_WithoutModel_ThrowsMcpException()
-    {
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Configure("acme", "openai", "http://localhost:11434/v1", apiKey: "test-key-123",
-                cancellationToken: TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("model is required");
-    }
-
-    [Fact]
-    public async Task Configure_OpenAi_WithoutApiKey_ThrowsMcpException()
-    {
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Configure("acme", "openai", model: "nomic-embed-text",
-                cancellationToken: TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("embedding-api-key-missing");
-    }
-
-    [Fact]
-    public async Task Configure_OpenAi_WithApiKey_DelegatesProviderModelBaseUrl()
-    {
-        await _tools.Configure("acme", "openai", "http://localhost:11434/v1", "nomic-embed-text",
-            "test-key-123", TestContext.Current.CancellationToken);
-
-        _store.Configured.ShouldBe(("openai", "nomic-embed-text", "http://localhost:11434/v1", "test-key-123"));
-    }
-
-    [Fact]
-    public async Task Configure_OpenAi_WithoutArgKey_FallsBackToEnvKey()
-    {
-        var previous = Environment.GetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY");
-        Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", "env-key-456");
-        try
-        {
-            await _tools.Configure("acme", "openai", model: "nomic-embed-text",
-                cancellationToken: TestContext.Current.CancellationToken);
-
-            _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "env-key-456"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", previous);
-        }
-    }
-
-    [Fact]
-    public async Task Configure_OpenAi_WithoutBaseUrl_DefaultsToTheOpenAiEndpoint()
-    {
-        await _tools.Configure("acme", "openai", model: "nomic-embed-text", apiKey: "test-key-123",
-            cancellationToken: TestContext.Current.CancellationToken);
-
-        _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "test-key-123"));
-    }
-
-    [Fact]
-    public async Task Configure_Local_WithoutModel_DelegatesWithBundledDefault()
-    {
-        await _tools.Configure("acme", "local", cancellationToken: TestContext.Current.CancellationToken);
-
-        _store.Configured.ShouldBe(("local", null, null, null));
-    }
-
-    [Fact]
-    public async Task Configure_RequiresWriteAccess()
-    {
-        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "ro";
-
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Configure("acme", "local", cancellationToken: TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("access-denied");
-        _store.Configured.ShouldBeNull();
-    }
-
-    [Fact]
-    public async Task SetStructureAlpha_WritesSettingToStore()
-    {
-        var result = await _tools.SetStructureAlpha("acme", 0.8, TestContext.Current.CancellationToken);
-
-        result.Key.ShouldBe(StructureFusion.AlphaSettingKey);
-        result.Value.ShouldBe("0.8");
-        _store.Settings[StructureFusion.AlphaSettingKey].ShouldBe("0.8");
-    }
-
-    [Fact]
-    public async Task SetStructureAlpha_OutOfRange_ThrowsInvalidParams()
-    {
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.SetStructureAlpha("acme", 1.5, TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("invalid-params");
-        _store.Settings.ShouldNotContainKey(StructureFusion.AlphaSettingKey);
-    }
-
-    [Fact]
-    public async Task SetStructureAlpha_RequiresWriteAccess()
-    {
-        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "ro";
-
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.SetStructureAlpha("acme", 0.5, TestContext.Current.CancellationToken));
-
-        ex.Message.ShouldContain("access-denied");
-        _store.Settings.ShouldNotContainKey(StructureFusion.AlphaSettingKey);
-    }
 
     private sealed class FakeStore : IMemoryStore
     {
@@ -349,8 +249,6 @@ public class MemoryToolsTests
         public (string ProjectId, string Hash)? Shared { get; private set; }
 
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
-
-        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
 
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
@@ -392,12 +290,9 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default)
-        {
-            Configured = (provider, model, baseUrl, apiKey);
-            return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
-        }
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", "local"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>
@@ -413,7 +308,7 @@ public class MemoryToolsTests
 
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, 30));
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 
@@ -422,6 +317,18 @@ public class MemoryToolsTests
             Settings[key] = value;
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(
+                Settings.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            Settings.Remove(key);
+            return Task.CompletedTask;
+        }
+
 
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
@@ -435,9 +342,12 @@ public class MemoryToolsTests
 
         public SyncNotConfiguredException? Exception { get; set; }
 
+        public string? LastObjectKey { get; private set; }
+
         public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
             CancellationToken cancellationToken = default)
         {
+            LastObjectKey = objectKey;
             if (Exception is not null)
             {
                 throw Exception;

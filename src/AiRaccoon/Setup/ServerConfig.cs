@@ -3,35 +3,21 @@ using AiRaccoon.Infrastructure.Options;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     The merged runtime configuration: transport + fully-resolved infrastructure options.
-///     Built by <see cref="Build"/> applying CLI args &gt; env vars &gt; built-in defaults per
-///     key; secret env vars are never read here — they stay environment-only by design.
+///     Launch identity: transport + bank options. Built by <see cref="Build"/> from the
+///     launch flags (CLI only — env handling was removed by the single-channel ruling;
+///     runtime configuration lives in the settings table via the config commands).
 /// </summary>
 internal sealed record ServerConfig(McpTransport Transport, InfrastructureOptions Options)
 {
-    internal static ServerConfig Build(CliOptions? cli, Func<string, string?> readEnv)
+    internal static ServerConfig Build(CliOptions? cli)
     {
-        var transport = ParseTransport(cli?.Transport ?? readEnv("MCP_TRANSPORT"));
-        var dataRoot = ExpandTilde(NonBlank(cli?.DataRoot) ?? NonBlank(readEnv("AIRACCOON_DATA_ROOT")));
-        var scope = cli?.InstallScope
-            ?? (string.Equals(readEnv("AIRACCOON_INSTALL_SCOPE"), "project", StringComparison.OrdinalIgnoreCase)
-                ? InstallScope.Project
-                : InstallScope.User);
-        var embeddingModel = ExpandTilde(NonBlank(cli?.EmbeddingModel) ?? NonBlank(readEnv("AIRACCOON_EMBEDDING_MODEL")));
+        var transport = ParseTransport(cli?.Transport);
+        var dataRoot = ExpandTilde(NonBlank(cli?.DataRoot));
 
         var options = new InfrastructureOptions
         {
             DataRoot = dataRoot ?? InfrastructureOptions.DefaultDataRoot(),
-            Scope = scope,
-            AccessMode = cli?.AccessMode ?? readEnv("AIRACCOON_ACCESS_MODE"),
-            EmbeddingModelPath = embeddingModel,
-            Sync = new SyncOptions
-            {
-                Endpoint = cli?.SyncEndpoint ?? readEnv("AIRACCOON_SYNC_ENDPOINT"),
-                Bucket = cli?.SyncBucket ?? readEnv("AIRACCOON_SYNC_BUCKET"),
-                Region = cli?.SyncRegion ?? readEnv("AIRACCOON_SYNC_REGION"),
-                ObjectKey = cli?.SyncObjectKey ?? readEnv("AIRACCOON_SYNC_OBJECT_KEY")
-            }
+            Scope = cli?.InstallScope ?? InstallScope.User
         };
 
         return new ServerConfig(transport, options);

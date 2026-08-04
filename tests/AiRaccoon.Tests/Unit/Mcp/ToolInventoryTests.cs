@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 public class ToolInventoryTests
 {
     [Fact]
-    public void MemoryTools_ExposesAll18SpecTools()
+    public void MemoryTools_ExposesAll16SpecTools()
     {
         var tools = typeof(MemoryTools)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -21,7 +21,7 @@ public class ToolInventoryTests
             .Select(a => a!.Name)
             .ToList();
 
-        tools.Count.ShouldBe(18);
+        tools.Count.ShouldBe(16);
         tools.ShouldContain("memory_write");
         tools.ShouldContain("memory_search");
         tools.ShouldContain("memory_list");
@@ -31,9 +31,7 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_delete_context");
         tools.ShouldContain("memory_ingest_file");
         tools.ShouldContain("memory_ingest_directory");
-        tools.ShouldContain("memory_configure");
         tools.ShouldContain("memory_embed_pending");
-        tools.ShouldContain("memory_set_structure_alpha");
         tools.ShouldContain("memory_workspace_begin");
         tools.ShouldContain("memory_workspace_status");
         tools.ShouldContain("memory_workspace_consolidate");
@@ -73,7 +71,7 @@ public class ToolInventoryTests
             .Where(x => x.Attr is not null)
             .ToList();
 
-        toolMethods.Count.ShouldBe(18);
+        toolMethods.Count.ShouldBe(16);
 
         foreach (var tm in toolMethods)
         {

@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
@@ -6,36 +7,24 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Proves the env path end-to-end after the CLI refactor: AIRACCOON_INSTALL_SCOPE is the
-///     honored middle precedence layer, so the server builds the bank for the project scope.
-///     The var is set before the first CreateClientAsync (host build is lazy) and restored in
-///     finally so it cannot leak into the serial E2E collection.
+///     Proves the launch-identity flags end-to-end after the single-channel refactor:
+///     --install-scope=project (injected via the factory's UseSetting, which the real
+///     entry point receives as an arg) makes the server build the bank for the project
+///     scope. Env vars are no longer a config channel.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(E2ETestCollection.Name)]
-public class McpServerEnvHonoredE2ETests : IAsyncLifetime
+public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 {
-    private const string ScopeEnvVar = "AIRACCOON_INSTALL_SCOPE";
-
     private McpClient _client = null!;
     private McpServerFactory _factory = null!;
 
     public async ValueTask InitializeAsync()
     {
         await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
-        _factory = new McpServerFactory();
-
-        var previous = Environment.GetEnvironmentVariable(ScopeEnvVar);
-        Environment.SetEnvironmentVariable(ScopeEnvVar, "project");
-        try
-        {
-            _client = await _factory.CreateClientAsync();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(ScopeEnvVar, previous);
-        }
+        _factory = new McpServerFactory(InstallScope.Project);
+        _client = await _factory.CreateClientAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -49,7 +38,7 @@ public class McpServerEnvHonoredE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task InstallScope_ProjectEnv_BankLivesUnderDataRootAiRaccoonDir()
+    public async Task InstallScope_ProjectFlag_BankLivesUnderDataRootAiRaccoonDir()
     {
         // Any tool call opens the bank; stats is the lightest.
         await _client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },

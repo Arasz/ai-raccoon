@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
@@ -35,7 +36,7 @@ public sealed class MemoryToolsAccessModeTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(_store), new SyncOptions(),
+            new MemoryAccessGuard(_store), new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
             new ToolCallMetrics());
     }
@@ -209,8 +210,8 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -227,7 +228,7 @@ public sealed class MemoryToolsAccessModeTests
 
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, 30));
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 
@@ -236,6 +237,18 @@ public sealed class MemoryToolsAccessModeTests
             Settings[key] = value;
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(
+                Settings.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            Settings.Remove(key);
+            return Task.CompletedTask;
+        }
+
 
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
