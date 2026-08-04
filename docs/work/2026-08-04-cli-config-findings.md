@@ -159,3 +159,13 @@ ai-raccoon watch list                            # enabled flags + scopes, per p
 - **`appsettings.json`** (F10): explicitly clear the default sources (`builder.Configuration.Sources.Clear()`) or document the dormant file as inert.
 - **Registry manifest** (F10): shrink `environmentVariables` to the survivors (data-root, install-scope, 4 secrets) and add the currently-missing `AIRACCOON_DB_PASSPHRASE`.
 - **Migration of existing env-based setups**: env vars that stop being read (e.g. `AIRACCOON_ACCESS_MODE`) become silently inert — already-seeded settings rows survive, so no data loss; worth a release note so users don't assume the env var still works.
+
+## Owner rulings (f: 2026-08-04 — closes the open questions above)
+
+1. **Startup-scoped options stay command args only**: `--transport`, `--data-root`, `--install-scope` remain launch flags (logically startup-scoped); no CLI commands for them.
+2. **Everything else moves to CLI commands or is removed**: no runtime option keeps an env/args channel. `sweep ttl_days` is REMOVED (not moved).
+3. **`appsettings.json` removed**: configuration sources cleared; the dormant channel is deleted, not documented as inert.
+4. **Env var handling removed**: settings (persisted) are the single runtime channel; the env-var merge layer goes away.
+5. **No backwards compatibility required**: no transitional releases, no migration ceremony, no deprecation shims (e.g. `memory_configure` is deleted outright, replaced by `model set`).
+6. **Secrets live in settings**: the DB is fully encrypted at rest, so the 4 env-only secrets (F12) move into the settings table; the env-only exception is dropped. (Interactive keyring entry rejected — not needed.)
+
