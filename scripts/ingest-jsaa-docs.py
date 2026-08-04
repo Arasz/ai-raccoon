@@ -121,8 +121,9 @@ class Chunk:
     """A single retrievable unit of knowledge."""
 
     structured_path: str   # e.g. "docs:adr/0011-frontend-chassis-stack.md#decision"
-    content: str           # markdown body with embedded ## Source: header
+    content: str           # markdown body (no embedded provenance — Wave 2 plan C §3 2d)
     context: str           # typed context label e.g. "docs:adr"
+    source_file: str       # original relative path, e.g. "docs/adr/0011-frontend-chassis-stack.md"
 
 
 # ---------------------------------------------------------------------------
@@ -202,12 +203,18 @@ class AiRaccoonClient:
         content: str,
         context: Optional[str] = None,
         agent_id: Optional[str] = None,
+        source_file: Optional[str] = None,
+        section: Optional[str] = None,
     ) -> dict:
         args: dict = {"projectId": project_id, "content": content}
         if context:
             args["context"] = context
         if agent_id:
             args["agentId"] = agent_id
+        if source_file:
+            args["sourceFile"] = source_file
+        if section:
+            args["section"] = section
         result = await self._call(
             client, "tools/call", {"name": "memory_write", "arguments": args}
         )
@@ -500,11 +507,6 @@ def read_file(path: Path) -> str:
         return ""
 
 
-def _make_chunk_content(body: str, structured_path: str) -> str:
-    """Embed the structured path as a ## Source header in the content."""
-    return f"## Source: {structured_path}\n\n{body}"
-
-
 def _chunk_path(rel: str, section: str) -> str:
     """Build the structured path for a chunk."""
     source_prefix = _source_prefix(rel)
@@ -611,7 +613,7 @@ def chunk_adr(rel: str, text: str, _type_key: str, context: str) -> list[Chunk]:
     if total_len < 1000:
         # Short ADR: single chunk
         path = _chunk_path(rel, "")
-        return [Chunk(structured_path=path, content=_make_chunk_content(text.strip(), path), context=context)]
+        return [Chunk(structured_path=path, content=text.strip(), context=context, source_file=rel)]
 
     # Split by Nygard sections
     sections = _split_by_h2(text)
@@ -633,20 +635,19 @@ def chunk_adr(rel: str, text: str, _type_key: str, context: str) -> list[Chunk]:
         path = _chunk_path(rel, section_slug)
         # For non-preamble sections, include the H1 title context
         body = f"# {title}\n\n## {sec_name}\n\n{sec_body}" if title else sec_body
-        chunks.append(Chunk(structured_path=path, content=_make_chunk_content(body, path), context=context))
+        chunks.append(Chunk(structured_path=path, content=body, context=context, source_file=rel))
 
     return chunks
 
 
 def chunk_heading(rel: str, text: str, _type_key: str, context: str) -> list[Chunk]:
-    """Split by ## headers, prepend H1 title. Fallback to whole file."""
-    title = _extract_title(text)
+    """Split by ## headers. Fallback to whole file."""
     sections = _split_by_h2(text)
 
     if len(sections) == 1 and sections[0][0] == "body":
         # No ## sections: whole file as one chunk
         path = _chunk_path(rel, "")
-        return [Chunk(structured_path=path, content=_make_chunk_content(text.strip(), path), context=context)]
+        return [Chunk(structured_path=path, content=text.strip(), context=context, source_file=rel)]
 
     chunks: list[Chunk] = []
     for sec_name, sec_body in sections:
@@ -656,8 +657,10 @@ def chunk_heading(rel: str, text: str, _type_key: str, context: str) -> list[Chu
         # capitals ("## Framework" -> "#ramework").
         section_slug = re.sub(r"[^a-z0-9-]+", "-", sec_name.strip().lower()).strip("-")
         path = _chunk_path(rel, section_slug)
-        body = f"# {title}\n\n## {sec_name}\n\n{sec_body}" if title else f"## {sec_name}\n\n{sec_body}"
-        chunks.append(Chunk(structured_path=path, content=_make_chunk_content(body, path), context=context))
+        # Wave 2 (plan C §3 2d): no H1 title in section chunks — the title is file-level
+        # provenance; repeating it in every chunk pollutes BM25. The section heading stays.
+        body = f"## {sec_name}\n\n{sec_body}"
+        chunks.append(Chunk(structured_path=path, content=body, context=context, source_file=rel))
 
     return chunks
 
@@ -665,7 +668,7 @@ def chunk_heading(rel: str, text: str, _type_key: str, context: str) -> list[Chu
 def chunk_atomic(rel: str, text: str, _type_key: str, context: str) -> list[Chunk]:
     """One file = one chunk. No splitting."""
     path = _chunk_path(rel, "")
-    return [Chunk(structured_path=path, content=_make_chunk_content(text.strip(), path), context=context)]
+    return [Chunk(structured_path=path, content=text.strip(), context=context, source_file=rel)]
 
 
 def chunk_skill(rel: str, text: str, type_key: str, context: str) -> list[Chunk]:
@@ -702,7 +705,7 @@ def chunk_remember(rel: str, text: str, _type_key: str, context: str) -> list[Ch
     preamble = parts[0].strip()
     if preamble:
         path = _chunk_path(rel, "preamble")
-        chunks.append(Chunk(structured_path=path, content=_make_chunk_content(preamble, path), context=context))
+        chunks.append(Chunk(structured_path=path, content=preamble, context=context, source_file=rel))
 
     # Subsequent parts: header, content pairs
     i = 1
@@ -714,7 +717,7 @@ def chunk_remember(rel: str, text: str, _type_key: str, context: str) -> list[Ch
             date_match = re.search(r"(\d{4}-\d{2}-\d{2})", header_line)
             section_slug = date_match.group(1) if date_match else re.sub(r"[^a-z0-9-]+", "-", header_line.strip("#").strip().lower()).strip("-")
             path = _chunk_path(rel, section_slug)
-            chunks.append(Chunk(structured_path=path, content=_make_chunk_content(f"{header_line}\n\n{body}", path), context=context))
+            chunks.append(Chunk(structured_path=path, content=f"{header_line}\n\n{body}", context=context, source_file=rel))
         i += 2
 
     return chunks if chunks else chunk_atomic(rel, text, _type_key, context)
@@ -760,7 +763,7 @@ def chunk_rules(rel: str, text: str, _type_key: str, context: str) -> list[Chunk
 
         path = _chunk_path(rel, rule_id_slug)
         body = f"{preamble}\n\nRow {i + 1}: {row}" if preamble else row
-        chunks.append(Chunk(structured_path=path, content=_make_chunk_content(body, path), context=context))
+        chunks.append(Chunk(structured_path=path, content=body, context=context, source_file=rel))
 
     return chunks
 
@@ -824,8 +827,8 @@ def compute_expected_hash(content: str) -> str:
 
 
 def chunk_written_content(chunk: Chunk) -> str:
-    """The actual content sent to AiRaccoon, with metadata prefix."""
-    return f"[{chunk.context}] {chunk.structured_path}\n\n{chunk.content}"
+    """The actual content sent to AiRaccoon — plain chunk body since Wave 2 (plan C §3 2d)."""
+    return chunk.content
 
 
 def build_hash_map(chunks: list[Chunk]) -> dict[str, str]:
@@ -860,17 +863,18 @@ async def write_chunks_batched(
             log.info("[batch %d/%d] would write %d chunks (dry-run)", batch_num, total_batches, len(batch))
             continue
 
-        # Write each chunk in the batch
+        # Write each chunk in the batch. Provenance travels in the source_file/section
+        # parameters (Wave 2, plan C §3 2d) — the content itself carries no [context]
+        # prefix or ## Source: header, so BM25 and the embeddings see clean body text.
         for chunk in batch:
-            # Embed context label and structured path in content — AiRaccoon's memory_write
-            # does NOT have path/context params (passing context sets scope='custom', invisible
-            # to project-scoped search and stats). The metadata becomes part of content.
-            content_with_meta = f"[{chunk.context}] {chunk.structured_path}\n\n{chunk.content}"
+            section = chunk.structured_path.split("#", 1)[1] if "#" in chunk.structured_path else None
             await client.memory_write(
                 http,
                 project_id=PROJECT_ID,
-                content=content_with_meta,
+                content=chunk.content,
                 agent_id=chunk.structured_path,
+                source_file=chunk.source_file,
+                section=section,
             )
             written += 1
 
@@ -913,24 +917,24 @@ async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> N
     for query, expected in SPOT_CHECKS:
         result = await client.memory_search(http, PROJECT_ID, query, scope="project", limit=5, min_score=0.0)
         if isinstance(result, dict) and "results" in result:
-            # `path` is the hash-derived filename (WritePathFor), so the
-            # structured path only appears in the content/snippet — match
-            # expected against the snippet as well (hash-map contract:
-            # match by path prefix, not exact section).
+            # `path` is the hash-derived filename (WritePathFor), so the structured path
+            # lives in sourceFile (Wave 2) and the snippet — match expected against all
+            # three (hash-map contract: match by path prefix, not exact section).
             top3_paths = [r.get("path", "?") for r in result["results"][:3]]
             top3_snips = [(r.get("snippet", "") or "") for r in result["results"][:3]]
+            top3_sources = [(r.get("sourceFile") or "") for r in result["results"][:3]]
 
-            def _matches_expected(p: str, s: str) -> bool:
+            def _matches_expected(p: str, s: str, src: str) -> bool:
                 e = expected.lower()
-                if e in (p or "").lower() or e in s.lower():
+                if e in (p or "").lower() or e in s.lower() or e in src.lower():
                     return True
                 # ADR literals use "ADR-0011" but stored paths use "docs:adr:0011-…"
                 m = re.search(r"adr-(\d{3,4})", e)
-                return bool(m and m.group(1) in s.lower())
+                return bool(m and (m.group(1) in s.lower() or m.group(1) in src.lower()))
 
-            found = any(_matches_expected(p, s) for p, s in zip(top3_paths, top3_snips))
+            found = any(_matches_expected(p, s, src) for p, s, src in zip(top3_paths, top3_snips, top3_sources))
             status = "✓" if found else "✗"
-            log.info("  %s query=%r  expected=%s  top3=%s", status, query, expected, top3_paths)
+            log.info("  %s query=%r  expected=%s  top3=%s", status, query, expected, top3_sources or top3_paths)
         else:
             log.warning("  ? query=%r  unexpected response: %s", query, str(result)[:200])
 

@@ -71,6 +71,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = request.Content,
+                        sourceFile = request.SourceFile,
+                        section = request.Section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -113,6 +115,13 @@ public sealed class SqliteMemoryStore(
         }
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
+        if (SourcePathQuery.TryBuild(query.Query, out var pathExpression))
+        {
+            // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
+            // with AND semantics so the exact chunk ranks first (see SourcePathQuery); the
+            // OR fallback does not apply — the path expression is exact by construction.
+            plan = plan with { Expression = pathExpression, Fallback = null };
+        }
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
 
@@ -177,6 +186,77 @@ public sealed class SqliteMemoryStore(
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
+    }
+
+    /// <summary>
+    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
+    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
+    /// </summary>
+    internal static int CandidateWindowFor(int limit) =>
+        (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
+
+    /// <summary>
+    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
+    ///     when no engine is configured. The chunk size never exceeds the engine's documented
+    ///     max input tokens, preventing truncation dilution at embed time.
+    /// </summary>
+    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return (DefaultMaxTokens, DefaultOverlayTokens);
+        }
+
+        var model = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
+            .ConfigureAwait(false);
+        var context = EmbeddingService.ContextTokensFor(provider, model);
+        return (Math.Min(DefaultMaxTokens, context),
+            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ftsExpression is normalized, but a pathological query can still trip the FTS5
+            // tokenizer limits; a failed keyword modality degrades to the vector list.
+            return (await connection.QueryAsync<SearchRow>(
+                        new CommandDefinition(
+                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(row => new MemorySearchResult(
+                    row.Hash, row.Seq, row.Ranking, row.Path,
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
+                .ToList();
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        var rows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
+            .ToList();
+        return rows
+            .Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
+                row.SourceFile, row.ChunkIndex, row.TotalChunks))
+            .ToList();
     }
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -421,6 +501,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
+                        sourceFile = (string?)null,
+                        section = (string?)null,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -513,74 +595,6 @@ public sealed class SqliteMemoryStore(
         await connection.ExecuteAsync(
                 Def(MemorySql.UpdateEntryTtl, new { projectId, hash, ttlDays }, cancellationToken))
             .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
-    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
-    /// </summary>
-    internal static int CandidateWindowFor(int limit) => (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
-
-    /// <summary>
-    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
-    ///     when no engine is configured. The chunk size never exceeds the engine's documented
-    ///     max input tokens, preventing truncation dilution at embed time.
-    /// </summary>
-    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            return (DefaultMaxTokens, DefaultOverlayTokens);
-        }
-
-        var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
-            .ConfigureAwait(false);
-        var context = EmbeddingService.ContextTokensFor(provider, model);
-        return (Math.Min(DefaultMaxTokens, context),
-            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
-    }
-
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // ftsExpression is normalized, but a pathological query can still trip the FTS5
-            // tokenizer limits; a failed keyword modality degrades to the vector list.
-            return (await connection.QueryAsync<SearchRow>(
-                        new CommandDefinition(
-                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false))
-                .Select(row => new MemorySearchResult(
-                    row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
-                .ToList();
-        }
-        catch (SqliteException)
-        {
-            return [];
-        }
-    }
-
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
-    {
-        var rows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false))
-            .ToList();
-        return rows
-            .Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
-            .ToList();
     }
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4).</summary>
@@ -722,6 +736,8 @@ public sealed class SqliteMemoryStore(
                             hash,
                             path,
                             value = chunk,
+                            sourceFile = path,
+                            section = (string?)null,
                             scope = bucket.Scope,
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
@@ -788,6 +804,22 @@ public sealed class SqliteMemoryStore(
         {
             return ($"{alias}workspace_id = @workspaceId AND {alias}project_id = @projectId",
                 new Dictionary<string, object?> { ["workspaceId"] = context["workspace:".Length..], ["projectId"] = projectId });
+        }
+
+        if (context.StartsWith("label:", StringComparison.Ordinal))
+        {
+            // Wave 2 (plan C §3 2e): the label context contributes the label's custom-scoped
+            // rows only — project-scoped rows are already in the project batch (SearchContexts),
+            // and a union here would double-count them in RRF.
+            var rest = context["label:".Length..];
+            var colon = rest.IndexOf(':');
+            if (colon > 0)
+            {
+                var label = rest[(colon + 1)..];
+                return (
+                    $"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
+                    new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
+            }
         }
 
         return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
@@ -906,6 +938,12 @@ public sealed class SqliteMemoryStore(
         public string Snippet { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed class VectorRow
@@ -917,6 +955,12 @@ public sealed class SqliteMemoryStore(
         public string Path { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed record SourceRow(string Path, string Value);

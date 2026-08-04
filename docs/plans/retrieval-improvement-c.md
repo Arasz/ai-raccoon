@@ -122,6 +122,16 @@ prevents any zero-match.
 
 ### Wave 2 — Source as First-Class Citizen (structural foundation)
 
+> **Status: DONE ✓ (2026-08-04, branch task/w2-source-identity, ADR 0003).** Delivered:
+> `source_file` + `section` columns (migrated on open), weighted FTS (bm25 1.0/8.0/16.0),
+> source identity on `MemorySearchResult`, provenance removed from chunk content,
+> source-path queries matched against the source columns, searchable `contextLabel`.
+> Measured deviations from the gate as written: (1) S2's Decision chunk ranks ~13
+> FTS-only / beyond top-30 hybrid — FTS5 has no stemming (`decide`≠`decision`) and bm25's
+> document-length normalization crushes the 13.8 KB decision chunk; the section-level ≤3
+> target is Wave 6's dual-vector signal. (2) C2's hybrid rank collapsed (vector >100 on
+> clean content); it holds at FTS-only rank 1, fusion weighting is Wave 4's sweep.
+
 Schema changes to give the system document-level self-awareness.
 
 #### 2a. Schema: add `source_file` column

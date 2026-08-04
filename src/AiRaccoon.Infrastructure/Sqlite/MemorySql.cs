@@ -5,9 +5,9 @@ internal static class MemorySql
 {
     // embed_state defaults to 'pending': embeddings are P4 — every write lands deferred.
     public const string InsertEntry = """
-                                      INSERT INTO entries (hash, path, value, scope, project_id, context_label,
+                                      INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                            workspace_id, agent_id, created_at, updated_at)
-                                      VALUES (@hash, @path, @value, @scope, @projectId, @contextLabel,
+                                      VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
                                               @workspaceId, @agentId, @createdAt, @updatedAt)
                                       """;
 
@@ -53,15 +53,32 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
+    // Wave 2 (plan C §3 2c): the FTS index carries source_file and section as weighted
+    // columns — bm25(entries_fts, 1.0, 8.0, 16.0) gives a source-path match eight times and
+    // a section match sixteen times the signal of a body-text match, so identifier tokens
+    // (ADR-0070) and section tokens (decision) rank the owning chunk above cross-referencing
+    // prose. ChunkIndex/TotalChunks are computed per source_file partition (0 for rows
+    // without a source); the window functions live in a MATERIALIZED CTE because FTS5's
+    // bm25() cannot share a SELECT with a window function and SQLite re-executes an inlined
+    // window subquery once per FTS row (O(n²) on the corpus).
     public const string SearchByFilter = """
-                                         SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts) AS Ranking,
-                                                e.path AS Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet,
-                                                e.value AS Value
+                                         WITH candidates AS MATERIALIZED (
+                                             SELECT e.id AS Id, e.hash AS Hash, e.path AS Path, e.value AS Value,
+                                                    e.source_file AS SourceFile,
+                                                    CASE WHEN e.source_file IS NULL THEN 0
+                                                         ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
+                                                    CASE WHEN e.source_file IS NULL THEN 0
+                                                         ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
+                                             FROM entries e
+                                             WHERE {filter}
+                                         )
+                                         SELECT c.Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
+                                                c.Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet,
+                                                c.Value, c.SourceFile, c.ChunkIndex, c.TotalChunks
                                          FROM entries_fts
-                                         JOIN entries e ON e.id = entries_fts.rowid
+                                         JOIN candidates c ON c.Id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query
-                                           AND {filter}
-                                         ORDER BY bm25(entries_fts)
+                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 16.0)
                                          LIMIT @limit
                                          """;
 
@@ -71,7 +88,12 @@ internal static class MemorySql
     // modalities retrieve).
     public const string VectorSearchByFilter = """
                                                 SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
-                                                       e.value AS Value
+                                                       e.value AS Value,
+                                                       e.source_file AS SourceFile,
+                                                       CASE WHEN e.source_file IS NULL THEN 0
+                                                            ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
+                                                       CASE WHEN e.source_file IS NULL THEN 0
+                                                            ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
                                                 FROM vec_entries v
                                                 JOIN entries e ON e.id = v.rowid
                                                 WHERE {filter}

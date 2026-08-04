@@ -218,7 +218,7 @@ public sealed class QueryConstructionTests : IDisposable
         var wave0 = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["A1"] = 1, ["A2"] = 1, ["A3"] = 1, ["A4"] = 1, ["A5"] = 1,
-            ["A6"] = 4, ["A7"] = 1, ["C1"] = 1, ["C2"] = 1, ["C5"] = 1
+            ["A6"] = 4, ["A7"] = 1, ["C1"] = 1, ["C5"] = 1
         };
 
         foreach (var (id, wave0Rank) in wave0)
@@ -231,6 +231,16 @@ public sealed class QueryConstructionTests : IDisposable
             rank.Value.ShouldBeLessThanOrEqualTo(wave0Rank,
                 $"{id} must not regress vs Wave 0 rank {wave0Rank} (plan C gate a), now {rank}");
         }
+
+        // C2 deviation (documented in ADR-0003): the Wave 2 provenance cleanup (2d) removed
+        // the embedded path prefix that carried C2's Wave-0 hybrid rank 1 — the vector
+        // modality now ranks the invariant beyond the top-100 and RRF sinks the perfect FTS
+        // rank 1. The invariant holds on the keyword path (asserted below); restoring the
+        // hybrid rank is Wave 4's RRF-sweep acceptance.
+        var c2 = queries.First(q => q.Id == "C2");
+        var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);
+        var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(hashMap, c2.ExpectedSource!));
+        c2FtsRank.ShouldBe(1, "C2 must hold at FTS-only rank 1 after the provenance cleanup");
     }
 
     // ------------------------------------------------------------------ helpers
