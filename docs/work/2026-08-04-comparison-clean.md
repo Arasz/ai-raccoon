@@ -368,9 +368,13 @@ Exact-chunk @3 (limit 10): **19/19**. File @3: 19/19. Zero-match: **0** (44/44 r
 
 The FTS-only edge over hybrid on aggregate nDCG@5/recall@5 is the known fusion-regression
 observation (Wave 4/ADR 0006): a file-cluster artifact of the recall metric, not a knowledge
-loss — the exact-chunk fusion gate holds (hybrid exact rank ≤ best single modality on all 19
-queries) and hybrid wins MRR in every category. Hybrid recall@5 A1-A10 0.609 sits below
-FTS-only 0.706 because A6 (the very-hard query) contributes 1/6 file chunks to the top-5.
+loss. The exact-chunk fusion gate (hybrid exact rank ≤ best single modality) holds on the
+W4 sweep's 11 original queries; the 8 queries added in Wave 5b expose 3 violations (A9
+hybrid@3 vs FTS@2; S1, S5 hybrid@2 vs FTS@1 — the structure modality overrides a stronger
+keyword match) — scoped, documented observation, no gate regression on the swept set. Hybrid
+wins or ties MRR in every category (Structural and Invariants tie FTS at 1.000). Hybrid
+recall@5 A1-A10 0.609 sits below FTS-only 0.706 because A6 (the very-hard query) contributes
+1/6 file chunks to the top-5.
 
 ### Retrieval metrics by category (hybrid, limit 10)
 
