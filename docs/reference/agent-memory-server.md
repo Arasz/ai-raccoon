@@ -125,8 +125,12 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 |---|---|
 | `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
 | `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
-| `AIRACCOON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
-| `AIRACCOON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
+| `AIRACCOON_SYNC_ENDPOINT` | S3-compatible endpoint URL (sync) |
+| `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
+| `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
+| `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
+| `AIRACCOON_SYNC_REGION` | S3 region (sync, optional) |
+| `AIRACCOON_SYNC_OBJECT_KEY` | S3 object key (sync, optional; defaults to `memory-<projectId>.db`) |
 | `AIRACCOON_OPENAI_API_KEY` | API key for `provider=openai` embeddings |
 | `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path for `provider=local` (default: the bundled model) |
 
@@ -169,14 +173,15 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 | Missing/blank `projectId` | `invalid-params: project_id is required` |
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
 | Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'` |
-| Sync without credentials | `sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY` — both are required |
+| Sync without credentials | `sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY` |
 
-## Native extensions
+## Managed store
 
-sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 are pinned and provisioned
-per RID into `<data-root>/extensions/<rid>/` (e.g. `~/.ai-raccoon/extensions/osx-arm64/`),
-SHA-256 verified. `linux-musl-x64` has no sqlite-memory release binary — provisioning
-refuses with a clear `ExtensionProvisioningException` naming what is missing.
+All tables, indexes, FTS5 virtual table, vec0 virtual table, and triggers live in
+`memory.db` with no native extension dependencies. `MemorySchema.EnsureAsync` creates
+the schema on first open with `IF NOT EXISTS` on every DDL statement — idempotent,
+safe to run on every bank open. No download-on-first-run provisioning, no per-RID
+extension binaries, no external SQLite modules.
 
 ## Deletion and sync semantics
 
