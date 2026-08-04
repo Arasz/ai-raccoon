@@ -17,8 +17,16 @@ public sealed class RetrievalBaselineTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>Wave 0 corpus-exclusion markers (plan C step 5): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md.</summary>
-    private static readonly string[] ExcludedContentMarkers = ["docs:work", "state.json", "now.md"];
+    /// <summary>Wave 0 corpus-exclusion markers (plan C step 5): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
+    /// <remarks>Matched against the '## Source: &lt;structured_path&gt;' header only — a bare substring scan would
+    /// false-positive on legitimate prose mentions (e.g. skills that reference state.json).</remarks>
+    private static readonly string[] ExcludedContentMarkers =
+    [
+        "docs:work", "docs:state.json", "docs:now.md",
+        "ai-badger:state.json", "remember:now.md",
+    ];
+
+    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
 
     private readonly string _dataRoot;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
@@ -68,7 +76,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         _output.WriteLine(
             $"Loaded {queries.Length} baseline queries, {hashMap.Count} hash-map chunks across {fileHashes.Count} files");
 
-        var stats = await _store.GetStatsAsync("jsaa", TestContext.Current.CancellationToken);
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
         _output.WriteLine($"Database has {stats.EntryCount} entries, {stats.PendingCount} pending embeds");
 
         var scored = new List<QueryResult>();
@@ -79,7 +87,7 @@ public sealed class RetrievalBaselineTests : IDisposable
 
         foreach (var query in queries)
         {
-            var searchQuery = new SearchQuery("jsaa", query.Query, SearchScope.Project,
+            var searchQuery = new SearchQuery(ProjectId, query.Query, SearchScope.Project,
                 Limit: query.SearchLimit, MinScore: 0.0);
             var results = await _store.SearchAsync(searchQuery, TestContext.Current.CancellationToken);
 
@@ -126,7 +134,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         _output.WriteLine($"Exact-chunk match rate @3: {exactMatchesAtTop3}/{expectedSourceQueryCount} ({exactRate:P1})");
         _output.WriteLine($"File-level match rate @3: {fileMatchesAtTop3}/{expectedSourceQueryCount} ({fileRate:P1})");
 
-        var baseline = new BaselineReport("jsaa", FixedNow,
+        var baseline = new BaselineReport(ProjectId, FixedNow,
             queries.Length, totalWithResults,
             expectedSourceQueryCount, exactMatchesAtTop3, fileMatchesAtTop3,
             exactRate, fileRate, scored);
@@ -166,7 +174,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     [Fact]
     public async Task CorpusIntegrity_AllEntriesEmbedded()
     {
-        var stats = await _store.GetStatsAsync("jsaa", TestContext.Current.CancellationToken);
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
         stats.PendingCount.ShouldBe(0,
             $"Wave 0 requires a fully embedded corpus (embed_state='embedded'); " +
             $"{stats.PendingCount} entries still pending");
@@ -265,7 +273,10 @@ public sealed class RetrievalBaselineTests : IDisposable
     private static async Task<int> CountValueContainingAsync(SqliteConnection connection, string marker)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT count(*) FROM entries WHERE value LIKE '%' || $marker || '%'";
+        // Match the '## Source: <structured_path>' header only (plan C step 5: excluded dirs absent).
+        // A bare-substring scan would false-positive on legitimate prose mentions (e.g. a skill
+        // document that mentions .ai-badger/state.json in its body).
+        command.CommandText = "SELECT count(*) FROM entries WHERE value LIKE '%## Source: ' || $marker || '%'";
         command.Parameters.AddWithValue("$marker", marker);
         var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         return Convert.ToInt32(result);
