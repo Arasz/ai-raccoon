@@ -52,8 +52,7 @@ public sealed class ManagedHarness
                 $"Bundled embedding model missing: {string.Join("; ", ensured.Errors)}");
         }
 
-        var dataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-parity", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dataRoot);
+        var dataRoot = TestData.CreateTempRoot("ai-raccoon-parity");
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" },
             new NullKeyProvider());

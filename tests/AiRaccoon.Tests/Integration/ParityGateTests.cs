@@ -121,18 +121,6 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
             $"(delta {delta:F4} > {NdcgParityDelta:F2})");
     }
 
-    private static double Percentile(IReadOnlyList<double> samples, double quantile)
-    {
-        if (samples.Count == 0)
-        {
-            return 0;
-        }
-
-        var sorted = samples.OrderBy(v => v).ToList();
-        var index = (int)Math.Ceiling(quantile * sorted.Count) - 1;
-        return sorted[Math.Clamp(index, 0, sorted.Count - 1)];
-    }
-
     private static AggregateMetrics AggregateFromGolden(GoldenFile golden)
     {
         var queries = RealWorldQueries.Queries.ToDictionary(q => q.Id, StringComparer.Ordinal);

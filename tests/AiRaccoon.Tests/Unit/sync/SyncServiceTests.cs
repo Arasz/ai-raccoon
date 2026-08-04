@@ -13,8 +13,7 @@ public class SyncServiceTests : IDisposable
 
     public SyncServiceTests()
     {
-        _dataRoot = Path.Combine(Path.GetTempPath(), $"sync-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dataRoot);
+        _dataRoot = TestData.CreateTempRoot("sync-test");
     }
 
     private string BankPath => Path.Combine(_dataRoot, "memory.db");

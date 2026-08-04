@@ -110,6 +110,13 @@ public sealed class RetrievalBaselineTests : IDisposable
             TestContext.Current.CancellationToken);
         _output.WriteLine($"Baseline written to {reportPath}");
 
+        // Also copy to project root for external analysis
+        var projectRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var copyPath = Path.Combine(projectRoot, "scored-baseline.json");
+        File.Copy(reportPath, copyPath, overwrite: true);
+        _output.WriteLine($"Also copied to {copyPath}");
+
         matchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
             "at least one expected source should match at rank ≤3 after seeding");
     }

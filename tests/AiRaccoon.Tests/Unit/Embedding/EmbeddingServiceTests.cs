@@ -57,8 +57,8 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
             ],
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var same = Cosine(result[0].Vector, result[1].Vector);
-        var unrelated = Cosine(result[0].Vector, result[2].Vector);
+        var same = TestData.Cosine(result[0].Vector, result[1].Vector);
+        var unrelated = TestData.Cosine(result[0].Vector, result[2].Vector);
         same.ShouldBeGreaterThan(unrelated);
         same.ShouldBeGreaterThan(0.99);
     }
@@ -131,17 +131,4 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     public void EngineFingerprint_OpenAiWithoutBaseUrl_FallsBackToDefaultEndpoint() =>
         EmbeddingService.EngineFingerprint("openai", "text-embedding-3-small", null)
             .ShouldBe("openai:text-embedding-3-small@https://api.openai.com/v1");
-
-    private static double Cosine(ReadOnlyMemory<float> a, ReadOnlyMemory<float> b)
-    {
-        var aSpan = a.Span;
-        var bSpan = b.Span;
-        double dot = 0;
-        for (var i = 0; i < aSpan.Length; i++)
-        {
-            dot += aSpan[i] * bSpan[i];
-        }
-
-        return dot;
-    }
 }
