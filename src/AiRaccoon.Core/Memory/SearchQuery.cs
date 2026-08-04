@@ -12,7 +12,10 @@ public sealed record SearchQuery(
     int RrfK = SearchQuery.DefaultRrfK,
     int FtsWeight = 1,
     int VectorWeight = 1,
-    string? ContextLabel = null)
+    string? ContextLabel = null,
+    double SourceLambda = 0.1,
+    double ConsolidationThreshold = 0.1,
+    DocScoreFormula DocScoreFormula = DocScoreFormula.Max)
 {
     public const int DefaultRrfK = 60;
 
@@ -28,6 +31,15 @@ public sealed record SearchQuery(
     /// <summary>When set, the project scope also searches this project's custom-scoped rows under the label.</summary>
     public string? ContextLabel { get; } = ContextLabel;
 
+    /// <summary>Wave 3 adjacent-chunk boost: a same-source sibling at chunk index N±1 adds λ to the chunk's score.</summary>
+    public double SourceLambda { get; } = SourceLambda;
+
+    /// <summary>Wave 3 consolidation threshold: sibling visibility floor and the merge gap for weak adjacent siblings.</summary>
+    public double ConsolidationThreshold { get; } = ConsolidationThreshold;
+
+    /// <summary>Wave 3 document-score formula used as the secondary sort key.</summary>
+    public DocScoreFormula DocScoreFormula { get; } = DocScoreFormula;
+
     public sealed class Validator : AbstractValidator<SearchQuery>
     {
         public Validator()
@@ -40,6 +52,8 @@ public sealed record SearchQuery(
             RuleFor(x => x.FtsWeight).GreaterThanOrEqualTo(0);
             RuleFor(x => x.VectorWeight).GreaterThanOrEqualTo(0);
             RuleFor(x => x.ContextLabel).MaximumLength(256);
+            RuleFor(x => x.SourceLambda).InclusiveBetween(0.0, 1.0);
+            RuleFor(x => x.ConsolidationThreshold).GreaterThanOrEqualTo(0.0);
         }
     }
 }

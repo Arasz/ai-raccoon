@@ -188,6 +188,21 @@ source-column fix works without the vector crutch. A query for a source path
 
 ### Wave 3 — Source-Affinity Scoring (ranking improvement)
 
+> **Status: DONE ✓ (2026-08-04, branch task/w3-source-affinity, ADR 0005).** Delivered:
+> adjacent-chunk boost (λ), source consolidation and document-first ranking as a pass over
+> the fused candidate list in `SearchResultMerger` (plan C §3 items 1-3), with the sweep
+> (item 4) committed in docs/work/2026-08-04-wave3-source-affinity-sweep.md. Chosen
+> parameters (the SearchQuery defaults): **λ = 0.1, consolidation threshold = 0.1,
+> document-score formula = Max** (Sum measured identical on every grid point).
+> Measured deviations from the gate as written: A6's file rank was already 2 via W6 and is
+> held at 2 — the exact ADR-0067 Decision chunk additionally moves from a miss to rank 2.
+> The sibling-visibility floor (a sibling counts only when scoring within `maxRaw −
+> threshold`) is required: the naive full-list boost breaks C1/C2/C5 at every λ (deep
+> same-file siblings overtake the single-chunk invariants). Consolidation is conditional on
+> the same threshold and at the chosen point removes no top-10 result for the gate queries
+> (at threshold 0.15 it would merge A7's rank-3 chunk and lower nDCG@5). Full matrix and
+> per-point gates: the docs/work sweep file; design rationale: ADR 0005.
+
 1. **Adjacent chunk boost**: chunk N±1 from the same source gets a λ boost (sweep λ ∈
    {0.05, 0.1, 0.2}).
 2. **Source consolidation**: for each source file, take the best-scoring chunk and optionally

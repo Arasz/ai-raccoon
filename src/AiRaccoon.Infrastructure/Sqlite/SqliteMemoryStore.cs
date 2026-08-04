@@ -116,11 +116,14 @@ public sealed class SqliteMemoryStore(
         }
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        if (SourcePathQuery.TryBuild(query.Query, out var pathExpression))
+        // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
+        // with AND semantics so the exact chunk ranks first (see SourcePathQuery); the
+        // OR fallback does not apply — the path expression is exact by construction.
+        // Wave 3: the source-affinity pass is skipped for path queries — the exact chunk
+        // is the answer by construction and sibling boosts would displace it.
+        var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
+        if (isPathQuery)
         {
-            // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
-            // with AND semantics so the exact chunk ranks first (see SourcePathQuery); the
-            // OR fallback does not apply — the path expression is exact by construction.
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
@@ -195,7 +198,8 @@ public sealed class SqliteMemoryStore(
             }
         }
 
-        var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
+        var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK,
+            isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
     }
