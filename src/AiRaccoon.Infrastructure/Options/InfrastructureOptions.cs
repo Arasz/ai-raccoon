@@ -23,12 +23,13 @@ public sealed record InfrastructureOptions
 
     public SyncOptions Sync { get; init; } = new();
 
-    /// <summary>Data root resolution: AIRACCOON_DATA_ROOT, else ~/.ai-raccoon (spec §5.1).</summary>
-    public static string DefaultDataRoot()
-    {
-        var env = Environment.GetEnvironmentVariable("AIRACCOON_DATA_ROOT");
-        return !string.IsNullOrWhiteSpace(env)
-            ? env
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
-    }
+    /// <summary>Global access-mode seed (ro|rw|full); null = no seed (validated by AccessModePolicy at seed time).</summary>
+    public string? AccessMode { get; init; }
+
+    /// <summary>Custom ONNX embedding model path; null = the bundled model.</summary>
+    public string? EmbeddingModelPath { get; init; }
+
+    /// <summary>Data root fallback: ~/.ai-raccoon (spec §5.1); the caller resolves env/CLI overrides.</summary>
+    public static string DefaultDataRoot() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
 }
