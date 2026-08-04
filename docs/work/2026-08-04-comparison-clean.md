@@ -317,7 +317,7 @@ Commit: ab44a09. Full suite 576 passed / 0 failed / 43 skipped. Corpus unchanged
 
 ## Final Baseline Report — 2026-08-04 (post-Wave-5b)
 
-Commit: f84a6cb. Full suite 580 passed / 0 failed / 43 skipped. Corpus unchanged (752 chunks,
+Commit: 8f2b28c. Full suite 580 passed / 0 failed / 43 skipped. Corpus unchanged (752 chunks,
 752 embedded, provider=local). Catalog: **44 queries** (+8 in Wave 5b: A8/A9/A10
 reconciliation + S1/S3/S4/S5/S6 structural completion), **19 expected-source** queries.
 Exact-chunk @3 (limit 10): **19/19**. File @3: 19/19. Zero-match: **0** (44/44 returned results).
