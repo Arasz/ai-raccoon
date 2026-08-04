@@ -79,6 +79,9 @@ public sealed class WatchCatchUpTests
         var stack = new WatchTestStack();
         stack.Enable();
         stack.AllowScope(dir.Path);
+        // The fake's Ingested list is not thread-safe; serialize digests (concurrency 1 is a
+        // valid config — the concurrency behavior itself is pinned by S4's scheduler tests).
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
         var catchUp = NewCatchUp(stack);
 
@@ -129,6 +132,9 @@ public sealed class WatchCatchUpTests
         var stack = new WatchTestStack();
         stack.Enable();
         stack.AllowScope(dir.Path);
+        // The fake's Ingested list is not thread-safe; serialize digests (concurrency 1 is a
+        // valid config — the concurrency behavior itself is pinned by S4's scheduler tests).
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
         var catchUp = NewCatchUp(stack);
 
