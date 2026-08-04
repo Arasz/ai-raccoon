@@ -187,6 +187,9 @@ internal static class MemorySql
         "SELECT id AS Id, value AS Value FROM entries WHERE project_id = @projectId AND embed_state = 'embedded' " +
         "ORDER BY id";
 
+    public const string SelectAllEmbedded =
+        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
+
     public const string CommittedContexts = """
                                             SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
                                             FROM entries
@@ -223,6 +226,16 @@ internal static class MemorySql
     public const string SelectSetting =
         """
         SELECT value FROM settings WHERE key = @key LIMIT 1
+        """;
+
+    public const string SelectSettingsByPrefix =
+        """
+        SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key
+        """;
+
+    public const string DeleteSetting =
+        """
+        DELETE FROM settings WHERE key = @key
         """;
 
     public const string UpdateEntryTtl =

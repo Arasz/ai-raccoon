@@ -22,26 +22,14 @@ public static partial class Dependencies
 {
     public static void RegisterMemoryServices(this IServiceCollection services, InfrastructureOptions options)
     {
-        // Sync credentials stay environment-only: layered here (the composition root),
-        // never via CLI options and never in ServerConfig.Build. All other options are
-        // pre-merged by ServerConfig.Build (CLI > env > default).
-        options = options with
-        {
-            Sync = options.Sync with
-            {
-                AccessKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ACCESS_KEY"),
-                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY")
-            }
-        };
-
         services.AddSingleton(options);
-        services.AddSingleton(options.Sync);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEncryptionKeyProvider>(_ =>
             new EnvEncryptionKeyProvider());
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
             sp.GetRequiredService<IEncryptionKeyProvider>()));
+        services.AddSingleton<SyncCloudStoreFactory>();
         services.AddSingleton<EmbeddingService>();
         services.AddSingleton<SqliteMemoryStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
@@ -52,19 +40,8 @@ public static partial class Dependencies
             [sp.GetRequiredService<RetrievalRatingExtension>()]));
         services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<MemoryExtensionHost>());
         services.AddSingleton<RetrievalRatingExtension>();
-        services.AddSingleton<ICloudStore>(sp =>
-        {
-            var syncOpts = sp.GetRequiredService<SyncOptions>();
-            if (!syncOpts.IsConfigured)
-            {
-                return new NullCloudStore();
-            }
-
-            return new S3CloudStore(syncOpts,
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger<S3CloudStore>());
-        });
         services.AddSingleton(sp => new SyncService(
-            sp.GetRequiredService<ICloudStore>(),
+            ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
             async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
             async (path, ct) =>
             {

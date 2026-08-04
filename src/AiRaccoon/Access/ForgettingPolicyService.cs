@@ -5,17 +5,14 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Access;
 
 /// <summary>
-///     Forgetting knobs (FR-NM-2): sweep threshold and per-entry ttl_days overrides. Both are
-///     destructive adjustments, so they run behind the full-mode guard.
+///     Forgetting knobs (FR-NM-2): the sweep rating threshold (sweep.ttl_days was removed
+///     by the single-channel ruling — only per-entry TTLs remain, as data not config).
 /// </summary>
 public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access)
 {
     public const string SweepThresholdSettingKey = "sweep.threshold";
-    public const string SweepTtlDaysSettingKey = "sweep.ttl_days";
 
     public const double DefaultSweepThreshold = 0.3;
-
-    public const double DefaultSweepTtlDays = 30;
 
     public async Task<double> GetSweepThresholdAsync(string projectId, CancellationToken cancellationToken = default)
     {
@@ -25,13 +22,6 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
             : DefaultSweepThreshold;
     }
 
-    public async Task<double> GetSweepTtlDaysAsync(string projectId, CancellationToken cancellationToken = default)
-    {
-        var raw = await store.GetSettingAsync(SweepTtlDaysSettingKey, cancellationToken).ConfigureAwait(false);
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var ttl)
-            ? ttl
-            : DefaultSweepTtlDays;
-    }
 
     public async Task SetSweepThresholdAsync(string projectId, double threshold,
         CancellationToken cancellationToken = default)

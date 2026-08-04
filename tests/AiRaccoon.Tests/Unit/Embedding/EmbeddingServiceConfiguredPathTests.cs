@@ -1,14 +1,10 @@
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
-/// <summary>
-///     The merged EmbeddingModelPath (--embedding-model / AIRACCOON_EMBEDDING_MODEL) wins
-///     over the bundled model when settings.Model is empty.
-/// </summary>
+/// <summary>The settings row embedding.model (written by `model set local &lt;path&gt;`) overrides the bundled model.</summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
@@ -28,23 +24,23 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
     }
 
     [Fact]
-    public void CreateGenerator_UsesConfiguredPath_WhenSettingsModelEmpty()
+    public void CreateGenerator_UsesSettingsModelPath()
     {
         var custom = Path.Combine(_root, "custom.onnx");
         File.Copy(BundledModel.ResolveModelPath(), custom);
 
-        var service = new EmbeddingService(new InfrastructureOptions { EmbeddingModelPath = custom });
+        var service = new EmbeddingService();
 
-        using var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null));
+        using var generator = service.CreateGenerator(new EmbeddingSettings("local", custom, null, null));
         generator.ShouldNotBeNull();
     }
 
     [Fact]
-    public void CreateGenerator_MissingConfiguredPath_Throws()
+    public void CreateGenerator_MissingSettingsModelPath_Throws()
     {
-        var service = new EmbeddingService(
-            new InfrastructureOptions { EmbeddingModelPath = Path.Combine(_root, "missing.onnx") });
+        var service = new EmbeddingService();
 
-        Should.Throw<Exception>(() => service.CreateGenerator(new EmbeddingSettings("local", null, null, null)));
+        Should.Throw<Exception>(() =>
+            service.CreateGenerator(new EmbeddingSettings("local", Path.Combine(_root, "missing.onnx"), null, null)));
     }
 }

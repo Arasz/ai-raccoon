@@ -12,7 +12,7 @@ namespace AiRaccoon.Infrastructure.Degradation;
 public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
 {
     public async Task<SweepOutcome> SweepAsync(
-        string projectId, double threshold, double ttlDays, bool dryRun, CancellationToken cancellationToken = default)
+        string projectId, double threshold, bool dryRun, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
@@ -41,7 +41,8 @@ public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
             var rating = metadata?.Rating ?? RatingPolicy.DefaultBaseScore;
             var ageDays = Math.Max(0, (now - entry.CreatedAt) / 86_400.0);
 
-            if (!DegradationPolicy.ShouldDegrade(rating, ageDays, threshold, ttlDays, metadata?.TtlDays))
+            // Only entries with an explicit per-entry TTL degrade (global ttl knob removed).
+            if (!DegradationPolicy.ShouldDegrade(rating, ageDays, threshold, metadata?.TtlDays))
             {
                 continue;
             }

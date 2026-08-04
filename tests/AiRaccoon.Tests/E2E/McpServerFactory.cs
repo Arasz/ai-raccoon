@@ -1,3 +1,8 @@
+using AiRaccoon.Core.Access;
+using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
@@ -6,38 +11,29 @@ using ModelContextProtocol.Client;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Boots the real HTTP MCP server (MCP_TRANSPORT=http) in-process over
-///     WebApplicationFactory and exposes an MCP client bound to it. Each instance
-///     gets its own temp data root. No sqliteai native extensions are needed —
-///     vec0 comes from the NuGet package and FTS5 from the bundled SQLite.
-///     The server reads MCP_TRANSPORT / AIRACCOON_DATA_ROOT from the environment, so
-///     those are set before the host starts and restored on dispose — E2E tests must
-///     therefore run in a non-parallel collection (see E2ETestCollection).
+///     Boots the real HTTP MCP server in-process over WebApplicationFactory and exposes an
+///     MCP client bound to it. Each instance gets its own temp data root. Launch identity
+///     flows through the real entry point's args: WebApplicationFactory renders
+///     UseSetting values as --key=value args (transport/data-root/install-scope), which the
+///     parse-first Program consumes like any user invocation. The global access mode is
+///     runtime config (single channel), so the factory seeds access.mode.global=full the
+///     same way `ai-raccoon access default set full` would — before the first bank open.
 /// </summary>
 public sealed class McpServerFactory : WebApplicationFactory<Program>
 {
-    private readonly string? _previousAccessMode;
-    private readonly string? _previousDataRoot;
-    private readonly string? _previousTransport;
+    private readonly InstallScope _scope;
     private bool _disposed;
 
-    public McpServerFactory()
-    {
-        _previousTransport = Environment.GetEnvironmentVariable("MCP_TRANSPORT");
-        _previousDataRoot = Environment.GetEnvironmentVariable("AIRACCOON_DATA_ROOT");
-        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2
-        // (the seed at bank open turns this env value into the global access.mode setting).
-        _previousAccessMode = Environment.GetEnvironmentVariable("AIRACCOON_ACCESS_MODE");
-        Environment.SetEnvironmentVariable("MCP_TRANSPORT", "http");
-        Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", DataRoot);
-        Environment.SetEnvironmentVariable("AIRACCOON_ACCESS_MODE", "full");
-    }
+    public McpServerFactory(InstallScope scope = InstallScope.User) => _scope = scope;
 
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
 
     public async Task<McpClient> CreateClientAsync()
     {
+        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2
+        // (the settings row is read per call by the access guard).
+        await SeedGlobalAccessModeAsync();
         var httpClient = CreateClient();
         var transport = new HttpClientTransport(
             new HttpClientTransportOptions
@@ -52,9 +48,28 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         return await McpClient.CreateAsync(transport);
     }
 
+    private async Task SeedGlobalAccessModeAsync()
+    {
+        var store = new SqliteMemoryStore(
+            new SqliteConnectionFactory(
+                new InfrastructureOptions { DataRoot = DataRoot, Scope = _scope },
+                new EnvEncryptionKeyProvider()),
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+        await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        // WebApplicationFactory turns UseSetting into entry-point args (--key=value), the
+        // launch-identity channel the server reads after the env-merge removal.
+        builder.UseSetting("transport", "http");
+        builder.UseSetting("data-root", DataRoot);
+        if (_scope == InstallScope.Project)
+        {
+            builder.UseSetting("install-scope", "project");
+        }
+
         builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
     }
 
@@ -67,9 +82,6 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
         _disposed = true;
         base.Dispose(disposing);
-        Environment.SetEnvironmentVariable("MCP_TRANSPORT", _previousTransport);
-        Environment.SetEnvironmentVariable("AIRACCOON_DATA_ROOT", _previousDataRoot);
-        Environment.SetEnvironmentVariable("AIRACCOON_ACCESS_MODE", _previousAccessMode);
         try
         {
             Directory.Delete(DataRoot, true);

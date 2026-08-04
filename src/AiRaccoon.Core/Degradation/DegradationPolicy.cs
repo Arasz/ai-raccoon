@@ -1,9 +1,12 @@
 namespace AiRaccoon.Core.Degradation;
 
-/// <summary>Candidate selection: an entry degrades only when it is both old enough and rated low enough.</summary>
+/// <summary>
+///     Candidate selection: an entry degrades only when it has an explicit per-entry TTL
+///     and is both old enough and rated low enough (the global sweep.ttl_days knob was
+///     removed by the single-channel ruling).
+/// </summary>
 public static class DegradationPolicy
 {
-    public static bool ShouldDegrade(double rating, double ageDays, double threshold, double ttlDays) => rating < threshold && ageDays > ttlDays;
-
-    public static bool ShouldDegrade(double rating, double ageDays, double threshold, double ttlDays, double? ttlOverrideDays) => rating < threshold && ageDays > (ttlOverrideDays ?? ttlDays);
+    public static bool ShouldDegrade(double rating, double ageDays, double threshold, double? ttlDays) =>
+        ttlDays.HasValue && rating < threshold && ageDays > ttlDays.Value;
 }

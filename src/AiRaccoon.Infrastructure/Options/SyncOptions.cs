@@ -1,6 +1,6 @@
 namespace AiRaccoon.Infrastructure.Options;
 
-/// <summary>Sync credentials from AIRACCOON_SYNC_* environment variables; never hardcoded.</summary>
+/// <summary>Sync settings resolved per memory_sync call from the sync.* settings rows.</summary>
 public sealed record SyncOptions
 {
     public string? Endpoint { get; init; }

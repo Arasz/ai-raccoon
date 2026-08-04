@@ -100,9 +100,9 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         CancellationToken cancellationToken = default) =>
         await inner.IngestDirectoryAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
 
-    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-        string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
-        await inner.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, apiKey, cancellationToken)
+    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        await inner.ConfigureEmbeddingAsync(provider, model, baseUrl, cancellationToken)
             .ConfigureAwait(false);
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -126,6 +126,13 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
 
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
         await inner.SetSettingAsync(key, value, cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        await inner.GetSettingsByPrefixAsync(prefix, cancellationToken).ConfigureAwait(false);
+
+    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        await inner.DeleteSettingAsync(key, cancellationToken).ConfigureAwait(false);
 
     public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default) =>

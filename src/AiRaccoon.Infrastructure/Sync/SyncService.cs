@@ -5,12 +5,20 @@ namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>Row-merge sync over S3-compatible object storage: VACUUM INTO snapshot → pull → ATTACH+merge → push If-Match.</summary>
 public partial class SyncService(
-    ICloudStore cloud,
+    Func<CancellationToken, Task<ICloudStore>> resolveCloud,
     Func<CancellationToken, Task<SqliteConnection>> openBank,
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
     ILogger<SyncService> logger)
 {
+    /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
+    public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
+        Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
+        TimeProvider timeProvider, ILogger<SyncService> logger)
+        : this(_ => Task.FromResult(cloud), openBank, openReadOnly, timeProvider, logger)
+    {
+    }
+
     private const int MaxPushRetries = 3;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -34,6 +42,10 @@ public partial class SyncService(
     private async Task<SyncResult> SyncCycleAsync(string projectId, string objectKey,
         CancellationToken cancellationToken)
     {
+        // F13: the cloud store is resolved per call from the current settings rows —
+        // `sync add/remove` take effect without a restart.
+        var cloud = await resolveCloud(cancellationToken).ConfigureAwait(false);
+
         // 1. VACUUM INTO a temp snapshot of the current local bank.
         var localSnapshot = Path.GetTempFileName();
         try

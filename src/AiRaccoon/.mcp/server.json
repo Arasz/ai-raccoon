@@ -13,17 +13,7 @@
             },
             "packageArguments": [],
             "environmentVariables": [
-                "AIRACCOON_DATA_ROOT",
-                "AIRACCOON_INSTALL_SCOPE",
-                "AIRACCOON_ACCESS_MODE",
-                "AIRACCOON_OPENAI_API_KEY",
-                "AIRACCOON_EMBEDDING_MODEL",
-                "AIRACCOON_SYNC_ENDPOINT",
-                "AIRACCOON_SYNC_BUCKET",
-                "AIRACCOON_SYNC_ACCESS_KEY",
-                "AIRACCOON_SYNC_SECRET_KEY",
-                "AIRACCOON_SYNC_REGION",
-                "AIRACCOON_SYNC_OBJECT_KEY"
+                "AIRACCOON_DB_PASSPHRASE"
             ]
         }
     ],

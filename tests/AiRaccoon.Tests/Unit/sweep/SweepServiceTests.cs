@@ -21,7 +21,7 @@ public class SweepServiceTests
         var store = new FakeStore { Rating = 0.1 };
         var service = Service(store);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, true, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, true, TestContext.Current.CancellationToken);
 
         outcome.Candidates.Count.ShouldBe(1);
         outcome.Candidates[0].Hash.ShouldBe("old-low");
@@ -35,7 +35,7 @@ public class SweepServiceTests
         var store = new FakeStore { Rating = 0.1 };
         var service = Service(store);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
 
         outcome.DeletedHashes.ShouldContain("old-low");
         store.Deleted.ShouldContain("old-low");
@@ -47,7 +47,21 @@ public class SweepServiceTests
         var store = new FakeStore { Rating = 0.9 };
         var service = Service(store);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
+
+        outcome.Candidates.ShouldBeEmpty();
+        store.Deleted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SweepAsync_EntryWithoutPerEntryTtl_IsNeverSwept()
+    {
+        // The global sweep.ttl_days knob was removed: only entries with an explicit
+        // per-entry TTL can degrade.
+        var store = new FakeStore { Rating = 0.1, TtlDays = null };
+        var service = Service(store);
+
+        var outcome = await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
 
         outcome.Candidates.ShouldBeEmpty();
         store.Deleted.ShouldBeEmpty();
@@ -61,7 +75,7 @@ public class SweepServiceTests
         store.SharedHashes.Add("old-low");
         var service = Service(store);
 
-        await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
+        await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
 
         store.Deleted.ShouldBeEmpty();
     }
@@ -72,7 +86,7 @@ public class SweepServiceTests
         var store = new FakeStore { Rating = null }; // no on-row metadata exists
         var service = Service(store);
 
-        var outcome = await service.SweepAsync("acme", 0.3, 30, false, TestContext.Current.CancellationToken);
+        var outcome = await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
 
         // Missing metadata falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
         // entry must NOT be swept just because it was never searched (FR-MEM-1.15).
@@ -83,6 +97,8 @@ public class SweepServiceTests
     private sealed class FakeStore : IMemoryStore
     {
         public double? Rating { get; set; } = 0.1;
+
+        public int? TtlDays { get; set; } = 30;
 
         public List<string> Deleted { get; } = [];
 
@@ -128,8 +144,8 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -162,12 +178,18 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(Rating is null
                 ? null
-                : new EntryMetadata(Rating.Value, null));
+                : new EntryMetadata(Rating.Value, TtlDays));
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 
         public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

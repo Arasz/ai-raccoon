@@ -1,5 +1,9 @@
 using System.Text.Json;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Setup;
 using AiRaccoon.Tests.Unit.Embedding;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -188,11 +192,9 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Embeddings_ConfigureLocal_BundledEngine_EmbedsWritesEndToEnd()
     {
-        // FR-NM-3 s1: provider local embeds in-process with the bundled model — no sidecar,
-        // no download, no server process.
-        var configure = await CallAsync("memory_configure",
-            ("projectId", "acme"), ("provider", "local"));
-        Text(configure).ShouldContain("\"engine\":\"local:bundled\"");
+        // FR-NM-3 s1: the CLI config channel configures the engine (memory_configure was
+        // removed by the single-channel ruling); the running server hot-reloads the row.
+        await RunConfigCliAsync("model", "set", "local");
 
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "locally embedded e2e fact"));
@@ -205,13 +207,8 @@ public class McpServerE2ETests : IAsyncLifetime
     public async Task Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint()
     {
         // FR-NM-3 s3: any OpenAI-compatible baseUrl replaces the default engine.
-        var configure = await CallAsync("memory_configure",
-            ("projectId", "acme"),
-            ("provider", "openai"),
-            ("baseUrl", _openAi.BaseUrl),
-            ("model", "nomic-embed-text"),
-            ("apiKey", "test-key-123"));
-        Text(configure).ShouldContain($"\"engine\":\"openai:nomic-embed-text@{_openAi.BaseUrl}\"");
+        await RunConfigCliAsync("model", "set", "openai", "nomic-embed-text", _openAi.BaseUrl,
+            "--api-key", "test-key-123");
 
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "routed e2e fact"));
@@ -231,7 +228,7 @@ public class McpServerE2ETests : IAsyncLifetime
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "queued e2e fact"));
 
-        await CallAsync("memory_configure", ("projectId", "acme"), ("provider", "local"));
+        await RunConfigCliAsync("model", "set", "local");
 
         var embed = await CallAsync("memory_embed_pending", ("projectId", "acme"));
         var embedText = Text(embed);
@@ -246,6 +243,24 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         var dict = arguments.ToDictionary(a => a.Key, a => a.Value);
         return await _client.CallToolAsync(tool, dict, null, null, CancellationToken.None);
+    }
+
+    private async Task RunConfigCliAsync(params string[] args)
+    {
+        // Runs the real config-command pipeline against the factory's bank — the same
+        // composition Program.cs uses for `ai-raccoon <verb>`.
+        var parsed = CliArgs.Parse(args);
+        parsed.Errors.ShouldBeEmpty();
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var store = new SqliteMemoryStore(
+            new SqliteConnectionFactory(
+                new InfrastructureOptions { DataRoot = _factory.DataRoot },
+                new EnvEncryptionKeyProvider()),
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
+            CancellationToken.None);
+        exit.ShouldBe(0, stderr.ToString());
     }
 
     private static string Text(CallToolResult result)
