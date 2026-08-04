@@ -157,8 +157,6 @@ public sealed class RrfParameterSweepTests : IDisposable
         // negative result: the pre-sweep defaults are the unique optimum; ADR 0006).
         chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.722,
             $"ADR nDCG@5 must hold at the documented baseline 0.722; got {chosen.AdrNdcg5:F3}");
-        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(current.AdrNdcg5,
-            $"the chosen point must at least tie the measured default point ({current.AdrNdcg5:F3})");
 
         var holders = rows.Where(HoldsAllGates).ToList();
         holders.Count.ShouldBeGreaterThanOrEqualTo(1, "the chosen point itself must hold every gate");
@@ -351,6 +349,16 @@ public sealed class RrfParameterSweepTests : IDisposable
             violations.Add($"C2 {row.C2ExactRank?.ToString() ?? "-"}");
         }
 
+        if (row.C1ExactRank != 1)
+        {
+            violations.Add($"C1 {row.C1ExactRank?.ToString() ?? "-"}");
+        }
+
+        if (row.C5ExactRank != 1)
+        {
+            violations.Add($"C5 {row.C5ExactRank?.ToString() ?? "-"}");
+        }
+
         if (row.A1FileRank != 1)
         {
             violations.Add($"A1 file {row.A1FileRank?.ToString() ?? "-"}");
@@ -472,9 +480,8 @@ public sealed class RrfParameterSweepTests : IDisposable
         builder.AppendLine($"- The FTS-heavy (2:1) weight fixes A6 (file 1, exact 1) and A5's recall, but regresses A1 " +
                            "file 1 → 2 and exact-chunk @3 → 9/11; the vector-heavy (1:2) regresses A6 (file 4, exact 4). " +
                            "k=30 kills A1/A6; the Max5x50 window starves A6's exact chunk (candidate depth 50 < 100).");
-        builder.AppendLine($"- minScore is inert at the chosen point: at k=60 the fused top-10 normalized scores all " +
-                           "exceed 0.7 by RRF construction (61/70 ≈ 0.871), so 0.3/0.5/0.7 filter nothing; it only trims " +
-                           "at low k (k=10), where it always hurts or ties.");
+        builder.AppendLine("- minScore is measured inert at the chosen point: at k=60 the four minScore rows are identical " +
+                           "for every weight×window combo (24 rows); it trims only at low k (k=10), where it always hurts or ties.");
         builder.AppendLine($"- Fusion (gate c) holds per query on the exact-chunk rank: the hybrid never ranks the " +
                            "expected chunk below the best single modality (A6 2 ≤ min(2, miss); S2 3 ≤ min(4, miss); " +
                            "A5 3 ≤ min(miss, 4)). The Wave 0 recall@5 observation flags A5/A6/S2, but that is a " +

@@ -41,18 +41,19 @@ eleven queries.
 
 ## Consequences
 
-- **Negative result, measured.** 11 of 96 points score above 0.722 on nDCG@5; every one
+- **Negative result, measured.** 24 of 96 points score above 0.722 on nDCG@5; every one
   violates at least one gate. The best raw point (k=120, 1:1, Max3x100: nDCG@5 0.775,
   MRR 0.929, recall@5 0.677) regresses A1 file 1 → 2, A6 exact 2 → 6, and exact-chunk
   @3 11/11 → 9/11. The FTS-heavy (2:1) weight fixes A6 (file 1, exact 1) but regresses
   A1 file → 2 and exact@3 → 9/11; vector-heavy (1:2) regresses A6 (file 4, exact 4);
   k=30 kills A1/A6; the Max5x50 window starves A6's exact chunk (50 < 100 candidates
   per modality).
-- **minScore is inert at the chosen point.** At k=60 the fused top-10 normalized scores
-  all exceed 0.7 by RRF construction (the 10th result scores ≥ 61/70 ≈ 0.871), so
-  0.3/0.5/0.7 filter nothing; at k=10 it trims the tail and always hurts or ties. The
-  measured baseline (minScore 0.0) and the tool default (0.7) are equivalent at the
-  chosen point.
+- **minScore is measured inert at the chosen point.** At k=60 the four minScore rows are
+  identical for every weight×window combo (24 rows); at k=10 it trims the tail and always
+  hurts or ties. (The construction bound is conditional: with a dual-retrieved rank-1 max,
+  a single-modality rank-10 result normalizes to 61/140 ≈ 0.44 and would be filtered —
+  measured inertness is what holds at k=60.) The measured baseline (minScore 0.0) and the
+  tool default (0.7) are equivalent at the chosen point.
 - **Fusion gate definition.** "No fusion regression" is enforced on the exact-chunk rank:
   the hybrid never ranks the expected chunk below the best single modality (A6 2 ≤
   min(2, miss), S2 3 ≤ min(4, miss), A5 3 ≤ min(miss, 4)). The Wave 0 recall@5
@@ -79,9 +80,10 @@ eleven queries.
 - **k=30, 2:1** (nDCG@5 0.752): rejected — A6 file 3, A6 exact 4, exact@3 9/11, A4
   exact lost from the top 10.
 - **Max5x50 window**: rejected — at limit 10 it halves the per-modality candidate depth
-  (50 vs 100) and starves A6's exact chunk everywhere (A6 exact 5-10 or missing).
-- **minScore 0.3/0.5/0.7**: no measured effect at the chosen point (top-10 scores all
-  ≥ 0.7); rejected as a no-op with tail-trim risk at other k.
+  (50 vs 100) and starves A6's exact chunk at most points (A6 exact 5-10 or missing;
+  two points keep it — k=60/120 2:1 — but all Max5x50 points regress A1 file 1 → 2).
+- **minScore 0.3/0.5/0.7**: no measured effect at the chosen point (all four k=60 rows
+  identical per weight×window combo); rejected as a no-op with tail-trim risk at other k.
 - **Recall@5-based fusion gate**: rejected as the hard gate — it flags the hybrid's
   top-5 diversity (fewer same-file chunks) rather than answer-chunk quality, and no
   grid point satisfies it for A6; kept as a documented observation only.
