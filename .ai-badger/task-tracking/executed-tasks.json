@@ -280,10 +280,11 @@
       "branch": "task/hook-metrics-and-traces",
       "risk": false,
       "startedAt": "2026-08-04T14:58:26.921243+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-04T15:27:54.587580+00:00",
+      "state": "FINISHED",
       "resumeCommand": "claude --resume 20260804_165711_e2b235",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }
