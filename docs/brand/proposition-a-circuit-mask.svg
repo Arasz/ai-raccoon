@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="AiRaccoon logo proposition A: a circuit-masked raccoon peeking over a terminal window">
+  <title>AiRaccoon — Circuit Mask Raccoon</title>
+
+  <defs>
+    <clipPath id="a-head">
+      <path d="M128 40c44 0 76 24 82 60 5 30-8 56-30 72-13 10-30 16-52 16s-39-6-52-16c-22-16-35-42-30-72 6-36 38-60 82-60z"/>
+    </clipPath>
+    <linearGradient id="a-field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16202C"/>
+      <stop offset="1" stop-color="#0A1017"/>
+    </linearGradient>
+    <linearGradient id="a-fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2F5F8"/>
+      <stop offset="1" stop-color="#C0CCD9"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#a-field)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#2BD9C0" stroke-opacity=".3" stroke-width="3"/>
+
+  <!-- circuitry in the field, flanking the head -->
+  <g stroke="#2BD9C0" stroke-opacity=".4" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="M26 96V64h26"/>
+    <path d="M230 96V64h-26"/>
+  </g>
+  <g fill="#2BD9C0" fill-opacity=".55">
+    <circle cx="52" cy="64" r="4"/><circle cx="204" cy="64" r="4"/>
+  </g>
+
+  <!-- the raccoon, peeking over the terminal -->
+  <g transform="translate(43.5,-2) scale(0.66)">
+    <!-- ears -->
+    <g stroke="#0A1017" stroke-width="5">
+      <circle cx="62" cy="50" r="24" fill="url(#a-fur)"/>
+      <circle cx="194" cy="50" r="24" fill="url(#a-fur)"/>
+      <circle cx="62" cy="52" r="12" fill="#1B232E" stroke="none"/>
+      <circle cx="194" cy="52" r="12" fill="#1B232E" stroke="none"/>
+      <circle cx="62" cy="52" r="5" fill="#2BD9C0" stroke="none"/>
+      <circle cx="194" cy="52" r="5" fill="#2BD9C0" stroke="none"/>
+    </g>
+
+    <!-- head -->
+    <path d="M128 40c44 0 76 24 82 60 5 30-8 56-30 72-13 10-30 16-52 16s-39-6-52-16c-22-16-35-42-30-72 6-36 38-60 82-60z" fill="url(#a-fur)"/>
+
+    <g clip-path="url(#a-head)">
+      <!-- bandit mask -->
+      <path d="M54 84Q58 52 96 50L160 50Q198 52 202 84L206 116Q200 146 172 150Q150 154 136 144Q128 138 120 144Q106 154 84 150Q56 146 50 116Z" fill="#161C24"/>
+      <!-- white spectacles around the eyes -->
+      <circle cx="97" cy="104" r="16" fill="#F2F5F8"/>
+      <circle cx="159" cy="104" r="16" fill="#F2F5F8"/>
+      <!-- circuit traces through the mask -->
+      <g fill="none" stroke="#2BD9C0" stroke-width="3.6" stroke-linecap="round">
+        <path d="M62 62Q96 56 128 56Q160 56 194 62"/>
+        <path d="M62 92Q96 86 128 86Q160 86 194 92"/>
+        <path d="M58 112Q56 130 68 140"/>
+        <path d="M198 112Q200 130 188 140"/>
+      </g>
+      <g fill="#2BD9C0">
+        <circle cx="128" cy="56" r="4"/>
+        <circle cx="66" cy="92" r="4"/><circle cx="190" cy="92" r="4"/>
+        <circle cx="68" cy="140" r="4"/><circle cx="188" cy="140" r="4"/>
+      </g>
+      <!-- eyes -->
+      <g>
+        <circle cx="97" cy="104" r="13" fill="#0B1017"/>
+        <circle cx="159" cy="104" r="13" fill="#0B1017"/>
+        <circle cx="97" cy="104" r="9.5" fill="#2BD9C0"/>
+        <circle cx="159" cy="104" r="9.5" fill="#2BD9C0"/>
+        <circle cx="97" cy="104" r="4.6" fill="#07272C"/>
+        <circle cx="159" cy="104" r="4.6" fill="#07272C"/>
+        <circle cx="100.5" cy="100" r="3.2" fill="#FFFFFF"/>
+        <circle cx="162.5" cy="100" r="3.2" fill="#FFFFFF"/>
+      </g>
+    </g>
+
+    <!-- muzzle -->
+    <ellipse cx="128" cy="172" rx="36" ry="24" fill="#F7FAFC"/>
+    <path d="M117 156h22q4 0 4 4q0 12-15 18-15-6-15-18q0-4 4-4z" fill="#161C24"/>
+    <g fill="none" stroke="#161C24" stroke-width="4.2" stroke-linecap="round">
+      <path d="M128 178v6"/>
+      <path d="M128 184q-8 8-15 1"/>
+      <path d="M128 184q8 8 15 1"/>
+    </g>
+  </g>
+
+  <!-- terminal window -->
+  <g>
+    <rect x="16" y="122" width="224" height="118" rx="18" fill="#111823"/>
+    <path d="M16 140h224v-.5c0-9.9-8.1-18-18-18H34c-9.9 0-18 8.1-18 18z" fill="#1C2634"/>
+    <rect x="16" y="122" width="224" height="118" rx="18" fill="none" stroke="#2BD9C0" stroke-opacity=".28" stroke-width="2.5"/>
+    <!-- prompt -->
+    <path d="M38 163l16 12-16 12" fill="none" stroke="#2BD9C0" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="66" y="161" width="13" height="28" rx="3" fill="#2BD9C0"/>
+    <g fill="#FFFFFF" fill-opacity=".22">
+      <rect x="38" y="206" width="112" height="11" rx="5.5"/>
+      <rect x="160" y="206" width="46" height="11" rx="5.5"/>
+    </g>
+  </g>
+
+  <!-- paws hooked over the window edge -->
+  <g fill="#E4EBF3" stroke="#0A1017" stroke-width="4.5" stroke-linejoin="round">
+    <path d="M40 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7H40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
+    <path d="M176 114h40a7 7 0 0 1 7 7v20a7 7 0 0 1-7 7h-40a7 7 0 0 1-7-7v-20a7 7 0 0 1 7-7z"/>
+  </g>
+  <g fill="none" stroke="#0A1017" stroke-width="3.5" stroke-linecap="round" stroke-opacity=".5">
+    <path d="M53 126v16M67 126v16"/>
+    <path d="M189 126v16M203 126v16"/>
+  </g>
+</svg>

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="AiRaccoon logo proposition B: a raccoon cradling a glowing memory crystal">
+  <title>AiRaccoon — The Memory Hoarder</title>
+
+  <defs>
+    <linearGradient id="b-field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16202C"/>
+      <stop offset="1" stop-color="#0A1017"/>
+    </linearGradient>
+    <linearGradient id="b-fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2F5F8"/>
+      <stop offset="1" stop-color="#C0CCD9"/>
+    </linearGradient>
+    <linearGradient id="b-gem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FE9DC"/>
+      <stop offset="1" stop-color="#1FA88F"/>
+    </linearGradient>
+    <radialGradient id="b-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2BD9C0" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#2BD9C0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#b-field)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#2BD9C0" stroke-opacity=".3" stroke-width="3"/>
+
+  <!-- soft halo behind the raccoon -->
+  <circle cx="128" cy="116" r="86" fill="url(#b-glow)"/>
+
+  <!-- body -->
+  <path d="M84 118 Q76 152 82 172 Q88 198 128 198 Q168 198 174 172 Q180 152 172 118 Q128 104 84 118Z" fill="url(#b-fur)"/>
+  <ellipse cx="128" cy="172" rx="40" ry="22" fill="#E4EBF3"/>
+
+  <!-- ringed tail, curled across the bottom, in front of the body -->
+  <g stroke="#0A1017" stroke-width="3" stroke-opacity=".35">
+    <rect x="70" y="178" width="46" height="20" rx="10" fill="#E4EBF3"/>
+    <rect x="116" y="178" width="32" height="20" rx="10" fill="#1B232E"/>
+    <rect x="148" y="178" width="44" height="20" rx="10" fill="#E4EBF3"/>
+  </g>
+  <circle cx="192" cy="188" r="10" fill="#E4EBF3" stroke="#0A1017" stroke-width="3" stroke-opacity=".35"/>
+
+  <!-- head -->
+  <ellipse cx="128" cy="86" rx="44" ry="42" fill="url(#b-fur)"/>
+
+  <!-- ears -->
+  <g stroke="#0A1017" stroke-width="4">
+    <circle cx="90" cy="50" r="16" fill="url(#b-fur)"/>
+    <circle cx="166" cy="50" r="16" fill="url(#b-fur)"/>
+    <circle cx="90" cy="51" r="8" fill="#1B232E" stroke="none"/>
+    <circle cx="166" cy="51" r="8" fill="#1B232E" stroke="none"/>
+    <circle cx="90" cy="51" r="3.4" fill="#2BD9C0" stroke="none"/>
+    <circle cx="166" cy="51" r="3.4" fill="#2BD9C0" stroke="none"/>
+  </g>
+
+  <!-- bandit mask -->
+  <path d="M84 86 Q86 66 108 62 L148 62 Q170 66 172 86 L176 108 Q170 128 150 132 Q136 136 128 130 Q120 136 106 132 Q86 128 80 108 Z" fill="#161C24"/>
+  <circle cx="106" cy="92" r="13" fill="#F2F5F8"/>
+  <circle cx="150" cy="92" r="13" fill="#F2F5F8"/>
+
+  <!-- eyes -->
+  <g>
+    <circle cx="106" cy="92" r="10.5" fill="#0B1017"/>
+    <circle cx="150" cy="92" r="10.5" fill="#0B1017"/>
+    <circle cx="106" cy="92" r="7.5" fill="#2BD9C0"/>
+    <circle cx="150" cy="92" r="7.5" fill="#2BD9C0"/>
+    <circle cx="106" cy="92" r="3.6" fill="#07272C"/>
+    <circle cx="150" cy="92" r="3.6" fill="#07272C"/>
+    <circle cx="108.5" cy="89" r="2.6" fill="#FFFFFF"/>
+    <circle cx="152.5" cy="89" r="2.6" fill="#FFFFFF"/>
+  </g>
+
+  <!-- muzzle -->
+  <ellipse cx="128" cy="122" rx="26" ry="17" fill="#F7FAFC"/>
+  <path d="M120 110h16q3 0 3 3q0 9-11 13-11-4-11-13q0-3 3-3z" fill="#161C24"/>
+  <g fill="none" stroke="#161C24" stroke-width="3.4" stroke-linecap="round">
+    <path d="M128 128v4"/>
+    <path d="M128 132q-6 6-11 1"/>
+    <path d="M128 132q6 6 11 1"/>
+  </g>
+
+  <!-- the memory: a glowing crystal cradled in the paws -->
+  <circle cx="128" cy="164" r="32" fill="url(#b-glow)"/>
+  <g stroke="#FFFFFF" stroke-opacity=".35" stroke-width="2">
+    <path d="M128 146 L146 156 L146 176 L128 186 L110 176 L110 156 Z" fill="url(#b-gem)" stroke="none"/>
+    <path d="M128 146 L128 186"/>
+    <path d="M110 156 L146 156"/>
+    <path d="M110 176 L146 176"/>
+    <path d="M128 146 L110 156 M128 146 L146 156"/>
+  </g>
+  <path d="M128 148 L138 155 L128 158 L118 155 Z" fill="#FFFFFF" fill-opacity=".65"/>
+
+  <!-- paws holding the crystal -->
+  <g fill="#E4EBF3" stroke="#0A1017" stroke-width="3.5" stroke-linejoin="round">
+    <ellipse cx="100" cy="168" rx="16" ry="11" transform="rotate(-18 100 168)"/>
+    <ellipse cx="156" cy="168" rx="16" ry="11" transform="rotate(18 156 168)"/>
+  </g>
+  <g fill="none" stroke="#0A1017" stroke-width="2.4" stroke-linecap="round" stroke-opacity=".45">
+    <path d="M94 164v8M100 163v9"/>
+    <path d="M162 164v8M156 163v9"/>
+  </g>
+
+  <!-- sparkles -->
+  <g fill="#2BD9C0">
+    <path d="M196 96 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/>
+    <path d="M56 148 l2.4 6.4 6.4 2.4 -6.4 2.4 -2.4 6.4 -2.4 -6.4 -6.4 -2.4 6.4 -2.4z"/>
+  </g>
+</svg>
