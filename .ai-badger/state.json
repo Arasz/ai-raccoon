@@ -1,11 +1,21 @@
 {
-  "lastUpdated": "2026-08-04T07:12:04Z",
+  "lastUpdated": "2026-08-04T09:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "doc-ingestion-and-tests",
+      "summary": "Implemented document ingestion pipeline + retrieval test suite: ingest-jsaa-docs.py (1090 lines) walks job-search-ai-assistant (196 files, 762 typed chunks), writes to AiRaccoon via MCP HTTP/SSE; baseline-queries.json (35 queries, 8 categories); run-baseline-queries.py (hash-map-based isExpectedSource matching); scoring-form.html (self-contained scoring UI). Pipeline verified: 35/35 queries return results, 6/10 expected-source matches at rank ≤3. Key findings: AiRaccoon MCP Streamable HTTP uses SSE (event/data format); memory_write context param sets scope=custom (invisible to project search); SHA256 content hashing requires matching written content prefix.",
+      "hasNotes": true
+    },
+  {
+    "id": "memory-model-research",
+    "summary": "Research-only: 4 parallel subagents investigated (1) encryption-at-rest patterns for .NET SQLite memory stores — transparent SQLCipher/e_sqlite3mc with ASP.NET Data Protection key wrapping, (2) document ingestion pipeline design for job-search-ai-assistant → memory.db — ~150-180 files, ~770 typed chunks, 43 test queries, scoring HTML form, (3) ai-badger stacks architecture (19 stacks, features/ layout, ADRs 0010/0013/0014) and mcp-index tool-indexing system, (4) memory model gap analysis vs LLM Wiki v2 + Noba human memory — 10 gaps identified, prioritized into 6 implementation waves. Consolidated synthesis at docs/work/2026-08-04-memory-model-research-synthesis.md. Deliverables: encryption report, ingestion pipeline design, gap analysis, stacks-aware memory integration proposal.",
+    "hasNotes": true
+  },
+    {
       "id": "integration-review",
-      "summary": "Code review (preflight checklist, 0 FAIL items, all phases PASS) + full documentation refresh: new docs/explanation/architecture.md with mermaid diagrams (data model, query flow, write path, sync cycle, workspace lifecycle, access mode resolution, algorithms), README/SECURITY.md verified, features table updated, stale env-var docs corrected.",
+      "summary": "Code review (preflight checklist, 2 FAIL fixed, 3 Low deferred) + full docs refresh: architecture.md with 6 mermaid diagrams, README/SECURITY/env-vars updated, features table current.",
       "hasNotes": true
     },
     {

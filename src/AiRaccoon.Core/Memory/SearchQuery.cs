@@ -2,52 +2,27 @@ using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
-public sealed record SearchQuery
+public sealed record SearchQuery(
+    string ProjectId,
+    string Query,
+    SearchScope Scope = SearchScope.All,
+    string? WorkspaceId = null,
+    int Limit = 20,
+    double MinScore = 0.7,
+    int RrfK = SearchQuery.DefaultRrfK,
+    int FtsWeight = 1,
+    int VectorWeight = 1)
 {
     public const int DefaultRrfK = 60;
 
-    public SearchQuery(
-        string projectId,
-        string query,
-        SearchScope scope = SearchScope.All,
-        string? workspaceId = null,
-        int limit = 20,
-        double minScore = 0.7,
-        int rrfK = DefaultRrfK,
-        int ftsWeight = 1,
-        int vectorWeight = 1)
-    {
-        ProjectId = projectId;
-        Query = query;
-        Scope = scope;
-        WorkspaceId = workspaceId;
-        Limit = limit;
-        MinScore = minScore;
-        RrfK = rrfK;
-        FtsWeight = ftsWeight;
-        VectorWeight = vectorWeight;
-    }
-
-    public string ProjectId { get; }
-
-    public string Query { get; }
-
-    public SearchScope Scope { get; }
-
-    public string? WorkspaceId { get; }
-
-    public int Limit { get; }
-
-    public double MinScore { get; }
-
     /// <summary>RRF cutoff; a result's score contribution from a ranked list is weight / (k + rank).</summary>
-    public int RrfK { get; }
+    public int RrfK { get; } = RrfK;
 
     /// <summary>Weight of the FTS5 (keyword) ranked list in the RRF fusion.</summary>
-    public int FtsWeight { get; }
+    public int FtsWeight { get; } = FtsWeight;
 
     /// <summary>Weight of the vec0 (semantic) ranked list in the RRF fusion.</summary>
-    public int VectorWeight { get; }
+    public int VectorWeight { get; } = VectorWeight;
 
     public sealed class Validator : AbstractValidator<SearchQuery>
     {

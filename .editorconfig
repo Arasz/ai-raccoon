@@ -81,3 +81,6 @@ csharp_style_namespace_declarations = file_scoped:warning
 # `dotnet format whitespace` — means giving that up, which is a separate decision
 # with a repo-wide reformat attached, not a hook.
 dotnet_diagnostic.IDE0055.severity = None
+
+[tests/AiRaccoon.Tests/Retrieval/RetrievalBaselineTests.cs]
+dotnet_diagnostic.IDE0011.severity = none

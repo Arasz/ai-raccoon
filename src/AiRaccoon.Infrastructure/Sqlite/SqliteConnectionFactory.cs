@@ -10,11 +10,8 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
 ///     every table lives in memory.db (FR-NM-1).
 /// </summary>
-public sealed class SqliteConnectionFactory
+public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyProvider keyProvider)
 {
-    private readonly InfrastructureOptions _options;
-    private readonly IEncryptionKeyProvider _keyProvider;
-
     static SqliteConnectionFactory()
     {
         // Dapper maps columns to constructor parameters case-insensitively but not across
@@ -22,19 +19,13 @@ public sealed class SqliteConnectionFactory
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
-    public SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyProvider keyProvider)
-    {
-        _options = options;
-        _keyProvider = keyProvider;
-    }
-
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
     private string BankDirectory =>
-        _options.Scope switch
+        options.Scope switch
         {
-            InstallScope.User => _options.DataRoot,
-            InstallScope.Project => Path.Combine(_options.DataRoot, ".ai-raccoon"),
-            _ => throw new ArgumentOutOfRangeException(nameof(_options.Scope), _options.Scope,
+            InstallScope.User => options.DataRoot,
+            InstallScope.Project => Path.Combine(options.DataRoot, ".ai-raccoon"),
+            _ => throw new ArgumentOutOfRangeException(nameof(options.Scope), options.Scope,
                 "Unknown install scope.")
         };
 
@@ -44,7 +35,7 @@ public sealed class SqliteConnectionFactory
     {
         Directory.CreateDirectory(BankDirectory);
 
-        var passphrase = _keyProvider.GetPassphrase();
+        var passphrase = keyProvider.GetPassphrase();
         var csb = new SqliteConnectionStringBuilder
         {
             DataSource = BankPath,

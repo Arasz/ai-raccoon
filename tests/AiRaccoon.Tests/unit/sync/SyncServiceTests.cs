@@ -17,9 +17,9 @@ public class SyncServiceTests : IDisposable
         Directory.CreateDirectory(_dataRoot);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
-
     private string BankPath => Path.Combine(_dataRoot, "memory.db");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private static async Task<SqliteConnection> CreateAndOpenAsync(string path, CancellationToken ct = default)
     {
@@ -67,7 +67,12 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
@@ -83,7 +88,12 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -111,9 +121,9 @@ public class SyncServiceTests : IDisposable
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
-                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
-                                """;
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
@@ -145,9 +155,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
-                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                VALUES ('local-hash-2', 'local2.md', 'local content 2', 'project', 'acme', 2, 2)
-                                """;
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash-2', 'local2.md', 'local content 2', 'project', 'acme', 2, 2)
+                                 """;
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
@@ -191,14 +201,19 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
-                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                VALUES ('will-delete', 'del.md', 'to be deleted', 'project', 'acme', 1, 1)
-                                """;
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('will-delete', 'del.md', 'to be deleted', 'project', 'acme', 1, 1)
+                                 """;
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
         var service = new SyncService(cloud, OpenBank,
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -212,9 +227,9 @@ public class SyncServiceTests : IDisposable
 
             await using var tomb = conn.CreateCommand();
             tomb.CommandText = """
-                              INSERT INTO sync_tombstones (hash, scope, deleted_at)
-                              VALUES ('will-delete', 'project', 100)
-                              """;
+                               INSERT INTO sync_tombstones (hash, scope, deleted_at)
+                               VALUES ('will-delete', 'project', 100)
+                               """;
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
@@ -245,22 +260,27 @@ public class SyncServiceTests : IDisposable
         {
             await using var ws = conn.CreateCommand();
             ws.CommandText = """
-                            INSERT INTO workspaces (id, project_id, status, created_at)
-                            VALUES ('ws-1', 'acme', 'Active', 1)
-                            """;
+                             INSERT INTO workspaces (id, project_id, status, created_at)
+                             VALUES ('ws-1', 'acme', 'Active', 1)
+                             """;
             await ws.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
 
             await using var entry = conn.CreateCommand();
             entry.CommandText = """
-                               INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
-                               VALUES ('ws-hash', 'ws.md', 'private scratch', 'ws-1', 'acme', 1, 1)
-                               """;
+                                INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
+                                VALUES ('ws-hash', 'ws.md', 'private scratch', 'ws-1', 'acme', 1, 1)
+                                """;
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -302,9 +322,9 @@ public class SyncServiceTests : IDisposable
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
-                                    INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, embed_state)
-                                    VALUES ('row-a', 'a.md', 'content A', 'project', 'acme', 1, 1, 'embedded')
-                                    """;
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, embed_state)
+                                     VALUES ('row-a', 'a.md', 'content A', 'project', 'acme', 1, 1, 'embedded')
+                                     """;
                 await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
@@ -317,7 +337,12 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -350,15 +375,20 @@ public class SyncServiceTests : IDisposable
 
             await using var entry = conn.CreateCommand();
             entry.CommandText = """
-                               INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
-                               VALUES ('ws-hash-1', 'private.md', 'workspace data', 'ws-1', 'acme', 1, 1)
-                               """;
+                                INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
+                                VALUES ('ws-hash-1', 'private.md', 'workspace data', 'ws-1', 'acme', 1, 1)
+                                """;
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -397,9 +427,9 @@ public class SyncServiceTests : IDisposable
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
-                                    INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                    VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
-                                    """;
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
                 await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
@@ -415,15 +445,20 @@ public class SyncServiceTests : IDisposable
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
-                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
-                                """;
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -446,7 +481,12 @@ public class SyncServiceTests : IDisposable
         // First sync to create a valid remote.
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
-            async (path, ct) => { var c = new SqliteConnection($"Data Source={path}"); await c.OpenAsync(ct); return c; }, null!);
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, null!);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -459,9 +499,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
-                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
-                                VALUES ('real-hash', 'real.md', 'real content', 'project', 'acme', 1, 1)
-                                """;
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('real-hash', 'real.md', 'real content', 'project', 'acme', 1, 1)
+                                 """;
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 

@@ -268,6 +268,13 @@ public sealed class WorkspaceIsolationTests : IDisposable
         workspace[0].Value.ShouldBe("workspace draft");
     }
 
+    private static string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "airaccoon-isolation-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
     private sealed class EntryIsolationRow
     {
         public string? WorkspaceId { get; set; }
@@ -278,12 +285,5 @@ public sealed class WorkspaceIsolationTests : IDisposable
     private sealed class StubChunker : IChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
-
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-isolation-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
     }
 }

@@ -134,6 +134,51 @@
       "resumeCommand": "claude --resume 20260803_162437_9ae3d6",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "memory-model-research",
+      "title": "Research: memory model gaps, encryption at rest, doc ingestion, ai-badger stacks/mcp-index integration",
+      "sessionId": "20260804_092510_c4c091",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/memory-model-research",
+      "risk": false,
+      "startedAt": "2026-08-04T07:38:49.782716+00:00",
+      "finishedAt": "2026-08-04T07:48:51.792961+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_092510_c4c091",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "encrypt-at-rest",
+      "title": "Encryption at rest \u2014 transparent SQLite encryption via e_sqlite3mc",
+      "sessionId": "20260803_162437_9ae3d6",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/encrypt-at-rest",
+      "risk": false,
+      "startedAt": "2026-08-04T07:50:10.587181+00:00",
+      "finishedAt": "2026-08-04T08:30:27.802773+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260803_162437_9ae3d6",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "doc-ingestion-and-tests",
+      "title": "Document ingestion pipeline and retrieval test suite for job-search-ai-assistant docs",
+      "sessionId": "20260804_095231_7165e9",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/doc-ingestion-and-tests",
+      "risk": false,
+      "startedAt": "2026-08-04T08:30:43.567383+00:00",
+      "finishedAt": "2026-08-04T09:07:46.183720+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_095231_7165e9",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

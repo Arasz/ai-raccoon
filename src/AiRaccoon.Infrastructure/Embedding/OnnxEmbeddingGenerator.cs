@@ -10,25 +10,20 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     BERT WordPiece tokenization, one batched session run, mean-pool + L2-normalize
 ///     matching sentence-transformers semantics.
 /// </summary>
-internal sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath) : IEmbeddingGenerator<string, Embedding<float>>
 {
     private const int MaxSequenceLength = 256;
 
-    private readonly InferenceSession _session;
-    private readonly BertTokenizer _tokenizer;
+    private readonly InferenceSession _session = new(modelPath);
 
-    public OnnxEmbeddingGenerator(string modelPath, string vocabPath)
+    private readonly BertTokenizer _tokenizer = BertTokenizer.Create(vocabPath, new BertOptions
     {
-        _session = new InferenceSession(modelPath);
-        _tokenizer = BertTokenizer.Create(vocabPath, new BertOptions
-        {
-            LowerCaseBeforeTokenization = true,
-            ApplyBasicTokenization = true,
-            SplitOnSpecialTokens = true,
-            IndividuallyTokenizeCjk = true,
-            RemoveNonSpacingMarks = true
-        });
-    }
+        LowerCaseBeforeTokenization = true,
+        ApplyBasicTokenization = true,
+        SplitOnSpecialTokens = true,
+        IndividuallyTokenizeCjk = true,
+        RemoveNonSpacingMarks = true
+    });
 
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
         EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
@@ -45,6 +40,8 @@ internal sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embed
     }
 
     public void Dispose() => _session.Dispose();
+
+    object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
 
     private GeneratedEmbeddings<Embedding<float>> RunBatch(
         IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
@@ -78,7 +75,7 @@ internal sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embed
 
         var hidden = results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
         var dense = hidden as DenseTensor<float>
-            ?? throw new InvalidOperationException("ONNX last_hidden_state is not a dense tensor.");
+                    ?? throw new InvalidOperationException("ONNX last_hidden_state is not a dense tensor.");
         var maskRow = new int[maxLen];
         for (var i = 0; i < batch; i++)
         {
@@ -98,8 +95,8 @@ internal sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embed
 
     private (int[] Ids, int[] Mask) Encode(string text)
     {
-        var ids = _tokenizer.EncodeToIds(text, addSpecialTokens: true, considerPreTokenization: true,
-            considerNormalization: true);
+        var ids = _tokenizer.EncodeToIds(text, true, true,
+            true);
         if (ids.Count > MaxSequenceLength)
         {
             ids = ids.Take(MaxSequenceLength).ToList();
@@ -109,6 +106,4 @@ internal sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embed
         Array.Fill(mask, 1);
         return (ids.ToArray(), mask);
     }
-
-    object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
 }

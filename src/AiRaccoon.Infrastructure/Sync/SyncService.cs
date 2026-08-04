@@ -4,23 +4,14 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>Row-merge sync over S3-compatible object storage: VACUUM INTO snapshot → pull → ATTACH+merge → push If-Match.</summary>
-public partial class SyncService
+public partial class SyncService(
+    ICloudStore cloud,
+    Func<CancellationToken, Task<SqliteConnection>> openBank,
+    Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
+    ILogger<SyncService> logger)
 {
-    private readonly ICloudStore _cloud;
-    private readonly ILogger<SyncService> _logger;
-    private readonly Func<CancellationToken, Task<SqliteConnection>> _openBank;
-    private readonly Func<string, CancellationToken, Task<SqliteConnection>> _openReadOnly;
-    private readonly SemaphoreSlim _gate = new(1, 1);
     private const int MaxPushRetries = 3;
-
-    public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
-        Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly, ILogger<SyncService> logger)
-    {
-        _cloud = cloud;
-        _openBank = openBank;
-        _openReadOnly = openReadOnly;
-        _logger = logger;
-    }
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
         CancellationToken cancellationToken = default)
@@ -46,7 +37,7 @@ public partial class SyncService
         var localSnapshot = Path.GetTempFileName();
         try
         {
-            await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+            await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = $"VACUUM INTO '{localSnapshot}'";
@@ -66,7 +57,7 @@ public partial class SyncService
             }
 
             // 2. Integrity check on the snapshot.
-            await using (var ro = await _openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
+            await using (var ro = await openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
             {
                 await using var integrity = ro.CreateCommand();
                 integrity.CommandText = "PRAGMA quick_check";
@@ -80,12 +71,12 @@ public partial class SyncService
             var snapshotBytes = await File.ReadAllBytesAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
 
             // 3. Pull the remote snapshot.
-            var remote = await _cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+            var remote = await cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
 
             var sent = 0;
             var received = 0;
             var reindexed = 0;
-            string? remoteETag = remote?.ETag;
+            var remoteETag = remote?.ETag;
 
             if (remote is not null)
             {
@@ -96,7 +87,7 @@ public partial class SyncService
                 try
                 {
                     await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
-                    await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                    await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
                     {
                         await using var cmd = conn.CreateCommand();
                         cmd.CommandText = $"VACUUM INTO '{mergedPath}'";
@@ -120,11 +111,11 @@ public partial class SyncService
             {
                 try
                 {
-                    var newETag = await _cloud.PushAsync(objectKey, snapshotBytes, pushETag, cancellationToken)
+                    var newETag = await cloud.PushAsync(objectKey, snapshotBytes, pushETag, cancellationToken)
                         .ConfigureAwait(false);
 
                     // Record the ETag watermark.
-                    await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                    await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
                     {
                         await using var upsert = conn.CreateCommand();
                         upsert.CommandText = "INSERT INTO sync_meta (key, value) VALUES ('last_etag', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
@@ -138,7 +129,7 @@ public partial class SyncService
                 catch (SyncConflictException) when (attempt < MaxPushRetries)
                 {
                     // Re-pull and re-merge.
-                    remote = await _cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+                    remote = await cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
                     remoteETag = remote?.ETag;
                     pushETag = remoteETag;
                     if (remote is not null)
@@ -150,7 +141,7 @@ public partial class SyncService
                         try
                         {
                             await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
-                            await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                            await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
                             {
                                 await using var cmd = conn.CreateCommand();
                                 cmd.CommandText = $"VACUUM INTO '{retryPath}'";
@@ -170,7 +161,7 @@ public partial class SyncService
                 }
                 catch (SyncConflictException)
                 {
-                    Log.SyncConflictExhausted(_logger, MaxPushRetries);
+                    Log.SyncConflictExhausted(logger, MaxPushRetries);
                     throw;
                 }
             }
@@ -197,7 +188,7 @@ public partial class SyncService
             // Integrity check the remote snapshot.
             try
             {
-                await using (var ro = await _openReadOnly(remotePath, cancellationToken).ConfigureAwait(false))
+                await using (var ro = await openReadOnly(remotePath, cancellationToken).ConfigureAwait(false))
                 {
                     await using var check = ro.CreateCommand();
                     check.CommandText = "PRAGMA quick_check";
@@ -208,12 +199,12 @@ public partial class SyncService
                     }
                 }
             }
-            catch (Microsoft.Data.Sqlite.SqliteException ex)
+            catch (SqliteException ex)
             {
                 throw new SyncCorruptFileException($"Remote snapshot is corrupt: {ex.Message}");
             }
 
-            await using var conn = await _openBank(cancellationToken).ConfigureAwait(false);
+            await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
 
             // ATTACH the remote snapshot.
             await using var attach = conn.CreateCommand();
@@ -228,21 +219,21 @@ public partial class SyncService
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     mergeEntries.CommandText = """
-                                              INSERT OR IGNORE INTO entries (hash, path, value, scope, project_id, context_label,
-                                                                              workspace_id, agent_id, created_at, updated_at,
-                                                                              access_count, last_accessed_at, rating, ttl_days,
-                                                                              embed_state, embedding)
-                                              SELECT r.hash, r.path, r.value, r.scope, r.project_id, r.context_label,
-                                                     r.workspace_id, r.agent_id, r.created_at, r.updated_at,
-                                                     r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
-                                                     'pending', NULL
-                                              FROM remote.entries r
-                                              WHERE r.workspace_id IS NULL
-                                                AND NOT EXISTS (
-                                                    SELECT 1 FROM sync_tombstones t
-                                                    WHERE t.hash = r.hash AND t.scope = COALESCE(r.scope, 'workspace')
-                                                )
-                                              """;
+                                               INSERT OR IGNORE INTO entries (hash, path, value, scope, project_id, context_label,
+                                                                               workspace_id, agent_id, created_at, updated_at,
+                                                                               access_count, last_accessed_at, rating, ttl_days,
+                                                                               embed_state, embedding)
+                                               SELECT r.hash, r.path, r.value, r.scope, r.project_id, r.context_label,
+                                                      r.workspace_id, r.agent_id, r.created_at, r.updated_at,
+                                                      r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
+                                                      'pending', NULL
+                                               FROM remote.entries r
+                                               WHERE r.workspace_id IS NULL
+                                                 AND NOT EXISTS (
+                                                     SELECT 1 FROM sync_tombstones t
+                                                     WHERE t.hash = r.hash AND t.scope = COALESCE(r.scope, 'workspace')
+                                                 )
+                                               """;
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -250,11 +241,11 @@ public partial class SyncService
                 await using (var mergeSettings = conn.CreateCommand())
                 {
                     mergeSettings.CommandText = """
-                                               INSERT INTO settings (key, value)
-                                               SELECT key, value FROM remote.settings
-                                               WHERE true
-                                               ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                                               """;
+                                                INSERT INTO settings (key, value)
+                                                SELECT key, value FROM remote.settings
+                                                WHERE true
+                                                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                                                """;
                     await mergeSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -262,9 +253,9 @@ public partial class SyncService
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
                     mergeTombstones.CommandText = """
-                                                 INSERT OR IGNORE INTO sync_tombstones (hash, scope, deleted_at)
-                                                 SELECT hash, scope, deleted_at FROM remote.sync_tombstones
-                                                 """;
+                                                  INSERT OR IGNORE INTO sync_tombstones (hash, scope, deleted_at)
+                                                  SELECT hash, scope, deleted_at FROM remote.sync_tombstones
+                                                  """;
                     await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -272,10 +263,10 @@ public partial class SyncService
                 await using (var applyTombstones = conn.CreateCommand())
                 {
                     applyTombstones.CommandText = """
-                                                 DELETE FROM entries
-                                                 WHERE (hash, COALESCE(scope, 'workspace'))
-                                                     IN (SELECT hash, scope FROM remote.sync_tombstones)
-                                                 """;
+                                                  DELETE FROM entries
+                                                  WHERE (hash, COALESCE(scope, 'workspace'))
+                                                      IN (SELECT hash, scope FROM remote.sync_tombstones)
+                                                  """;
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -308,15 +299,15 @@ public partial class SyncService
                 await using (var reindexCmd = conn.CreateCommand())
                 {
                     reindexCmd.CommandText = """
-                                            UPDATE entries
-                                            SET embed_state = 'pending', embedding = NULL
-                                            WHERE embed_state = 'embedded'
-                                              AND id IN (
-                                                  SELECT e.id FROM entries e
-                                                  INNER JOIN remote.entries r ON e.hash = r.hash AND COALESCE(e.scope, 'workspace') = COALESCE(r.scope, 'workspace')
-                                                  WHERE e.workspace_id IS NULL
-                                              )
-                                            """;
+                                             UPDATE entries
+                                             SET embed_state = 'pending', embedding = NULL
+                                             WHERE embed_state = 'embedded'
+                                               AND id IN (
+                                                   SELECT e.id FROM entries e
+                                                   INNER JOIN remote.entries r ON e.hash = r.hash AND COALESCE(e.scope, 'workspace') = COALESCE(r.scope, 'workspace')
+                                                   WHERE e.workspace_id IS NULL
+                                               )
+                                             """;
                     reindexed = await reindexCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -340,7 +331,7 @@ public partial class SyncService
 
     private async Task WaitForWalCheckpointAsync(CancellationToken cancellationToken)
     {
-        await using var conn = await _openBank(cancellationToken).ConfigureAwait(false);
+        await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
