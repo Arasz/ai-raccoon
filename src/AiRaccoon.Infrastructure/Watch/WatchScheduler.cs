@@ -10,7 +10,7 @@ public sealed class WatchScheduler
     private const int DefaultConcurrency = 4;
     private const int MaxConcurrency = 16;
 
-    private readonly Dictionary<string, SemaphoreSlim> _projectGates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (SemaphoreSlim Gate, int Limit)> _projectGates = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
     public async Task RunBatchAsync(
@@ -89,17 +89,19 @@ public sealed class WatchScheduler
 
     private SemaphoreSlim GateFor(string projectId, IReadOnlyDictionary<string, int> concurrencyByProject)
     {
+        var limit = Math.Clamp(concurrencyByProject.GetValueOrDefault(projectId, DefaultConcurrency), 1,
+            MaxConcurrency);
         lock (_gate)
         {
-            if (_projectGates.TryGetValue(projectId, out var existing))
+            if (_projectGates.TryGetValue(projectId, out var existing) && existing.Limit == limit)
             {
-                return existing;
+                return existing.Gate;
             }
 
-            var limit = Math.Clamp(concurrencyByProject.GetValueOrDefault(projectId, DefaultConcurrency), 1,
-                MaxConcurrency);
+            // A changed limit (watch concurrency set between batches) replaces the gate —
+            // the next batch runs at the new concurrency, not the first batch's limit.
             var gate = new SemaphoreSlim(limit, limit);
-            _projectGates[projectId] = gate;
+            _projectGates[projectId] = (gate, limit);
             return gate;
         }
     }
