@@ -97,6 +97,18 @@ public class MemoryStorePortTests
         metadata!.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
     }
 
+    [Fact]
+    public async Task DeleteSourcePathAsync_IsPartOfThePort_AndCarriesProjectAndPath()
+    {
+        var store = new RecordingStore();
+
+        var deleted = await store.DeleteSourcePathAsync("acme", "/repo/docs/api.md",
+            TestContext.Current.CancellationToken);
+
+        deleted.ShouldBe(0);
+        store.DeletedSourcePath.ShouldBe(("acme", "/repo/docs/api.md"));
+    }
+
     private sealed class RecordingStore : IMemoryStore
     {
         public (string ProjectId, string Hash)? Shared { get; private set; }
@@ -110,6 +122,8 @@ public class MemoryStorePortTests
         public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
 
         public string? ListedContext { get; private set; }
+
+        public (string ProjectId, string Path)? DeletedSourcePath { get; private set; }
 
         public Task<MemoryEntry>
             WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
@@ -181,6 +195,13 @@ public class MemoryStorePortTests
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
+
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default)
+        {
+            DeletedSourcePath = (projectId, path);
+            return Task.FromResult(0);
+        }
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 

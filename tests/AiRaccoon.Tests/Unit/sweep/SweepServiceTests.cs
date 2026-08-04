@@ -108,6 +108,10 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,

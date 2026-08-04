@@ -61,6 +61,9 @@ public interface IMemoryStore
     /// <summary>Upserts one settings row.</summary>
     Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default);
 
+    /// <summary>Deletes every committed chunk whose source file is the given path (mirror delete/rename).</summary>
+    Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default);
+
     /// <summary>Sets an entry's ttl_days override — a forgetting knob gated to full mode at the boundary.</summary>
     Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default);

@@ -193,6 +193,10 @@ public sealed class MemoryToolsAccessModeTests
             return Task.FromResult(1);
         }
 
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(Stats);
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,

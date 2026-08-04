@@ -375,6 +375,10 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    public Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException("DeleteSourcePathAsync not implemented yet (S1).");
+
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
