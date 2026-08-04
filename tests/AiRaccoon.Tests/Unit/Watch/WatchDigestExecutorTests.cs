@@ -104,6 +104,26 @@ public sealed class WatchDigestExecutorTests
     }
 
     [Fact]
+    public async Task Digest_Delete_FiresOnSourceChangedWithDeletedKind()
+    {
+        using var dir = TempDir.New("digest-delete-hook");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "bye", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        File.Delete(file);
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Deleted, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Extension.SourceChanges.Count.ShouldBe(2);
+        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
+    }
+
+    [Fact]
     public async Task Digest_DeleteOfNeverIngestedFile_IsSilentNoOp()
     {
         using var dir = TempDir.New("digest-delete-never");
