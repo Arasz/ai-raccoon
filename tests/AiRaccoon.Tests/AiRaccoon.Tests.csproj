@@ -40,4 +40,10 @@
         <Content Include="Retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
+    <!-- Reqnroll generated-test suite (P12): feature files from docs/features/. -->
+    <ItemGroup>
+        <ReqnrollFeatureFiles Include="../../docs/features/native-memory/native-memory.feature" />
+        <ReqnrollFeatureFiles Include="../../docs/features/agent-memory/agent-memory.feature" />
+    </ItemGroup>
+
 </Project>
