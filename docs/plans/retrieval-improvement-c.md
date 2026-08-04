@@ -223,6 +223,19 @@ Wave 0 baseline. No regression on invariants.
 
 ### Wave 4 — RRF Parameter Optimization
 
+> **Status: DONE ✓ (2026-08-04, branch task/w4-rrf-sweep, ADR 0006).** Delivered: the
+> 96-point grid sweep (k {10,30,60,120} × weights {1:1,1:2,2:1} × minScore {0.0,0.3,0.5,0.7}
+> × window {max(3×,100), max(5×,50)}) over the real pipeline with Wave 3 fixed, committed
+> in docs/work/2026-08-04-wave4-rrf-sweep.md. Measured outcome (negative result): the
+> pre-sweep defaults (k=60, 1:1, minScore=0.0, window max(3×,100)) are re-confirmed as
+> the grid optimum — no point beats nDCG@5 0.722 while holding the W3/S2/C2 gates
+> (24 points score higher; each violates ≥1 gate; the best raw point k=120 1:1 scores
+> 0.775 but regresses A1 file→2, A6 exact→6, exact@3→9/11). C2 acceptance closed
+> (hybrid rank 1 ≤ 3). The candidate window becomes a `SearchQuery.CandidateWindow`
+> parameter so the measured policy is pinned. Fusion-regression gate held on the
+> exact-chunk rank (hybrid ≤ best single modality on all 11 queries; the Wave 0 recall@5
+> observation flags A5/A6/S2 but is a file-cluster artifact — see ADR 0006).
+
 Grid search using the existing `SweepMatrix`:
 - k ∈ {10, 30, 60, 120}
 - Weight ratios: (1:1), (1:2), (2:1)

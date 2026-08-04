@@ -141,7 +141,7 @@ public sealed class SqliteMemoryStore(
         foreach (var context in contexts)
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
-            var limit = CandidateWindowFor(query.Limit);
+            var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
             // FTS modality: primary expression first; a per-context under-match — at most as
             // many rows as the query has terms, or at most as many as the caller asked for (a
@@ -205,11 +205,16 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
-    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
+    ///     Per-modality candidate window before RRF fusion (P6b plan §8; plan C Wave 4): the
+    ///     default policy is max(limit*3, 100) so overlap candidates ranked 20-100 are not
+    ///     starved by a per-modality LIMIT @limit; Max5x50 is the measured alternative
+    ///     (max(limit*5, 50)). The caller's limit and minScore still apply in the final
+    ///     merger pass.
     /// </summary>
-    internal static int CandidateWindowFor(int limit) =>
-        (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
+    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3x100) =>
+        mode == CandidateWindowMode.Max5x50
+            ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
+            : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>
     ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults

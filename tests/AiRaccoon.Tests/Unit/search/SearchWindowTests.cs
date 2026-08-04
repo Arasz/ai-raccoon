@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
@@ -17,4 +18,12 @@ public sealed class SearchWindowTests
 
     [Fact]
     public void CandidateWindowFor_ClampsToIntMax_WithoutOverflow() => SqliteMemoryStore.CandidateWindowFor(int.MaxValue).ShouldBe(int.MaxValue);
+
+    [Theory]
+    [InlineData(1, 50)]
+    [InlineData(10, 50)]
+    [InlineData(20, 100)]
+    [InlineData(40, 200)]
+    public void CandidateWindowFor_Max5x50Window_IsMaxOfFiveTimesLimitAndFifty(int limit, int expected)
+        => SqliteMemoryStore.CandidateWindowFor(limit, CandidateWindowMode.Max5x50).ShouldBe(expected);
 }

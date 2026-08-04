@@ -1,7 +1,18 @@
+using AiRaccoon.Core.Memory;
+
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
-/// <summary>One RRF fusion parameter point: cutoff k and the (fts, vector) weight pair.</summary>
-public sealed record SweepPoint(int K, int FtsWeight, int VectorWeight)
+/// <summary>
+///     One RRF fusion parameter point: cutoff k, the (fts, vector) weight pair, the
+///     minScore filter, and the candidate-window policy. MinScore and Window default to
+///     the pre-Wave-4 values so the FR-NM-4 grid points keep their original meaning.
+/// </summary>
+public sealed record SweepPoint(
+    int K,
+    int FtsWeight,
+    int VectorWeight,
+    double MinScore = 0.0,
+    CandidateWindowMode Window = CandidateWindowMode.Max3x100)
 {
     public string Id => $"k{K}-w{FtsWeight}{VectorWeight}";
 }
@@ -15,6 +26,13 @@ public static class SweepMatrix
 {
     public static IReadOnlyList<SweepPoint> Points { get; } = Build();
 
+    /// <summary>
+    ///     Plan C Wave 4 RRF parameter grid: k in {10, 30, 60, 120} x weights {(1,1), (1,2),
+    ///     (2,1)} x minScore {0.0, 0.3, 0.5, 0.7} x candidate window {Max3x100, Max5x50}.
+    ///     Deterministic order — k, weight pair, minScore, window — each ascending.
+    /// </summary>
+    public static IReadOnlyList<SweepPoint> RrfGrid { get; } = BuildRrfGrid();
+
     private static IReadOnlyList<SweepPoint> Build()
     {
         var points = new List<SweepPoint>();
@@ -23,6 +41,26 @@ public static class SweepMatrix
             foreach (var (fts, vector) in new[] { (1, 1), (1, 2), (2, 1) })
             {
                 points.Add(new SweepPoint(k, fts, vector));
+            }
+        }
+
+        return points;
+    }
+
+    private static IReadOnlyList<SweepPoint> BuildRrfGrid()
+    {
+        var points = new List<SweepPoint>();
+        foreach (var k in new[] { 10, 30, 60, 120 })
+        {
+            foreach (var (fts, vector) in new[] { (1, 1), (1, 2), (2, 1) })
+            {
+                foreach (var minScore in new[] { 0.0, 0.3, 0.5, 0.7 })
+                {
+                    foreach (var window in new[] { CandidateWindowMode.Max3x100, CandidateWindowMode.Max5x50 })
+                    {
+                        points.Add(new SweepPoint(k, fts, vector, minScore, window));
+                    }
+                }
             }
         }
 
