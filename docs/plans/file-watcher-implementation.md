@@ -59,7 +59,7 @@ Findings that shape the plan:
 7. **CLI parse is pure and tested:** `CliArgs.Parse` returns a `CliParseResult` and never writes; `Program.cs` is 20 lines and is the only dispatch point. Watch commands need a verb branch in `Program.cs` that runs a command and exits **without starting the MCP server**.
 8. **Reqnroll wiring precedent:** feature files live outside the test project and are linked via `<ReqnrollFeatureFiles>` in `AiRaccoon.Tests.csproj` (see `docs/work/features-native-memory/native-memory.feature`). Steps bind per-scenario through `MemoryFeatureContext` registered in `BDD/Hooks.cs`. `reqnroll.json` maps tags `integration`/`slow`/`e2e` → non-parallelizable. The canonical feature to link is `docs/features/file-watcher/file-watcher.feature` (the `docs/work/features-file-watcher/` copy is the elicitation draft — differs only in its title line; leave it untouched as provenance).
 9. **Time control for ticks:** `Microsoft.Extensions.TimeProvider.Testing` (`FakeTimeProvider`) is already referenced and used (`MemoryFeatureContext.FixedNow`) — the 1s tick is testable deterministically.
-10. **`OnSourceChanged` does not exist** — the gap analysis (2026-08-04) proposed it as the watcher hook, but the spec's accepted design (card D10 + scope.in) routes the watcher straight to the existing ingest path, not through `IMemoryExtension`. **No extension-hook work is planned**; the digest executor calls `IMemoryStore` directly (through the same `MemoryExtensionHost`-decorated instance the MCP layer uses, so hooks still observe watcher writes — a free side effect, not a requirement).
+10. **`OnSourceChanged` does not exist today** — the gap analysis (2026-08-04) proposed it as the watcher hook. **Owner ruling (2026-08-04): ADD the hook.** `IMemoryExtension` gains `OnSourceChangedAsync(projectId, path, kind)` + context record; `MemoryExtensionHost` dispatches it (default no-op for existing extensions); `WatchDigestExecutor` fires it per processed change (post-hash-skip, pre-ingest). Watcher writes flow through the `MemoryExtensionHost`-decorated store so existing hooks observe them too.
 11. **TreatWarningsAsErrors** is on via `Directory.Build.props`; bare `dotnet build` / `dotnet test` from the worktree root are the canonical gates.
 12. **xunit v3 + Reqnroll:** `Console.WriteLine` is not captured in test output — use `ITestOutputHelper` for diagnostics (project convention, per task context).
 
@@ -70,7 +70,7 @@ Findings that shape the plan:
 ```
 src/AiRaccoon.Core/Watch/            (NEW — domain, infrastructure-free)
   WatchPath.cs            — D3 normalization (Path.GetFullPath; absolute; trailing sep stripped; host-OS case)
-  WatchConfigKeys.cs      — settings keys (enable/scope, global + per-project)
+  WatchConfigKeys.cs      — settings keys (enable/scope/concurrency, global + per-project)
   WatchConfig.cs          — resolution: project entry wins over global; enable default false; scope list
   WatchState.cs           — enum scanning/healthy/retrying/stopped + WatchStatus record (state, lastError, lastSync)
   IWatchService.cs        — AddAsync/RemoveAsync/StatusAsync(projectId) — the port the MCP tools call
@@ -91,8 +91,8 @@ src/AiRaccoon.Infrastructure/Sqlite/ (TOUCHED by S1)
   MemorySql.cs            — + DeleteBySourcePath, watch CRUD consts
   SqliteMemoryStore.cs    — + DeleteSourcePathAsync
 
-src/AiRaccoon.Core/Memory/IMemoryStore.cs + src/AiRaccoon.Core/Rating/MemoryExtensionHost.cs
-                          — + DeleteSourcePathAsync (S1)
+src/AiRaccoon.Core/Memory/IMemoryStore.cs + src/AiRaccoon.Core/Rating/{IMemoryExtension,MemoryExtensionHost}.cs
+                          — + DeleteSourcePathAsync (S1); + OnSourceChangedAsync hook + host dispatch (owner ruling)
 
 src/AiRaccoon/Setup/
   CliArgs.cs              — + `watch` verb (S3)
@@ -122,6 +122,7 @@ tests/AiRaccoon.Tests/
 | Key | Value | Notes |
 |---|---|---|
 | `watch.enabled.global` | `"true"`/`"false"` | default absent = false (opt-in) |
+| `watch.concurrency.global` / `watch.concurrency.<project>` | `"1"`..`"16"` | default `"4"` |
 | `watch.enabled.project:{projectId}` | `"true"`/`"false"` | more specific wins |
 | `watch.scope.global` | JSON array of absolute paths | empty/absent = empty allowlist |
 | `watch.scope.project:{projectId}` | JSON array of absolute paths | more specific wins |
@@ -166,9 +167,9 @@ Wave 5 (serial):    S8  (full gate)
 
 | File | Owned by |
 |---|---|
-| `Core/Memory/IMemoryStore.cs`, `Core/Rating/MemoryExtensionHost.cs`, `Infrastructure/Sqlite/MemorySchema.cs`, `MemorySql.cs`, `SqliteMemoryStore.cs`, `Unit/Memory/MemoryStorePortTests.cs`, `Integration/SqliteMemoryStoreIntegrationTests.cs` | **S1 only** |
+| `Core/Memory/IMemoryStore.cs`, `Core/Rating/{IMemoryExtension,MemoryExtensionHost}.cs`, `Infrastructure/Sqlite/MemorySchema.cs`, `MemorySql.cs`, `SqliteMemoryStore.cs`, `Unit/Memory/MemoryStorePortTests.cs`, `Integration/SqliteMemoryStoreIntegrationTests.cs` | **S1 only** |
 | `Core/Watch/*` (new) | **S2 only** |
-| `Setup/CliArgs.cs`, `Setup/WatchCommands.cs` (new), `Program.cs`, `Unit/Setup/CliArgsTests.cs`, `Unit/Setup/WatchCommandsTests.cs` (new) | **S3 only** |
+| `Setup/CliArgs.cs`, `Setup/WatchCommands.cs` (new), `Program.cs`, `Unit/Setup/CliArgsTests.cs`, `Unit/Setup/WatchCommandsTests.cs` (new) | **CLI task (task/cli-config)** — S3 deferred by owner ruling; no file on this branch touches them |
 | `Infrastructure/Watch/*` (new) | **S4 + S5** — S5 adds files; S4's files are read-only for S5. S4 defines the pipeline classes **incl. `WatchService`** (the `IWatchService` impl); S5 adds `WatchEventSource` + `WatchCatchUp` + `WatchHostedService` as *new* files and only consumes S4's public surface. Safe to run S5 after S4 merges (Wave 3), or same-wave with explicit file split. |
 | `Tools/WatchTools.cs` (new), `Setup/McpServerSetup.cs`, `Unit/Mcp/WatchTools*Tests.cs` (new) | **S6 only** |
 | `Setup/Dependencies.cs` | **S5 + S6** — S6 (Wave 2) registers watch services + `IWatchService`; S5 (Wave 3) appends the hosted-service + catch-up/event-source registrations. Waves are sequential, so the two edits never overlap. |
@@ -219,7 +220,7 @@ dotnet test --filter "FullyQualifiedName~MemoryStorePortTests|FullyQualifiedName
 
 ### Scope
 - `WatchPath.Normalize(string)` per D3: `Path.GetFullPath`, trailing separator stripped (except root), host-OS case comparison; `IsWithinScope(watchPath, scopeEntry)` — absolute entry covers the directory and all subdirectories; a file watch is inside scope when its full path is under an entry.
-- `WatchConfigKeys`: `EnabledGlobal = "watch.enabled.global"`, `EnabledProject(id)`, `ScopeGlobal = "watch.scope.global"`, `ScopeProject(id)`; JSON-array serialization helpers.
+- `WatchConfigKeys`: `EnabledGlobal = "watch.enabled.global"`, `EnabledProject(id)`, `ScopeGlobal = "watch.scope.global"`, `ScopeProject(id)`, `ConcurrencyGlobal = "watch.concurrency.global"`, `ConcurrencyProject(id)`; JSON-array serialization helpers. **Contract with the CLI task (task/cli-config, parallel branch): these exact keys are written by its `watch` commands — any deviation breaks integration.**
 - `WatchConfig.Resolve(settings)`: enable = project entry ?? global entry ?? **false**; scope = project list ?? global list ?? empty. More specific wins (mirrors `AccessModePolicy.Resolve`).
 - `WatchState` enum + `WatchStatus(projectId, path, state, lastError, lastSync)`.
 - `IWatchService` port: `AddAsync(projectId, path, ct)`, `RemoveAsync(projectId, path, ct)`, `StatusAsync(projectId, ct)`, `IsEnabledAsync(projectId, ct)`, `IsPathAllowedAsync(projectId, path, ct)` — the surface S4/S6 consume. Errors: `WatchDisabledException` (→ tool error `watching-disabled`), `PathOutsideScopeException` (`path-outside-scope`), `PathNotFound` (`path-not-found`), `MissingProject` (tool-level, S6).
@@ -240,28 +241,13 @@ dotnet test --filter "FullyQualifiedName~AiRaccoon.Tests.Unit.Watch"
 
 ---
 
-## Section S3 — CLI watch commands
+## Section S3 — CLI watch commands (DEFERRED to the CLI task)
 
-**Wave 1. Parallel with S1, S2 (reads S2's key constants, which the plan fixes). Owns `CliArgs.cs`, `Program.cs`.**
+**Owner ruling (2026-08-04): the CLI surface — including the spec-ruled watch commands — is implemented by the parallel CLI-config task (branch task/cli-config, worktree .ai-badger/worktrees/cli-config), NOT on this branch.** Both branches would otherwise rewrite `CliArgs.cs`/`Program.cs` and collide at merge.
 
-### Scope
-1. `CliArgs.BuildRootCommand` gains a `watch` subcommand tree: `watch enable|disable {project-id|*} {true|false}`, `watch scope add|remove|list {project-id|*} {path}`. Parse result gains a discriminated `WatchCommandRequest?` (verb, scopeKey, project-or-*, path-or-flag). Root options (`--data-root`, `--install-scope`, …) still apply so the command opens the right bank.
-2. New `Setup/WatchCommands.cs`: runners that resolve `ServerConfig.Build`-style options, open the bank via `SqliteConnectionFactory`, and upsert/read settings through `SqliteMemoryStore.GetSettingAsync`/`SetSettingAsync`. `scope add` appends a normalized absolute path (dedup + re-sort); `scope remove` removes; `scope list` prints entries. `watch enable * true` with an empty allowlist prints the "add at least one scope" message (per feature scenario). All output through the caller-supplied writer (stderr convention).
-3. `Program.cs` dispatch: if the parse produced a watch command → run it, return exit code, **never start the MCP server**.
+Contract this plan pins for that task (in its brief, and in the WatchConfigKeys note above): `watch enable|disable {project-id|*} {true|false}`, `watch scope add|remove|list {project-id|*} {path}` (absolute, covers dir+subdirs), `watch concurrency {project-id|*} {1..16}` (default 4), `watch list`; settings keys as in S2; `*` = all projects, more specific wins; enable-`*`-with-empty-allowlist prints the add-a-scope message; no env/args channel (single-channel ruling).
 
-### TDD order
-1. `CliArgsTests`: parse `watch enable * true`, `watch disable proj-a`, `watch scope add * /docs`, `watch scope remove proj-a /docs`, `watch scope list *`, unknown watch verb → error; root options still parse.
-2. `WatchCommandsTests` (new, temp bank + FakeTimeProvider): enable persists to settings; `*` vs project precedence round-trip; scope add/remove/list mutate the JSON list; enable-`*`-with-no-scope returns the message; command idempotency (add twice → one entry).
-3. `CliOutputRoutingTests` addition (or same-pattern test): watch command text goes only to the injected writer, never stdout.
-
-### Acceptance criteria
-- The four feature scenarios of rule "Watch configuration is CLI-only and user-facing" pass at the unit level (survives restart = settings persisted in memory.db, verified by reopening the bank).
-- No env/args/config-file channel exists for watch config (parse-level test: `--watch-enable` is an unknown option error).
-
-### Quality gate
-```
-dotnet test --filter "FullyQualifiedName~CliArgsTests|FullyQualifiedName~WatchCommandsTests|FullyQualifiedName~CliOutputRoutingTests"
-```
+**Impact on this branch:** no section touches `CliArgs.cs` or `Program.cs`; the four feature scenarios of rule "Watch configuration is CLI-only and user-facing" are validated by the CLI task's tests and re-validated by the S7 Reqnroll suite at integration (Wave 5). Wave 1 = {S1, S2} only.
 
 ---
 
@@ -271,8 +257,8 @@ dotnet test --filter "FullyQualifiedName~CliArgsTests|FullyQualifiedName~WatchCo
 
 ### Scope
 - `WatchPipeline`: single `Channel<WatchEvent>`; per-path pending aggregation (a path with ≥1 event is pending once); 1s tick (injected `TimeProvider`); each tick drains pending paths to the scheduler; events arriving during a digest keep the path pending → next tick re-digests (feature: "modified during its own digest").
-- `WatchScheduler`: global concurrency limit (constant default 4, `WatchOptions.ConcurrencyLimit`), round-robin across watches so one watch's flood cannot starve others (feature rule 12).
-- `WatchDigestExecutor`: **replace-by-path digest** — if the file no longer exists → `DeleteSourcePathAsync` (delete event); else compute file hash `SHA-256(path + full content)`, compare `watch_files.file_hash`; equal → skip (hash-skip, metadata-only touch); different → `DeleteSourcePathAsync` + `IngestFileAsync` (re-digest via the existing ingest path), upsert fingerprint, update `watch.last_change_ts`. Rename event → remove old-path chunks + digest new path (overwrite on collision per D2). Delete of a never-ingested file → silent no-op.
+- `WatchScheduler`: concurrency limit from `WatchConfig.Resolve` (`watch.concurrency.*`, default 4, range 1-16 validated by the CLI task), round-robin across watches so one watch's flood cannot starve others (feature rule 12).
+- `WatchDigestExecutor`: **replace-by-path digest** — if the file no longer exists → `DeleteSourcePathAsync` (delete event); else compute file hash `SHA-256(path + full content)`, compare `watch_files.file_hash`; equal → skip (hash-skip, metadata-only touch); different → fire `OnSourceChangedAsync(projectId, path, kind)` on the extension host (owner ruling; post-hash-skip, pre-ingest), then `DeleteSourcePathAsync` + `IngestFileAsync` (re-digest via the existing ingest path), upsert fingerprint, update `watch.last_change_ts`. Rename event → remove old-path chunks + digest new path (overwrite on collision per D2). Delete of a never-ingested file → silent no-op.
 - `WatchRetryPolicy`: per-watch consecutive-failure counter; exponential backoff between attempts; after 5 consecutive failures → state `stopped`, stop checking, keep registration + status; success resets counter (feature rule 14).
 - Status transitions: `scanning` (initial scan in flight) → `healthy`; failures → `retrying`; 5th failure → `stopped`; success → `healthy`. `WatchStatus` carries last error + last sync.
 - Containment: every loop iteration is try/caught; no exception escapes to the MCP server (feature rule 13) — errors land in status.
@@ -284,6 +270,7 @@ dotnet test --filter "FullyQualifiedName~CliArgsTests|FullyQualifiedName~WatchCo
 4. Delete-during-digest / delete-before-digest: deterministic resolution — file gone at digest time ⇒ chunks removed, no resurrect (feature rule 8).
 5. Retry: 4 failures → `retrying` + backoff schedule (asserted via fake time advance); 5th → `stopped`, registration intact; success resets (feature rule 14).
 6. Loop containment: executor throws → status shows error, pipeline keeps ticking, next tick succeeds and clears the error (feature rule 13).
+7. OnSourceChanged: processed change (post-hash-skip) fires the hook once with projectId/path/kind; hash-skipped touch does NOT fire it; hook throw is contained like any digest error (owner ruling).
 
 ### Acceptance criteria
 - All D5 internals (concurrency, round-robin, hash-skip, containment) pinned by unit tests.
@@ -451,8 +438,8 @@ No plan-blocking unknowns. Five decisions the review forced (all with a recommen
 1. **Replace-by-path digest requires a new port method** `DeleteSourcePathAsync` (the spec says "re-digest via existing ingest" but ingest is additive-only — mirror semantics are impossible without delete-by-source-path). **Default: add to port** (S1).
 2. **"Exactly one memory entry holds that path"** (rename-overwrite scenario) vs chunking (one file = N chunk rows). **Default: interpret as "exactly one content set" — assert old content absent, new content present, no orphan chunks; not a row-count-of-1 assertion.** Step author note (S7).
 3. **Restart with watching disabled:** spec rules only add-time errors. **Default: registrations persist; checking pauses while disabled; `watch enable` resumes checking.** Consistent with "stop checking but keep registration/status".
-4. **Concurrency limit configurability:** spec says "configured concurrency limit (default 4)" but the only config channel is CLI enable/scope. **Default: `WatchOptions.ConcurrencyLimit = 4` as a code constant; CLI surface deferred** (consistent with D11/D12 single-channel principle).
-5. **No `IMemoryExtension` work:** the gap analysis's `OnSourceChanged` hook is superseded by the spec's direct ingest-path design; watcher writes flow through the `MemoryExtensionHost`-decorated store anyway, so existing hooks observe them for free.
+4. **Concurrency limit configurability:** spec says "configured concurrency limit (default 4)". **Owner ruling (2026-08-04): CLI surface — `watch concurrency {project-id|*} {1..16}`, default 4, range-validated; no ProcessorCount coupling** (deterministic across hosts/tests; 16 is the ceiling). Implemented by the CLI task (S3 deferral); `WatchScheduler` reads it from settings via `WatchConfig.Resolve`.
+5. **`OnSourceChanged` hook: ADDED (owner reversal, 2026-08-04).** `IMemoryExtension` gains `OnSourceChangedAsync(projectId, path, kind)` (+ context record); `MemoryExtensionHost` dispatches it with a default no-op for existing extensions; `WatchDigestExecutor` fires it per processed change (post-hash-skip, pre-ingest). Owned by S1 (interface + host dispatch) and fired by S4 (unit-tested, item 7).
 
 ### Recorded deviations
 
@@ -465,6 +452,8 @@ No plan-blocking unknowns. Five decisions the review forced (all with a recommen
 - S1–S7 merged on `task/file-watcher` with per-section gates green; S8 full `dotnet build` + `dotnet test` green.
 - All 60 feature scenarios passing (the acceptance contract), each demonstrably red-before-implementation.
 - Unit-level implementation tests present per D5 (concurrency, round-robin, hash-skip, containment, retry).
+- `OnSourceChangedAsync` present on `IMemoryExtension`, dispatched by the host, fired per processed change (S1+S4, unit-tested).
+- Watch CLI commands (enable/disable/scope/concurrency) delivered by the CLI task (branch task/cli-config) per the S2 settings-key contract; the four CLI-rule feature scenarios green via the S7 suite at integration.
 - No MCP server failure path introduced: containment scenarios green.
 - Docs drift fixed (tool inventory in README/CLAUDE.md if they enumerate tools).
 - Owner-gate review completed per spec `gate.ownerGateReview` (formally deferred during elicitation — offered with the final diff).
