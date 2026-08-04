@@ -39,7 +39,11 @@ public class ConfigCommandsWatchTests
         var (exit, _, _) = await Run(["watch", "enable", "acme", "true"], store);
 
         exit.ShouldBe(0);
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.EnabledProject("acme")].ShouldBe("true");
+=======
+        store.Settings[WatchSettingsKeys.Enabled("acme")].ShouldBe("true");
+>>>>>>> origin/main
     }
 
     [Fact]
@@ -49,7 +53,11 @@ public class ConfigCommandsWatchTests
 
         await Run(["watch", "enable", "*", "true"], store);
 
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.EnabledGlobal].ShouldBe("true");
+=======
+        store.Settings[WatchSettingsKeys.EnabledGlobal].ShouldBe("true");
+>>>>>>> origin/main
     }
 
     [Fact]
@@ -67,7 +75,11 @@ public class ConfigCommandsWatchTests
     public async Task WatchEnableStar_WithScopesConfigured_PrintsNoHint()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeGlobal] = "[\"/a\"]";
+=======
+        store.Settings[WatchSettingsKeys.ScopeGlobal] = "[\"/a\"]";
+>>>>>>> origin/main
 
         var (_, _, err) = await Run(["watch", "enable", "*", "true"], store);
 
@@ -81,7 +93,11 @@ public class ConfigCommandsWatchTests
 
         await Run(["watch", "disable", "acme", "false"], store);
 
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.EnabledProject("acme")].ShouldBe("false");
+=======
+        store.Settings[WatchSettingsKeys.Enabled("acme")].ShouldBe("false");
+>>>>>>> origin/main
     }
 
     // ── scope add / remove / list ──
@@ -95,7 +111,11 @@ public class ConfigCommandsWatchTests
         var (exit, stdout, _) = await Run(["watch", "scope", "add", "acme", "rel/notes"], store);
 
         exit.ShouldBe(0);
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe($"[{System.Text.Json.JsonSerializer.Serialize(expected)}]");
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")].ShouldBe($"[{System.Text.Json.JsonSerializer.Serialize(expected)}]");
+>>>>>>> origin/main
         stdout.ShouldContain(expected);
     }
 
@@ -103,12 +123,20 @@ public class ConfigCommandsWatchTests
     public async Task WatchScopeAdd_DedupsAndReSorts()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")] = "[\"/b\"]";
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")] = "[\"/b\"]";
+>>>>>>> origin/main
 
         await Run(["watch", "scope", "add", "acme", "/a"], store);
         await Run(["watch", "scope", "add", "acme", "/b"], store);
 
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/b\"]");
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")].ShouldBe("[\"/a\",\"/b\"]");
+>>>>>>> origin/main
     }
 
     [Fact]
@@ -118,36 +146,60 @@ public class ConfigCommandsWatchTests
 
         await Run(["watch", "scope", "add", "*", "/a"], store);
 
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeGlobal].ShouldBe("[\"/a\"]");
+=======
+        store.Settings[WatchSettingsKeys.ScopeGlobal].ShouldBe("[\"/a\"]");
+>>>>>>> origin/main
     }
 
     [Fact]
     public async Task WatchScopeRemove_RemovesOnePath_KeepingOrderAndDedup()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")] = "[\"/a\",\"/b\",\"/c\"]";
 
         await Run(["watch", "scope", "remove", "acme", "/b"], store);
 
         store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/c\"]");
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")] = "[\"/a\",\"/b\",\"/c\"]";
+
+        await Run(["watch", "scope", "remove", "acme", "/b"], store);
+
+        store.Settings[WatchSettingsKeys.Scope("acme")].ShouldBe("[\"/a\",\"/c\"]");
+>>>>>>> origin/main
     }
 
     [Fact]
     public async Task WatchScopeRemove_LastPath_DeletesTheRow()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]";
 
         await Run(["watch", "scope", "remove", "acme", "/a"], store);
 
         store.Settings.ShouldNotContainKey(WatchConfigKeys.ScopeProject("acme"));
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")] = "[\"/a\"]";
+
+        await Run(["watch", "scope", "remove", "acme", "/a"], store);
+
+        store.Settings.ShouldNotContainKey(WatchSettingsKeys.Scope("acme"));
+>>>>>>> origin/main
     }
 
     [Fact]
     public async Task WatchScopeList_PrintsOnePathPerLine()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ScopeProject("acme")] = "[\"/a\",\"/b\"]";
+=======
+        store.Settings[WatchSettingsKeys.Scope("acme")] = "[\"/a\",\"/b\"]";
+>>>>>>> origin/main
 
         var (exit, stdout, _) = await Run(["watch", "scope", "list", "acme"], store);
 
@@ -174,7 +226,11 @@ public class ConfigCommandsWatchTests
         var (exit, _, _) = await Run(["watch", "concurrency", "acme", "8"], store);
 
         exit.ShouldBe(0);
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ConcurrencyProject("acme")].ShouldBe("8");
+=======
+        store.Settings[WatchSettingsKeys.Concurrency("acme")].ShouldBe("8");
+>>>>>>> origin/main
     }
 
     [Fact]
@@ -184,7 +240,11 @@ public class ConfigCommandsWatchTests
 
         await Run(["watch", "concurrency", "*", "4"], store);
 
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.ConcurrencyGlobal].ShouldBe("4");
+=======
+        store.Settings[WatchSettingsKeys.ConcurrencyGlobal].ShouldBe("4");
+>>>>>>> origin/main
     }
 
     [Fact]
@@ -198,7 +258,11 @@ public class ConfigCommandsWatchTests
 
             exit.ShouldBe(1);
             err.ShouldContain("1..16");
+<<<<<<< HEAD
             store.Settings.ShouldNotContainKey(WatchConfigKeys.ConcurrencyProject("acme"));
+=======
+            store.Settings.ShouldNotContainKey(WatchSettingsKeys.Concurrency("acme"));
+>>>>>>> origin/main
         }
     }
 
@@ -208,9 +272,15 @@ public class ConfigCommandsWatchTests
     public async Task WatchList_ShowsResolvedValues_PerTarget()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.EnabledGlobal] = "true";
         store.Settings[WatchConfigKeys.ConcurrencyProject("acme")] = "2";
         store.Settings[WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]";
+=======
+        store.Settings[WatchSettingsKeys.EnabledGlobal] = "true";
+        store.Settings[WatchSettingsKeys.Concurrency("acme")] = "2";
+        store.Settings[WatchSettingsKeys.Scope("acme")] = "[\"/a\"]";
+>>>>>>> origin/main
 
         var (exit, stdout, _) = await Run(["watch", "list"], store);
 
@@ -223,10 +293,17 @@ public class ConfigCommandsWatchTests
     public async Task WatchList_ProjectRow_WinsOverGlobal()
     {
         var store = new FakeConfigStore();
+<<<<<<< HEAD
         store.Settings[WatchConfigKeys.EnabledGlobal] = "false";
         store.Settings[WatchConfigKeys.EnabledProject("acme")] = "true";
         store.Settings[WatchConfigKeys.ConcurrencyGlobal] = "16";
         store.Settings[WatchConfigKeys.ConcurrencyProject("acme")] = "8";
+=======
+        store.Settings[WatchSettingsKeys.EnabledGlobal] = "false";
+        store.Settings[WatchSettingsKeys.Enabled("acme")] = "true";
+        store.Settings[WatchSettingsKeys.ConcurrencyGlobal] = "16";
+        store.Settings[WatchSettingsKeys.Concurrency("acme")] = "8";
+>>>>>>> origin/main
 
         var (_, stdout, _) = await Run(["watch", "list"], store);
 
