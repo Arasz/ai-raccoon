@@ -8,7 +8,7 @@ namespace AiRaccoon.Observability;
 ///     Meter name is "AiRaccoon.MemoryTools" for discoverability by dotnet-counters.
 ///     project_id Activity tag: fine for Wave 0 (local only); may need hashing when OTLP export is added.
 /// </summary>
-public sealed class ToolCallMetrics
+public sealed class ToolCallMetrics : IDisposable
 {
     private readonly Counter<long> _invocationCount;
     private readonly Histogram<double> _invocationDurationMs;
@@ -69,4 +69,6 @@ public sealed class ToolCallMetrics
 
         _invocationDurationMs.Record(duration.TotalMilliseconds, histoTags);
     }
+
+    public void Dispose() => Meter.Dispose();
 }

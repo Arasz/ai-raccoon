@@ -644,9 +644,12 @@ public sealed class MemoryTools(
 
             if (!syncOptions.IsConfigured)
             {
-                throw new McpException(
+                var notConfigured = new McpException(
                     "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
                     "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+                activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
+                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(McpException));
+                throw notConfigured;
             }
 
             var objectKey = syncOptions.ObjectKey ?? $"memory-{projectId}.db";
@@ -701,7 +704,8 @@ public sealed class MemoryTools(
                                    && ex is not SyncAuthFailedException
                                    && ex is not SyncConflictException
                                    && ex is not SyncNetworkException
-                                   && ex is not SyncCorruptFileException)
+                                   && ex is not SyncCorruptFileException
+                                   && ex is not McpException)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, ex.GetType().Name);

@@ -36,15 +36,15 @@ A single `Meter` named `"AiRaccoon.MemoryTools"` exposes two instruments:
 
 | Instrument | Type | Name | Unit | Tags |
 |---|---|---|---|---|
-| Call counter | `Counter<long>` | `ai_raccoon.tool.invocation.count` | `{call}` | `tool`, `result`, `error_type` |
-| Call duration | `Histogram<double>` | `ai_raccoon.tool.invocation.duration_ms` | `ms` | `tool` |
+| Call counter | `Counter<long>` | `ai_raccoon_tool_invocations` | `{call}` | `tool`, `result`, `error_type` |
+| Call duration | `Histogram<double>` | `ai_raccoon_tool_duration_ms` | `ms` | `tool`, `result`, `error_type` |
 
 Custom histogram buckets (milliseconds):
 `1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000`.
 These cover sub-millisecond reads up to 30-second timeouts.
 
 The `tool` tag carries the MCP tool name (`"memory_write"`, `"memory_search"`,
-…) — exactly as surfaced to MCP clients. The `result` tag is `"ok"` or
+`) — exactly as surfaced to MCP clients. The `result` tag is `"success"` or
 `"error"`. The `error_type` tag carries the exception type name when
 `result` is `"error"`; it is absent when the call succeeds.
 
@@ -57,7 +57,7 @@ tool call. Tags attached to the span:
 |---|---|
 | `tool` | MCP tool name |
 | `project_id` | Project identifier from the call |
-| `result` | `"ok"` or `"error"` |
+| `result` | `"success"` or `"error"` |
 
 The `Activity` wraps the tool body in a `try`/`catch`: `SetStatus(Error)` on
 failure, `SetStatus(Ok)` on success. This gives `dotnet-trace` and OTel
@@ -82,7 +82,7 @@ catch (Exception ex)
     throw;
 }
 activity?.SetStatus(ActivityStatusCode.Ok);
-_metrics.Record(tool, "ok", null, Elapsed(started));
+`_metrics.Record(tool, "success", null, sw.Elapsed);`
 return result;
 ```
 
