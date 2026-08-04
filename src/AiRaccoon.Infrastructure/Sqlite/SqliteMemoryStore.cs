@@ -779,16 +779,16 @@ public sealed class SqliteMemoryStore(
 
         if (context.StartsWith("label:", StringComparison.Ordinal))
         {
-            // Wave 2 (plan C §3 2e): a context-label filter augments the project scope with
-            // the label's custom-scoped rows (scope='custom' AND context_label = label).
+            // Wave 2 (plan C §3 2e): the label context contributes the label's custom-scoped
+            // rows only — project-scoped rows are already in the project batch (SearchContexts),
+            // and a union here would double-count them in RRF.
             var rest = context["label:".Length..];
             var colon = rest.IndexOf(':');
             if (colon > 0)
             {
                 var label = rest[(colon + 1)..];
                 return (
-                    $"(({alias}scope = 'project' AND {alias}project_id = @projectId) OR " +
-                    $"({alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId))",
+                    $"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
                     new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
             }
         }

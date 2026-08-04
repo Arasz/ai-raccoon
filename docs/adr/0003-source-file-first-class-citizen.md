@@ -100,3 +100,17 @@ Measured on the regenerated 752-chunk corpus (plan C §3 Wave 2 gates):
   must decide how they participate (plan C §6 open question 6).
 - The migration is destructive to the old FTS index only (drop + recreate + repopulate);
   `entries` data is preserved. Runs once per legacy bank on first open.
+- **Content dedup shadows a file's identity (Wave 2 review):** `entries` is
+  content-addressed (FR-NM-7), so byte-identical chunks from a second file — 10 of
+  jsaa's `HERMES.md` chunks are byte-identical to `CLAUDE.md`'s — keep the first
+  file's row. The shadowed file has no rows of its own, its structured paths are
+  absent from the db while still listed in `chunk-hash-map.json`, and a source-path
+  query for the shadowed file matches nothing. The duplicates are dropped correctly;
+  the map asymmetry is the accepted trade-off of FR-NM-7.
+- **Title handling asymmetry (Wave 2 review):** the H1 title prepend was dropped for
+  `chunk_heading` chunks during the 2d provenance cleanup while `chunk_adr` keeps the
+  title in content — heading chunks and ADR chunks embed different title signals.
+- **`agent_id` still carries the structured path (Wave 2 review):** the ingest script
+  passes `agent_id=chunk.structured_path`, so every corpus row retains the structured
+  path in `agent_id` (unindexed, harmless) — provenance left the content, not the row
+  entirely.

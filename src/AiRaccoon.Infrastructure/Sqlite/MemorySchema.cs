@@ -56,52 +56,81 @@ internal static class MemorySchema
                     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        if (ftsSql is null || (ftsSql.Contains("source_file", StringComparison.Ordinal)
-                              && ftsSql.Contains("section", StringComparison.Ordinal)))
+        if (ftsSql is not null && ftsSql.Contains("source_file", StringComparison.Ordinal)
+            && ftsSql.Contains("section", StringComparison.Ordinal))
         {
-            return;
+            // New shape in place; verify it is not an empty shell left by a crash between the
+            // DROP/CREATE and the repopulate — the triggers keep it in sync only from here on.
+            var ftsRows = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            var entryRows = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (ftsRows == entryRows)
+            {
+                return;
+            }
         }
 
         // The old index cannot host weighted source/section columns: drop it with its
         // triggers, recreate in the new shape, and repopulate from the content table.
+        // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
+        // (or with an empty shell) that never heals on reopen.
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    DROP TRIGGER IF EXISTS entries_fts_ai;
-                    DROP TRIGGER IF EXISTS entries_fts_ad;
-                    DROP TRIGGER IF EXISTS entries_fts_au;
-                    DROP TABLE IF EXISTS entries_fts;
-
-                    CREATE VIRTUAL TABLE entries_fts USING fts5(
-                        value,
-                        source_file,
-                        section,
-                        content='entries',
-                        content_rowid='id'
-                    );
-
-                    CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
-                        INSERT INTO entries_fts(rowid, value, source_file, section)
-                        VALUES (new.id, new.value, new.source_file, new.section);
-                    END;
-
-                    CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
-                        INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                        VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                    END;
-
-                    CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
-                        INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                        VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                        INSERT INTO entries_fts(rowid, value, source_file, section)
-                        VALUES (new.id, new.value, new.source_file, new.section);
-                    END;
-
-                    INSERT INTO entries_fts(rowid, value, source_file, section)
-                    SELECT id, value, source_file, section FROM entries;
-                    """,
-                    cancellationToken: cancellationToken))
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        DROP TRIGGER IF EXISTS entries_fts_ai;
+                        DROP TRIGGER IF EXISTS entries_fts_ad;
+                        DROP TRIGGER IF EXISTS entries_fts_au;
+                        DROP TABLE IF EXISTS entries_fts;
+
+                        CREATE VIRTUAL TABLE entries_fts USING fts5(
+                            value,
+                            source_file,
+                            section,
+                            content='entries',
+                            content_rowid='id'
+                        );
+
+                        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        INSERT INTO entries_fts(rowid, value, source_file, section)
+                        SELECT id, value, source_file, section FROM entries;
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     // workspace_id exists now for the P8 structural-isolation wave; the FK and the

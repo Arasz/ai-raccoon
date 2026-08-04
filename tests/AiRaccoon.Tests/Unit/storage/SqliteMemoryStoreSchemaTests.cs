@@ -131,6 +131,39 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         hasColumn.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task OpenBank_AfterFtsShellCrash_RecreatesAndRepopulatesIndex()
+    {
+        // A crash between the migration's DROP/CREATE and its repopulate leaves a
+        // new-shape FTS table with no rows and no triggers — it must heal on reopen.
+        var store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
+            new TokenizerChunker(), new EmbeddingService());
+        await store.WriteAsync(new MemoryWriteRequest("acme", "shell crash recovery content"),
+            TestContext.Current.CancellationToken);
+
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                """
+                DROP TRIGGER IF EXISTS entries_fts_ai;
+                DROP TRIGGER IF EXISTS entries_fts_ad;
+                DROP TRIGGER IF EXISTS entries_fts_au;
+                DROP TABLE IF EXISTS entries_fts;
+                CREATE VIRTUAL TABLE entries_fts USING fts5(value, source_file, section,
+                    content='entries', content_rowid='id');
+                """,
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var reopened = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var ftsRows = await reopened.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries_fts", TestContext.Current.CancellationToken);
+        var entryRows = await reopened.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
+        ftsRows.ShouldBe(entryRows, "the empty shell must be detected and repopulated on reopen");
+        ftsRows.ShouldBeGreaterThan(0);
+    }
+
     private async Task CreateLegacyBankAsync()
     {
         var bankPath = Path.Combine(_dataRoot, "memory.db");
