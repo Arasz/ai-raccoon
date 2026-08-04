@@ -71,6 +71,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = request.Content,
+                        sourceFile = request.SourceFile,
+                        section = request.Section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -113,6 +115,12 @@ public sealed class SqliteMemoryStore(
         }
 
         var ftsExpression = FtsQueryNormalizer.Normalize(query.Query);
+        if (SourcePathQuery.TryBuild(query.Query, out var pathExpression))
+        {
+            // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
+            // with AND semantics so the exact chunk ranks first (see SourcePathQuery).
+            ftsExpression = pathExpression;
+        }
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         foreach (var context in SearchContexts.For(query))
         {
@@ -196,7 +204,8 @@ public sealed class SqliteMemoryStore(
                     .ConfigureAwait(false))
                 .Select(row => new MemorySearchResult(
                     row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
                 .ToList();
         }
         catch (SqliteException)
@@ -216,7 +225,8 @@ public sealed class SqliteMemoryStore(
             .ToList();
         return rows
             .Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
+                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
+                row.SourceFile, row.ChunkIndex, row.TotalChunks))
             .ToList();
     }
 
@@ -462,6 +472,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
+                        sourceFile = (string?)null,
+                        section = (string?)null,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -695,6 +707,8 @@ public sealed class SqliteMemoryStore(
                             hash,
                             path,
                             value = chunk,
+                            sourceFile = path,
+                            section = (string?)null,
                             scope = bucket.Scope,
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
@@ -761,6 +775,22 @@ public sealed class SqliteMemoryStore(
         {
             return ($"{alias}workspace_id = @workspaceId AND {alias}project_id = @projectId",
                 new Dictionary<string, object?> { ["workspaceId"] = context["workspace:".Length..], ["projectId"] = projectId });
+        }
+
+        if (context.StartsWith("label:", StringComparison.Ordinal))
+        {
+            // Wave 2 (plan C §3 2e): a context-label filter augments the project scope with
+            // the label's custom-scoped rows (scope='custom' AND context_label = label).
+            var rest = context["label:".Length..];
+            var colon = rest.IndexOf(':');
+            if (colon > 0)
+            {
+                var label = rest[(colon + 1)..];
+                return (
+                    $"(({alias}scope = 'project' AND {alias}project_id = @projectId) OR " +
+                    $"({alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId))",
+                    new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
+            }
         }
 
         return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
@@ -882,6 +912,12 @@ public sealed class SqliteMemoryStore(
         public string Snippet { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed class VectorRow
@@ -893,6 +929,12 @@ public sealed class SqliteMemoryStore(
         public string Path { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public string? SourceFile { get; set; }
+
+        public int ChunkIndex { get; set; }
+
+        public int TotalChunks { get; set; }
     }
 
     private sealed record SourceRow(string Path, string Value);

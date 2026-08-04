@@ -71,6 +71,10 @@ public sealed class MemoryTools(
         string? agentId = null,
         [Description("Optional custom context label instead of the default project/workspace context.")]
         string? context = null,
+        [Description("Optional original file path the content came from; chunks of one file share it.")]
+        string? sourceFile = null,
+        [Description("Optional section slug within the source file (e.g. 'decision'); indexed as a weighted FTS column.")]
+        string? section = null,
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WRITE);
@@ -82,7 +86,7 @@ public sealed class MemoryTools(
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_WRITE, cancellationToken);
 
-            var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId);
+            var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
             new MemoryWriteRequest.Validator().ValidateAndThrow(request);
 
             var entry = await store.WriteAsync(request, cancellationToken);
@@ -118,6 +122,8 @@ public sealed class MemoryTools(
         int ftsWeight = 1,
         [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
         int vectorWeight = 1,
+        [Description("When set, the project scope also searches custom-scoped rows under this context label.")]
+        string? contextLabel = null,
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SEARCH);
@@ -138,7 +144,7 @@ public sealed class MemoryTools(
             };
 
             var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
-                rrfK, ftsWeight, vectorWeight);
+                rrfK, ftsWeight, vectorWeight, contextLabel);
             new SearchQuery.Validator().ValidateAndThrow(searchQuery);
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
