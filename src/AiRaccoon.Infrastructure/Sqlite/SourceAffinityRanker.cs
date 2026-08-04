@@ -55,6 +55,7 @@ internal static class SourceAffinityRanker
                 ? scores[candidate.Hash]
                 : docScore[candidate.SourceFile])
             .ThenBy(candidate => candidate.Path, StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.ChunkIndex)
             .ToList();
 
         var consolidated = Consolidate(order, scores, consolidationThreshold);

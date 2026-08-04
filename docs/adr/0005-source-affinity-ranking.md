@@ -60,7 +60,7 @@ Measured on the committed jsaa corpus (SourceAffinitySweepTests, limit 10, k=60,
   gate-passing points, and the only one surfacing the A6 exact chunk at rank 2.
   Max and Sum are identical on every point (measured) — Max kept as the simpler formula.
   Consolidation removes no top-10 result for the gate queries at the chosen point; at
-  threshold 0.15 it would merge A7's rank-3 chunk, lowering nDCG@5 (0.869 → 0.723).
+  threshold 0.15 it would merge A7's rank-3 chunk, lowering nDCG@5.
 - **Cost.** One extra sort + per-source grouping over the fused candidate list (~200
   items); the parity gate's p95 latency budget holds (full suite green, parity test asserts
   p95 ≤ 1000 ms).

@@ -99,6 +99,8 @@ public sealed class SourceAffinitySweepTests : IDisposable
         chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(3,
             $"A6 expected file must rank <= 3; got {chosen.A6FileRank}");
         chosen.A6ExactRank.ShouldNotBeNull("A6 exact chunk should surface in the top 10 at the chosen configuration");
+        chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(2,
+            $"A6 exact chunk measured rank 2 at the chosen point; drift to {chosen.A6ExactRank} would stale the ADR claim");
 
         // Gate (c): ADR nDCG@5 improves over the Wave 6 merged state (0.650) and the λ=0 arm.
         chosen.AdrNdcg5.ShouldBeGreaterThan(0.650,

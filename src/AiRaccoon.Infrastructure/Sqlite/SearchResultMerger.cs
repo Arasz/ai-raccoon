@@ -7,7 +7,8 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     batch is one ranked list, contexts fuse at uniform weight, scores normalize to their
 ///     max (top result = 1.0). Wave 3: the fused candidates then pass through the
 ///     source-affinity ranker (adjacent-chunk boost, consolidation, document-first tie-break)
-///     before minScore and limit apply.
+///     before minScore and limit apply — minScore therefore filters against the boosted-max
+///     normalization (scale shifts ~10-20% at λ=0.1 for non-boosted results).
 /// </summary>
 internal static class SearchResultMerger
 {
