@@ -25,6 +25,9 @@
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+    <!-- WatchHostedService (BackgroundService) lives in Hosting.Abstractions; 10.0.3 is the
+         version already flowing transitively into Infrastructure. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
     <!-- In-process local embedding engine (P4): pinned; re-run the retrieval harness on upgrade. -->
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
     <!-- Microsoft.ML.Tokenizers.Data.O200kBase pulls Bcl.Memory 9.0.4 transitively; 9.0.14 patches GHSA-73j8-2gch-69rq. -->

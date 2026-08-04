@@ -268,9 +268,28 @@ internal static class MemorySchema
                                    PRIMARY KEY (hash, scope)
                                );
 
+                               -- File-watcher feature: persisted watch registrations and per-path
+                               -- fingerprints (hash-skip). D3-normalized paths; runtime state is not persisted.
+                               CREATE TABLE IF NOT EXISTS watches (
+                                   project_id      TEXT NOT NULL,
+                                   path            TEXT NOT NULL,
+                                   created_at      INTEGER NOT NULL,
+                                   last_change_ts  INTEGER NOT NULL,       -- catch-up watermark (D1)
+                                   PRIMARY KEY (project_id, path)
+                               );
+
+                               CREATE TABLE IF NOT EXISTS watch_files (
+                                   project_id      TEXT NOT NULL,
+                                   path            TEXT NOT NULL,
+                                   file_hash       TEXT NOT NULL,          -- SHA-256(path + full content)
+                                   updated_at      INTEGER NOT NULL,
+                                   PRIMARY KEY (project_id, path)
+                               );
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
+                               CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
                                """;
 }

@@ -62,6 +62,9 @@ public interface IMemoryStore
     /// <summary>Upserts one settings row.</summary>
     Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default);
 
+    /// <summary>Deletes every committed chunk whose source path is the given path or lies under it (mirror delete/rename/directory cascade).</summary>
+    Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default);
+
     /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>
     Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default);

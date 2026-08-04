@@ -374,6 +374,47 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Removes every committed chunk of one source path and everything under it (a deleted
+    ///     directory cascades to its subtree), plus the per-path watch fingerprints in the same
+    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale
+    ///     chunks. The watch registration survives.
+    /// </summary>
+    public async Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var pathPrefix = LikePattern.Escape(path) + "/%";
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                        new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted;
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);

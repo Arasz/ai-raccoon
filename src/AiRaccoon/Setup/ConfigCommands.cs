@@ -339,14 +339,14 @@ internal static class ConfigCommands
     {
         var target = parseResult.GetValue<string>("target")!;
         var enabled = parseResult.GetValue<bool>("enabled");
-        var key = target == "*" ? WatchSettingsKeys.EnabledGlobal : WatchSettingsKeys.Enabled(target);
+        var key = target == "*" ? WatchConfigKeys.EnabledGlobal : WatchConfigKeys.EnabledProject(target);
         await store.SetSettingAsync(key, enabled ? "true" : "false", cancellationToken);
 
         if (target == "*" && enabled &&
-            WatchScopeList.Parse(await store.GetSettingAsync(WatchSettingsKeys.ScopeGlobal, cancellationToken)).Count == 0)
+            WatchScopeList.Parse(await store.GetSettingAsync(WatchConfigKeys.ScopeGlobal, cancellationToken)).Count == 0)
         {
             await stderr.WriteLineAsync(
-                "ai-raccoon: warning — no watch scopes configured; add one with 'ai-raccoon watch scope add * <path>'");
+                "ai-raccoon: warning — no watch scopes configured; add at least one scope with 'ai-raccoon watch scope add * <path>'");
         }
 
         await stdout.WriteLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");
@@ -358,7 +358,7 @@ internal static class ConfigCommands
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
-        var key = target == "*" ? WatchSettingsKeys.ScopeGlobal : WatchSettingsKeys.Scope(target);
+        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
         var current = WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
         var updated = WatchScopeList.Add(current, path);
         await store.SetSettingAsync(key, WatchScopeList.ToJson(updated), cancellationToken);
@@ -371,7 +371,7 @@ internal static class ConfigCommands
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
-        var key = target == "*" ? WatchSettingsKeys.ScopeGlobal : WatchSettingsKeys.Scope(target);
+        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
         var current = WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
         var updated = WatchScopeList.Remove(current, path);
         if (updated.Count == 0)
@@ -391,7 +391,7 @@ internal static class ConfigCommands
         TextWriter stdout, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
-        var key = target == "*" ? WatchSettingsKeys.ScopeGlobal : WatchSettingsKeys.Scope(target);
+        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
         foreach (var path in WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken)))
         {
             await stdout.WriteLineAsync(path);
@@ -407,11 +407,11 @@ internal static class ConfigCommands
         var value = parseResult.GetValue<int>("value");
         if (value is < 1 or > 16)
         {
-            await stderr.WriteLineAsync($"ai-raccoon: invalid concurrency {value} (expected 1..16)");
+            await stderr.WriteLineAsync($"ai-raccoon: invalid-value: concurrency {value} (expected 1..16)");
             return 1;
         }
 
-        var key = target == "*" ? WatchSettingsKeys.ConcurrencyGlobal : WatchSettingsKeys.Concurrency(target);
+        var key = target == "*" ? WatchConfigKeys.ConcurrencyGlobal : WatchConfigKeys.ConcurrencyProject(target);
         await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
         await stdout.WriteLineAsync($"watch concurrency set to {value} for {target}");
         return 0;
@@ -433,16 +433,16 @@ internal static class ConfigCommands
 
         foreach (var target in targets)
         {
-            var enabled = rows.GetValueOrDefault(WatchSettingsKeys.Enabled(target))
-                           ?? rows.GetValueOrDefault(WatchSettingsKeys.EnabledGlobal)
+            var enabled = rows.GetValueOrDefault(WatchConfigKeys.EnabledProject(target))
+                           ?? rows.GetValueOrDefault(WatchConfigKeys.EnabledGlobal)
                            ?? "false";
-            var concurrencyRaw = rows.GetValueOrDefault(WatchSettingsKeys.Concurrency(target))
-                                 ?? rows.GetValueOrDefault(WatchSettingsKeys.ConcurrencyGlobal);
+            var concurrencyRaw = rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyProject(target))
+                                 ?? rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyGlobal);
             var concurrency = int.TryParse(concurrencyRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
                 ? n
                 : 4;
-            var scope = WatchScopeList.Parse(rows.GetValueOrDefault(WatchSettingsKeys.Scope(target))
-                                             ?? rows.GetValueOrDefault(WatchSettingsKeys.ScopeGlobal));
+            var scope = WatchScopeList.Parse(rows.GetValueOrDefault(WatchConfigKeys.ScopeProject(target))
+                                             ?? rows.GetValueOrDefault(WatchConfigKeys.ScopeGlobal));
             await stdout.WriteLineAsync($"{target}: enabled={enabled} concurrency={concurrency} scope={WatchScopeList.ToJson(scope)}");
         }
 

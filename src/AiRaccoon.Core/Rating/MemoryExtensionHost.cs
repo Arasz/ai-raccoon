@@ -63,6 +63,27 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         return await inner.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var extension in _extensions)
+        {
+            await extension.OnDeleteAsync(new DeleteContext(projectId, Path: path), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return await inner.DeleteSourcePathAsync(projectId, path, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Dispatches one processed source change to every extension (watch mirror; fired by the digest executor).</summary>
+    public async Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken = default)
+    {
+        foreach (var extension in _extensions)
+        {
+            await extension.OnSourceChangedAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => await inner.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,

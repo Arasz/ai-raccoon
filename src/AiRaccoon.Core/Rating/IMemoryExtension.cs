@@ -3,6 +3,14 @@ using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Core.Rating;
 
+public enum SourceChangeKind
+{
+    Created,
+    Changed,
+    Deleted,
+    Renamed
+}
+
 /// <summary>Extension contract; ordered hooks run around every store operation (spec §6.2).</summary>
 public interface IMemoryExtension
 {
@@ -17,6 +25,10 @@ public interface IMemoryExtension
     Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context, CancellationToken cancellationToken);
 
     Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken);
+
+    /// <summary>Observes one processed source change (watch mirror); extensions that do not care inherit a no-op.</summary>
+    Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }
 
 public sealed record WriteContext(
@@ -34,7 +46,7 @@ public sealed record SearchContext(
     int Limit = 20,
     double MinScore = 0.7);
 
-public sealed record DeleteContext(string ProjectId, string? Hash = null, string? Context = null);
+public sealed record DeleteContext(string ProjectId, string? Hash = null, string? Context = null, string? Path = null);
 
 public sealed record SweepContext(string ProjectId, double Threshold, double DefaultTtlDays, bool DryRun);
 
@@ -43,3 +55,5 @@ public sealed record ConsolidationContext(
     string WorkspaceId,
     IReadOnlyList<string> PromotedHashes,
     IReadOnlyList<string> DiscardedHashes);
+
+public sealed record SourceChangedContext(string ProjectId, string Path, SourceChangeKind ChangeKind);

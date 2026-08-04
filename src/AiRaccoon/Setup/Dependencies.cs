@@ -3,6 +3,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
@@ -10,8 +11,10 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Setup;
 
@@ -32,9 +35,10 @@ public static partial class Dependencies
         services.AddSingleton<SqliteWorkspaceStore>();
         services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
         services.AddSingleton<IChunker, TokenizerChunker>();
-        services.AddSingleton<IMemoryStore>(sp => new MemoryExtensionHost(
+        services.AddSingleton<MemoryExtensionHost>(sp => new MemoryExtensionHost(
             sp.GetRequiredService<SqliteMemoryStore>(),
             [sp.GetRequiredService<RetrievalRatingExtension>()]));
+        services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<MemoryExtensionHost>());
         services.AddSingleton<RetrievalRatingExtension>();
         services.AddSingleton(sp => new SyncService(
             ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
@@ -53,5 +57,36 @@ public static partial class Dependencies
         services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
             sp.GetRequiredService<IMemoryStore>()));
         services.AddSingleton<ToolCallMetrics>();
+
+        // Watch services resolve the same MemoryExtensionHost-decorated IMemoryStore, so
+        // extension hooks (OnSourceChangedAsync) observe watcher digests. The hosted
+        // service + catch-up/event-source registrations land in S5 (next wave).
+        services.AddSingleton<WatchStore>();
+        services.AddSingleton<IWatchStore>(sp => sp.GetRequiredService<WatchStore>());
+        services.AddSingleton<WatchRetryPolicy>();
+        services.AddSingleton<WatchDigestExecutor>();
+        services.AddSingleton<WatchScheduler>();
+        services.AddSingleton<WatchPipeline>();
+        services.AddSingleton<IWatchService, WatchService>();
+
+        // S5 watcher lifecycle: catch-up scans, the FileSystemWatcher adapter (adapter
+        // failures surface as synthetic WatchEventError events — logged, never thrown),
+        // and the hosted re-watch loop that starts/stops watchers on a poll.
+        services.AddSingleton<WatchCatchUp>();
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();
+            return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
+                error => Log.WatchEventSourceError(logger, error.ProjectId, error.WatchPath, error.Message), logger);
+        });
+        services.AddHostedService<WatchHostedService>();
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 330, Level = LogLevel.Error,
+            Message = "Watch event source error for {ProjectId} on {WatchPath}: {Message}")]
+        public static partial void WatchEventSourceError(ILogger logger, string projectId, string watchPath,
+            string message);
     }
 }

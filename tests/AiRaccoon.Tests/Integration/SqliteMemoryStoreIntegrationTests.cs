@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
+using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -23,17 +24,18 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = CreateTempRoot();
+    private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
     private readonly WorkspaceService _workspaces;
 
     public SqliteMemoryStoreIntegrationTests()
     {
-        var factory = new SqliteConnectionFactory(
+        _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             new NullKeyProvider());
-        _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
+        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new EmbeddingService());
-        _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(factory), new FakeTimeProvider(FixedNow));
+        _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -184,6 +186,128 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var metadata = await _store.GetMetadataAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
         metadata!.TtlDays.ShouldBe(7);
+    }
+
+    [Fact]
+    public async Task DeleteSourcePath_RemovesAllChunksOfTheFile_AndSearchStopsReturningIt()
+    {
+        var file = Path.Combine(_dataRoot, "notes.md");
+        await File.WriteAllTextAsync(file, "magnetostrictive mirror content", TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
+                TestContext.Current.CancellationToken))
+            .ShouldNotBeEmpty();
+
+        var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeGreaterThan(0);
+        (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
+                TestContext.Current.CancellationToken))
+            .ShouldBeEmpty();
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task DeleteSourcePath_RemovesOnlyThatProjectsRows_ForTheSamePath()
+    {
+        var file = Path.Combine(_dataRoot, "shared-source.md");
+        await File.WriteAllTextAsync(file, "magnetostrictive cross project content", TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("beta", file, null, TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeGreaterThan(0);
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
+        (await _store.GetStatsAsync("beta", TestContext.Current.CancellationToken)).EntryCount.ShouldBeGreaterThan(0);
+        (await _store.SearchAsync(new SearchQuery("beta", "magnetostrictive"),
+                TestContext.Current.CancellationToken))
+            .ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteSourcePath_LeavesWorkspaceScratchRowsForThePathAlone()
+    {
+        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var file = Path.Combine(_dataRoot, "scratch.md");
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "magnetostrictive workspace scratch",
+                WorkspaceId: ws.Id, SourceFile: file),
+            TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBe(0);
+        (await _store.ListContextAsync("acme", $"workspace:{ws.Id}", TestContext.Current.CancellationToken))
+            .ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteSourcePath_ClearsWatchFingerprint_ButKeepsTheWatchRegistration()
+    {
+        var file = Path.Combine(_dataRoot, "watched.md");
+        await File.WriteAllTextAsync(file, "magnetostrictive watched content", TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES (@projectId, @path, @now, @now)",
+                new { projectId = "acme", path = file, now = 1L });
+            await connection.ExecuteAsync(
+                "INSERT INTO watch_files (project_id, path, file_hash, updated_at) VALUES (@projectId, @path, @hash, @now)",
+                new { projectId = "acme", path = file, hash = "abc123", now = 1L });
+        }
+
+        var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeGreaterThan(0);
+        await using var verify = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await verify.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM watch_files WHERE project_id = @projectId AND path = @path",
+                new { projectId = "acme", path = file }))
+            .ShouldBe(0);
+        (await verify.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM watches WHERE project_id = @projectId AND path = @path",
+                new { projectId = "acme", path = file }))
+            .ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Schema_CreatesWatchTables_OnFreshBank()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var tables = (await connection.QueryAsync<string>(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('watches', 'watch_files')"))
+            .ToList();
+
+        tables.ShouldContain("watches");
+        tables.ShouldContain("watch_files");
+    }
+
+    [Fact]
+    public async Task Schema_ExistingBankWithoutWatchTables_GainsThemOnReopen_WithoutDisturbingEntries()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "pre feature entry"),
+            TestContext.Current.CancellationToken);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            // Simulate a bank created before the watch feature: drop the watch tables only.
+            await connection.ExecuteAsync("DROP TABLE IF EXISTS watches; DROP TABLE IF EXISTS watch_files;");
+        }
+
+        await using var reopened = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var tables = (await reopened.QueryAsync<string>(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('watches', 'watch_files')"))
+            .ToList();
+        tables.ShouldContain("watches");
+        tables.ShouldContain("watch_files");
+        (await reopened.ExecuteScalarAsync<long>("SELECT count(*) FROM entries_fts"))
+            .ShouldBe(await reopened.ExecuteScalarAsync<long>("SELECT count(*) FROM entries"));
+        (await _store.SearchAsync(new SearchQuery("acme", "pre feature"),
+                TestContext.Current.CancellationToken))
+            .ShouldNotBeEmpty();
     }
 
     private static string CreateTempRoot() =>

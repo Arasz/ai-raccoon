@@ -182,6 +182,9 @@ public class MemoryToolsInstrumentationTests
         public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
             => Task.FromResult(1);
 
+        public Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
         public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
             => Task.FromResult(1);
 
