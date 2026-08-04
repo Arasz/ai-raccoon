@@ -23,3 +23,6 @@ tests/AiRaccoon.Tests/Retrieval/assets/*
 src/AiRaccoon/Models/*.onnx
 # Reqnroll generated code-behind files (P12)
 **/*.feature.cs
+baseline-results.json
+scripts/chunk-hash-map.json
+scripts/baseline-results.json
