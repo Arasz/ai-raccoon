@@ -265,3 +265,22 @@ Exact-chunk @3: **11/11** (post-W2: 6/11). File-level @3: 11/11. Zero-match: 0.
   improvement) is delivered beyond the file-level target.
 - **Verdict:** best state measured so far — every metric above every prior wave; all invariants
   at rank 1; exact-chunk @3 11/11.
+
+---
+
+## Post-Wave-5a Integration — 2026-08-04 (baseline enrichment & corpus hygiene)
+
+Commit: 353be1b. Full suite 568 passed / 0 failed / 43 skipped.
+
+- **Query difficulty strata** (all 36 queries, persisted in scripts/baseline-queries.json):
+  11 easy / 11 medium / 10 hard / 4 very-hard — assignments cross-checked against measured
+  hybrid ranks (A2/A5/C1/C2/C5 exact@1 easy; A1@2/A3@3 medium; A4@5/A7@4/S2@5 hard;
+  A6 exact miss/file@2 very-hard).
+- **Per-query relevance grades 1-5**: expected-source queries graded (9×grade-5, A6/A7
+  grade-4); H1-H3 negative tests ungraded and non-evidential (documented per the comparison
+  convention); rubric in BaselineQueryCatalogTests + plan §Wave 5a.
+- **Corpus-integrity assertions** (RetrievalBaselineTests): FR-NM-7 hash contract recomputed
+  over all 752 rows (0 violations), hash-map set ≡ db set, 0 pending embeds, excluded-content
+  markers absent, source_file 100% / section 664-populated, H1-H3 target content excluded.
+- **Verdict:** no retrieval behavior change (catalog data only); measurement harness is now
+  stratified and integrity-pinned for Wave 5b's final report.
