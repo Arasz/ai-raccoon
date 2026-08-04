@@ -21,6 +21,12 @@ for (var i = 1; i < args.Length; i++)
     if (args[i] == "--alpha" && i + 1 < args.Length
         && double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
     {
+        if (parsed is < 0.0 or > 1.0)
+        {
+            Console.Error.WriteLine("Usage: --alpha must be in [0, 1]");
+            return 1;
+        }
+
         alpha = parsed;
     }
 }

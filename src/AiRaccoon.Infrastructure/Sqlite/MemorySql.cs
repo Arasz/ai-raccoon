@@ -103,11 +103,17 @@ internal static class MemorySql
                                                 """;
 
     // Wave 6 structure modality: cosine KNN over the heading-path vectors (vec_structure),
-    // same shape as the content query so both lists fuse in C# by entry hash.
+    // same shape as the content query (source identity included) so both lists fuse in C# by
+    // entry hash.
     public const string StructureVectorSearchByFilter = """
                                                          SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
                                                                 e.value AS Value,
-                                                                vec_distance_cosine(v.embedding, @queryVector) AS Distance
+                                                                vec_distance_cosine(v.embedding, @queryVector) AS Distance,
+                                                                e.source_file AS SourceFile,
+                                                                CASE WHEN e.source_file IS NULL THEN 0
+                                                                     ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
+                                                                CASE WHEN e.source_file IS NULL THEN 0
+                                                                     ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
                                                          FROM vec_structure v
                                                          JOIN entries e ON e.id = v.rowid
                                                          WHERE {filter}

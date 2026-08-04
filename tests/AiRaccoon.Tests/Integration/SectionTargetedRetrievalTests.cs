@@ -120,13 +120,13 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             "S2: the ADR-0011 file must answer the query within the top 3.");
         sectionRank.ShouldBeGreaterThan(0, "S2: the Decision chunk must be found in the top 15.");
         sectionRank.ShouldBeLessThanOrEqualTo(15,
-            "S2: the Decision chunk must not regress beyond the top 15 (measured rank 8).");
+            "S2: the Decision chunk must not regress beyond the top 15 (measured rank 5).");
     }
 
     /// <summary>
     ///     Wave 6 gate (b): section-level hit@5 over the six A-queries with section ground truth
     ///     (A1–A5, A7 — A6's section ground truth is missing per
-    ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6. Measured 5/6.
+    ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6. Measured 6/6.
     /// </summary>
     [Fact]
     public async Task SectionHitAt5_OverAdrQueries_AtLeast4Of6()

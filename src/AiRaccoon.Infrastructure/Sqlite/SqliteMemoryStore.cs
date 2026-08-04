@@ -160,9 +160,10 @@ public sealed class SqliteMemoryStore(
                 }
             }
 
-            // Vector modality: independent of the FTS expression — run once per context;
-            // the dual-vector pass fuses the content and structure (heading-path) lists.
-            var vectorResults = queryVector is null
+            // Vector modality: independent of the FTS expression — run once per context; the
+            // dual-vector pass fuses the content and structure (heading-path) lists. Skipped
+            // when the semantic weight is zero (a weight-0 list contributes nothing to RRF).
+            var vectorResults = queryVector is null || query.VectorWeight == 0
                 ? []
                 : await QueryDualVectorBatchAsync(connection, filter,
                     SearchParameters(""), alpha, cancellationToken).ConfigureAwait(false);
@@ -288,12 +289,10 @@ public sealed class SqliteMemoryStore(
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         return fused
-            .Select(rank => byHash.TryGetValue(rank.Hash, out var row)
-                ? new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
-                    row.SourceFile, row.ChunkIndex, row.TotalChunks)
-                : null)
-            .Where(result => result is not null)
-            .Select(result => result!)
+            .Select(rank => byHash[rank.Hash])
+            .Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
+                row.SourceFile, row.ChunkIndex, row.TotalChunks))
             .ToList();
     }
 

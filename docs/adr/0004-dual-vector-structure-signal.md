@@ -72,9 +72,9 @@ V:content-only per the pre-registered rule (file hit@5 9/10 vs 8/10, MRR(file)
 | Gate | Target | Measured |
 |---|---|---|
 | S4 "Consequences of ADR-0011?" | rank ≤ 3 | **1** |
-| S2 "What does ADR-0011 decide?" | rank ≤ 3 | file rank **1**; Decision chunk **8** (hybrid) |
-| Section hit@5 over A1–A5+A7 | ≥ 4/6 | **5/6** (A1@2, A2@1, A3@4, A5@1, A7@5; A4@9) |
-| File-level no-regression (A1–A7+C1/C2/C5) | strict | 3 queries flip by 1–2 positions (A1 1→2, A3 1→2, A4 1→3); all files stay in top 5; A2/A4/A6/A7/C2 improve |
+| S2 "What does ADR-0011 decide?" | rank ≤ 3 | file rank **1**; Decision chunk **5** (hybrid) |
+| Section hit@5 over A1–A5+A7 | ≥ 4/6 | **6/6** (A1@2, A2@1, A3@3, A4@5, A5@1, A7@4) |
+| File-level no-regression (A1–A7+C1/C2/C5) | strict | 2 queries flip by 1 position (A1 1→2, A4 1→2, same-knowledge alternatives); all files stay in top 5; A2/A4/A6/A7/C2 improve |
 | Invariants | C1/C2/C5 rank 1 | **1/1/1** (C2 improves 5→1) |
 
 ### Measured deviations (documented, not hidden)
@@ -89,7 +89,7 @@ V:content-only per the pre-registered rule (file hit@5 9/10 vs 8/10, MRR(file)
    S2 needs α ≤ 0.4, while A1's no-regression needs α ≥ 0.93 — no single
    fixed alpha satisfies both on this corpus/model. The wave ships the
    mechanism and the S2 answer at file level (rank 1) with the Decision chunk
-   found at rank 8; closing the gap is Wave 1 (FTS) + alpha re-measurement.
+   found at rank 5; closing the gap is Wave 3 (source-affinity/document-first).
 2. **Strict file-rank no-regression is not achievable with section-carrying
    paths.** A1/A3/A4 flip by 1–2 positions when structure-carrying sections of
    relevant documents (the shadcn/ui pivot section, prompt-caching sections,
@@ -102,7 +102,7 @@ V:content-only per the pre-registered rule (file hit@5 9/10 vs 8/10, MRR(file)
 ## Consequences
 
 - **Positive.** Section-targeted queries become answerable (S4 rank 1, S2 at
-  file level); section hit@5 reaches 5/6; A2 (UUID) and C2 (screaming
+  file level); section hit@5 reaches 6/6; A2 (UUID) and C2 (screaming
   architecture) jump to rank 1; A6 (erasure) improves 4→2. The mechanism is
   independent of the Wave 2 schema wave (headings come from chunk content) and
   the backfill is idempotent, so merge conflicts on the corpus db resolve by

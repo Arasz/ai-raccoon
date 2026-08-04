@@ -271,7 +271,7 @@ stratification, corpus integrity checks. Structural queries S1-S6 scored.
 - (b) measured: S4 Consequences-chunk ≤ 3 ✓; S2 file rank 1 ✓ but the Decision chunk ranks 5
   (top-1 is the ADR's metadata header — within-file sibling competition). **S2's decision-chunk
   ≤ 3 target moves to Wave 3's gate** (source-affinity/document-first ranking is the mechanism).
-  Section-level hit@5 measured 5/6 ≥ 4/6 ✓.
+  Section-level hit@5 measured 6/6 ≥ 4/6 ✓.
 - File-level trade (bounded, content-verified): A1 and A4 expected files move 1 → 2 — the
   rank-1 results are same-knowledge alternatives (A1: frontend-architecture.md#3 is the
   evidence section ADR-0011 links to; A4: behaviour-specification.md#3 states "The MCP server

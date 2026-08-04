@@ -190,7 +190,7 @@ on 746 chunks, 704 unique heading paths, vec_structure populated; chunk content/
 | MRR (ADR) | 0.893 | 0.893 | 0.893 | 0.786 | −0.107 (A1/A4 file slips) |
 | recall@5 (ADR) | 0.544 | 0.544 | 0.559 | 0.581 | +0.022 ✓ |
 | Invariants nDCG@5 | 1.000 | 1.000 | 0.667 | 1.000 | +0.333 ✓ (C2 restored) |
-| Section hit@5 (A1-A5,A7) | — | — | — | 5/6 | gate ≥4/6 ✓ |
+| Section hit@5 (A1-A5,A7) | — | — | — | 6/6 | gate ≥4/6 ✓ |
 
 ### Notes (content-verified per integration rule)
 
@@ -209,8 +209,8 @@ on 746 chunks, 704 unique heading paths, vec_structure populated; chunk content/
 - **C2 restored by the structure signal** (invariant heading path matches the query embedding) —
   the Wave-4 C2 acceptance criterion is already satisfied; Wave 4's sweep now only needs to
   hold it.
-- α fixed at 0.5 in practice: `memory_configure` cannot write `retrieval.structureAlpha`
-  (follow-up open question).
+- α is bank-tunable via `memory_set_structure_alpha(projectId, alpha)` (rw tier; the
+  open question is resolved — see plan Wave 6 gate amendments).
 - **Verdict:** the wave delivers its purpose — section-targeted retrieval (S2 file-level, S4 ≤3,
-  section hit@5 5/6) plus C2/A6/A7/recall improvements — at bounded, content-verified file-rank
+  section hit@5 6/6) plus C2/A6/A7/recall improvements — at bounded, content-verified file-rank
   costs on A1/A4 (same-knowledge alternatives) and A3 (exact ≤3).

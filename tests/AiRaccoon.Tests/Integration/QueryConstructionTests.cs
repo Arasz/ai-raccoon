@@ -218,7 +218,7 @@ public sealed class QueryConstructionTests : IDisposable
         var wave0 = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["A1"] = 2, ["A2"] = 1, ["A3"] = 1, ["A4"] = 2, ["A5"] = 1,
-            ["A6"] = 4, ["A7"] = 1, ["C1"] = 1, ["C5"] = 1
+            ["A6"] = 4, ["A7"] = 1, ["C1"] = 1, ["C2"] = 1, ["C5"] = 1
         };
 
         foreach (var (id, wave0Rank) in wave0)
@@ -242,9 +242,8 @@ public sealed class QueryConstructionTests : IDisposable
 
         // C2 (ADR-0003 + Wave 6 integration): the Wave 2 provenance cleanup (2d) collapsed C2's
         // hybrid rank (vector >100, RRF sinks FTS rank 1). Wave 6's dual-vector structure
-        // signal restored it — the invariant's heading path matches the query's structure
-        // embedding — so the hybrid rank-1 assertion below is the W4 gate criterion, already
-        // satisfied. The FTS-only rank-1 check guards the keyword path independently.
+        // signal restored it — the hybrid rank-1 assertion above is the W4 gate criterion,
+        // already satisfied; the FTS-only rank-1 check below guards the keyword path.
         var c2 = queries.First(q => q.Id == "C2");
         var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);
         var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(hashMap, c2.ExpectedSource!));
