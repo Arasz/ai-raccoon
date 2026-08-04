@@ -100,6 +100,18 @@ internal static class MemorySchema
                                    DELETE FROM vec_entries WHERE rowid = OLD.id;
                                END;
 
+                               CREATE TABLE IF NOT EXISTS sync_meta (
+                                   key TEXT PRIMARY KEY,
+                                   value TEXT NOT NULL
+                               );
+
+                               CREATE TABLE IF NOT EXISTS sync_tombstones (
+                                   hash TEXT NOT NULL,
+                                   scope TEXT NOT NULL,
+                                   deleted_at INTEGER NOT NULL,
+                                   PRIMARY KEY (hash, scope)
+                               );
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
