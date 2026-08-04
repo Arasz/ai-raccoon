@@ -88,6 +88,9 @@ the schema level.
   for INSERT, DELETE, and UPDATE of `value`.
 - `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
   for semantic search. Triggers sync it with `embed_state` changes.
+- `vec_structure` — vec0 virtual table over the Wave 6 heading-path embeddings
+  (rowid = entry id). Written only by the re-runnable structure backfill
+  (`StructureBackfillService`); a delete trigger keeps orphans out.
 - `idx_entries_scope_project` — the primary lookup path for context-filtered queries.
 - `idx_entries_hash` — content dedup and per-hash lookups.
 - `idx_entries_workspace` — workspace-scoped queries.
@@ -199,9 +202,16 @@ modalities produce ranked lists:
    keyword modality silently returns an empty list — search degrades, never
    crashes.
 
-2. **vec0 (semantic):** when an embedding engine is configured, the query is
-   embedded and a KNN search runs against the `vec_entries` table. Without
-   an engine, this modality is simply absent.
+2. **vec0 (semantic, dual-vector):** when an embedding engine is configured, the
+   query is embedded and KNN search runs against both `vec_entries` (content)
+   and `vec_structure` (heading path). The two lists are fused with a fixed
+   alpha (Wave 6, docs/adr/0004):
+   `score = alpha × sim(q, content) + (1 − alpha) × sim(q, structure)`.
+   Chunks without a heading path contribute zero structure similarity. Alpha
+   defaults to 0.5 and is configurable per bank via the
+   `retrieval.structureAlpha` setting; without an engine, the modality is
+   simply absent, and without structure vectors the fusion degrades to
+   content-only ordering.
 
 **Per-modality candidate window:** `K = max(limit × 3, 100)` — this prevents
 overlap candidates ranked beyond the caller's limit (e.g. rank 30 when
@@ -213,7 +223,9 @@ is 1.0. The per-context batches are then merged with a second RRF pass at
 uniform weight, and `minScore` + `limit` are applied.
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:95-152`
-> (search), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
+> (search), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:215-259`
+> (dual-vector fusion), `src/AiRaccoon.Infrastructure/Embedding/StructureFusion.cs:1-50`
+> (fusion math), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
 > (RRF), `src/AiRaccoon.Infrastructure/Sqlite/SearchResultMerger.cs:12-24`
 > (merger), `src/AiRaccoon.Infrastructure/Sqlite/SearchContexts.cs:9-29`
 > (context resolution)
