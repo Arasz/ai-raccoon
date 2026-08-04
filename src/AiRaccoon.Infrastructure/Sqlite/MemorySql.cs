@@ -124,6 +124,62 @@ internal static class MemorySql
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
 
+    // Mirror delete/rename: committed chunks of the source path AND everything under it
+    // (a deleted directory cascades to its subtree; workspace scratch is transient and
+    // stays), plus the per-path watch fingerprints so a delete-then-recreate cycle cannot
+    // hash-skip its way back to stale chunks. The watch registration survives.
+    public const string DeleteBySourcePath = """
+                                              DELETE FROM entries
+                                              WHERE project_id = @projectId AND workspace_id IS NULL
+                                                AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
+                                              """;
+
+    public const string DeleteWatchFilesByProjectPathCascade = """
+                                                               DELETE FROM watch_files
+                                                               WHERE project_id = @projectId
+                                                                 AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                               """;
+
+    public const string InsertWatchIfAbsent = """
+                                               INSERT INTO watches (project_id, path, created_at, last_change_ts)
+                                               VALUES (@projectId, @path, @createdAt, @lastChangeTs)
+                                               ON CONFLICT(project_id, path) DO NOTHING
+                                               """;
+
+    public const string UpdateWatchLastChange = """
+                                                 UPDATE watches
+                                                 SET last_change_ts = @lastChangeTs
+                                                 WHERE project_id = @projectId AND path = @path
+                                                 """;
+
+    public const string DeleteWatch =
+        "DELETE FROM watches WHERE project_id = @projectId AND path = @path";
+
+    public const string SelectWatches = """
+                                        SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt,
+                                               last_change_ts AS LastChangeTs
+                                        FROM watches
+                                        ORDER BY project_id, path
+                                        """;
+
+    public const string UpsertWatchFile = """
+                                          INSERT INTO watch_files (project_id, path, file_hash, updated_at)
+                                          VALUES (@projectId, @path, @fileHash, @updatedAt)
+                                          ON CONFLICT(project_id, path) DO UPDATE SET
+                                              file_hash = excluded.file_hash,
+                                              updated_at = excluded.updated_at
+                                          """;
+
+    public const string SelectWatchFile = """
+                                          SELECT file_hash AS FileHash, updated_at AS UpdatedAt
+                                          FROM watch_files
+                                          WHERE project_id = @projectId AND path = @path
+                                          LIMIT 1
+                                          """;
+
+    public const string SelectWatchFilesByProject =
+        "SELECT path FROM watch_files WHERE project_id = @projectId";
+
     public const string CountProjectEntries =
         "SELECT count(*) FROM entries WHERE scope = 'project' AND project_id = @projectId";
 
@@ -140,6 +196,9 @@ internal static class MemorySql
     public const string SelectEmbeddedForProject =
         "SELECT id AS Id, value AS Value FROM entries WHERE project_id = @projectId AND embed_state = 'embedded' " +
         "ORDER BY id";
+
+    public const string SelectAllEmbedded =
+        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
 
     public const string CommittedContexts = """
                                             SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
@@ -177,6 +236,16 @@ internal static class MemorySql
     public const string SelectSetting =
         """
         SELECT value FROM settings WHERE key = @key LIMIT 1
+        """;
+
+    public const string SelectSettingsByPrefix =
+        """
+        SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key
+        """;
+
+    public const string DeleteSetting =
+        """
+        DELETE FROM settings WHERE key = @key
         """;
 
     public const string UpdateEntryTtl =

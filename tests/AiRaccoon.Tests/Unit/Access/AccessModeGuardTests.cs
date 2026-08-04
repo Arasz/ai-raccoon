@@ -116,6 +116,12 @@ public sealed class AccessModeGuardTests
             Settings[key] = value;
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
 
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default)
@@ -142,6 +148,10 @@ public sealed class AccessModeGuardTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -158,8 +168,8 @@ public sealed class AccessModeGuardTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

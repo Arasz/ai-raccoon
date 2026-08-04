@@ -28,64 +28,72 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
   remove old, low-rated project entries (`shared` is protected).
 - **Access modes.** Three tiers enforced at the tool boundary: `ro` (read-only),
   `rw` (default: read + write), `full` (adds deletion, sweep execution, and
-  workspace consolidation). Set globally with `AIRACCOON_ACCESS_MODE` or per-project
-  in the settings table.
+  workspace consolidation). Set with the `access` CLI commands (settings table).
 - **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
   (`shared` + `project:<id>`) as a single snapshot to S3-compatible object storage
   (R2, S3, MinIO) using VACUUM INTO + If-Match CAS + row merge.
 
-## Tools (17) and prompts (2)
+## Tools (16) and prompts (2)
 
 `memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
 `memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
-`memory_configure`, `memory_embed_pending`, `memory_workspace_begin`,
+`memory_embed_pending`, `memory_workspace_begin`,
 `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
 `memory_sweep`, `memory_sync` — plus the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
-All 17 tool names are unchanged. `memory_configure` gained a `baseUrl` parameter for
-any OpenAI-compatible endpoint.
+Configuration is deliberately NOT an MCP tool: the CLI is the single config channel
+(see below), so `memory_configure` and `memory_set_structure_alpha` were removed.
+
+## Configuration: the CLI is the single channel
+
+Runtime configuration lives in the settings table of the install's `memory.db` and is
+changed only through the `ai-raccoon` verb commands (one-shot processes against the bank;
+the running server hot-reloads the rows). Bare `ai-raccoon` (with optional launch flags)
+runs the server; a verb runs a config command:
+
+```
+ai-raccoon access default set {ro|rw|full}    ai-raccoon access default show
+ai-raccoon access set {project-id|*} {ro|rw|full}
+ai-raccoon access unset {project-id|*}        ai-raccoon access list
+ai-raccoon model set local [path]             ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
+ai-raccoon model reset                        ai-raccoon model show
+ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
+ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--access-key <key>] [--secret-key <key>]
+ai-raccoon sync remove                        ai-raccoon sync show
+ai-raccoon watch enable|disable {project-id|*} {true|false}
+ai-raccoon watch scope add|remove|list {project-id|*} {path}
+ai-raccoon watch concurrency {project-id|*} {1..16}
+ai-raccoon watch list
+```
+
+Secrets (OpenAI API key, S3 access/secret keys) are stored in the settings table, which
+is encrypted at rest when a passphrase is configured.
 
 ## Environment variables
 
-| Variable                         | Purpose                                           |
-|----------------------------------|---------------------------------------------------|
-| `AIRACCOON_DATA_ROOT`            | Bank data root (default `~/.ai-raccoon`)          |
-| `AIRACCOON_INSTALL_SCOPE`        | `user` (default) or `project`                     |
-| `AIRACCOON_ACCESS_MODE`          | Global access mode seed: `ro`, `rw` (default), or `full` |
-| `AIRACCOON_OPENAI_API_KEY`       | API key for `provider=openai` embeddings          |
-| `AIRACCOON_EMBEDDING_MODEL`      | Custom ONNX model path overriding the bundled all-MiniLM-L6-v2 |
-| `AIRACCOON_SYNC_ENDPOINT`        | S3-compatible endpoint URL (sync)                 |
-| `AIRACCOON_SYNC_BUCKET`          | S3 bucket name (sync)                             |
-| `AIRACCOON_SYNC_ACCESS_KEY`      | S3 access key (sync)                              |
-| `AIRACCOON_SYNC_SECRET_KEY`      | S3 secret key (sync)                              |
-| `AIRACCOON_SYNC_REGION`          | S3 region (optional)                              |
-| `AIRACCOON_SYNC_OBJECT_KEY`      | Custom S3 object key (default `memory-<projectId>.db`) |
+Only one environment variable is read:
 
-Credentials are read from the environment only — never from tracked files.
+| Variable                  | Purpose                                              |
+|---------------------------|------------------------------------------------------|
+| `AIRACCOON_DB_PASSPHRASE` | SQLCipher passphrase for the bank (unset = plaintext) |
+
+All other configuration (access modes, embedding engine, sync, watch) comes from the
+settings table via the CLI commands above.
 
 ## Command-line options
 
 The server parses its own arguments (System.CommandLine 2.0.10) before the host
-builds. Precedence: **CLI args > environment variables > built-in defaults** —
-every option below mirrors an environment variable, so env-only setups keep
-working unchanged.
+builds. Launch-identity flags (startup-scoped only):
 
-| Option | Values | Default | Maps to |
-|---|---|---|---|
-| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
-| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
-| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
-| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
-| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
-| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
-| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
-| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
-| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+| Option | Values | Default |
+|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
+| `--install-scope` | `user`, `project` | `user` |
 
-Secrets are environment-only, never CLI options: `AIRACCOON_OPENAI_API_KEY`,
-`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE` —
-the parser's unknown-option error is the defense (`--sync-access-key x` fails).
+Launch flags must precede a config verb: `ai-raccoon --data-root /x access list`.
 `--help`/`--version` and parse errors print to **stderr** (exit 0 / exit 1);
 stdout carries only MCP protocol frames. Generic host flags (`--environment`,
 `--contentRoot`, `--applicationName`) are accepted hidden and ignored.
@@ -110,39 +118,24 @@ Explicit equivalent (identical behavior, spelled out):
       "args": [
         "--transport", "stdio",
         "--data-root", "~/.ai-raccoon",
-        "--install-scope", "user",
-        "--access-mode", "rw"
+        "--install-scope", "user"
       ]
     }
   }
 }
 ```
 
-Secrets go in the client's user-scoped config (e.g. Claude Code `~/.claude.json`
-`env`), never in a shared/tracked `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "ai-raccoon": {
-      "command": "ai-raccoon",
-      "env": {
-        "AIRACCOON_OPENAI_API_KEY": "sk-...",
-        "AIRACCOON_DB_PASSPHRASE": "change-me"
-      }
-    }
-  }
-}
-```
+Encrypted-bank setups set `AIRACCOON_DB_PASSPHRASE` in the client's user-scoped
+config (e.g. Claude Code `~/.claude.json` `env`), never in a shared/tracked `.mcp.json`.
 
 Registry installs (`.mcp/server.json`) pass no args — `packageArguments` stays
-empty; `environmentVariables` is the secret channel.
+empty; `environmentVariables` lists the one surviving variable.
 
 ## Transports
 
 - `stdio` (default) — MCP clients launch the server as a subprocess.
-- `http` — Streamable HTTP at `/mcp`, selected via `MCP_TRANSPORT=http` or
-  `--transport http` (stateless per the 2026-07-28 spec revision).
+- `http` — Streamable HTTP at `/mcp`, selected via `--transport http`
+  (stateless per the 2026-07-28 spec revision).
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
@@ -162,19 +155,18 @@ sync_meta, and sync_tombstones.
 
 The default embedding engine is the bundled int8 all-MiniLM-L6-v2 ONNX model
 (~23 MB, Apache-2.0, 384 dimensions, SHA-256 pinned) that ships inside the tool
-package under `Models/` — `memory_configure(provider="local")` embeds in-process
+package under `Models/` — `ai-raccoon model set local` embeds in-process
 with ONNX Runtime, no sidecar or download.
 
-`memory_configure(provider="openai")` routes through any OpenAI-compatible `baseUrl`
-(default `https://api.openai.com/v1`) with a model id; it needs an API key (`apiKey`
-arg or `AIRACCOON_OPENAI_API_KEY`). API keys are never persisted.
+`ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]` routes through
+any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`); the key is
+persisted in the settings table (encrypted at rest).
 
 Without a configured engine, writes are stored deferred (`embed_state=pending`) and
 indexed later via `memory_embed_pending`. Changing the engine re-embeds the bank.
 
 The `model` parameter is optional for local (defaults to the bundled model) and
-required for openai. The `AIRACCOON_EMBEDDING_MODEL` env var overrides the bundled
-model path with a custom ONNX model.
+required for openai. `ai-raccoon model reset` returns to FTS5-only search.
 
 ## Packaging note
 

@@ -33,9 +33,8 @@ public sealed class SqliteMemoryStore(
     private static readonly HashSet<string> IndexableExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
 
-    // The remote API key is held for the process lifetime only — never persisted (tool contract).
-    // After a restart the operator's env var provides it again at embed time.
-    private string? _remoteApiKey;
+    // The remote API key is a settings row (embedding.apiKey) — the single-channel
+    // ruling (2026-08-04) moved it out of process memory and environment.
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -368,6 +367,47 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Removes every committed chunk of one source path and everything under it (a deleted
+    ///     directory cascades to its subtree), plus the per-path watch fingerprints in the same
+    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale
+    ///     chunks. The watch registration survives.
+    /// </summary>
+    public async Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var pathPrefix = LikePattern.Escape(path) + "/%";
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                        new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted;
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -437,46 +477,28 @@ public sealed class SqliteMemoryStore(
     }
 
     public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-        string projectId, string provider, string? model, string? baseUrl, string? apiKey,
-        CancellationToken cancellationToken = default)
+        string provider, string? model, string? baseUrl, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
         if (string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase))
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(model);
         }
 
-        // The API key is never persisted (tool contract); it resolves from arg/env at embed time.
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            _remoteApiKey = apiKey;
-        }
 
         var previous = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Engine }, cancellationToken))
             .ConfigureAwait(false);
 
-        await connection.ExecuteAsync(
-                Def(MemorySql.UpsertSetting,
-                    new { key = EmbeddingSettingsKeys.Provider, value = provider }, cancellationToken))
+        // The CLI contract is a consistent engine state: a null model/baseUrl clears the
+        // row (switching provider must not leave stale rows behind).
+        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
             .ConfigureAwait(false);
-        if (model is not null)
-        {
-            await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertSetting,
-                        new { key = EmbeddingSettingsKeys.Model, value = model }, cancellationToken))
-                .ConfigureAwait(false);
-        }
-
-        if (baseUrl is not null)
-        {
-            await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertSetting,
-                        new { key = EmbeddingSettingsKeys.BaseUrl, value = baseUrl }, cancellationToken))
-                .ConfigureAwait(false);
-        }
+        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
+            .ConfigureAwait(false);
+        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
+            .ConfigureAwait(false);
 
         var engine = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
         await connection.ExecuteAsync(
@@ -484,13 +506,13 @@ public sealed class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        // Engine change → re-embed the bank with the new engine (FR-NM-3 s6): previously
-        // embedded rows are embedded again; the pending queue is untouched — memory_embed_pending
-        // owns it (s5).
+        // Engine change → re-embed the whole bank with the new engine (FR-NM-3 s6): settings
+        // are bank-global, so every embedded row re-embeds; the pending queue is untouched —
+        // memory_embed_pending owns it (s5).
         if (!string.Equals(previous, engine, StringComparison.Ordinal))
         {
             var reEmbedRows = (await connection.QueryAsync<EmbedRow>(
-                    Def(MemorySql.SelectEmbeddedForProject, new { projectId }, cancellationToken))
+                    Def(MemorySql.SelectAllEmbedded, cancellationToken))
                 .ConfigureAwait(false)).ToList();
             await EmbedBatchAsync(connection, reEmbedRows, cancellationToken).ConfigureAwait(false);
         }
@@ -636,6 +658,27 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<SettingRow>(
+                Def(MemorySql.SelectSettingsByPrefix, new { prefix }, cancellationToken))
+            .ConfigureAwait(false);
+        return rows.ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
+    }
+
+    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(Def(MemorySql.DeleteSetting, new { key }, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default)
     {
@@ -738,7 +781,25 @@ public sealed class SqliteMemoryStore(
         var baseUrl = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.BaseUrl }, cancellationToken))
             .ConfigureAwait(false);
-        return new EmbeddingSettings(provider ?? "", model, baseUrl, _remoteApiKey);
+        var apiKey = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.ApiKey }, cancellationToken))
+            .ConfigureAwait(false);
+        return new EmbeddingSettings(provider ?? "", model, baseUrl, apiKey);
+    }
+
+    private static async Task UpsertOrDeleteSettingAsync(SqliteConnection connection, string key, string? value,
+        CancellationToken cancellationToken)
+    {
+        if (value is null)
+        {
+            await connection.ExecuteAsync(Def(MemorySql.DeleteSetting, new { key }, cancellationToken))
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken))
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<int> InsertChunksAsync(string projectId, string path, string content, string? context,
@@ -1017,6 +1078,8 @@ public sealed class SqliteMemoryStore(
     }
 
     private sealed record SourceRow(string Path, string Value);
+
+    private sealed record SettingRow(string Key, string Value);
 
     private sealed class EmbedRow
     {

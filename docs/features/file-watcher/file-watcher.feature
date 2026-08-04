@@ -58,9 +58,17 @@ Feature: File watcher
 
         Scenario: A more specific project setting overrides the wildcard
             Given watch enable * true
-            When the user runs watch disable proj-a
+            When the user runs watch disable proj-a false
             Then watching stays disabled for "proj-a"
             And watching stays enabled for other projects
+
+        Scenario: watch concurrency sets the digest limit per project
+            When the user runs watch concurrency proj-a 8
+            Then the concurrency limit for "proj-a" is 8
+
+        Scenario: watch concurrency rejects values outside 1-16
+            When the user runs watch concurrency proj-a 20
+            Then the command errors with invalid-value
 
         Scenario: Watch configuration survives a restart
             Given watching enabled with scope "/repo"

@@ -5,15 +5,15 @@ namespace AiRaccoon.Setup;
 
 /// <summary>
 ///     Wires the MCP server for a resolved transport: stdio by default, http/https from
-///     MCP_TRANSPORT or --transport (https is declared but unsupported — warning only).
+///     --transport (https is declared but unsupported — warning only).
 /// </summary>
 internal static partial class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
 
     /// <summary>
-    ///     Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http"
-    ///     (case-insensitive) runs stdio.
+    ///     Resolves the --transport value to the transports to enable; anything other than
+    ///     "http" (case-insensitive) runs stdio.
     /// </summary>
     internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport) =>
         Enum.TryParse<McpTransport>(transport, true, out var mcpTransport)
@@ -47,6 +47,7 @@ internal static partial class McpServerSetup
                 .AddMcpServer()
                 .ConfigureMcpTransport([transport], webApplicationBuilder.Logging)
                 .WithTools<MemoryTools>()
+                .WithTools<WatchTools>()
                 .WithPrompts<MemoryPrompts>();
 
             return webApplicationBuilder;

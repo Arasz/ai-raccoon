@@ -29,12 +29,13 @@ public interface IMemoryStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Sets the bank's embedding provider/model/endpoint (and API key when remote); persists
-    ///     in the settings table (spec §4.1 memory_configure), records the engine fingerprint,
-    ///     and re-embeds previously embedded rows when the engine changes (FR-NM-3 s6).
+    ///     Sets the bank's embedding provider/model/endpoint, persists them in the settings
+    ///     table, records the engine fingerprint, and re-embeds previously embedded rows
+    ///     (bank-global) when the engine changes (FR-NM-3 s6). The remote API key is a
+    ///     separate settings row (embedding.apiKey).
     /// </summary>
-    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model, string? baseUrl,
-        string? apiKey, CancellationToken cancellationToken = default);
+    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -60,6 +61,16 @@ public interface IMemoryStore
 
     /// <summary>Upserts one settings row.</summary>
     Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes every committed chunk whose source path is the given path or lies under it (mirror delete/rename/directory cascade).</summary>
+    Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>
+    Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes one settings row (unset/reset commands); absent keys are a no-op.</summary>
+    Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>Sets an entry's ttl_days override — a forgetting knob gated to full mode at the boundary.</summary>
     Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,

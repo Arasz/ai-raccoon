@@ -13,63 +13,23 @@
         }
     },
     "cards": [
-        {
-            "id": "D1",
-            "card": "Missed events while the server is down",
-            "ruling": "Each watch keeps a last-change timestamp; on restart, targets changed since it are re-ingested (catch-up). No stale state — goes straight to processing."
-        },
-        {
-            "id": "D2",
-            "card": "Rename onto an existing path",
-            "ruling": "Overwrite — the incoming content wins; the target's previous chunks are replaced."
-        },
-        {
-            "id": "D3",
-            "card": "Path normalization for watch identity",
-            "ruling": "OS-agnostic: Path.GetFullPath (absolute, separators and '..' resolved, trailing separator stripped); case comparison follows the host OS filesystem."
-        },
-        {
-            "id": "D4",
-            "card": "Status states",
-            "ruling": "scanning / healthy / retrying / stopped."
-        },
-        {
-            "id": "D5",
-            "card": "Unit-level scenarios (concurrency, watcher-loop containment, hash-skip internals)",
-            "ruling": "Keep as implementation tests."
-        },
-        {
-            "id": "D6",
-            "card": "Watch scope",
-            "ruling": "Project-scoped only; no global/workspace-scoped watches; all three tools take projectId."
-        },
-        {
-            "id": "D7",
-            "card": "Access tiers",
-            "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)."
-        },
-        {
-            "id": "D8",
-            "card": "Are watches 'settings that affect other agents'?",
-            "ruling": "No — rw may add/remove watches; the ro tier may not."
-        },
-        {
-            "id": "D9",
-            "card": "Watch path boundary",
-            "ruling": "Opt-in: watching disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path covers the directory and all subdirectories; no '*' needed)."
-        },
-        {
-            "id": "D10",
-            "card": "Config channel for watch enable/scope",
-            "ruling": "CLI-only, user-facing (no MCP tools, no env/args, no config-file edits; no access-tier checks). Format: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}; '*' matches all projects, more specific entry wins. Single-channel principle (f:): added CLI options remove other config channels."
-        }
+        { "id": "D1", "card": "Missed events while the server is down", "ruling": "Each watch keeps a last-change timestamp; on restart, targets changed since it are re-ingested (catch-up). No stale state — goes straight to processing." },
+        { "id": "D2", "card": "Rename onto an existing path", "ruling": "Overwrite — the incoming content wins; the target's previous chunks are replaced." },
+        { "id": "D3", "card": "Path normalization for watch identity", "ruling": "OS-agnostic: Path.GetFullPath (absolute, separators and '..' resolved, trailing separator stripped); case comparison follows the host OS filesystem." },
+        { "id": "D4", "card": "Status states", "ruling": "scanning / healthy / retrying / stopped." },
+        { "id": "D5", "card": "Unit-level scenarios (concurrency, watcher-loop containment, hash-skip internals)", "ruling": "Keep as implementation tests." },
+        { "id": "D6", "card": "Watch scope", "ruling": "Project-scoped only; no global/workspace-scoped watches; all three tools take projectId." },
+        { "id": "D7", "card": "Access tiers", "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)." },
+        { "id": "D8", "card": "Are watches 'settings that affect other agents'?", "ruling": "No — rw may add/remove watches; the ro tier may not." },
+        { "id": "D9", "card": "Watch path boundary", "ruling": "Opt-in: watching disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path covers the directory and all subdirectories; no '*' needed)." },
+        { "id": "D10", "card": "Config channel for watch enable/scope/concurrency", "ruling": "CLI-only, user-facing (no MCP tools, no env/args, no config-file edits; no access-tier checks). Format: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}, watch concurrency {project-id|*} {1..16} (default 4); '*' matches all projects, more specific entry wins. Single-channel principle (f:): added CLI options remove other config channels." }
     ],
     "scope": {
         "in": [
             "Three MCP tools: memory_watch_add / memory_watch_status / memory_watch_remove, all project-scoped (projectId), identified per (projectId, path)",
             "Watches are project-scoped only; no global or workspace-scoped watches",
             "Watching is opt-in: disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path, covers directory + all subdirectories)",
-            "Watch configuration is CLI-only and user-facing: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}; '*' matches all projects, more specific entry wins; no access-tier checks; persisted across restarts",
+            "Watch configuration is CLI-only and user-facing: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}, watch concurrency {project-id|*} {1..16} (default 4); '*' matches all projects, more specific entry wins; no access-tier checks; persisted across restarts",
             "Watches accept both single files and directories; a directory watch covers its subtree",
             "Initial scan is asynchronous: add returns immediately, status reports scanning until the seed digest completes",
             "All four filesystem event types (created/changed/renamed/deleted) enter the pipeline",

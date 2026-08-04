@@ -49,8 +49,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_WithConfiguredEngine_ReturnsVectorOnlyHit_WhenKeywordHasNoMatch()
     {
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
-            "test-key-123", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "the quick brown fox leaps over the lazy dog"),
@@ -74,8 +74,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // ADOPT (P6b plan §8): a vector-only hit has no FTS5 snippet() — FR-NM-4 s1 still
         // requires a snippet on every result, so the entry value is trimmed to ~200 chars
         // ('…'-marked, keyed by hash) instead of an empty snippet.
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
-            "test-key-123", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var longValue = string.Join(" ", Enumerable.Range(1, 40).Select(i =>
             $"sentence number {i} with enough prose to exceed the two hundred character window"));
@@ -99,8 +99,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // list must rank ascending (the exact-restatement doc, distance 0, first) and the
         // fused Ranking must stay an RRF score in 0..1 with the top exactly 1.0, never the
         // raw distance. ftsWeight 0 isolates the vector modality.
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
-            "test-key-123", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var identical = await _store.AddContentAsync("acme", "a.md",
             "semantic memory retrieval system", ContextNaming.ProjectContext("acme"),
@@ -131,8 +131,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
             TestContext.Current.CancellationToken);
 
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
-            "test-key-123", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var c = await _store.AddContentAsync("acme", "c.md",
             "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"),
@@ -165,8 +165,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             new MemoryWriteRequest("acme", "api contract design"),
             TestContext.Current.CancellationToken);
 
-        await _store.ConfigureEmbeddingAsync("acme", "openai", "nomic-embed-text", _openAi.BaseUrl,
-            "test-key-123", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var vectorFavoured = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "tax legislation for the 2026 fiscal year"),
