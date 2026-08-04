@@ -1,7 +1,7 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
@@ -32,7 +32,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             new NullKeyProvider());
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new AiRaccoon.Infrastructure.Embedding.EmbeddingService());
+            new EmbeddingService());
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(factory), new FakeTimeProvider(FixedNow));
     }
 
@@ -56,7 +56,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "draft finding", workspaceId: ws.Id),
+            new MemoryWriteRequest("acme", "draft finding", WorkspaceId: ws.Id),
             TestContext.Current.CancellationToken);
 
         entry.Context.ShouldBe($"workspace:{ws.Id}");
@@ -146,7 +146,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
 
         await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "workspace durable fact", workspaceId: ws.Id),
+            new MemoryWriteRequest("acme", "workspace durable fact", WorkspaceId: ws.Id),
             TestContext.Current.CancellationToken);
 
         var result = await _workspaces.ConsolidateAsync("acme", ws.Id, ["all"],
@@ -170,11 +170,9 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task Settings_Get_MissingKey_ReturnsNull()
-    {
+    public async Task Settings_Get_MissingKey_ReturnsNull() =>
         (await _store.GetSettingAsync("test.missing", TestContext.Current.CancellationToken))
-            .ShouldBeNull();
-    }
+        .ShouldBeNull();
 
     [Fact]
     public async Task SetEntryTtl_UpdatesTheRowsTtlOverride()
