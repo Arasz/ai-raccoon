@@ -14,11 +14,11 @@ public static class WatchConfigKeys
     public const string ScopeGlobal = "watch.scope.global";
     public const string ConcurrencyGlobal = "watch.concurrency.global";
 
-    public static string EnabledProject(string projectId) => $"watch.enabled.project:{projectId}";
+    public static string EnabledProject(string projectId) => $"watch.enabled.{projectId}";
 
-    public static string ScopeProject(string projectId) => $"watch.scope.project:{projectId}";
+    public static string ScopeProject(string projectId) => $"watch.scope.{projectId}";
 
-    public static string ConcurrencyProject(string projectId) => $"watch.concurrency.project:{projectId}";
+    public static string ConcurrencyProject(string projectId) => $"watch.concurrency.{projectId}";
 
     public static string SerializeScope(IEnumerable<string> paths)
     {

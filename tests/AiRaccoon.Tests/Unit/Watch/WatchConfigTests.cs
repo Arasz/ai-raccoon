@@ -21,9 +21,9 @@ public sealed class WatchConfigTests
         WatchConfigKeys.EnabledGlobal.ShouldBe("watch.enabled.global");
         WatchConfigKeys.ScopeGlobal.ShouldBe("watch.scope.global");
         WatchConfigKeys.ConcurrencyGlobal.ShouldBe("watch.concurrency.global");
-        WatchConfigKeys.EnabledProject("acme").ShouldBe("watch.enabled.project:acme");
-        WatchConfigKeys.ScopeProject("acme").ShouldBe("watch.scope.project:acme");
-        WatchConfigKeys.ConcurrencyProject("acme").ShouldBe("watch.concurrency.project:acme");
+        WatchConfigKeys.EnabledProject("acme").ShouldBe("watch.enabled.acme");
+        WatchConfigKeys.ScopeProject("acme").ShouldBe("watch.scope.acme");
+        WatchConfigKeys.ConcurrencyProject("acme").ShouldBe("watch.concurrency.acme");
     }
 
     [Fact]

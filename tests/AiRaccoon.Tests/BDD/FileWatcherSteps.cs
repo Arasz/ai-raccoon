@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Setup;
 using AiRaccoon.Tools;
 using Dapper;
 using ModelContextProtocol;
@@ -16,25 +17,13 @@ namespace AiRaccoon.Tests.BDD;
 ///     WatchTools (MCP tool layer, incl. access guard) exactly like NativeMemorySteps drives
 ///     the real store/services. Ticks are FakeTimeProvider-deterministic; OS event delivery is
 ///     bounded by StepUntil polling (≤5s real). The 6 scenarios of rule "Watch configuration is
-///     CLI-only and user-facing" invoke the CLI's `watch` commands which land on the parallel
-///     task/cli-config branch — they are bound here (against the same settings the CLI writes)
-///     but skipped at runtime; integration validates them once that branch merges.
+///     CLI-only and user-facing" invoke the REAL CLI (`CliArgs.Parse` + `ConfigCommands.RunAsync`
+///     against the scenario's store) — end-to-end: the CLI writes settings, the watcher reads them.
 /// </summary>
 [Binding]
 public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 {
     private const string DefaultProject = "proj-a";
-
-    /// <summary>Titles of the 6 CLI-rule scenarios; the `watch` commands exist only on task/cli-config.</summary>
-    private static readonly HashSet<string> CliGateTitles = new(StringComparer.Ordinal)
-    {
-        "watch enable returns a message to add a scope",
-        "The scope allowlist is managed add/remove/list",
-        "A more specific project setting overrides the wildcard",
-        "watch concurrency sets the digest limit per project",
-        "watch concurrency rejects values outside 1-16",
-        "Watch configuration survives a restart"
-    };
 
     private readonly ScenarioContext _scenarioContext = scenarioContext;
 
@@ -70,23 +59,31 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
     private int _tokenSeq;
 
-    // ── Gating: rule "Watch configuration is CLI-only and user-facing" ──
-    // The 6 scenarios below need the CLI `watch` commands (watch enable|disable|scope|concurrency),
-    // which land on the parallel task/cli-config branch and do NOT exist on this branch yet.
-    // They are bound here (against the same settings keys the CLI writes) but skipped at runtime;
-    // integration (after task/cli-config merges) removes this gate and validates them for real.
-    [BeforeScenario]
-    public void SkipCliRuleScenarios()
-    {
-        if (CliGateTitles.Contains(_scenarioContext.ScenarioInfo.Title))
-        {
-            throw SkipException.ForSkip(
-                "CLI watch-config commands (watch enable/disable/scope/concurrency) land on the parallel " +
-                "task/cli-config branch; these 6 scenarios are validated at integration once it merges.");
-        }
-    }
-
     // ── Helpers ──
+
+    /// <summary>
+    ///     Runs a real CLI config command in-process against the scenario's store
+    ///     (CliArgs.Parse + ConfigCommands.RunAsync — the same dispatch as Program.cs).
+    ///     Captures combined output in _lastCliMessage and, on non-zero exit, stderr in
+    ///     _lastCliError. This is the integration seam that validates the CLI's watch
+    ///     commands against the watcher's settings reads end-to-end.
+    /// </summary>
+    private async Task<string> RunCliAsync(params string[] args)
+    {
+        var parsed = CliArgs.Parse(args);
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = parsed.CommandPath.Length == 0
+            ? 1
+            : await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr);
+        _lastCliMessage = stdout.ToString() + stderr.ToString();
+        if (exit != 0 || parsed.CommandPath.Length == 0)
+        {
+            _lastCliError = (stderr.ToString() + string.Join("; ", parsed.Errors)).Trim();
+        }
+
+        return _lastCliMessage;
+    }
 
     private string NextToken(string seed) =>
         "zephyr" + seed.Replace("/", string.Empty).Replace(".", string.Empty) + _tokenSeq++;
@@ -275,40 +272,20 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [Given("^watching enabled$")]
     public Task GivenWatchingEnabled() => Ctx.SetWatchEnabledGlobalAsync(true);
 
-    // ── Rule: Watch configuration is CLI-only and user-facing (bound; skipped via the gate) ──
+    // ── Rule: Watch configuration is CLI-only and user-facing (real CLI via RunCliAsync) ──
     [Given("^watch enable \\* true$")]
     [When("^the user runs watch enable \\* true$")]
-    public async Task WhenUserRunsWatchEnable()
-    {
-        await Ctx.SetWatchEnabledGlobalAsync(true);
-        var config = await Ctx.ResolveConfigAsync(DefaultProject);
-        if (config.Scope.Count == 0)
-        {
-            _lastCliMessage = "watch scope add <project-id|*> <path> — add at least one scope to start watching";
-        }
-    }
+    public Task WhenUserRunsWatchEnable() => RunCliAsync("watch", "enable", "*", "true");
 
-    [When("^the user runs watch scope add \\* \"([^\"]*)\"$")]
-    public async Task WhenUserRunsWatchScopeAdd(string path)
-    {
-        var config = await Ctx.ResolveConfigAsync(DefaultProject);
-        await Ctx.SetWatchScopeGlobalAsync(config.Scope.Concat([Map(path)]));
-    }
+    [When("^the user runs watch scope add \\* ([^ ]*)$")]
+    public Task WhenUserRunsWatchScopeAdd(string path) => RunCliAsync("watch", "scope", "add", "*", Map(path));
 
     [When("^the user runs watch disable ([^\"]*)$")]
-    public Task WhenUserRunsWatchDisable(string projectId) => Ctx.SetWatchEnabledAsync(projectId, false);
+    public Task WhenUserRunsWatchDisable(string projectId) => RunCliAsync("watch", "disable", projectId);
 
     [When("^the user runs watch concurrency ([^ ]*) ([0-9]+)$")]
-    public async Task WhenUserRunsWatchConcurrency(string projectId, int value)
-    {
-        if (value is < 1 or > 16)
-        {
-            _lastCliError = $"invalid-value: concurrency must be between 1 and 16 (got {value})";
-            return;
-        }
-
-        await Ctx.SetConcurrencyGlobalAsync(value);
-    }
+    public Task WhenUserRunsWatchConcurrency(string projectId, int value) =>
+        RunCliAsync("watch", "concurrency", projectId, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     [Given("^watching enabled with scope \"([^\"]*)\"$")]
     public async Task GivenWatchingEnabledWithScope(string path)

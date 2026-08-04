@@ -195,6 +195,18 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, string>>(Settings
+            .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Value is not null)
+            .ToDictionary(kv => kv.Key, kv => kv.Value!));
+
+    public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        Settings.Remove(key);
+        return Task.CompletedTask;
+    }
+
     public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
@@ -223,8 +235,8 @@ internal sealed class FakeMemoryStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
-        string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+    public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
     public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

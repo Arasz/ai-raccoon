@@ -1565,7 +1565,24 @@
     },
     {
       "taskId": "file-watcher",
-      "subagents": [],
+      "subagents": [
+        {
+          "description": "Wave 1: S1+S2 (store primitives, watch domain) \u2014 73 tests green",
+          "at": "2026-08-04T20:43:42.291852+00:00",
+          "totalTokens": 9831215,
+          "delegationId": "deleg_4788d613",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 94
+        },
+        {
+          "description": "Wave 2: S4+S6 (pipeline core, MCP tools) \u2014 118 tests green",
+          "at": "2026-08-04T21:09:00.393940+00:00",
+          "totalTokens": 18875181,
+          "delegationId": "deleg_2f49b96e",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 134
+        }
+      ],
       "grade": null,
       "sessionId": "20260804_221230_6e37d2",
       "trackingSource": "hermes",
@@ -1594,6 +1611,21 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 28706396,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     },
     {
