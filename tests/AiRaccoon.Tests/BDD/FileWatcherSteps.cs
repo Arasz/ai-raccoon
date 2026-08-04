@@ -71,13 +71,19 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     private async Task<string> RunCliAsync(params string[] args)
     {
         var parsed = CliArgs.Parse(args);
+        // A step that does not parse is a broken contract (e.g. a missing bool argument):
+        // fail the scenario loudly instead of dispatching with defaults.
+        if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"CLI command did not parse: {string.Join("; ", parsed.Errors)}");
+        }
+
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = parsed.CommandPath.Length == 0
-            ? 1
-            : await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr);
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr);
         _lastCliMessage = stdout.ToString() + stderr.ToString();
-        if (exit != 0 || parsed.CommandPath.Length == 0)
+        if (exit != 0)
         {
             _lastCliError = (stderr.ToString() + string.Join("; ", parsed.Errors)).Trim();
         }

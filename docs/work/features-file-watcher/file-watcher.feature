@@ -58,7 +58,7 @@ Feature: File watcher
 
         Scenario: A more specific project setting overrides the wildcard
             Given watch enable * true
-            When the user runs watch disable proj-a
+            When the user runs watch disable proj-a false
             Then watching stays disabled for "proj-a"
             And watching stays enabled for other projects
 
