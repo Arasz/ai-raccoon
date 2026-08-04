@@ -329,6 +329,22 @@
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260804_192411_ee30d1",
       "resumeAttempts": []
+    },
+    {
+      "taskId": "check-search-values",
+      "title": "Benchmark System.Buffers.SearchValues vs HashSet; replace if gain",
+      "sessionId": "20260804_194821_c45db4",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/check-search-values",
+      "risk": false,
+      "startedAt": "2026-08-04T17:50:12.292366+00:00",
+      "finishedAt": "2026-08-04T18:09:34.717132+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260804_194821_c45db4",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }
