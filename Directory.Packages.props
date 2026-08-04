@@ -11,13 +11,23 @@
     <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0" />
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="Dapper" Version="2.1.79" />
+    <!-- sqlite-vec pre-v1 (vec0 virtual table); pinned — re-run the retrieval harness on upgrade (plan §6). -->
+    <PackageVersion Include="HiraokaHyperTools.sqlite-vec" Version="0.1.9" />
     <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.4.2" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="LLamaSharp" Version="0.27.0" />
     <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+    <!-- In-process local embedding engine (P4): pinned; re-run the retrieval harness on upgrade. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
+    <!-- Microsoft.ML.Tokenizers.Data.O200kBase pulls Bcl.Memory 9.0.4 transitively; 9.0.14 patches GHSA-73j8-2gch-69rq. -->
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="9.0.14" />
+    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
+    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />
     <PackageVersion Include="OpenAI" Version="2.12.0" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.0.0" />
   </ItemGroup>
 </Project>

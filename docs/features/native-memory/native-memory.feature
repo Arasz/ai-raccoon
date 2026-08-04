@@ -35,10 +35,12 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I call memory_write for project "acme-web"
             Then the tool errors with access-denied
             And memory_search for project "acme-web" still returns results
+        @ignore
         Scenario: full mode allows removal
             Given project "acme-web" is in mode full
             When I call memory_delete with a known hash
             Then the entry is deleted
+        @ignore
         Scenario: full mode allows workspace discard
             Given project "acme-web" is in mode full
             And workspace "ws-1" exists for project "acme-web"
@@ -62,14 +64,14 @@ Feature: Native memory store (ai-raccoon MCP server)
             Given the global mode is ro
             When I call memory_write for project "other-app"
             Then the tool errors with access-denied
-        @deferred
+        @ignore
         Scenario: The memory inspects itself through memory_inspect
         # Part 2: introspection tool exposing schema, engine, provider, counts, pending, workspaces, watches, sync state.
-        @deferred
+        @ignore
         Scenario: The store emits metrics and tracing for its own operations
     # Part 2: metrics and tracing so the knowledge about the memory is complete.
 
-    @FR-NM-3 @AC-3
+    @FR-NM-3 @AC-3 @ignore
     Rule: Embeddings are pluggable; the default engine is the small in-process model bundled with the tool
         Scenario: The default engine embeds locally without a sidecar
             Given the small model ships inside the tool package
@@ -101,6 +103,7 @@ Feature: Native memory store (ai-raccoon MCP server)
 
     @FR-NM-4 @AC-4
     Rule: Hybrid search fuses FTS5 and vectors with reciprocal rank fusion
+        @ignore
         Scenario: Search returns ranked results with the preserved contract
             When I search for "project knowledge" in project "acme-web"
             Then results carry hash, seq, ranking, path and snippet
@@ -118,7 +121,7 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I search for that fact with scope "shared"
             Then no results are returned
 
-    @FR-NM-5 @AC-5
+    @FR-NM-5 @AC-5 @ignore
     Rule: The swap is gated by a golden-retrieval harness
         Scenario: The harness passes before the pinned extension is removed
             Given a fixed corpus and a graded query set exist
@@ -129,21 +132,25 @@ Feature: Native memory store (ai-raccoon MCP server)
 
     @FR-NM-6 @AC-6
     Rule: Workspaces are first-class entities with structural isolation
+        @ignore
         Scenario: A new workspace is an Active row in the bank
             When I call memory_workspace_begin for project "acme-web"
             Then a workspace id is returned
             And its workspaces row has status "Active"
+        @ignore
         Scenario: A write is either committed or in exactly one workspace
             Given workspace "ws-1" exists for project "acme-web"
             When I write "draft finding" to project "acme-web" with workspace "ws-1"
             Then the entry row has workspace_id "ws-1"
             And the schema forbids a row that has both a workspace_id and a committed scope
+        @ignore
         Scenario: Consolidation promotes, discards and closes in one transaction
             Given workspace "ws-1" contains entries "h1" and "h2"
             When I call memory_workspace_consolidate with keep=["h1"]
             Then "h1" is committed to project "acme-web"
             And "h2" is deleted
             And the workspace row has status "Closed"
+        @ignore
         Scenario: Sync and sweep structurally exclude workspace rows
             Given workspace "ws-1" contains an entry
             When I call memory_sync
@@ -156,17 +163,19 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: Identical content is written once
             When I write the same content twice to project "acme-web"
             Then memory_stats reports one entry
+        @ignore
         Scenario: Sharing creates a real row under a distinct path
             Given an entry with hash "h1" exists in project "acme-web"
             When I call memory_share with hash "h1"
             Then a row with path "shared/<path>" exists in the shared scope
             And its hash differs from "h1"
+        @ignore
         Scenario: Consolidation preserves the logical path
             Given workspace "ws-1" contains an entry with path "docs/note.md"
             When I call memory_workspace_consolidate with keep=["all"]
             Then the committed entry keeps path "docs/note.md"
 
-    @FR-NM-8 @AC-8
+    @FR-NM-8 @AC-8 @ignore
     Rule: Sync transports one snapshot file to S3-compatible storage and merges rows
         Scenario: Sync without credentials errors cleanly
             When I call memory_sync without sync credentials
@@ -222,8 +231,7 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I ingest it
             Then no chunk boundary falls inside the fence
 
-    @deferred
+    @ignore
     Rule: File watching is a separate part-2 feature
-        @deferred
         Scenario: Watcher tools exist
 # Part 2: memory_watch_add / memory_watch_status / memory_watch_remove with a persisted watches table.

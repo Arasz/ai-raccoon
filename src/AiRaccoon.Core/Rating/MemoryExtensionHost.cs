@@ -79,9 +79,9 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         CancellationToken cancellationToken = default) =>
         await inner.IngestDirectoryAsync(projectId, path, context, cancellationToken).ConfigureAwait(false);
 
-    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-        string? apiKey, CancellationToken cancellationToken = default) =>
-        await inner.ConfigureEmbeddingAsync(projectId, provider, model, apiKey, cancellationToken)
+    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+        string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+        await inner.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, apiKey, cancellationToken)
             .ConfigureAwait(false);
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -95,4 +95,18 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>
         await inner.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+
+    public async Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default) =>
+        await inner.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        await inner.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+
+    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+        await inner.SetSettingAsync(key, value, cancellationToken).ConfigureAwait(false);
+
+    public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        CancellationToken cancellationToken = default) =>
+        await inner.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false);
 }

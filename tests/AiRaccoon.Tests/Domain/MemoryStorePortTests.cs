@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Rating;
 using Shouldly;
 using Xunit;
 
@@ -57,10 +58,10 @@ public class MemoryStorePortTests
         var store = new RecordingStore();
 
         var config = await store.ConfigureEmbeddingAsync(
-            "acme", "local", "/models/nomic.gguf", null, TestContext.Current.CancellationToken);
+            "acme", "local", "/models/custom.onnx", null, null, TestContext.Current.CancellationToken);
 
         config.Engine.ShouldBe("local");
-        store.Configured.ShouldBe(("local", "/models/nomic.gguf", null));
+        store.Configured.ShouldBe(("local", "/models/custom.onnx", null, null));
     }
 
     [Fact]
@@ -85,6 +86,17 @@ public class MemoryStorePortTests
         store.ListedContext.ShouldBe("workspace:ws-1");
     }
 
+    [Fact]
+    public async Task GetMetadataAsync_IsPartOfThePort_AndReturnsOnRowRating()
+    {
+        var store = new RecordingStore();
+
+        var metadata = await store.GetMetadataAsync("acme", "h1", TestContext.Current.CancellationToken);
+
+        metadata.ShouldNotBeNull();
+        metadata!.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
+    }
+
     private sealed class RecordingStore : IMemoryStore
     {
         public (string ProjectId, string Hash)? Shared { get; private set; }
@@ -95,7 +107,7 @@ public class MemoryStorePortTests
 
         public (string Path, string? Context)? IngestedDirectory { get; private set; }
 
-        public (string Provider, string Model, string? ApiKey)? Configured { get; private set; }
+        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
 
         public string? ListedContext { get; private set; }
 
@@ -143,11 +155,11 @@ public class MemoryStorePortTests
         }
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-            string projectId, string provider, string model, string? apiKey,
+            string projectId, string provider, string? model, string? baseUrl, string? apiKey,
             CancellationToken cancellationToken = default)
         {
-            Configured = (provider, model, apiKey);
-            return Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
+            Configured = (provider, model, baseUrl, apiKey);
+            return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
         }
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -165,5 +177,18 @@ public class MemoryStorePortTests
             return Task.FromResult<IReadOnlyList<MemoryEntry>>(
                 [new MemoryEntry("h1", "note.md", context, "value", 1)]);
         }
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

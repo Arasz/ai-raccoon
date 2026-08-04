@@ -78,14 +78,13 @@ gained a `baseUrl` parameter for any OpenAI-compatible endpoint.
   traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
-  age exceeds 30 days. `shared` entries are never swept. Requires `full` access mode
-  when `dryRun=false` (`rw` is sufficient for `dryRun=true`).
-- **`memory_sync`:** pushes the committed contexts (`shared` + `project:<id>`) as a
-  single `memory-<id>.db` snapshot to S3-compatible object storage (R2, S3, MinIO).
-  Uses VACUUM INTO + `PRAGMA quick_check` + If-Match conditional PUT + row merge
-  (updated_at last-writer-wins + tombstones). Workspace rows are stripped before
-  upload. Requires `AIRACCOON_SYNC_ENDPOINT`, `AIRACCOON_SYNC_BUCKET`,
-  `AIRACCOON_SYNC_ACCESS_KEY`, and `AIRACCOON_SYNC_SECRET_KEY`.
+  age exceeds 30 days. `shared` entries are never swept.
+- **`memory_configure`:** `provider` is `local` (bundled int8 ONNX model in-process)
+  or `openai` (any OpenAI-compatible endpoint). For `openai`, `model` and an API key
+  (`apiKey` arg or `AIRACCOON_OPENAI_API_KEY`) are required — an explicit `apiKey`
+  parameter takes precedence over the environment variable. Until an engine is
+  configured, writes are stored deferred (`memory_stats.pending > 0`) and only become
+  searchable after `memory_embed_pending`. Changing the engine re-embeds the bank.
 
 ## Prompts (2)
 
@@ -126,91 +125,40 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 |---|---|
 | `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
 | `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
-| `AIRACCOON_ACCESS_MODE` | Global access mode seed: `ro`, `rw` (default), or `full` |
+| `AIRACCOON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
+| `AIRACCOON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
 | `AIRACCOON_OPENAI_API_KEY` | API key for `provider=openai` embeddings |
-| `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path overriding the bundled all-MiniLM-L6-v2 |
-| `AIRACCOON_SYNC_ENDPOINT` | S3-compatible endpoint URL (sync) |
-| `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
-| `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
-| `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
-| `AIRACCOON_SYNC_REGION` | S3 region (optional) |
-| `AIRACCOON_SYNC_OBJECT_KEY` | Custom object key (default `memory-<projectId>.db`) |
+| `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path for `provider=local` (default: the bundled model) |
 
-Credentials are read from the environment only — never from tracked files.
+Credentials are read from the environment only.
+
+## Local embedding model
+
+Local embeddings run in-process on ONNX Runtime over the small int8
+all-MiniLM-L6-v2 model (dimension 384, mean-pool + L2-normalize) **bundled inside
+the tool package** — `memory_configure(provider="local")` needs no sidecar, server
+process or download. The binary is gitignored and fetched once by the pinned script
+(SHA-256 verified); the tests FAIL (never skip) when it is missing:
+
+```bash
+scripts/download-embedding-model.sh          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
+```
+
+A custom ONNX model path overrides the bundled model via
+`memory_configure(provider="local", model="/path/to/model.onnx")` or
+`AIRACCOON_EMBEDDING_MODEL`.
 
 ## Embedding configuration matrix
 
-`memory_configure` accepts two providers with the `IEmbeddingGenerator` abstraction:
+`memory_configure` resolves exactly two engines:
 
 | Engine | `provider` | `model` | `baseUrl` | Key | Notes |
 |---|---|---|---|---|---|
-| Local (ONNX) | `local` | ONNX model path (optional) | — | none | Bundled int8 all-MiniLM-L6-v2 (~23 MB, 384 dims, SHA-256 pinned); `model` overrides it. |
-| Remote (OpenAI) | `openai` | model id (required) | any OpenAI-compatible endpoint | `AIRACCOON_OPENAI_API_KEY` or `apiKey` arg | Defaults to `https://api.openai.com/v1`; any compatible endpoint works. |
+| Local (bundled ONNX) | `local` | optional ONNX path (default: bundled model) | ignored | none | In-process, offline, no API cost |
+| OpenAI-compatible | `openai` | model id (required), e.g. `nomic-embed-text` | optional endpoint (default `https://api.openai.com/v1`) | `apiKey` arg or `AIRACCOON_OPENAI_API_KEY` | Any OpenAI-compatible `/embeddings` backend (LM Studio, Ollama, self-hosted, OpenAI) |
 
-The local engine runs in-process with ONNX Runtime; no sidecar, no download on first
-run, no GGUF/llama.cpp. The model and BERT vocab are bundled inside the tool package
-under `Models/`. The `AIRACCOON_EMBEDDING_MODEL` env var overrides the bundled model
-path; the bundled model is SHA-256 verified on first use (gate test catches drift).
-
-Changing the engine (new provider, model, or baseUrl) triggers a full re-embed of the
-bank's committed entries; the pending queue is left for `memory_embed_pending`.
-
-Writes without a configured engine are stored `embed_state=pending` and become
-searchable only after `memory_embed_pending`.
-
-## Hybrid search (FTS5 + vec0 + RRF)
-
-Search combines two retrieval modalities fused with Reciprocal Rank Fusion:
-
-- **FTS5**: external-content index over `entries(value)` uses normalized FTS5
-  expressions; a pathological query that trips FTS5 tokenizer limits degrades
-  gracefully to the vector list only.
-- **vec0**: KNN over the `vec_entries` virtual table (384-dimensional float vectors);
-  only active when an embedding engine is configured. Query text is embedded with the
-  configured engine at search time.
-- **RRF fusion**: each modality produces a ranked candidate list with window
-  `max(limit × 3, 100)`; RRF scores are `weight / (k + rank)` summed across
-  modalities, then normalized so the top result is 1.0. Defaults: `k=60`,
-  `ftsWeight=1`, `vectorWeight=1`. Results are filtered by `minScore` and truncated
-  to `limit` after fusion.
-- Per-context fusion: each in-scope context produces its own fused batch; batches
-  are merged with the `SearchResultMerger` (max fusion score per hash, then
-  re-normalize, filter, and truncate).
-
-## Workspaces
-
-Workspaces are first-class entities in `memory.db` with structural isolation
-(FR-NM-8):
-
-- The `workspaces` table holds lifecycle state: `id`, `project_id`, `agent_id`,
-  `name`, `status` (`Active`/`Closed`), `created_at`, `closed_at`.
-- `entries.workspace_id` is an FK to `workspaces.id` with a CHECK constraint
-  enforcing XOR: a row must have either a workspace-scoped context (workspace_id
-  NOT NULL, scope NULL) or a committed context (workspace_id NULL, scope IN
-  ('shared','project','custom')).
-- Consolidate promotes kept entries via `memory_add_content` into the project's
-  committed context (preserving each entry's logical path), then deletes the
-  workspace context atomically via `memory_delete_context`.
-- Workspace rows (entries with `workspace_id IS NOT NULL`) are stripped from sync
-  snapshots — they never leave the local bank.
-
-## Sync
-
-Own S3-compatible sync replacing the former SQLite Cloud path:
-
-- **Push**: VACUUM INTO a temp snapshot → strip workspace rows → `PRAGMA quick_check`
-  → upload with If-Match (CAS) using the last known ETag → record the new ETag in
-  `sync_meta`.
-- **Pull**: download the remote snapshot → integrity check → ATTACH and row-merge
-  (entries via content hash `INSERT OR IGNORE`, settings via LWW on `updated_at`,
-  tombstones applied and GC'd below the last pull watermark).
-- **Conflict**: 412 on push triggers a re-pull + re-merge + re-push cycle (up to 3
-  retries). Exhaustion is a `sync-conflict` error.
-- **Tombstones**: `sync_tombstones` records deleted (hash, scope, deleted_at);
-  tombstone GC only removes rows below the minimum of both sides' last_pull
-  watermark.
-- Sync is serialized per project with a `SemaphoreSlim`.
-- Workspace rows are never synced.
+Changing the engine (provider, model or baseUrl) re-embeds the bank with the new
+engine.
 
 ## Error shapes
 
@@ -220,15 +168,15 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 |---|---|
 | Missing/blank `projectId` | `invalid-params: project_id is required` |
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
-| Invalid `provider` | `invalid-params: provider must be 'local' or 'openai', got '<x>'` |
-| Openai without model | `invalid-params: model is required for provider 'openai'` |
 | Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'` |
-| Sync without credentials | `sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY` |
-| Sync auth failure | `sync-auth-failed: verify AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY` |
-| Sync conflict exhausted | `sync-conflict: remote changed during merge — retry the sync` |
-| Sync network error | `sync-network: <message>` |
-| Sync corrupt file | `sync-corrupt-file: <message>` |
-| Access denied | `access-denied: <tool> requires mode <required> (current <current>)` |
+| Sync without credentials | `sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY` — both are required |
+
+## Native extensions
+
+sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 are pinned and provisioned
+per RID into `<data-root>/extensions/<rid>/` (e.g. `~/.ai-raccoon/extensions/osx-arm64/`),
+SHA-256 verified. `linux-musl-x64` has no sqlite-memory release binary — provisioning
+refuses with a clear `ExtensionProvisioningException` naming what is missing.
 
 ## Deletion and sync semantics
 

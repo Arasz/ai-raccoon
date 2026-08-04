@@ -1,3 +1,5 @@
+using AiRaccoon.Access;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
@@ -20,7 +22,6 @@ public class MemoryToolsTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly FakeMetaStore _meta = new();
     private readonly FakeStore _store = new();
     private readonly SweepService _sweeper;
     private readonly FakeSyncService _sync = new();
@@ -30,8 +31,15 @@ public class MemoryToolsTests
     public MemoryToolsTests()
     {
         _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
-        _sweeper = new SweepService(_store, _meta, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper);
+        _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
+        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store),
+            new SyncOptions
+            {
+                Endpoint = "http://test",
+                Bucket = "test-bucket",
+                AccessKey = "test-key",
+                SecretKey = "test-secret"
+            });
     }
 
     [Fact]
@@ -71,6 +79,27 @@ public class MemoryToolsTests
 
         _store.LastQuery!.Scope.ShouldBe(SearchScope.All);
         _store.LastQuery.ProjectId.ShouldBe("acme");
+    }
+
+    [Fact]
+    public async Task Search_WithFusionParameters_DelegatesThemOnTheQuery()
+    {
+        await _tools.Search("acme", "query", rrfK: 30, ftsWeight: 2, vectorWeight: 1,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.RrfK.ShouldBe(30);
+        _store.LastQuery.FtsWeight.ShouldBe(2);
+        _store.LastQuery.VectorWeight.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Search_WithoutFusionParameters_AppliesDefaults()
+    {
+        await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.RrfK.ShouldBe(SearchQuery.DefaultRrfK);
+        _store.LastQuery.FtsWeight.ShouldBe(1);
+        _store.LastQuery.VectorWeight.ShouldBe(1);
     }
 
     [Fact]
@@ -121,6 +150,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceConsolidate_WithAll_PromotesEverything()
     {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
         _store.EntriesByContext["workspace:ws-1"] =
         [
             new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
@@ -152,13 +182,99 @@ public class MemoryToolsTests
         [
             new MemoryEntry("old", "n.md", "project:acme", "v", FixedNow.ToUnixTimeSeconds() - 40 * 86_400)
         ];
-        _meta.Rating = 0.1;
+        _store.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
 
         var result = await _tools.Sweep("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Candidates.Count.ShouldBe(1);
         result.Deleted.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Configure_WithUnknownProvider_ThrowsMcpException()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Configure("acme", "vectorspace", cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("provider must be 'local' or 'openai'");
+        _store.Configured.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Configure_OpenAi_WithoutModel_ThrowsMcpException()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Configure("acme", "openai", baseUrl: "http://localhost:11434/v1", apiKey: "test-key-123",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("model is required");
+    }
+
+    [Fact]
+    public async Task Configure_OpenAi_WithoutApiKey_ThrowsMcpException()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Configure("acme", "openai", model: "nomic-embed-text",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("embedding-api-key-missing");
+    }
+
+    [Fact]
+    public async Task Configure_OpenAi_WithApiKey_DelegatesProviderModelBaseUrl()
+    {
+        await _tools.Configure("acme", "openai", baseUrl: "http://localhost:11434/v1", model: "nomic-embed-text",
+            apiKey: "test-key-123", cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.Configured.ShouldBe(("openai", "nomic-embed-text", "http://localhost:11434/v1", "test-key-123"));
+    }
+
+    [Fact]
+    public async Task Configure_OpenAi_WithoutArgKey_FallsBackToEnvKey()
+    {
+        var previous = Environment.GetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY");
+        Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", "env-key-456");
+        try
+        {
+            await _tools.Configure("acme", "openai", model: "nomic-embed-text",
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "env-key-456"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AIRACCOON_OPENAI_API_KEY", previous);
+        }
+    }
+
+    [Fact]
+    public async Task Configure_OpenAi_WithoutBaseUrl_DefaultsToTheOpenAiEndpoint()
+    {
+        await _tools.Configure("acme", "openai", model: "nomic-embed-text", apiKey: "test-key-123",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.Configured.ShouldBe(("openai", "nomic-embed-text", null, "test-key-123"));
+    }
+
+    [Fact]
+    public async Task Configure_Local_WithoutModel_DelegatesWithBundledDefault()
+    {
+        await _tools.Configure("acme", "local", cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.Configured.ShouldBe(("local", null, null, null));
+    }
+
+    [Fact]
+    public async Task Configure_RequiresWriteAccess()
+    {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "ro";
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Configure("acme", "local", cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("access-denied");
+        _store.Configured.ShouldBeNull();
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -168,6 +284,8 @@ public class MemoryToolsTests
         public MemoryEntry? SharedEntry { get; set; }
 
         public MemoryStats Stats { get; set; } = new(0, 0, []);
+
+        public double Rating { get; set; } = 0.9;
 
         public MemoryWriteRequest? LastRequest { get; private set; }
 
@@ -215,9 +333,14 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbeddingConfig(provider, model, provider == "local" ? "local" : "remote"));
+        public (string Provider, string? Model, string? BaseUrl, string? ApiKey)? Configured { get; private set; }
+
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default)
+        {
+            Configured = (provider, model, baseUrl, apiKey);
+            return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
+        }
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>
@@ -230,15 +353,37 @@ public class MemoryToolsTests
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
+        public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+        {
+            Settings[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeSyncService() : SyncService(new SyncOptions(), new FakeCloudSyncFactory())
+    private sealed class FakeSyncService : SyncService
     {
+        public FakeSyncService() : base(new FakeCloudStore(), _ => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!),
+            (_, _) => Task.FromResult((Microsoft.Data.Sqlite.SqliteConnection)null!), null!)
+        {
+        }
+
         public SyncResult Result { get; set; } = new(0, 0, 0);
 
         public SyncNotConfiguredException? Exception { get; set; }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
             CancellationToken cancellationToken = default)
         {
             if (Exception is not null)
@@ -250,22 +395,14 @@ public class MemoryToolsTests
         }
     }
 
-    private sealed class FakeCloudSyncFactory : ICloudSyncConnectionFactory
+    private sealed class FakeCloudStore : ICloudStore
     {
-        public Task<ICloudSyncConnection> OpenAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
-    }
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult<CloudObject?>(null);
 
-    private sealed class FakeMetaStore() : MetaStore(null!, TimeProvider.System)
-    {
-        public double Rating { get; set; } = 0.9;
-
-        public override Task<MetaEntry?> GetEntryAsync(string projectId, string hash,
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<MetaEntry?>(new MetaEntry(hash, projectId, null, null, 0, 0, null, Rating, null));
-
-        public override Task<bool> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+            Task.FromResult("fake-etag");
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

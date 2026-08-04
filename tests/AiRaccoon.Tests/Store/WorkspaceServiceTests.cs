@@ -200,8 +200,8 @@ public class WorkspaceServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -214,6 +214,19 @@ public class WorkspaceServiceTests
             LastListedContext = context;
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries : []);
         }
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore

@@ -2,15 +2,14 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Degradation;
 
 /// <summary>
 ///     Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec
-///     FR-MEM-1.15).
+///     FR-MEM-1.15). Ratings and TTLs are read on-row — the meta database is gone (P1).
 /// </summary>
-public sealed class SweepService(IMemoryStore store, MetaStore meta, TimeProvider timeProvider)
+public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
 {
     public async Task<SweepOutcome> SweepAsync(
         string projectId, double threshold, double ttlDays, bool dryRun, CancellationToken cancellationToken = default)
@@ -37,11 +36,12 @@ public sealed class SweepService(IMemoryStore store, MetaStore meta, TimeProvide
                 continue;
             }
 
-            var meta1 = await meta.GetEntryAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
-            var rating = meta1?.Rating ?? RatingPolicy.DefaultBaseScore;
+            var metadata = await store.GetMetadataAsync(projectId, entry.Hash, cancellationToken)
+                .ConfigureAwait(false);
+            var rating = metadata?.Rating ?? RatingPolicy.DefaultBaseScore;
             var ageDays = Math.Max(0, (now - entry.CreatedAt) / 86_400.0);
 
-            if (!DegradationPolicy.ShouldDegrade(rating, ageDays, threshold, ttlDays, meta1?.TtlDays))
+            if (!DegradationPolicy.ShouldDegrade(rating, ageDays, threshold, ttlDays, metadata?.TtlDays))
             {
                 continue;
             }
@@ -53,7 +53,6 @@ public sealed class SweepService(IMemoryStore store, MetaStore meta, TimeProvide
             }
 
             await store.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
-            await meta.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
             deleted.Add(entry.Hash);
         }
 

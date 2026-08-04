@@ -1,51 +1,355 @@
-using AiRaccoon.Infrastructure.Options;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Outcome of one memory sync run.</summary>
-public sealed record SyncResult(int Sent, int Received, int Reindexed);
-
-/// <summary>
-///     Runs the sqlite-sync push/pull sequence over the bank's committed contexts (shared + project:&lt;id&gt;),
-///     serialized per spec §6.3.
-/// </summary>
-public class SyncService(SyncOptions options, ICloudSyncConnectionFactory connections)
+/// <summary>Row-merge sync over S3-compatible object storage: VACUUM INTO snapshot → pull → ATTACH+merge → push If-Match.</summary>
+public partial class SyncService
 {
+    private readonly ICloudStore _cloud;
+    private readonly ILogger<SyncService> _logger;
+    private readonly Func<CancellationToken, Task<SqliteConnection>> _openBank;
+    private readonly Func<string, CancellationToken, Task<SqliteConnection>> _openReadOnly;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private const int MaxPushRetries = 3;
 
-    public virtual async Task<SyncResult> MemorySyncAsync(string projectId,
+    public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
+        Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly, ILogger<SyncService> logger)
+    {
+        _cloud = cloud;
+        _openBank = openBank;
+        _openReadOnly = openReadOnly;
+        _logger = logger;
+    }
+
+    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-
-        if (!options.IsConfigured)
-        {
-            throw new SyncNotConfiguredException();
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await using var connection = await connections.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-            var committedContexts = await connection.GetCommittedContextsAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var context in committedContexts)
-            {
-                await connection.EnableSyncAsync(context, cancellationToken).ConfigureAwait(false);
-            }
-
-            await connection.NetworkInitAsync(options.ManagedDatabaseId!, cancellationToken).ConfigureAwait(false);
-            await connection.SetApiKeyAsync(options.ApiKey!, cancellationToken).ConfigureAwait(false);
-
-            var send = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);
-            var receive = await connection.NetworkSyncAsync(cancellationToken).ConfigureAwait(false);
-            var reindexCount = await connection.ReindexAsync(cancellationToken).ConfigureAwait(false);
-
-            return new SyncResult(send.Sent, receive.Received, reindexCount);
+            return await SyncCycleAsync(projectId, objectKey, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private async Task<SyncResult> SyncCycleAsync(string projectId, string objectKey,
+        CancellationToken cancellationToken)
+    {
+        // 1. VACUUM INTO a temp snapshot of the current local bank.
+        var localSnapshot = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+            {
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"VACUUM INTO '{localSnapshot}'";
+                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // Strip workspace rows — they never leave the bank.
+            await using (var snap = new SqliteConnection($"Data Source={localSnapshot}"))
+            {
+                await snap.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await using var del = snap.CreateCommand();
+                del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
+                await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                await using var vac = snap.CreateCommand();
+                vac.CommandText = "VACUUM";
+                await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // 2. Integrity check on the snapshot.
+            await using (var ro = await _openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
+            {
+                await using var integrity = ro.CreateCommand();
+                integrity.CommandText = "PRAGMA quick_check";
+                var result = (string)(await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new SyncCorruptFileException($"Local snapshot integrity check failed: {result}");
+                }
+            }
+
+            var snapshotBytes = await File.ReadAllBytesAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
+
+            // 3. Pull the remote snapshot.
+            var remote = await _cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+
+            var sent = 0;
+            var received = 0;
+            var reindexed = 0;
+            string? remoteETag = remote?.ETag;
+
+            if (remote is not null)
+            {
+                // Remote exists — ATTACH and merge.
+                (received, reindexed) = await MergeRemoteAsync(projectId, remote.Data, cancellationToken).ConfigureAwait(false);
+                // Re-read the merged local bank as the new snapshot.
+                var mergedPath = Path.GetTempFileName();
+                try
+                {
+                    await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
+                    await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                    {
+                        await using var cmd = conn.CreateCommand();
+                        cmd.CommandText = $"VACUUM INTO '{mergedPath}'";
+                        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    snapshotBytes = await File.ReadAllBytesAsync(mergedPath, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (File.Exists(mergedPath))
+                    {
+                        File.Delete(mergedPath);
+                    }
+                }
+            }
+
+            // 4. Push with If-Match, retrying on 412/conflict.
+            var pushETag = remoteETag;
+            for (var attempt = 1; attempt <= MaxPushRetries; attempt++)
+            {
+                try
+                {
+                    var newETag = await _cloud.PushAsync(objectKey, snapshotBytes, pushETag, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Record the ETag watermark.
+                    await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                    {
+                        await using var upsert = conn.CreateCommand();
+                        upsert.CommandText = "INSERT INTO sync_meta (key, value) VALUES ('last_etag', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+                        upsert.Parameters.AddWithValue("@value", newETag);
+                        await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    sent = 1;
+                    break;
+                }
+                catch (SyncConflictException) when (attempt < MaxPushRetries)
+                {
+                    // Re-pull and re-merge.
+                    remote = await _cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+                    remoteETag = remote?.ETag;
+                    pushETag = remoteETag;
+                    if (remote is not null)
+                    {
+                        (received, reindexed) = await MergeRemoteAsync(projectId, remote.Data, cancellationToken)
+                            .ConfigureAwait(false);
+                        // Re-read merged snapshot.
+                        var retryPath = Path.GetTempFileName();
+                        try
+                        {
+                            await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
+                            await using (var conn = await _openBank(cancellationToken).ConfigureAwait(false))
+                            {
+                                await using var cmd = conn.CreateCommand();
+                                cmd.CommandText = $"VACUUM INTO '{retryPath}'";
+                                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                            }
+
+                            snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            if (File.Exists(retryPath))
+                            {
+                                File.Delete(retryPath);
+                            }
+                        }
+                    }
+                }
+                catch (SyncConflictException)
+                {
+                    Log.SyncConflictExhausted(_logger, MaxPushRetries);
+                    throw;
+                }
+            }
+
+            return new SyncResult(sent, received, reindexed);
+        }
+        finally
+        {
+            if (File.Exists(localSnapshot))
+            {
+                File.Delete(localSnapshot);
+            }
+        }
+    }
+
+    private async Task<(int Received, int Reindexed)> MergeRemoteAsync(string projectId, byte[] remoteData,
+        CancellationToken cancellationToken)
+    {
+        var remotePath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllBytesAsync(remotePath, remoteData, cancellationToken).ConfigureAwait(false);
+
+            // Integrity check the remote snapshot.
+            try
+            {
+                await using (var ro = await _openReadOnly(remotePath, cancellationToken).ConfigureAwait(false))
+                {
+                    await using var check = ro.CreateCommand();
+                    check.CommandText = "PRAGMA quick_check";
+                    var result = (string)(await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                    if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new SyncCorruptFileException($"Remote snapshot integrity check failed: {result}");
+                    }
+                }
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex)
+            {
+                throw new SyncCorruptFileException($"Remote snapshot is corrupt: {ex.Message}");
+            }
+
+            await using var conn = await _openBank(cancellationToken).ConfigureAwait(false);
+
+            // ATTACH the remote snapshot.
+            await using var attach = conn.CreateCommand();
+            attach.CommandText = $"ATTACH DATABASE '{remotePath}' AS remote";
+            await attach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                var received = 0;
+
+                // Merge entries: content-addressed near-union (skip duplicates).
+                await using (var mergeEntries = conn.CreateCommand())
+                {
+                    mergeEntries.CommandText = """
+                                              INSERT OR IGNORE INTO entries (hash, path, value, scope, project_id, context_label,
+                                                                              workspace_id, agent_id, created_at, updated_at,
+                                                                              access_count, last_accessed_at, rating, ttl_days,
+                                                                              embed_state, embedding)
+                                              SELECT r.hash, r.path, r.value, r.scope, r.project_id, r.context_label,
+                                                     r.workspace_id, r.agent_id, r.created_at, r.updated_at,
+                                                     r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
+                                                     'pending', NULL
+                                              FROM remote.entries r
+                                              WHERE r.workspace_id IS NULL
+                                                AND NOT EXISTS (
+                                                    SELECT 1 FROM sync_tombstones t
+                                                    WHERE t.hash = r.hash AND t.scope = COALESCE(r.scope, 'workspace')
+                                                )
+                                              """;
+                    received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // Merge settings: updated_at LWW.
+                await using (var mergeSettings = conn.CreateCommand())
+                {
+                    mergeSettings.CommandText = """
+                                               INSERT INTO settings (key, value)
+                                               SELECT key, value FROM remote.settings
+                                               WHERE true
+                                               ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                                               """;
+                    await mergeSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // Merge sync_tombstones: union.
+                await using (var mergeTombstones = conn.CreateCommand())
+                {
+                    mergeTombstones.CommandText = """
+                                                 INSERT OR IGNORE INTO sync_tombstones (hash, scope, deleted_at)
+                                                 SELECT hash, scope, deleted_at FROM remote.sync_tombstones
+                                                 """;
+                    await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // Apply tombstones: delete rows locally that remote deleted.
+                await using (var applyTombstones = conn.CreateCommand())
+                {
+                    applyTombstones.CommandText = """
+                                                 DELETE FROM entries
+                                                 WHERE (hash, COALESCE(scope, 'workspace'))
+                                                     IN (SELECT hash, scope FROM remote.sync_tombstones)
+                                                 """;
+                    await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // GC tombstones: remove rows older than the last pull watermark.
+                await using (var watermarkCmd = conn.CreateCommand())
+                {
+                    watermarkCmd.CommandText = "SELECT value FROM sync_meta WHERE key = 'last_pull_at'";
+                    var lastPullStr = (string?)await watermarkCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+                    if (long.TryParse(lastPullStr, out var lastPull))
+                    {
+                        await using var gc = conn.CreateCommand();
+                        gc.CommandText = "DELETE FROM sync_tombstones WHERE deleted_at < @watermark";
+                        gc.Parameters.AddWithValue("@watermark", lastPull);
+                        await gc.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                // Record last pull timestamp.
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                await using (var updateWatermark = conn.CreateCommand())
+                {
+                    updateWatermark.CommandText =
+                        "INSERT INTO sync_meta (key, value) VALUES ('last_pull_at', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+                    updateWatermark.Parameters.AddWithValue("@value", now.ToString());
+                    await updateWatermark.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // Reindex: enqueue new/changed rows into the pending embed queue.
+                var reindexed = 0;
+                await using (var reindexCmd = conn.CreateCommand())
+                {
+                    reindexCmd.CommandText = """
+                                            UPDATE entries
+                                            SET embed_state = 'pending', embedding = NULL
+                                            WHERE embed_state = 'embedded'
+                                              AND id IN (
+                                                  SELECT e.id FROM entries e
+                                                  INNER JOIN remote.entries r ON e.hash = r.hash AND COALESCE(e.scope, 'workspace') = COALESCE(r.scope, 'workspace')
+                                                  WHERE e.workspace_id IS NULL
+                                              )
+                                            """;
+                    reindexed = await reindexCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                return (received, reindexed);
+            }
+            finally
+            {
+                await using var detach = conn.CreateCommand();
+                detach.CommandText = "DETACH DATABASE remote";
+                await detach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            if (File.Exists(remotePath))
+            {
+                File.Delete(remotePath);
+            }
+        }
+    }
+
+    private async Task WaitForWalCheckpointAsync(CancellationToken cancellationToken)
+    {
+        await using var conn = await _openBank(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 100, Level = LogLevel.Warning,
+            Message = "Sync If-Match push exhausted after {retries} retries")]
+        public static partial void SyncConflictExhausted(ILogger logger, int retries);
     }
 }

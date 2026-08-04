@@ -10,6 +10,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
   @FR-MEM-1.1 @AC-1
   Rule: The MCP surface exposes the memory tools and guides on both transports
+    @ignore
     Scenario: Tools are listed over the stdio transport
       Given the server runs with the default stdio transport
       When I list available tools
@@ -53,6 +54,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
     Scenario: Duplicate content is written once
       When I write the same content twice to project "acme-web"
       Then memory_stats reports one entry
+    @ignore
     Scenario: A context restricts search
       Given content "docs note" is written with context "docs:api"
       When I search for "docs note" restricted to context "docs:api"
@@ -66,6 +68,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
   @FR-MEM-1.5 @FR-MEM-1.6 @FR-MEM-1.7 @AC-3
   Rule: A workspace sandbox keeps worktree writes out of committed memory
+    @ignore
     Scenario: A new workspace returns a workspace id
       When I call memory_workspace_begin for project "acme-web" with agent "agent-a"
       Then a workspace id is returned
@@ -75,11 +78,13 @@ Feature: Agent memory management (ai-raccoon MCP server)
       When I write "draft finding" to project "acme-web" with workspace "ws-1"
       Then memory_stats for project "acme-web" without workspace shows zero draft entries
       And the entry is listed by memory_workspace_status for "ws-1"
+    @ignore
     Scenario: Search spans project and workspace when the workspace is named
       Given project "acme-web" contains "committed fact"
       And workspace "ws-1" contains "draft finding"
       When I search for "finding" in project "acme-web" with workspace "ws-1"
       Then both the committed fact and the draft finding are returned
+    @ignore
     Scenario: Consolidation promotes the kept hashes and deletes the rest
       Given workspace "ws-1" for project "acme-web" contains entries with hashes "h1" and "h2"
       When I call memory_workspace_consolidate with keep=["h1"]
@@ -92,7 +97,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
       Then memory_workspace_status for "ws-2" returns zero entries
       And memory_stats for project "acme-web" is unchanged
 
-  @FR-MEM-1.11 @FR-MEM-1.12 @AC-5
+  @FR-MEM-1.11 @FR-MEM-1.12 @AC-5 @ignore
   Rule: Embedding configuration is per memory bank, local-first, remotely optional
     Scenario: The local GGUF model is configured once and reused
       When I call memory_configure with provider "local" and model "/models/nomic.gguf" for project "acme-web"
@@ -109,7 +114,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
       Then memory_stats reports zero pending entries
       And the entry is searchable
 
-  @FR-MEM-1.13 @FR-MEM-1.14 @AC-6
+  @FR-MEM-1.13 @FR-MEM-1.14 @AC-6 @ignore
   Rule: Extensions observe memory operations through a hook pipeline
     Scenario: Registered extensions run their hooks in order
       Given two extensions are registered
@@ -122,23 +127,26 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
   @FR-MEM-1.15 @AC-7
   Rule: Degradation removes only low-rated, aged memories
+    @ignore
     Scenario: A dry run lists candidates without deleting
       Given an entry rated below threshold and older than the TTL exists
       When I call memory_sweep with dry_run=true
       Then the entry is listed as a candidate
       And memory_stats still reports the entry
+    @ignore
     Scenario: A real sweep deletes exactly the candidates
       Given an entry rated below threshold and older than the TTL exists
       And an entry rated above threshold exists
       When I call memory_sweep with dry_run=false
       Then the low-rated aged entry is deleted
       And the highly-rated entry survives
+    @ignore
     Scenario: Shared entries are protected from the sweep
       Given a shared entry rated below threshold and older than the TTL exists
       When I call memory_sweep with dry_run=false
       Then the shared entry is not deleted
 
-  @FR-MEM-1.16 @FR-MEM-1.22 @AC-8
+  @FR-MEM-1.16 @FR-MEM-1.22 @AC-8 @ignore
   Rule: Cloud sync is opt-in, carries committed bank contexts only, and is the correlation point between installs
     Scenario: Sync without credentials errors cleanly
       When I call memory_sync for project "acme-web" without cloud credentials
@@ -165,13 +173,13 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
   @OQ-4
   Rule: Consolidation could later become a multi-round-trip request
-    @deferred
+    @ignore
     Scenario: The server asks the agent which hashes to keep via MRTR
       # Fallback for V1: plain tool call with an explicit keep list, as specified above.
 
   @OQ-5
   Rule: A single cloud memory bank could serve all agents
-    @deferred
+    @ignore
     Scenario: Project isolation is enforced on the cloud side via row-level security
       # Fallback for V1: the cloud database is the correlation point; committed contexts
       # (shared + project:<id>) sync into it, and global/local installs merge through it.

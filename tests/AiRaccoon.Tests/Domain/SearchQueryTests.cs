@@ -29,6 +29,19 @@ public class SearchQueryTests
         query.Limit.ShouldBe(20);
         query.MinScore.ShouldBe(0.7);
         query.Scope.ShouldBe(SearchScope.All);
+        query.RrfK.ShouldBe(60);
+        query.FtsWeight.ShouldBe(1);
+        query.VectorWeight.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Constructor_WithFusionParameters_KeepsThem()
+    {
+        var query = new SearchQuery("acme", "search", rrfK: 30, ftsWeight: 2, vectorWeight: 1);
+
+        query.RrfK.ShouldBe(30);
+        query.FtsWeight.ShouldBe(2);
+        query.VectorWeight.ShouldBe(1);
     }
 
     [Fact]
@@ -91,6 +104,29 @@ public class SearchQueryTests
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "minScore");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validator_WithNonPositiveRrfK_ReportsCamelCaseProperty(int rrfK)
+    {
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", rrfK: rrfK));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "rrfK");
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-10)]
+    public void Validator_WithNegativeFusionWeight_ReportsCamelCaseProperty(int weight)
+    {
+        var result = new SearchQuery.Validator()
+            .Validate(new SearchQuery("acme", "query", ftsWeight: weight, vectorWeight: 1));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "ftsWeight");
     }
 
     [Fact]

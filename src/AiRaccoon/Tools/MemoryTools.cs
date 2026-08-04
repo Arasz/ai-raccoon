@@ -1,7 +1,10 @@
 using System.ComponentModel;
+using AiRaccoon.Access;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using FluentValidation;
@@ -11,7 +14,13 @@ using ModelContextProtocol.Server;
 namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tools over IMemoryStore and the workspace/sweep/sync services — no business logic here (spec §6.1).</summary>
-public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceService workspaces, SweepService sweeper)
+public sealed class MemoryTools(
+    IMemoryStore store,
+    SyncService sync,
+    WorkspaceService workspaces,
+    SweepService sweeper,
+    IMemoryAccessGuard access,
+    SyncOptions syncOptions)
 {
     private static void RequireProjectId(string? projectId)
     {
@@ -20,6 +29,10 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
             throw new McpException("invalid-params: project_id is required");
         }
     }
+
+    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
+        CancellationToken cancellationToken) =>
+        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = "memory_write")]
     [Description(
@@ -38,6 +51,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_write", cancellationToken);
 
         var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId);
         new MemoryWriteRequest.Validator().ValidateAndThrow(request);
@@ -60,9 +74,16 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         int limit = 20,
         [Description("Minimum ranking threshold 0..1 (default 0.7).")]
         double minScore = 0.7,
+        [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
+        int rrfK = SearchQuery.DefaultRrfK,
+        [Description("Weight of the keyword (FTS5) list in the RRF fusion (default 1).")]
+        int ftsWeight = 1,
+        [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
+        int vectorWeight = 1,
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_search", cancellationToken);
 
         var parsedScope = scope.ToLowerInvariant() switch
         {
@@ -72,7 +93,8 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
             _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore);
+        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
+            rrfK, ftsWeight, vectorWeight);
         new SearchQuery.Validator().ValidateAndThrow(searchQuery);
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);
@@ -86,6 +108,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_list", cancellationToken);
         var files = await store.ListFilesAsync(projectId, cancellationToken);
         return new ListResult(files);
     }
@@ -97,6 +120,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_stats", cancellationToken);
         var stats = await store.GetStatsAsync(projectId, cancellationToken);
         return new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
     }
@@ -111,6 +135,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_share", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.ShareAsync(projectId, hash, cancellationToken);
@@ -126,6 +151,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
@@ -141,6 +167,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete_context", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
         var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
@@ -158,6 +185,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_ingest_file", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
@@ -175,6 +203,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_ingest_directory", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
@@ -183,28 +212,52 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
 
     [McpServerTool(Name = "memory_configure")]
     [Description(
-        "Configures the bank's embedding model: provider 'local' with a GGUF model path, or a remote provider name with a model id. Remote requires an API key (env AIRACCOON_VECTORSSPACE_API_KEY or api_key).")]
+        "Configures the bank's embedding engine. provider 'local' embeds in-process with the bundled " +
+        "int8 ONNX model (optional model path overrides it); provider 'openai' routes through any " +
+        "OpenAI-compatible baseUrl (default https://api.openai.com/v1) with a model id. Remote requires " +
+        "an API key (env AIRACCOON_OPENAI_API_KEY or api_key). Changing the engine re-embeds the bank.")]
     public async Task<ConfigureResult> Configure(
-        [Description("The project id.")] string projectId,
-        [Description("Embedding provider: 'local' or a remote provider name.")]
+        [Description("The project id; every memory operation is scoped to a project.")]
+        string projectId,
+        [Description("Embedding provider: 'local' (bundled ONNX) or 'openai' (OpenAI-compatible endpoint).")]
         string provider,
-        [Description("GGUF model path (local) or remote model id.")]
-        string model,
+        [Description("Endpoint base URL for provider 'openai' (e.g. http://localhost:11434/v1); defaults to the OpenAI API.")]
+        string? baseUrl = null,
+        [Description("Model id (openai) or ONNX model path (local); defaults to the bundled model for local.")]
+        string? model = null,
         [Description("Optional API key for remote embeddings; never persisted.")]
         string? apiKey = null,
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_configure", cancellationToken);
 
-        var isRemote = !string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
-        var resolvedKey = apiKey ?? Environment.GetEnvironmentVariable("AIRACCOON_VECTORSSPACE_API_KEY");
-        if (isRemote && string.IsNullOrWhiteSpace(resolvedKey))
+        var isLocal = string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
+        var isOpenAi = string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase);
+        if (!isLocal && !isOpenAi)
         {
-            throw new McpException(
-                "embedding-api-key-missing: set AIRACCOON_VECTORSSPACE_API_KEY or pass api_key for a remote embedding provider");
+            throw new McpException($"invalid-params: provider must be 'local' or 'openai', got '{provider}'");
         }
 
-        var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, resolvedKey, cancellationToken);
+        var resolvedKey = apiKey;
+        if (isOpenAi)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                throw new McpException("invalid-params: model is required for provider 'openai'");
+            }
+
+            resolvedKey = apiKey ?? Environment.GetEnvironmentVariable(
+                AiRaccoon.Infrastructure.Embedding.EmbeddingService.OpenAiApiKeyEnvVar);
+            if (string.IsNullOrWhiteSpace(resolvedKey))
+            {
+                throw new McpException(
+                    "embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'");
+            }
+        }
+
+        var config = await store.ConfigureEmbeddingAsync(projectId, provider, model, baseUrl, resolvedKey,
+            cancellationToken);
         return new ConfigureResult(config.Provider, config.Model, config.Engine);
     }
 
@@ -217,6 +270,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_embed_pending", cancellationToken);
 
         var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
         return new EmbedResult(result.Processed, result.Pending);
@@ -234,6 +288,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_workspace_begin", cancellationToken);
 
         var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
         return new WorkspaceBeginResult(workspace.Id, workspace.Context);
@@ -247,6 +302,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Read, "memory_workspace_status", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
@@ -264,6 +320,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_workspace_consolidate", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
@@ -279,6 +336,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Destructive, "memory_workspace_discard", cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
@@ -295,6 +353,7 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, "memory_sweep", cancellationToken);
 
         var outcome = await sweeper.SweepAsync(projectId, 0.3, 30, dryRun, cancellationToken);
         return new SweepResult(outcome.Candidates, outcome.DeletedHashes);
@@ -302,22 +361,52 @@ public sealed class MemoryTools(IMemoryStore store, SyncService sync, WorkspaceS
 
     [McpServerTool(Name = "memory_sync")]
     [Description(
-        "Syncs the bank's committed contexts (shared + project:<id>) to the configured cloud database. Requires AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY.")]
+        "Syncs the bank's committed contexts (shared + project:<id>) to S3-compatible object storage. " +
+        "Requires AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY " +
+        "and AIRACCOON_SYNC_SECRET_KEY.")]
     public async Task<SyncToolResult> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
         RequireProjectId(projectId);
+        await RequireAsync(projectId, AccessRequirement.Write, "memory_sync", cancellationToken);
 
+        if (!syncOptions.IsConfigured)
+        {
+            throw new McpException(
+                "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
+                "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+
+        var objectKey = syncOptions.ObjectKey ?? $"memory-{projectId}.db";
         try
         {
-            var result = await sync.MemorySyncAsync(projectId, cancellationToken);
+            var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
             return new SyncToolResult(result.Sent, result.Received, result.Reindexed);
         }
         catch (SyncNotConfiguredException)
         {
             throw new McpException(
-                "sync-not-configured: set AIRACCOON_SQLITECLOUD_DB_ID and AIRACCOON_SQLITECLOUD_API_KEY");
+                "sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, " +
+                "AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+        catch (SyncAuthFailedException)
+        {
+            throw new McpException(
+                "sync-auth-failed: verify AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY");
+        }
+        catch (SyncConflictException)
+        {
+            throw new McpException(
+                "sync-conflict: remote changed during merge — retry the sync");
+        }
+        catch (SyncNetworkException ex)
+        {
+            throw new McpException($"sync-network: {ex.Message}");
+        }
+        catch (SyncCorruptFileException ex)
+        {
+            throw new McpException($"sync-corrupt-file: {ex.Message}");
         }
     }
 

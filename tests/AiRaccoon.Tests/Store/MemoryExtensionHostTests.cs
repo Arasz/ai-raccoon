@@ -2,22 +2,15 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Rating;
-using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Store;
 
-[Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class MemoryExtensionHostTests : IDisposable
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class MemoryExtensionHostTests
 {
-    private readonly string _dataRoot = CreateTempRoot();
-
-    public void Dispose() => Directory.Delete(_dataRoot, true);
-
     [Fact]
     public async Task Search_RunsExtensionHooksInRegistrationOrder()
     {
@@ -44,27 +37,16 @@ public sealed class MemoryExtensionHostTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchHit_BumpsMetaAccessCountAndRating_ThroughRetrievalRatingExtension()
+    public async Task Search_DelegatesToInnerStore_AndRunsExtensionsAfter()
     {
-        var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            false, _ => { });
-        var meta = new MetaStore(factory, TimeProvider.System);
-        var extension = new RetrievalRatingExtension(meta);
-        var results = new List<MemorySearchResult>
-        {
-            new("h1", 0, 0.9, "note.md", "snippet")
-        };
-        var inner = new StubStore(results);
-        var host = new MemoryExtensionHost(inner, [extension]);
+        var recorder = new RecordingExtension("first");
+        var inner = new StubStore([new MemorySearchResult("h1", 0, 0.9, "note.md", "s")]);
+        var host = new MemoryExtensionHost(inner, [recorder]);
 
-        await host.SearchAsync(new SearchQuery("acme", "q"), TestContext.Current.CancellationToken);
-        await host.SearchAsync(new SearchQuery("acme", "q"), TestContext.Current.CancellationToken);
+        var results = await host.SearchAsync(new SearchQuery("acme", "q"), TestContext.Current.CancellationToken);
 
-        var entry = await meta.GetEntryAsync("acme", "h1", TestContext.Current.CancellationToken);
-        entry.ShouldNotBeNull();
-        entry.AccessCount.ShouldBe(2);
-        entry.Rating.ShouldBeGreaterThan(RatingPolicy.DefaultBaseScore);
+        results.ShouldHaveSingleItem();
+        recorder.Calls.ShouldContain("OnSearchAsync");
     }
 
     private static string CreateTempRoot()
@@ -149,9 +131,9 @@ public sealed class MemoryExtensionHostTests : IDisposable
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model,
-            string? apiKey, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbeddingConfig(provider, model, "local"));
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model,
+            string? baseUrl, string? apiKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", "local"));
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>
@@ -164,5 +146,18 @@ public sealed class MemoryExtensionHostTests : IDisposable
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

@@ -1,44 +1,29 @@
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Rating;
 
 /// <summary>
-///     First-party extension: search hits bump the retrieval rating (FR-MEM-1.14). Every hash the
-///     search returned gets its access count incremented and rating recomputed in the local meta
-///     store; writes record provenance so a later sweep has a rating to judge.
+///     First-party extension keeping the rating pipeline wired to on-row columns (P1 rewire):
+///     the search hit bump (access_count/last_accessed_at/rating) now happens inside
+///     SqliteMemoryStore.SearchAsync, and deletes remove the whole row — so every hook here is a
+///     no-op. Kept registered so the extension host architecture (spec §6.2) stays intact for
+///     later waves.
 /// </summary>
-public sealed class RetrievalRatingExtension(MetaStore meta) : IMemoryExtension
+public sealed class RetrievalRatingExtension : IMemoryExtension
 {
     public string Name => "retrieval-rating";
 
-    public async Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken) =>
-        // The content hash is only known after the store reads the row back, so write-time
-        // provenance is not recorded here; the first search hit creates the meta row (FR-MEM-1.14).
-        await Task.CompletedTask;
+    public Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public async Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken)
-    {
-        foreach (var result in context.Results)
-        {
-            await meta.UpsertAccessAsync(
-                    context.ProjectId, result.Hash, context: result.Path, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
+    public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public async Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(context.Hash))
-        {
-            await meta.DeleteAsync(context.ProjectId, context.Hash, cancellationToken).ConfigureAwait(false);
-        }
-    }
+    public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task<IReadOnlyList<SweepCandidate>>
         OnSweepAsync(SweepContext context, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
 
-    public async Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => await Task.CompletedTask;
+    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }

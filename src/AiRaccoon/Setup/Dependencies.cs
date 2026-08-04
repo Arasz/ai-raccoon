@@ -1,9 +1,12 @@
+using AiRaccoon.Access;
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Provisioning;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
@@ -28,58 +31,53 @@ public static partial class Dependencies
             Scope = scope,
             Sync = new SyncOptions
             {
-                ManagedDatabaseId = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_DB_ID"),
-                ApiKey = Environment.GetEnvironmentVariable("AIRACCOON_SQLITECLOUD_API_KEY")
+                Endpoint = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ENDPOINT"),
+                Bucket = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_BUCKET"),
+                AccessKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_ACCESS_KEY"),
+                SecretKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_SECRET_KEY"),
+                Region = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_REGION"),
+                ObjectKey = Environment.GetEnvironmentVariable("AIRACCOON_SYNC_OBJECT_KEY")
             }
         };
 
-        // Provision native extensions on first run (FR-MEM-1.19): download + verify the pinned
-        // vector/memory/cloudsync modules for the host RID before any connection opens them.
-        // Runs post-build via ProvisionExtensions (needs ILoggerFactory from the container).
         services.AddSingleton(options);
         services.AddSingleton(options.Sync);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => new SqliteConnectionFactory(
-            sp.GetRequiredService<InfrastructureOptions>(),
-            true));
+            sp.GetRequiredService<InfrastructureOptions>()));
+        services.AddSingleton<EmbeddingService>();
         services.AddSingleton<SqliteMemoryStore>();
-        services.AddSingleton<MetaStore>();
         services.AddSingleton<SqliteWorkspaceStore>();
         services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
+        services.AddSingleton<IChunker, TokenizerChunker>();
         services.AddSingleton<IMemoryStore>(sp => new MemoryExtensionHost(
             sp.GetRequiredService<SqliteMemoryStore>(),
             [sp.GetRequiredService<RetrievalRatingExtension>()]));
         services.AddSingleton<RetrievalRatingExtension>();
-        services.AddSingleton<ICloudSyncConnectionFactory, CloudSyncConnectionFactory>();
-        services.AddSingleton<SyncService>();
+        services.AddSingleton<ICloudStore>(sp =>
+        {
+            var syncOpts = sp.GetRequiredService<SyncOptions>();
+            if (!syncOpts.IsConfigured)
+            {
+                return new NullCloudStore();
+            }
+
+            return new S3CloudStore(syncOpts,
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger<S3CloudStore>());
+        });
+        services.AddSingleton(sp => new SyncService(
+            sp.GetRequiredService<ICloudStore>(),
+            async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
+            async (path, ct) =>
+            {
+                var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path}");
+                await conn.OpenAsync(ct);
+                return conn;
+            },
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
         services.AddSingleton<WorkspaceService>();
         services.AddSingleton<SweepService>();
-    }
-
-    /// <summary>Downloads + verifies the pinned native extensions before the first connection opens them (FR-MEM-1.19).</summary>
-    public static void ProvisionExtensions(this IServiceProvider services)
-    {
-        var options = services.GetRequiredService<InfrastructureOptions>();
-        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("AiRaccoon");
-        try
-        {
-            using var http = new HttpClient();
-            var provisioner = new ExtensionProvisioner(
-                options.DataRoot, options.Rid, http, ExtensionManifest.Sha256, true);
-            provisioner.EnsureProvisionedAsync().GetAwaiter().GetResult();
-        }
-        catch (Exception exception)
-        {
-            // Do not crash the server on provisioning failure — the first tool call that opens the
-            // bank will surface the precise missing-module error.
-            Log.ExtensionProvisioningFailed(logger, exception.Message);
-        }
-    }
-
-    private static partial class Log
-    {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Error,
-            Message = "ai-raccoon: native extension provisioning failed: {reason}")]
-        public static partial void ExtensionProvisioningFailed(ILogger logger, string reason);
+        services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
+            sp.GetRequiredService<IMemoryStore>()));
     }
 }

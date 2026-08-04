@@ -18,6 +18,8 @@
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk"/>
         <PackageReference Include="ModelContextProtocol.Core"/>
+        <PackageReference Include="Reqnroll.xunit.v3"/>
+        <PackageReference Include="Reqnroll.Tools.MsBuild.Generation" PrivateAssets="all"/>
         <PackageReference Include="Shouldly"/>
         <PackageReference Include="xunit.v3"/>
         <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all"/>
@@ -27,6 +29,21 @@
         <ProjectReference Include="../../src/AiRaccoon/AiRaccoon.csproj"/>
         <ProjectReference Include="../../src/AiRaccoon.Core/AiRaccoon.Core.csproj"/>
         <ProjectReference Include="../../src/AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
+    </ItemGroup>
+
+    <!-- Golden-retrieval harness (tests/Retrieval): reuse the benchmark corpus (data-only C#
+         files, no benchmark packages) and copy the committed asset manifest to the output. -->
+    <ItemGroup>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/CorpusModels.cs" Link="Retrieval/Corpus/CorpusModels.cs"/>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs" Link="Retrieval/Corpus/RealWorldCorpus.cs"/>
+        <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldQueries.cs" Link="Retrieval/Corpus/RealWorldQueries.cs"/>
+        <Content Include="Retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <!-- Reqnroll generated-test suite (P12): feature files from docs/features/. -->
+    <ItemGroup>
+        <ReqnrollFeatureFiles Include="../../docs/features/native-memory/native-memory.feature" />
+        <ReqnrollFeatureFiles Include="../../docs/features/agent-memory/agent-memory.feature" />
     </ItemGroup>
 
 </Project>

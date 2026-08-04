@@ -29,11 +29,12 @@ public interface IMemoryStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Sets the bank's embedding provider/model (and API key when remote); persists in dbmem_settings (spec §4.1
-    ///     memory_configure).
+    ///     Sets the bank's embedding provider/model/endpoint (and API key when remote); persists
+    ///     in the settings table (spec §4.1 memory_configure), records the engine fingerprint,
+    ///     and re-embeds previously embedded rows when the engine changes (FR-NM-3 s6).
     /// </summary>
-    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string model, string? apiKey,
-        CancellationToken cancellationToken = default);
+    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string projectId, string provider, string? model, string? baseUrl,
+        string? apiKey, CancellationToken cancellationToken = default);
 
     /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -48,5 +49,19 @@ public interface IMemoryStore
 
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>
     Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the on-row rating/ttl metadata for one entry (degradation policy input).</summary>
+    Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads one settings row (access modes, forgetting knobs); null when the key is absent.</summary>
+    Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default);
+
+    /// <summary>Upserts one settings row.</summary>
+    Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets an entry's ttl_days override — a forgetting knob gated to full mode at the boundary.</summary>
+    Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default);
 }

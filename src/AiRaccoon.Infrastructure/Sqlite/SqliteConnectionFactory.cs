@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Options;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -5,28 +6,24 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Opens the install's memory bank (one DB per install scope) with the shared PRAGMA policy and loads native
-///     extensions (spec §6.3).
+///     Opens the install's single memory bank (memory.db) with the shared PRAGMA policy, loads
+///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
+///     every table lives in memory.db (FR-NM-1).
 /// </summary>
 public sealed class SqliteConnectionFactory
 {
-    private readonly bool _loadCloudSync;
-    private readonly Action<SqliteConnection> _loadExtensions;
     private readonly InfrastructureOptions _options;
 
     static SqliteConnectionFactory()
     {
         // Dapper maps columns to constructor parameters case-insensitively but not across
-        // underscores; the sqlite-memory schema uses snake_case (created_at, access_count, …).
+        // underscores; our schema uses snake_case (created_at, access_count, …).
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
-    public SqliteConnectionFactory(InfrastructureOptions options, bool loadCloudSync = false,
-        Action<SqliteConnection>? loadExtensions = null)
+    public SqliteConnectionFactory(InfrastructureOptions options)
     {
         _options = options;
-        _loadCloudSync = loadCloudSync;
-        _loadExtensions = loadExtensions ?? LoadNativeExtensions;
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
@@ -41,66 +38,48 @@ public sealed class SqliteConnectionFactory
 
     public string BankPath => Path.Combine(BankDirectory, "memory.db");
 
-    public string MetaDatabasePath => Path.Combine(BankDirectory, "raccoon_meta.db");
-
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(BankDirectory);
 
         var connection = new SqliteConnection($"Data Source={BankPath}");
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
-        _loadExtensions(connection);
-        return connection;
-    }
 
-    public async Task<SqliteConnection> OpenMetaAsync(CancellationToken cancellationToken = default)
-    {
-        Directory.CreateDirectory(BankDirectory);
-
-        var connection = new SqliteConnection($"Data Source={MetaDatabasePath}");
-        await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
-        return connection;
-    }
-
-    private void LoadNativeExtensions(SqliteConnection connection)
-    {
         connection.EnableExtensions();
-        var paths = ExtensionPaths.For(_options.DataRoot, _options.Rid, _loadCloudSync);
-        connection.LoadExtension(paths.Vector);
-        connection.LoadExtension(paths.Memory);
-        if (paths.CloudSync is not null)
+        // vec0 ships in the NuGet package — always available, no provisioning.
+        connection.LoadVector();
+        await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+        await SeedGlobalAccessModeAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        return connection;
+    }
+
+    // FR-NM-2: the global access mode is seeded once from the AIRACCOON_ACCESS_MODE env value
+    // (ro|rw|full); an operator-set settings row is never overwritten by the seed.
+    private static async Task SeedGlobalAccessModeAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var env = Environment.GetEnvironmentVariable("AIRACCOON_ACCESS_MODE");
+        if (AccessModePolicy.Parse(env) is not { } mode)
         {
-            connection.LoadExtension(paths.CloudSync);
+            return;
         }
 
-        // Writes must work before any embedding model is configured: defer embeddings by
-        // default (FR-MEM-1.12); memory_configure turns deferral off once a model is set.
-        // Only apply the deferral default when no provider is persisted yet — re-asserting it
-        // on every open would clobber a configured model's deferral-off (M1).
-        using var provider = connection.CreateCommand();
-        provider.CommandText = "SELECT memory_get_option('provider')";
-        var configuredProvider = provider.ExecuteScalar() as string;
-        if (string.IsNullOrWhiteSpace(configuredProvider))
-        {
-            using var defer = connection.CreateCommand();
-            defer.CommandText = MemorySql.SetDeferEmbeddings;
-            defer.Parameters.AddWithValue("@value", 1);
-            defer.ExecuteScalar();
-        }
-
-        // Path-scoped hashes: identical content may live in several contexts (a project row and
-        // its shared promotion, or the same fact in two projects). add_text still dedups within
-        // a context, which keeps FR-MEM-1.8; add_content with a distinct path creates the
-        // second row (B1).
-        using var preserve = connection.CreateCommand();
-        preserve.CommandText = MemorySql.SetPreserveDuplicatePaths;
-        preserve.Parameters.AddWithValue("@value", 1);
-        preserve.ExecuteScalar();
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "INSERT INTO settings (key, value) VALUES (@key, @value) ON CONFLICT(key) DO NOTHING",
+                    new { key = AccessModePolicy.GlobalSettingKey, value = AccessModePolicy.Serialize(mode) },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var fk = connection.CreateCommand();
+        fk.CommandText = "PRAGMA foreign_keys = ON";
+        await fk.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         await using var wal = connection.CreateCommand();
         wal.CommandText = "PRAGMA journal_mode=WAL";
