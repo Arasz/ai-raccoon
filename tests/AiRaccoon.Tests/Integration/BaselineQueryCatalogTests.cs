@@ -5,13 +5,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Wave 5a data pins (docs/plans/retrieval-improvement-c.md §3 Wave 5a): every baseline query
-///     carries a difficulty stratum (easy/medium/hard/very-hard) and a 1-5 relevance grade —
-///     expected-source chunk fully answers = 5, answer split across 2+ authoritative chunks/files
-///     = 4, 0 = ungraded (coverage queries and non-evidential negative tests, comparison-clean.md).
-///     Difficulty criteria: measured hybrid exact-chunk rank for expected-source queries
-///     (exact@1 easy, @2-3 medium, @4-5 hard, outside top-5 very-hard); structural dispersion
-///     for coverage queries. Rubric + measured rank table: docs/plans/retrieval-improvement-c.md.
+///     Wave 5a data pins: difficulty strata + relevance grades per the rubric in
+///     docs/plans/retrieval-improvement-c.md §3 Wave 5a.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

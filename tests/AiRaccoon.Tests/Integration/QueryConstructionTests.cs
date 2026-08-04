@@ -11,11 +11,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Wave 1 gates of docs/plans/retrieval-improvement-c.md: the AND-with-OR-fallback retry
-///     (no zero-matches), the diagnostic triplet on the FTS-only path, and the FTS-only
-///     guard (file hit@5 ≥ 6/7 and MRR ≥ 0.70 on the expected-source suite). Runs against
-///     the committed jsaa-memory.db corpus; the fallback test uses a token absent from the
-///     corpus so the AND primary provably zero-matches.
+///     Wave 1 gates (plan C): AND-with-OR-fallback (no zero-matches), the diagnostic triplet
+///     and the FTS-only guard on the committed corpus.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -53,13 +50,7 @@ public sealed class QueryConstructionTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    /// <summary>
-    ///     A4 boundary regression (Wave 1 integration review): 'What happened to the MCP
-    ///     server?' — the AND primary matches exactly max(3, 5) rows and excludes the ADR-0060
-    ///     decision chunk ('happened' does not occur in it). The boundary trigger must fire
-    ///     the OR fallback, restoring the decision chunk to the FTS-only top-8 (measured rank
-    ///     7 with bigrams; plain OR ranked it 8).
-    /// </summary>
+    /// <summary>A4 boundary regression: the AND primary at max(TokenCount, limit) rows must fire the OR fallback (measured Wave 1 case).</summary>
     [Fact]
     public async Task AndPrimary_AtBoundary_A4DecisionChunkRestoredByFallback()
     {
@@ -79,12 +70,7 @@ public sealed class QueryConstructionTests : IDisposable
             $"A4's decision chunk measured FTS-only rank 7 under the fallback (plain OR: 8), got {rank}");
     }
 
-    /// <summary>
-    ///     An AND primary that matches fewer rows than it has terms is over-constrained: A6's
-    ///     'project AND handle AND data AND erasure' matches only ADR-0068 rows (2 < 4 terms),
-    ///     so the OR fallback must fire and bring ADR-0067 into the FTS-only top-5 (the
-    ///     measured Wave 1 regression case — plan C gate a).
-    /// </summary>
+    /// <summary>An AND primary with fewer matches than it has terms is over-constrained — the OR fallback must fire (A6 measured case).</summary>
     [Fact]
     public async Task AndPrimary_UnderMatchedRows_FallsBackToOr()
     {
@@ -96,11 +82,7 @@ public sealed class QueryConstructionTests : IDisposable
         rank.Value.ShouldBeLessThanOrEqualTo(RankCutoff, "A6 must answer within the FTS-only top-5 after the fallback");
     }
 
-    /// <summary>
-    ///     The AND primary provably zero-matches ('zyxwv' is absent from the corpus), so the
-    ///     OR fallback must fire: FTS-only results for "adr zyxwv" equal those for "adr"
-    ///     (the fallback expression is 'adr OR zyxwv' and zyxwv matches nothing).
-    /// </summary>
+    /// <summary>A provably zero-matching AND primary must retry with the OR fallback (results equal the OR-only expression).</summary>
     [Fact]
     public async Task AndPrimary_ZeroMatch_RetriesWithOrFallback()
     {
@@ -203,11 +185,7 @@ public sealed class QueryConstructionTests : IDisposable
         _output.WriteLine($"FTS-only guard: ADR file hit@5 {adrHitsAt5}/{adrQueries.Length}, MRR {mrr:F4} over {expectedSource.Length} queries");
     }
 
-    /// <summary>
-    ///     Plan C Wave 1 gate (a): no hybrid rank regresses vs the Wave 0 baseline. Wave 0
-    ///     ranks: plan §0 documents A2=1, A7=1, A6=4, C1=1 and MRR 1.0 for C2/C5 (→ rank 1);
-    ///     the documented ADR MRR 0.893 = (6×1 + 1/4)/7 pins A1/A3/A4/A5 at rank 1 too.
-    /// </summary>
+    /// <summary>No hybrid rank regresses vs the Wave 0 baseline (ranks pinned per plan §0 and the documented ADR MRR).</summary>
     [Fact]
     public async Task HybridRanks_DoNotRegress_VsWave0()
     {

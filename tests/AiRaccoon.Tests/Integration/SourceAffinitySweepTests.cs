@@ -13,12 +13,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 3 sweep: adjacent-chunk boost (λ), consolidation threshold and
-///     document-score formula against the committed jsaa baseline. Runs every grid point over
-///     the eleven expected-source queries, writes the matrix to
-///     docs/work/2026-08-04-wave3-source-affinity-sweep.md, and pins the chosen configuration
-///     (the SearchQuery defaults) to the Wave 3 gates: S2 decision ≤ 3, A6 file ≤ 3, A1/A4
-///     file ≤ 2, invariants at rank 1, ADR nDCG@5 above the λ=0 baseline.
+///     Plan C Wave 3 sweep: λ, consolidation threshold, doc-score formula over the grid;
+///     pins the chosen configuration (the defaults) to the Wave 3 gates. Full matrix in
+///     docs/work/2026-08-04-wave3-source-affinity-sweep.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

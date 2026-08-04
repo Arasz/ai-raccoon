@@ -13,10 +13,8 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     IMemoryStore over our own memory.db tables (plan §2.2) with plain SQL: no sqlite-memory
-///     functions, FTS5-only interim search (RRF + normalization are P6), on-row metadata and
-///     embed_state driven by the configured embedding engine (P4): writes embed synchronously
-///     once an engine exists, stay pending otherwise, and engine changes re-embed the bank.
+///     IMemoryStore over the single-file memory.db (plan §2.2): plain SQL, FTS5 + vec0
+///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
 public sealed class SqliteMemoryStore(
     SqliteConnectionFactory factory,
@@ -205,11 +203,9 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Per-modality candidate window before RRF fusion (P6b plan §8; plan C Wave 4): the
-    ///     default policy is max(limit*3, 100) so overlap candidates ranked 20-100 are not
-    ///     starved by a per-modality LIMIT @limit; Max5x50 is the measured alternative
-    ///     (max(limit*5, 50)). The caller's limit and minScore still apply in the final
-    ///     merger pass.
+    ///     Per-modality candidate window before RRF fusion (plan C Wave 4; ADR-0006):
+    ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
+    ///     starved by a per-modality LIMIT.
     /// </summary>
     internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3x100) =>
         mode == CandidateWindowMode.Max5x50
@@ -217,9 +213,8 @@ public sealed class SqliteMemoryStore(
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>
-    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
-    ///     when no engine is configured. The chunk size never exceeds the engine's documented
-    ///     max input tokens, preventing truncation dilution at embed time.
+    ///     Chunk bounds tied to the configured engine's token window; the chunk size never
+    ///     exceeds the engine's max input tokens (avoids truncation dilution at embed time).
     /// </summary>
     private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
         SqliteConnection connection, CancellationToken cancellationToken)
@@ -265,10 +260,8 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Wave 6 vector modality: the content and structure (heading-path) KNN lists fused
-    ///     with a fixed alpha into one ranked list — score = alpha * content sim + (1 - alpha)
-    ///     * structure sim. Banks without structure vectors degrade to content-only ordering
-    ///     (alpha scales every score by the same positive factor).
+    ///     Wave 6 vector modality: content and structure KNN lists fused by fixed alpha
+    ///     (docs/adr/0004); banks without structure vectors degrade to content-only order.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
         SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,

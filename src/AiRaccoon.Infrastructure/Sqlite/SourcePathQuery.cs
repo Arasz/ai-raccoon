@@ -4,10 +4,8 @@ using System.Text.RegularExpressions;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Wave 2 (plan C §3 2c): a query shaped like a source path (file[#section], e.g.
-///     docs/adr/0011-frontend-chassis-stack.md#decision) is matched against the
-///     source_file/section FTS columns with AND semantics — the exact chunk (or the owning
-///     file's chunks) is the only match, so it ranks first without body-text noise.
+///     Source-path-shaped queries (file[#section]) match the source_file/section FTS columns
+///     with AND semantics (plan C Wave 2 2c), ranking the exact chunk first.
 /// </summary>
 internal static partial class SourcePathQuery
 {
