@@ -38,6 +38,18 @@ public class TokenizerChunkerTests
     }
 
     [Fact]
+    public void Chunk_DefaultBounds256Overlay48_KeepChunksWithinTheModelWindow()
+    {
+        var chunker = new TokenizerChunker();
+        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+
+        var chunks = chunker.Chunk(BuildLongNote(), maxTokens: 256, overlayTokens: 48);
+
+        chunks.Count.ShouldBeGreaterThan(1);
+        chunks.ShouldAllBe(chunk => tokenizer.CountTokens(chunk) <= 256);
+    }
+
+    [Fact]
     public void Chunk_IdenticalInput_ProducesIdenticalChunks()
     {
         var chunker = new TokenizerChunker();

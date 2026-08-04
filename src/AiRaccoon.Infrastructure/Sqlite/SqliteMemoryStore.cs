@@ -24,8 +24,11 @@ public sealed class SqliteMemoryStore(
     EmbeddingService embeddings)
     : IMemoryStore
 {
-    private const int DefaultMaxTokens = 512;
-    private const int DefaultOverlayTokens = 64;
+    // Chunk bounds (P6b plan §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
+    // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
+    // chunk size is clamped to the configured engine's window where the engine knows it.
+    private const int DefaultMaxTokens = 256;
+    private const int DefaultOverlayTokens = 48;
     private const int EmbedBatchSize = 32;
 
     // The remote API key is held for the process lifetime only — never persisted (tool contract).
@@ -154,6 +157,30 @@ public sealed class SqliteMemoryStore(
     /// </summary>
     internal static int CandidateWindowFor(int limit) =>
         (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
+
+    /// <summary>
+    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
+    ///     when no engine is configured. The chunk size never exceeds the engine's documented
+    ///     max input tokens, preventing truncation dilution at embed time.
+    /// </summary>
+    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return (DefaultMaxTokens, DefaultOverlayTokens);
+        }
+
+        var model = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
+            .ConfigureAwait(false);
+        var context = EmbeddingService.ContextTokensFor(provider, model);
+        return (Math.Min(DefaultMaxTokens, context),
+            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
+    }
 
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
         SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
@@ -625,9 +652,13 @@ public sealed class SqliteMemoryStore(
     private async Task<int> InsertChunksAsync(string projectId, string path, string content, string? context,
         CancellationToken cancellationToken)
     {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = BucketFor(resolvedContext, projectId);
-        var chunks = chunker.Chunk(content, DefaultMaxTokens, DefaultOverlayTokens);
+        var (chunkMaxTokens, chunkOverlayTokens) = await ChunkSizeForAsync(connection, cancellationToken)
+            .ConfigureAwait(false);
+        var chunks = chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens);
         if (chunks.Count == 0)
         {
             return 0;
@@ -635,8 +666,6 @@ public sealed class SqliteMemoryStore(
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var bucketParams = new { path, scope = bucket.Scope, projectId = bucket.ProjectId, contextLabel = bucket.ContextLabel, workspaceId = bucket.WorkspaceId };
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         var inserted = 0;
         foreach (var chunk in chunks)

@@ -18,6 +18,27 @@ public sealed class EmbeddingService
 
     public const string OpenAiApiKeyEnvVar = "AIRACCOON_OPENAI_API_KEY";
 
+    /// <summary>Maximum input tokens of the bundled all-MiniLM-L6-v2 model (P6b plan §8).</summary>
+    public const int BundledModelContextTokens = 256;
+
+    /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
+    public const int OpenAiEmbeddingContextTokens = 8191;
+
+    /// <summary>
+    ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
+    ///     the model's window (P6b plan §8); unknown engines default conservatively.
+    /// </summary>
+    public static int ContextTokensFor(string provider, string? model)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        return provider.ToLowerInvariant() switch
+        {
+            "local" => BundledModelContextTokens,
+            "openai" => OpenAiEmbeddingContextTokens,
+            _ => BundledModelContextTokens
+        };
+    }
+
     // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
     // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
     private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
