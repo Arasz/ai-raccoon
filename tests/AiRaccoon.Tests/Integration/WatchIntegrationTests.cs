@@ -278,6 +278,86 @@ public sealed class WatchIntegrationTests
     }
 
     [Fact]
+    public async Task DeletedDirectory_Cascades_RemovesChunksAndFingerprintsOfNestedFiles()
+    {
+        using var stack = new Stack();
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        stack.Write("sub/a.md", "zephyrnest one");
+        stack.Write("sub/b.md", "zephyrnest two");
+        stack.Write("top.md", "zephyrtop root");
+        (await stack.StepUntilAsync(async () =>
+        {
+            var nested = await stack.SearchAsync("zephyrnest", TestContext.Current.CancellationToken);
+            var top = await stack.SearchAsync("zephyrtop", TestContext.Current.CancellationToken);
+            return nested.Count >= 2 && top.Any();
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue("seed files did not become searchable");
+
+        // A directory delete event digests with the DIRECTORY path — the store must remove
+        // every chunk under it, not just the exact path.
+        await stack.Memory.DeleteSourcePathAsync(Project, stack.File("sub"), TestContext.Current.CancellationToken);
+
+        (await stack.CountEntriesUnderAsync(stack.File("sub"), TestContext.Current.CancellationToken))
+            .ShouldBe(0, "nested chunks must be removed by the directory cascade");
+        (await stack.CountFingerprintsUnderAsync(stack.File("sub"), TestContext.Current.CancellationToken))
+            .ShouldBe(0, "nested fingerprints must be removed by the directory cascade");
+        (await stack.SearchAsync("zephyrtop", TestContext.Current.CancellationToken))
+            .Any().ShouldBeTrue("a sibling file outside the deleted directory must survive");
+    }
+
+    [Fact]
+    public async Task Restart_CatchUp_RemovesChunksOfFilesDeletedWhileTheServerWasDown()
+    {
+        using var first = new Stack(name: "restart-delete", now: FixedNow, deleteDataRoot: false);
+        await first.EnableAsync(TestContext.Current.CancellationToken);
+        await first.AllowScopeAsync(TestContext.Current.CancellationToken);
+        first.Write("a.md", "zephyrdoomed v1");
+        first.Write("c.md", "zephyrsurvivor stable");
+        first.Age("a.md", TimeSpan.FromMinutes(1));
+        first.Age("c.md", TimeSpan.FromMinutes(1));
+        await first.AddWatchAsync(TestContext.Current.CancellationToken);
+        await first.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (first.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        (await first.StepUntilAsync(async () =>
+        {
+            var doomed = await first.SearchAsync("zephyrdoomed", TestContext.Current.CancellationToken);
+            var survivor = await first.SearchAsync("zephyrsurvivor", TestContext.Current.CancellationToken);
+            return doomed.Any() && survivor.Any();
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue("seed files did not become searchable");
+
+        // "Server down": the watcher stops, downtime passes, and a file is deleted while down.
+        first.EventSource.StopAll();
+        first.Time.Advance(TimeSpan.FromMinutes(5));
+        File.Delete(first.File("a.md"));
+
+        using var second = new Stack(name: "restart-delete", now: first.Time.GetUtcNow(), deleteDataRoot: true);
+        await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (second.CatchUp.LastScan is { } scan)
+        {
+            await scan;
+        }
+
+        (await second.StepUntilAsync(async () =>
+        {
+            var doomed = await second.SearchAsync("zephyrdoomed", TestContext.Current.CancellationToken);
+            var survivor = await second.SearchAsync("zephyrsurvivor", TestContext.Current.CancellationToken);
+            return doomed.Count == 0 && survivor.Any();
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue(
+            "catch-up did not remove chunks of a file deleted while the server was down");
+    }
+
+    [Fact]
     public async Task UnreadableFile_DigestFails_StatusShowsError_PipelineKeepsRunning()
     {
         if (OperatingSystem.IsWindows())
@@ -466,6 +546,14 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file LIKE @prefix",
+                new { p = Project, prefix = dirPrefix + "%" }, cancellationToken: cancellationToken));
+        }
+
+        public async Task<int> CountFingerprintsUnderAsync(string dirPrefix, CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT count(*) FROM watch_files WHERE project_id = @p AND path LIKE @prefix",
                 new { p = Project, prefix = dirPrefix + "%" }, cancellationToken: cancellationToken));
         }
 
