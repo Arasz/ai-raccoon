@@ -1,107 +1,126 @@
-# Retrieval Improvement Plan C — Measured Structure
+# Retrieval Improvement Plan C — Measured Structure (Revision 1)
 
-> **Based on:** Plans A (source-first architecture) and B (measurement-first, algorithmic)
-> **Approach:** B's measurement discipline as foundation, A's structural depth as the build
-> **Merged:** 2026-08-04 — takes best parts of both, resolves tensions, closes gaps
-
----
-
-## 0. The Foundation: The Baseline Must Be Reproducible
-
-Plan B discovered that the committed baseline is unreproducible:
-
-1. The committed `jsaa-memory.db` has 6675 entries (not 681), 0 embeddings, and 71% from excluded `docs/work/`
-2. `RetrievalBaselineTests` hardcodes `IsExpectedSource=false` and `ExpectedSourceMatchesAtTop3=0`
-3. The report's hybrid numbers cannot come from the committed DB (no vectors exist)
-4. `scripts/chunk-hash-map.json` is absent — expected-source detection is disabled
-
-**Every improvement in this plan is gated on Wave 0.** No structural or algorithmic change ships until the baseline reproduces on a clean checkout.
+> **Based on:** Plans A (source-first architecture) and B (measurement-first, algorithmic).
+> **Revised:** 2026-08-04 — Wave 0 delivered, research comparison completed, plan updated to measured reality.
 
 ---
 
-## 1. What Works (verified against the committed DB)
+## 0. Wave 0: Reproducible Baseline — DONE ✓
 
-| Query | Expected | FTS-only rank (committed DB) | Report claim |
-|-------|----------|------------------------------|-------------|
-| A1 shadcn/ui | ADR-0011 | 1 | 2 |
-| A3 offer-page fetch | ADR-0006 | 1 | 4 |
-| A4 MCP server | ADR-0060 | 1 | 5 |
-| A6 data erasure | ADR-0067 | 4 (ADR-0068 at 1) | NOT FOUND |
-| A7 ADR-0070 | ADR-0070 | NOT FOUND | NOT FOUND |
+Delivered by task `fix-baseline` (merge 08144d7). The canonical corpus and measurement
+infrastructure are in place:
 
-1. Whole-file-path indexing works — distinctive tokens ("mcp", "offer-page") find the right file
-2. 100% coverage holds even in FTS-only mode
-3. Short, keyword-dense documents (invariants) win at rank 1 — BM25's length normalization is an ally
-4. Fusion/sweep measurement infra exists (`SweepRunner`, `SweepMatrix`, `RetrievalMetrics`, `ManagedHarness`)
-
----
-
-## 2. What's Broken — Root Causes
-
-### 2.1 The measurement harness is disconnected (critical — from B)
-
-The report, the committed DB, the C# test, and the Python runner are four different realities. No improvement can be trusted until they converge.
-
-### 2.2 FTS query construction destroys precision (from A §4.2D + B §2.3)
-
-`"What is ADR-0070 about?"` → `what OR is OR adr OR 0070 OR about`. Stopwords drown the signal; BM25's length normalization then ranks short docs (README.md) above the actual ADR.
-
-### 2.3 ADR chunk sibling competition (from A §2.1)
-
-ADR-0067's chunks compete against each other and against ADR-0068's chunks. The system knows they're from the same file but has no structural boost for source affinity.
-
-### 2.4 Source identity is write-only (from B §2.2)
-
-`memory_write(context="docs:adr")` stores `scope='custom'` — invisible to `SearchContexts.For`. The ingest script smuggles the context into content text. The `## Source:` header and `[context]` prefix pollute BM25 scores and make hash matching fragile.
-
-### 2.5 No modality attribution (from B §2.5)
-
-We don't know which queries are keyword-carried vs semantic-carried. The committed DB has no vectors, yet the report claims hybrid numbers.
-
-### 2.6 Corpus pollution (from B §2.6)
-
-71% of the committed DB is from excluded `docs/work/` — negative tests are meaningless.
-
-### 2.7 Baseline blind spots (from A §2.5 + B §2.6)
-
-No per-query relevance grading, no ablation analysis, no difficulty stratification, no cross-chunk relevance scoring.
+- **Corpus**: `tests/AiRaccoon.Tests/Resources/jsaa-memory.db` — 762 chunks, 762 embedded
+  (all-MiniLM-L6-v2 in-process ONNX), project_id=`job-search-ai-assistant`. Paths are
+  SHA256-derived hashes; structured path→hash mapping in `scripts/chunk-hash-map.json`.
+  Curated content: `docs/adr/` (456), `ai-badger/` (78), `docs/explanation/` (20),
+  `docs/` other (187). Excluded: `docs/work/`, `docs/state.json`, `docs/now.md`,
+  `.ai-badger/state.json`.
+- **Tests**: `RetrievalBaselineTests` — real expected-source matching (chunk-hash-map.xml.xml.inverted),
+  corpus integrity assertions. `BaselineMetricsTests` — nDCG@5 / MRR / recall@5 per category,
+  per-query ablation (hybrid / FTS-only / vector-only), determinism double-run.
+- **Gate**: 414 passed, 0 failed (12 s). Two consecutive runs produce identical top-5 hashes at
+  identical ranks. Report includes modality attribution per query.
+- **Current metrics** (hybrid, ADR queries A1–A7): nDCG@5 0.642, MRR 0.893, recall@5 0.544.
+  Invariant queries C1/C2/C5 (now reachable): nDCG@5 1.0, MRR 1.0. Key per-query:
+  A2 rank 1, A7 rank 1, A6 rank 4, C1 rank 1.
 
 ---
 
-## 3. Improvement Plan
+## 1. What Works (verified on the reproducible baseline)
 
-### Wave 0 — Reproducible Baseline (gate for ALL subsequent waves)
-
-**From B §4.1, hardened with A's measurement ideas:**
-
-1. **Regenerate the canonical corpus** via `ingest-jsaa-docs.py` with the curated pipeline. Use the jsaa tree pinned at the commit recorded in `ai-raccoon`'s submodule or dependency manifest. Commit `jsaa-memory.db` + `chunk-hash-map.json` together. **Exclusion list:** `docs/work/`, `docs/state.json`, `docs/now.md`, `.ai-badger/state.json`, and any other non-ADR, non-invariant content. The exact exclusion globs must be documented in the ingestion script and asserted in the harness.
-2. **Fix `RetrievalBaselineTests`:** compute expected-source matches from the hash map or path prefix; assert actual match rate; emit machine-readable JSON report.
-3. **Embed the corpus** before measuring hybrid: one `memory_configure` + `embed_pending` step using the bundled all-MiniLM-L6-v2 ONNX model; assert `embedded_count == entry_count`.
-4. **Wire `SweepRunner`/`RetrievalMetrics` to the JSAA baseline:** nDCG@5, MRR, recall@5 per query category, with ablation (FTS-only, vector-only, hybrid) per query.
-5. **Corpus integrity assertions** (from B §3.1 R2): excluded dirs absent, included files present, embed_state='embedded' for 100%.
-
-**Gate:** Baseline reproduces on clean checkout; two consecutive runs produce identical top-5 results per query (identical hashes at identical ranks — the report JSON is the determinism target); report includes modality attribution (FTS-only / vector-only / hybrid per query) and retrieval metrics (nDCG@5, MRR, recall@5).
+1. The hybrid (FTS5 BM25 + vector cosine, RRF k=60, 1:1) delivers A7 at rank 1 on the clean
+   corpus — the identifier-query failure on the old corpus was a corpus-pollution symptom
+   (cross-referencing ADRs + 71% docs/work noise), not a fundamental retrieval gap.
+2. Invariants (C1/C2/C5) at rank 1 — short, keyword-dense documents dominate reliably.
+3. Deterministic ONNX embeddings + SQLite determinism guarantees → identical top-5 hashes
+   across consecutive runs.
+4. Measurement infra: `SweepRunner`, `SweepMatrix`, `RetrievalMetrics`, `ManagedHarness`.
 
 ---
 
-### Wave 1 — Query Construction (algorithmic quick win)
+## 2. What's Broken — Root Causes (updated for measured evidence)
 
-**From B §4.2, merged with A §4.2D:**
+### 2.1 ADR chunk sibling competition (from A §2.1)
 
-1. **Stopword removal** in `FtsQueryNormalizer`: strip `what, is, the, how, does, about, are, do, can, should, will, would, could, has, have, been, was, were, being, a, an, in, on, at, to, for, of, by, with, from`
-2. **AND for identifier queries:** detect `\bADR-\d+\b` → emit `adr AND <number>`. Also detect bare numbers after ADR context, UUIDs, and other identifier patterns. For all other queries ≤4 tokens: use implicit AND. For longer: keep OR for recall.
-3. **Bigram phrase extraction** (from A): for queries with ≥3 content tokens under OR semantics (longer queries), add adjacent token pairs as quoted phrases. Under AND semantics (short queries), bigrams add no additional constraint — skip them to avoid redundant FTS terms.
-4. **Re-run full baseline** against the reproducible corpus, including the diagnostic triplet: Q1 "What is ADR-0070 about?" (full question), Q2 "ADR-0070" (identifier-only), Q3 "documentation structure trust model" (content-only, no number). This isolates whether failures are tokenization (Q2 fails, Q3 works), content spread (all fail), or ranking (found, wrong rank).
+ADR-0067's chunks compete against ADR-0068's chunks. A6 "How does data erasure work?" returns
+ADR-0068 at rank 1 but ADR-0067 at rank 4, degrading nDCG@5 to 0.146. The system has no
+document-level identity — treating each chunk as an independent candidate.
 
-**Expected effect:** ADR-0070 query transforms from `what OR is OR adr OR 0070 OR about` to `adr AND 0070` — noise tokens disappear, BM25 concentrates on signal.
+### 2.2 FTS query construction loses precision (from A §4.2D)
 
-**Gate:** All existing expected-source queries (see Appendix A) maintain or improve rank. ADR-0070 (Q1/Q2) found at rank ≤3. Invariant queries (C1 "Is TDD required?", C2 "screaming architecture", C5 "hardcoded secrets") unchanged at rank 1.
+`"What is ADR-0070 about?"` → `what OR is OR adr OR 0070 OR about`. Stopwords drown signal.
+A7 is already rescued on the clean corpus by the hybrid's vector modality, so the FTS-only
+failure is a diagnostic showing the FTS path's weakness, not an end-user blocker today. But
+FTS-only ranks for identifier queries are fragile (the swept corpus showed A7 rank 11 under
+pure FTS `adr AND 0070` — cross-referencing ADRs held more `adr`+`0070` occurrences).
+
+### 2.3 Source identity is write-only (from B §2.2)
+
+`memory_write(context="docs:adr")` stores `scope='custom'` — invisible to `SearchContexts.For`.
+The ingest script writes structured path metadata into chunk content text, polluting BM25 and
+making hash matching fragile.
+
+### 2.4 No document-level ranking signal
+
+Chunks from the same source compete as strangers. No adjacent-chunk boost, no source
+consolidation, no document-first ranking. A6 is the canonical casualty.
+
+### 2.5 AND-for-short query construction regresses (new — from retrieval-improvement-cont research)
+
+On the old (polluted) corpus, applying AND semantics to queries with ≤4 content tokens zero-matched
+11 of 35 queries, including A2 ("governs"/"choice" absent from ADR-0004). The hybrid on the clean
+corpus masks this today (the vector side rescues A2 at rank 1), but the FTS-only path is fragile
+and an AND-only regime will regress the moment the corpus grows or the vector modality is
+unavailable. The mitigations are AND-with-OR-fallback (zero-match → retry OR) and the FTS source
+column (identifier tokens match the path, not body text). **Not yet measured on the clean corpus.**
+Evidence: tools/AiRaccoon.FtsPlanPrototype results-plan.md (prototype/dual-vector-alpha spike).
+
+### 2.6 No section-targeted retrieval mechanism
+
+The flat index treats all chunks equally; no signal separates a Decision-section chunk from a
+Context-section chunk. Plan C's structural queries (S2 "What does ADR-0011 decide?", S4
+"Consequences of ADR-0011?") cannot be answered by the current pipeline. The retrieval-improvement-cont
+research measured a dual-vector approach (content embedding + heading-path embedding with
+fixed-α≈0.58 fusion) that delivers structural hits — 6/6 section-targeted queries vs content-only
+4/6 and FTS 1/6 — on the old (polluted) corpus, **but not yet re-measured on the clean 762-chunk
+corpus.** The heading-path signals are present in the chunk content (## Decision headings); storing
+and embedding them is a schema + pipeline change.
+
+---
+
+## 3. Improvement Plan (renumbered — old Wave 0 removed)
+
+### Wave 1 — Query Construction: stopwords + bigrams + guarded AND
+
+**Re-spec from original Wave 1 (AND-for-short removed; research showed it regresses).**
+
+1. **Stopword removal** in `FtsQueryNormalizer`: strip `what, is, the, how, does, about, are, do,
+   can, should, will, would, could, has, have, been, was, were, being, a, an, in, on, at, to,
+   for, of, by, with, from`.
+2. **Bigram phrase extraction**: for queries with ≥3 content tokens, add adjacent token pairs as
+   quoted FTS5 phrases (e.g. `"shadcn ui"`). Under AND semantics (short queries), bigrams add no
+   constraint — skip them.
+3. **AND with OR fallback**: join remaining tokens with AND when ≤4 tokens; if the MATCH returns
+   zero rows, retry with OR-join. The OR retry **includes bigrams** when the original content
+   had ≥3 tokens (don't lose the precision signal when falling back). This captures AND's
+   precision benefit for short queries while preventing the zero-match regression measured on
+   the old corpus (A2, A6).
+4. **Re-run full baseline** against the clean corpus, including the diagnostic triplet: Q1 "What
+   is ADR-0070 about?" (full question), Q2 "ADR-0070" (identifier-only), Q3 "documentation
+   structure trust model" (content-only).
+
+**Gate**: No query regresses vs the Wave 0 baseline (every expected-source rank ≤ Wave 0 rank).
+Diagnostic triplet confirms FTS-only path answers A7 on the clean corpus. ADDITIONAL FTS-only
+guard: FTS-only file hit@5 ≥ 6/7 and FTS-only MRR ≥ 0.70 — no regression below the status-quo
+F1 ranker (the best file-level MRR of all measured arms on the old corpus). The AND-fallback
+prevents any zero-match.
 
 ---
 
 ### Wave 2 — Source as First-Class Citizen (structural foundation)
 
-**Merged from A §4.1 and B §4.3:**
+Schema changes to give the system document-level self-awareness.
 
 #### 2a. Schema: add `source_file` column
 
@@ -109,9 +128,8 @@ No per-query relevance grading, no ablation analysis, no difficulty stratificati
 ALTER TABLE entries ADD COLUMN source_file TEXT;
 ```
 
-- For `IngestFileAsync`/`IngestDirectoryAsync`: set to the original relative path (e.g. `docs/adr/0011-frontend-chassis-stack.md`)
-- For `memory_write`/`AddContentAsync`: NULL or caller-provided label
-- All chunks from the same file share the same `source_file`
+For ingested files: original relative path (e.g. `docs/adr/0011-frontend-chassis-stack.md`).
+All chunks from the same file share the same `source_file`.
 
 #### 2b. Expose source identity in `MemorySearchResult`
 
@@ -125,95 +143,153 @@ public sealed record MemorySearchResult(
 );
 ```
 
-#### 2c. Index source separately for FTS (B's key addition)
+#### 2c. Index source_path in FTS as a weighted column (the identifier-query fix)
 
-Add the structured source path to the FTS index as an additional column with a column weight, so `ADR-0070` and `decision` match the *source path*, not the content text. This requires rebuilding `entries_fts` (currently an external-content table on `entries(value)`) to include `source_file` as a weighted column — a non-trivial schema migration involving FTS5 content-table rebuild and updated sync triggers. FTS5's `bm25(fts, 0.0, 1.0)` per-column weights control the relative importance of source vs content matches.
+Add the structured source path to the FTS index as a weighted column, so `ADR-0070` and
+`decision` match the *source path*, not just body text. FTS5's `bm25(fts, weight_content,
+weight_source)` per-column weights let source matches carry more signal than body-text matches.
+This is the mechanism that addresses the A7 identifier-query case at the FTS level (research
+showed A7 rank 11 under FTS-only `adr AND 0070` on polluted corpus — cross-referencing ADRs
+held more term occurrences; the source column eliminates that competition).
+
+Requires rebuilding `entries_fts` (currently external-content on `entries(value)`) to include
+`source_file` as a weighted column — a non-trivial schema migration.
 
 #### 2d. Stop embedding provenance in content (B's insight)
 
-The `## Source:` header and `[context]` prefix currently pollute BM25 and make hash matching fragile. Move provenance to the `source_file` column and stop prepending it to chunk text.
+Remove `## Source:` header and `[context]` prefix from chunk text — move provenance to the
+`source_file` column. This cleans BM25 scores and hash matching.
 
-**Hash stability note:** Wave 0 commits a canonical DB with the old format (provenance embedded in content). Wave 2d changes ingestion so *new* writes omit provenance from content text. The canonical DB is NOT regenerated after Wave 2d — provenance-removal only benefits future writes. Metrics in Waves 3-5 are measured against the Wave 0 corpus (which includes `## Source:` headers), so the true benefit of 2d is verified by comparing a fresh re-ingestion against the old corpus after 2d lands.
+#### 2e. Make context labels searchable
 
-#### 2e. Make context labels searchable (B §4.3.4)
+Include `scope='custom'` rows when a context filter is requested, or map context labels into
+the project scope with a `context_label` filter on `memory_search`.
 
-Either include `scope='custom'` rows when a context filter is requested, or map context labels into the project scope with a `context_label` filter on search. This restores the design's §2.2 promise.
-
-**Gate:** Q4 "What does ADR-0011 decide?" finds the Decision-section chunk at rank ≤3. Results carry source identity (SourceFile, ChunkIndex, TotalChunks populated for ingested content). A query for a source path (e.g. `docs/adr/0011-frontend-chassis-stack.md#decision`) returns that exact chunk. No regression on invariants (C1, C2, C5 at rank 1).
+**Gate**: S2 ("What does ADR-0011 decide?") finds the Decision-section chunk at rank ≤3.
+Results carry source identity (SourceFile, ChunkIndex, TotalChunks populated for ingested
+content). Q2 ("ADR-0070" identifier-only) returns ADR-0070 at FTS-only rank ≤3 — proving the
+source-column fix works without the vector crutch. A query for a source path
+(e.g. `docs/adr/0011-...#decision`) returns that exact chunk. No regression on invariants
+(C1/C2/C5 at rank 1).
 
 ---
 
 ### Wave 3 — Source-Affinity Scoring (ranking improvement)
 
-**From A §4.1C, tuned with B's sweep discipline:**
+1. **Adjacent chunk boost**: chunk N±1 from the same source gets a λ boost (sweep λ ∈
+   {0.05, 0.1, 0.2}).
+2. **Source consolidation**: for each source file, take the best-scoring chunk and optionally
+   merge its adjacent siblings into a single result.
+3. **Document-first ranking**: after per-chunk scoring, compute a document score = max(chunk
+   scores), use as a secondary sort key.
+4. **Parameter sweep** over λ, consolidation threshold, and document-score formula against
+   the full baseline.
+5. **BM25 length normalization** investigation: on the clean corpus A7 is already hybrid rank 1,
+   so BM25 length is a solved problem for the primary metric. **Deprioritized** — re-prioritize
+   only if a new length-attributable regression surfaces (e.g. a future query where a long ADR
+   chunk loses to a short doc under FTS-only).
 
-1. **Adjacent chunk boost:** If chunk N from source S ranks well, chunk N±1 from the same source gets a boost (λ ∈ {0.05, 0.1, 0.2} — sweep to select).
-2. **Source consolidation:** For each source file, take the best-scoring chunk and optionally merge its adjacent siblings into a single result (reducing sibling competition noise).
-3. **Document-first ranking:** After per-chunk scoring, compute a document score = max(chunk scores) or mean(top-3). Use as a secondary sort key so documents with any strong match rank as a block before documents with only weak matches.
-4. **Parameter sweep** over boost λ, consolidation threshold, and document-score formula against the full baseline.
-5. **BM25 length normalization investigation** (from B §4.4.1): Long ADR chunks lose to short docs (README.md) purely on length. Analyze whether BM25's length normalization is the root cause of remaining ranking failures after Wave 1 query construction. Options: (a) reduce chunk max tokens for ADR-like content, (b) accept it and let source-column matching carry the load, (c) test FTS5 column weights to zero-out content-length normalization for source matches. Decide with a sweep.
-
-**Gate:** At least 8/10 expected sources (see Appendix A) at rank ≤3. No regression on invariants.
+**Gate**: A6's expected-source rank improves from 4 to ≤3; nDCG@5(ADRs) improves over
+Wave 0 baseline. No regression on invariants.
 
 ---
 
 ### Wave 4 — RRF Parameter Optimization
 
-**From B §4.4, extended with A §4.3G:**
-
 Grid search using the existing `SweepMatrix`:
 - k ∈ {10, 30, 60, 120}
-- Weight ratios: (1:1), (1:2), (2:1), (1:0 FTS-only), (0:1 vector-only)
+- Weight ratios: (1:1), (1:2), (2:1)
 - minScore ∈ {0.0, 0.3, 0.5, 0.7}
-- Candidate window: max(limit×3, 100) vs max(limit×5, 50) (from A §4.3I — a smaller window may reduce sibling competition noise with 6675+ entries)
+- Candidate window: max(limit×3, 100) vs max(limit×5, 50)
 
-Select the Pareto-optimal point on nDCG@5 and MRR. Document the choice in an ADR with sweep data.
+Select the Pareto-optimal point on nDCG@5 and MRR. Document in an ADR with sweep data.
 
-Additionally, measure what fraction of *correct* results sit below minScore=0.7 (the MCP default). If the default silently drops rank-3+ results that are correct, the sweep data makes the trade-off visible.
-
-**Gate:** Chosen parameters beat the current defaults (k=60, 1:1, minScore=0.0) on nDCG@5 without regressing invariants. RRF hybrid must be ≥ max(FTS-only, vector-only) in rank terms for every expected-source query (no fusion regression — from B §3.3). Sweep results committed alongside ADR.
+**Gate**: Chosen parameters beat the current defaults (k=60, 1:1, minScore=0.0) on nDCG@5
+without regressing invariants. RRF hybrid ≥ max(FTS-only, vector-only) for every expected-source
+query (no fusion regression). Sweep results committed alongside ADR.
 
 ---
 
 ### Wave 5 — Baseline Enrichment & Corpus Hygiene
 
-**From A §4 Wave 4 and B §4.5:**
+Split into 5a (can run early) and 5b (needs the ranking waves).
 
+#### 5a (after Wave 1 — guardrails before ranking work)
 1. Add query difficulty stratification (easy/medium/hard/very-hard)
-2. Add per-query relevance grading (1-5 scale, not just binary isExpectedSource)
-3. Compute nDCG@5, recall@5, MRR for all queries including new structural cases
-4. Add new structural and cross-document test cases from both plans
-5. Re-ingest with curated exclusions so negative tests are meaningful
-6. Add permanent corpus-integrity assertions to the harness
+2. Add per-query relevance grading (1-5 scale)
+3. Permanent corpus-integrity assertions in the harness
 
-**Gate:** Baseline report includes ablation breakdown, retrieval metrics, difficulty stratification, and corpus integrity checks. H1-H3 negative tests (see Appendix A) pass because the corpus excludes the content, not by luck of ranking.
+**Gate 5a**: H1-H3 negative tests pass because the corpus excludes the content. Query
+difficulty strata defined and assigned.
+
+#### 5b (after Waves 3+4+6 — measures final state)
+4. Add structural and cross-document test cases (S1-S6 from Appendix A)
+5. Compute nDCG@5, recall@5, MRR for all queries including structural cases
+6. Publish comprehensive baseline report
+
+**Gate 5b**: Baseline report includes ablation breakdown, retrieval metrics, difficulty
+stratification, corpus integrity checks. Structural queries S1-S6 scored.
+
+---
+
+### Wave 6 — Section-Targeted Retrieval: Dual-Vector Structure Signal
+
+> **New** (2026-08-04 — from retrieval-improvement-cont research, measured on old corpus.
+> **Pre-gate**: re-run the dual-vector comparison on the clean Wave 0 corpus (762 chunks,
+> all embedded) before proceeding. All numbers below are corpus-conditional — acceptance
+> requires clean-corpus confirmation.
+
+1. **Store heading path with each chunk**: parse markdown headings during ingest, assign each
+   chunk the heading-path context it belongs to (e.g. `ADR-0011: Frontend Chassis Stack > Decision`).
+2. **Generate a structure embedding**: embed the heading-path string as a second vector
+   alongside the content embedding (2× vector storage per chunk).
+3. **Fixed-α fusion**: `score = α × sim(q, content) + (1-α) × sim(q, structure)` with a
+   configurable constant α (≈0.5–0.6). The per-query sigmoid α machinery adds nothing over a
+   fixed blend (confidence is query-invariant; mean α clusters at ~0.58).
+4. **Gate**: (a) Pre-gate: dual-vector comparison re-run on clean Wave 0 corpus demonstrating
+   no regression vs content-only baseline. (b) Section-targeted queries (S2, S4) at rank ≤3.
+   Section-level hit@5 over A1–A7 ≥ 4/6 on the clean corpus. No regression on content-only
+   file-level ranks.
+
+**Research backing**: On the old (polluted 6675-chunk) corpus, the dual-vector with fixed-α=0.5
+lifted section hits from 4/6 (content-only) to 6/6 and MRR(section) from 0.37 to 0.46–0.56.
+FTS alone achieved 1/6. The heading-path information is present in the corpus markdown — storing
+and embedding it is a schema addition. Spike: prototype/dual-vector-alpha branch,
+`tools/AiRaccoon.DualVectorPrototype` + `scripts/compare-harnesses.py`.
+
+**Cost**: 2× vector storage (content + structure, ~762+estimated-200 unique heading paths),
+one extra embedding pass (~81 s for 6675 chunks on the old corpus; ~15 s for 762 on clean),
+peak RSS ~0.8 GB (ONNX inference in-process).
 
 ---
 
 ## 4. Success Metrics
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Baseline reproducible from clean checkout | No | Yes |
-| Expected-source match rate @3 | Unverifiable | ≥80% |
-| ADR-0070 found in results | No | Rank ≤3 |
-| ADR-0067 + ADR-0068 both in top 5 for "erasure" | 0068@1, 0067@4 | Both in top 3 |
-| Invariant match rate @1 | 100% | 100% (no regression) |
-| Modality attribution per query | None | In report |
-| nDCG@5 / MRR / recall@5 computed | No | Yes |
-| Excluded-corpus integrity | 71% pollution | 0% pollution |
-| RRF parameters | Unswept defaults | Swept, Pareto-selected, ADR'd |
-| Source identity in results | No | Yes (SourceFile, ChunkIndex, TotalChunks) |
-| Context labels searchable | No | Yes |
+| Metric | Old | Current (Wave 0) | Target |
+|--------|-----|-----------------|--------|
+| Baseline reproducible from clean checkout | No | Yes | Yes |
+| Expected-source match rate @3 | Unverifiable | 85.7% (6/7 ADR; C1/C2/C5 @1) | ≥90% |
+| ADR-0070 found in results | No | Hybrid rank 1 | FTS-only rank ≤5 |
+| ADR-0067 + ADR-0068 both in top 5 "erasure" | 0068@1, 0067@4 | 0068@1, 0067@4 | Both in top 3 |
+| Invariant match rate @1 | 100% (of those in corpus) | 100% | 100% |
+| Modality attribution per query | None | Yes | Yes |
+| nDCG@5 / MRR / recall@5 computed | No | Yes | Yes |
+| Excluded-corpus integrity | 71% pollution | 0% pollution | 0% |
+| Source identity in results | No | No | Yes (Wave 2) |
+| Section-targeted hit@5 | Not measured | Not measured | ≥4/6 (Wave 6, old corpus†) |
+| Dual-vector MRR(section) | — | — | ≥0.40 (Wave 6, old corpus†) |
+
+† Targets measured on the old (polluted 6675-chunk) corpus; re-measurement on clean corpus
+required before Wave 6 acceptance (see Wave 6 pre-gate).
 
 ---
 
 ## 5. Out of Scope
 
 - Embedding model change (all-MiniLM → OpenAI text-embedding-3) — separate evaluation
-- Chunk size changes (requires model change first)
-- Cross-encoder re-ranking — separate infrastructure
-- LLM query expansion — separate feature
+- Chunk size changes
+- Cross-encoder re-ranking
+- LLM query expansion
 - Shared-context / workspace-scoped search improvements
 - Cross-project retrieval
 
@@ -221,89 +297,60 @@ Additionally, measure what fraction of *correct* results sit below minScore=0.7 
 
 ## 6. Open Questions
 
-1. **Canonical corpus pinned:** Regenerate via `ingest-jsaa-docs.py` from the jsaa tree at the commit pinned in Wave 0 Step 1. The current DB (6675 entries, raw ingest) is the wrong corpus — it was produced by a different pipeline and cannot reproduce the report. (RESOLVED)
-2. **Source-file contract across repos:** If jsaa ingests via its own pipeline, the structured path format must be agreed between repos — both `source_file` schema and FTS source column depend on that contract.
-3. **Stopword list:** Fixed list (as specified) vs corpus-derived token frequency. Start fixed; revisit only if a query regresses.
-4. **minScore default:** Is 0.7 a product decision or an accident? Sweep data will show the cost of each threshold; the product owner decides.
-5. **Context-label searchability semantics:** Should `memory_search(context="docs:adr")` filter only that label, boost it, or both? Plan B §4.3.4 proposes filter; A is silent.
-6. **ChunkIndex stability:** When a file is re-ingested and chunks change, do indices shift? Current dedup by path+hash means unchanged content is a no-op, but new chunks shift indices for the same file.
-7. **Document-first ranking vs shared context:** Shared entries have no `source_file`. Should they participate in document-first ranking or be treated as independent atoms?
+1. **Source-file contract across repos**: if jsaa ingests via its own pipeline, the structured
+   path format must be agreed between repos.
+2. **Heading-path storage format**: store as a column in the `entries` table, or compute from
+   chunk content at search time? Storing requires schema migration + re-ingest; computing is
+   fragile (heading parse must match ingest time). Spike proved storing is viable.
+3. **Fixed α value**: ~0.5–0.6 measured on the old corpus. Needs re-measurement on clean corpus
+   (expected to be stable — heading structure is corpus-invariant, not content-dependent).
+4. **Dual-vector cost ceiling**: 2× storage + 2× embedding cost per chunk. Is the section-targeting
+   benefit worth it? Gate number will answer.
+5. **Structure embedding model**: same ONNX model (all-MiniLM-L6-v2) for both content and structure,
+   or separate? Separate model adds model-size cost; same model dilutes the embedding space (both
+   vectors from one model may co-vary). Spike used same model; the signal was still discriminative.
+6. **Document-first ranking vs shared context**: shared entries have no `source_file`. How do they
+   participate in document-first ranking?
 
 ---
 
 ## 7. Dependency Graph
 
 ```
-Wave 0 (reproducible baseline)
- ├── Wave 1 (query construction) ── independent, can start after 0
- ├── Wave 2 (source identity)    ── independent, can start after 0
- │    └── Wave 3 (source-affinity scoring) ── depends on 2 (needs source_file)
- │         └── Wave 4 (RRF sweep) ── depends on 3 (ranking changes affect sweep)
- └── Wave 5 (baseline enrichment + hygiene) ── runs after 4 to measure the final state
+Wave 0 (DONE ✓ — reproducible baseline)
+ ├── Wave 1 (query construction) ── independent, can start now
+ ├── Wave 2 (source identity)    ── independent, can start now
+ │    ├── Wave 3 (source-affinity scoring) ── depends on 2 (needs source_file)
+ │    │    └── Wave 4 (RRF sweep) ── depends on 3 (ranking changes affect sweep)
+ │    └── Wave 6 (dual-vector) ── independent (heading-path parse + second embedding,
+ │         does NOT need source_file — headings are in chunk content)
+ ├── Wave 5a (integrity + difficulty) ── independent, can run after Wave 1
+ └── Wave 5b (structural queries + final report) ── depends on 3 + 4 + 6
 ```
 
-Waves 1 and 2 can run in parallel after Wave 0 since they touch different code paths (`FtsQueryNormalizer` vs `MemorySchema`/`SqliteMemoryStore`/`MemorySearchResult`). Waves 3 and 4 are sequential (3 changes ranking, 4 tunes it).
+Wave 6 is parallel with Wave 3 — it touches the embedding/ranking pipeline (heading-path
+storage + second vector + fusion) and does NOT depend on the source_file schema from Wave 2
+(the heading hierarchy is reconstructible from chunk content text, not the source identity).
 
 ---
 
 ## 8. Differences From Plans A and B
 
-| Aspect | Plan A | Plan B | Plan C |
-|--------|--------|--------|--------|
-| First step | Source schema changes | Reproducible baseline | Reproducible baseline (B's win) |
-| Query construction | OR→AND for ≤4 tokens, bigrams, stopwords | Stopwords + identifier detection | Both, merged: stopwords + AND for identifiers + bigrams |
-| Source identity | source_file column + ChunkIndex/TotalChunks in results | FTS source column weighting + searchable context | Both: schema + results API from A, FTS indexing from B |
-| Ranking improvements | Adjacent boost, consolidation, document-first | RRF sweep, minScore tuning, BM25 length analysis | Both, sequenced: A's structural boosts first, B's sweep after |
-| Measurement | New baseline cases | SweepRunner + RetrievalMetrics wired to JSAA | B's infrastructure + A's test cases |
-| Corpus hygiene | Not addressed | Wave 4 dedicated to it | Included in Wave 5 with permanent assertions |
-| Context labels | Not addressed | Searchable context filter | Included in Wave 2 |
+| Aspect | Plan A | Plan B | Plan C (original) | Plan C (revision 1) |
+|--------|--------|--------|-------------------|---------------------|
+| First step | Source schema | Reproducible baseline | Reproducible baseline | ✓ DONE |
+| Query construction | AND-for-short, bigrams, stopwords | Stopwords, identifier AND | Both merged | Stopwords + bigrams + AND-with-OR-fallback (AND-for-short removed — measured regression) |
+| Identifier query fix | — | — | Wave 1 identifier AND | Wave 2c FTS source column (AND-based body matching fails — terms compete across docs) |
+| Section-targeting | — | — | Out of scope | Wave 6 dual-vector structure signal (fixed-α fusion, measured mechanism) |
+| Source identity | source_file + ChunkIndex/TotalChunks | FTS source column + searchable context | Both | Both |
+| Ranking | Adjacent boost, consolidation, document-first | RRF sweep, minScore, BM25 length | Both sequenced | Both sequenced |
+| Corpus hygiene | Not addressed | Wave 4 | Wave 5 | Wave 5, now with structural queries |
 
 ---
 
 ## 9. Appendix A — Query Catalog
 
-All queries referenced by gates in this plan. The 10 expected-source queries (A1-A10) are the primary evaluation set; invariants (C1-C5) are the regression guard; hygiene queries (H1-H3) are negative tests.
-
-### Expected-Source Queries (A1-A10)
-
-| ID | Query | Expected Source |
-|----|-------|----------------|
-| A1 | "Why was shadcn/ui chosen for the frontend?" | ADR-0011 |
-| A2 | "How are UUIDs generated?" | ADR-0004 |
-| A3 | "How does offer-page fetching handle security?" | ADR-0006 |
-| A4 | "What happened to the MCP server?" | ADR-0060 |
-| A5 | "What NFRs govern LLM cost?" | ADR-0046 |
-| A6 | "How does data erasure work?" | ADR-0067 |
-| A7 | "What is ADR-0070 about?" | ADR-0070 |
-| A8 | "What does ADR-0011 decide?" | ADR-0011 (Decision section) |
-| A9 | "ADR-0046 vs ADR-0022: which was retired?" | ADR-0046 |
-| A10 | "List all ADRs that reference Cosmos DB" | Multiple ADRs |
-
-### Invariant Queries (C1-C5 — must stay at rank 1)
-
-| ID | Query | Expected Source |
-|----|-------|----------------|
-| C1 | "Is TDD required?" | TDD invariant |
-| C2 | "What is the screaming architecture rule?" | Screaming architecture invariant |
-| C3 | "Are hardcoded secrets allowed?" | No hardcoded secrets invariant |
-| C4 | "What is the PR rule?" | One PR per task invariant |
-| C5 | "How should logging be done?" | High-performance logging invariant |
-
-### Hygiene Queries (H1-H3 — must NOT return excluded content)
-
-| ID | Query | Must NOT Return |
-|----|-------|-----------------|
-| H1 | "What changed yesterday?" | docs/work/ content |
-| H2 | "What happened today?" | docs/work/ content |
-| H3 | "aspire config" | docs/work/plans content |
-
-### Structural Queries (S1-S6 — source-aware, from A §3 + B §3)
-
-| ID | Query | Expected |
-|----|-------|----------|
-| S1 | "Show me all chunks from ADR-0011" | 3+ chunks, all source_file=docs/adr/0011-... |
-| S2 | "What does ADR-0011 decide?" | Decision-section chunk only |
-| S3 | "What does ADR-0067 say about erasure and what does ADR-0068 add?" | Chunks from both ADRs in top 5 |
-| S4 | "What are the consequences of ADR-0011?" | Consequences-section chunk |
-| S5 | "ADR-0070" | Any ADR-0070 chunk (identifier-only diagnostic) |
-| S6 | "documentation structure trust model" | Any ADR-0070 chunk (content-only diagnostic, no number) |
+> Unchanged from original Plan C (A1–A10 expected-source, C1–C5 invariant, H1–H3 hygiene,
+> S1–S6 structural). Note: C1/C2/C5 are reachable since Wave 0 (ai-badger:invariants included
+> in corpus). A8/A9/A10 have expected sources in chunk-hash-map.json but no matching queries
+> in baseline-queries.json — a catalog reconciliation gap (Wave 5 addresses it).
