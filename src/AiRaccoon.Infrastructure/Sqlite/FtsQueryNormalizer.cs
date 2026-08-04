@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.RegularExpressions;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
@@ -11,18 +12,20 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static partial class FtsQueryNormalizer
 {
-    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "and", "or", "not", "near"
-    };
+    // Ordinal is safe (and measurably faster than OrdinalIgnoreCase — see
+    // SearchValuesVsHashSetBenchmark) because every token is lowercased before the
+    // membership checks below; the sets themselves are all-lowercase ASCII.
+    private static readonly SearchValues<string> Reserved =
+        SearchValues.Create(["and", "or", "not", "near"], StringComparison.Ordinal);
 
-    private static readonly HashSet<string> Stopwords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "what", "is", "the", "how", "does", "about", "are", "do",
-        "can", "should", "will", "would", "could", "has", "have", "been",
-        "was", "were", "being", "a", "an", "in", "on", "at", "to",
-        "for", "of", "by", "with", "from"
-    };
+    private static readonly SearchValues<string> Stopwords =
+        SearchValues.Create(
+        [
+            "what", "is", "the", "how", "does", "about", "are", "do",
+            "can", "should", "will", "would", "could", "has", "have", "been",
+            "was", "were", "being", "a", "an", "in", "on", "at", "to",
+            "for", "of", "by", "with", "from"
+        ], StringComparison.Ordinal);
 
     public static FtsQueryPlan BuildPlan(string query)
     {

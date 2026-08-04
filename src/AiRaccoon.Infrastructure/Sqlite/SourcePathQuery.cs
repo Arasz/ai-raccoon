@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.RegularExpressions;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
@@ -10,10 +11,11 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static partial class SourcePathQuery
 {
-    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "and", "or", "not", "near"
-    };
+    // Ordinal is safe (and measurably faster than OrdinalIgnoreCase — see
+    // SearchValuesVsHashSetBenchmark) because tokens are lowercased before the check
+    // below; the set itself is all-lowercase ASCII.
+    private static readonly SearchValues<string> Reserved =
+        SearchValues.Create(["and", "or", "not", "near"], StringComparison.Ordinal);
 
     public static bool TryBuild(string query, out string ftsExpression)
     {
