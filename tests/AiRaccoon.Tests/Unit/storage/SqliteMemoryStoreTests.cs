@@ -524,12 +524,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new { hash });
     }
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-store-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class EntryRow
     {

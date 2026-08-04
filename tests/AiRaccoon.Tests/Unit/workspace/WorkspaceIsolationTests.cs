@@ -268,12 +268,8 @@ public sealed class WorkspaceIsolationTests : IDisposable
         workspace[0].Value.ShouldBe("workspace draft");
     }
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-isolation-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class EntryIsolationRow
     {

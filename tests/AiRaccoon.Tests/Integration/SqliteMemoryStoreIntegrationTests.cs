@@ -186,10 +186,6 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         metadata!.TtlDays.ShouldBe(7);
     }
 
-    private static string CreateTempRoot()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-it", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 }

@@ -113,12 +113,8 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         row.ClosedAt.ShouldBeNull();
     }
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-frnm1", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 
     private sealed class EntryRow
     {

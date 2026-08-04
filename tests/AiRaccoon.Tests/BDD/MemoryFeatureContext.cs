@@ -35,12 +35,8 @@ public sealed class MemoryFeatureContext : IDisposable
     /// <summary>Opens the bank and returns the connection for raw SQL queries.</summary>
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) => await Factory.OpenBankAsync(cancellationToken);
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-reqnroll", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 
     private sealed class StubChunker : IChunker
     {

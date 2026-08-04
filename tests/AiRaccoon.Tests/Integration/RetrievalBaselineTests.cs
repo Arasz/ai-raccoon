@@ -41,9 +41,11 @@ public sealed class RetrievalBaselineTests : IDisposable
     private readonly string _dataRoot;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly SqliteMemoryStore _store;
+    private readonly ITestOutputHelper _output;
 
-    public RetrievalBaselineTests()
+    public RetrievalBaselineTests(ITestOutputHelper output)
     {
+        _output = output;
         _dataRoot = CreateTempRoot();
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
@@ -60,10 +62,10 @@ public sealed class RetrievalBaselineTests : IDisposable
     {
         var queries = LoadQueries();
         queries.ShouldNotBeEmpty("baseline-queries.json should contain queries");
-        Console.WriteLine($"Loaded {queries.Length} baseline queries");
+        _output.WriteLine($"Loaded {queries.Length} baseline queries");
 
         var chunkMap = await SeedStoreAsync();
-        Console.WriteLine($"Seeded {chunkMap.Count} chunks into memory.db");
+        _output.WriteLine($"Seeded {chunkMap.Count} chunks into memory.db");
 
         var scored = new List<QueryResult>();
         var matchesAtTop3 = 0;
@@ -98,15 +100,15 @@ public sealed class RetrievalBaselineTests : IDisposable
         }
 
         var nonNegative = queries.Count(q => !q.NegativeTest);
-        Console.WriteLine($"Results: {totalWithResults}/{queries.Length} queries returned results");
-        Console.WriteLine($"Expected-source matches at rank ≤3: {matchesAtTop3}/{nonNegative}");
+        _output.WriteLine($"Results: {totalWithResults}/{queries.Length} queries returned results");
+        _output.WriteLine($"Expected-source matches at rank ≤3: {matchesAtTop3}/{nonNegative}");
 
         var baseline = new BaselineReport("jsaa", DateTimeOffset.UtcNow,
             queries.Length, totalWithResults, matchesAtTop3, scored);
         var reportPath = Path.Combine(_dataRoot, "scored-baseline.json");
         await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(baseline, _jsonOptions),
             TestContext.Current.CancellationToken);
-        Console.WriteLine($"Baseline written to {reportPath}");
+        _output.WriteLine($"Baseline written to {reportPath}");
 
         matchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
             "at least one expected source should match at rank ≤3 after seeding");
@@ -120,13 +122,13 @@ public sealed class RetrievalBaselineTests : IDisposable
 
         if (!Directory.Exists(jsaaRoot))
         {
-            Console.WriteLine($"JSAA project not found at {jsaaRoot} — seeding minimal test data");
+            _output.WriteLine($"JSAA project not found at {jsaaRoot} — seeding minimal test data");
             return await SeedMinimalTestDataAsync();
         }
 
         var chunkMap = new Dictionary<string, string>();
         var files = EnumerateFiles(jsaaRoot);
-        Console.WriteLine($"Found {files.Count} files to seed");
+        _output.WriteLine($"Found {files.Count} files to seed");
 
         foreach (var (relPath, fileType) in files)
         {
@@ -154,7 +156,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         await _store.EmbedPendingAsync("jsaa", null, TestContext.Current.CancellationToken);
 
         var stats = await _store.GetStatsAsync("jsaa", TestContext.Current.CancellationToken);
-        Console.WriteLine($"Seeded {stats.EntryCount} entries, {stats.PendingCount} pending");
+        _output.WriteLine($"Seeded {stats.EntryCount} entries, {stats.PendingCount} pending");
         return chunkMap;
     }
 
@@ -611,12 +613,8 @@ public sealed class RetrievalBaselineTests : IDisposable
         return AppContext.BaseDirectory;
     }
 
-    private static string CreateTempRoot()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "ai-raccoon-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 
     public sealed record BaselineQuery(
         string Id,

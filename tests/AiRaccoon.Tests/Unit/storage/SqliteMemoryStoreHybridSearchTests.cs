@@ -209,12 +209,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             .Select(r => r.Hash).ShouldBe([entry.Hash]);
     }
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-hybrid-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class StubChunker : IChunker
     {

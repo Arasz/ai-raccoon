@@ -49,12 +49,8 @@ public sealed class MemoryExtensionHostTests
         recorder.Calls.ShouldContain("OnSearchAsync");
     }
 
-    private static string CreateTempRoot()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-host", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class RecordingExtension(string name) : IMemoryExtension
     {

@@ -96,12 +96,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
-    private static string CreateTempRoot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "airaccoon-encryption-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class StubEncryptionKeyProvider(string? passphrase) : IEncryptionKeyProvider
     {

@@ -233,12 +233,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    private static string CreateTempRoot()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-embed", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 
     private sealed class EntryRow
     {

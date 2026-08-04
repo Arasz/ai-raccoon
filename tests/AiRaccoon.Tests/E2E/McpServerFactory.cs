@@ -80,10 +80,6 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         }
     }
 
-    private static string CreateTempRoot()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-e2e", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private static string CreateTempRoot() =>
+        TestData.CreateTempRoot("ai-raccoon-tests");
 }
