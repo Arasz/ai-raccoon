@@ -27,7 +27,7 @@ public sealed class WatchServicePortTests
     [Fact]
     public async Task Port_StatusAsync_ReturnsEmptyListWhenNoWatches()
     {
-        var statuses = await new StubWatchService().StatusAsync("acme");
+        var statuses = await new StubWatchService().StatusAsync("acme", TestContext.Current.CancellationToken);
         statuses.ShouldBeEmpty();
     }
 
@@ -35,16 +35,16 @@ public sealed class WatchServicePortTests
     public async Task Port_AddAndRemove_AreAwaitableWithoutThrowing()
     {
         var service = new StubWatchService();
-        await service.AddAsync("acme", "/repo");
-        await service.RemoveAsync("acme", "/repo");
+        await service.AddAsync("acme", "/repo", TestContext.Current.CancellationToken);
+        await service.RemoveAsync("acme", "/repo", TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task Port_IsEnabledAndIsPathAllowed_ReturnBooleans()
     {
         var service = new StubWatchService();
-        (await service.IsEnabledAsync("acme")).ShouldBeFalse();
-        (await service.IsPathAllowedAsync("acme", "/repo")).ShouldBeFalse();
+        (await service.IsEnabledAsync("acme", TestContext.Current.CancellationToken)).ShouldBeFalse();
+        (await service.IsPathAllowedAsync("acme", "/repo", TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
     [Fact]
