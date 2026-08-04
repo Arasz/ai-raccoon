@@ -1,14 +1,14 @@
 # AiRaccoon
 
-An MCP server that gives AI agents persistent, project-scoped memory backed by
-[sqlite-memory](https://github.com/sqliteai/sqlite-memory): local-first by default,
-one SQLite memory bank per install scope, hybrid semantic search, workspace
-sandboxes, a curated shared tier, memory degradation, and opt-in cloud sync
-through SQLite Cloud. Built on the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol)
-C# SDK 2.0.0 (net10.0).
+An MCP server that gives AI agents persistent, project-scoped memory backed by a
+managed .NET SQLite store: local-first by default, one memory bank per install scope,
+hybrid FTS5+vec0 semantic search, workspace sandboxes, a curated shared tier, memory
+degradation, and opt-in S3-compatible sync. Built on the
+[ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.0.0
+(net10.0).
 
 > Domain: provides AI agents with persistent, project-scoped memory over MCP,
-> backed by sqlite-memory.
+> backed by a managed SQLite store.
 > Stacks: `dotnet`, `mcp`.
 
 ## What an agent gets
@@ -23,13 +23,17 @@ C# SDK 2.0.0 (net10.0).
 - **Shared promotion tier.** Plain writes land in the project. `memory_share`
   promotes a hash into the flat `shared` context — cross-project, curated, and exempt
   from degradation sweeps.
-- **Hybrid search.** `memory_search` combines vector similarity and FTS5, scoped by
-  `scope=all|project|shared` and optional workspace.
-- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps
-  remove old, low-rated project entries (`shared` is protected).
-- **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
-  (`shared` + `project:<id>`) into a configured SQLite Cloud database, which is the
+- **Hybrid search.** `memory_search` combines FTS5 keyword ranking and vec0 semantic
+  similarity via reciprocal rank fusion (RRF), scoped by `scope=all|project|shared`
+  and optional workspace. Configurable weights per modality.
+- **Rating and degradation.** Search hits raise an entry's on-row retrieval rating
+  (half-life decay with access-count multiplier); sweeps remove old, low-rated
+  project entries (`shared` is protected).
+- **Cloud sync (optional).** `memory_sync` pushes/pulls VACUUM snapshots to an
+  S3-compatible object store with If-Match conflict detection. This is the
   correlation point between a user-scope install and any project-scope install.
+- **Access modes.** `ro` (read-only), `rw` (read-write, default), `full` (includes
+  destructive operations). Per-project settings override the global default.
 
 The full tool contract (17 tools, 2 prompts, environment variables, error
 shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-memory-server.md).
@@ -40,7 +44,7 @@ shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-mem
 - **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http`; serves the protocol at `/mcp`
   (launch profile `http`, `http://localhost:8080`).
 
-Transport selection lives in one place: `McpTransportSelector` keys off the
+Transport selection lives in one place: `McpServerSetup` keys off the
 `MCP_TRANSPORT` environment variable — anything other than `http` (case-insensitive)
 runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
@@ -50,9 +54,13 @@ runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messa
 |---|---|
 | `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
 | `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
-| `AIRACCOON_SQLITECLOUD_DB_ID` | SQLite Cloud managed database id (sync) |
-| `AIRACCOON_SQLITECLOUD_API_KEY` | SQLite Cloud API key (sync) |
-| `AIRACCOON_VECTORSSPACE_API_KEY` | vectors.space API key (remote embeddings) |
+| `AIRACCOON_SYNC_ENDPOINT` | S3-compatible endpoint URL (sync) |
+| `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
+| `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
+| `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
+| `AIRACCOON_SYNC_REGION` | S3 region (sync, optional) |
+| `AIRACCOON_SYNC_OBJECT_KEY` | Object key in the bucket (sync, optional; defaults to `memory-<projectId>.db`) |
+| `AIRACCOON_OPENAI_API_KEY` | API key for OpenAI-compatible remote embeddings |
 
 Credentials are read from the environment only — never from tracked files.
 
@@ -62,13 +70,13 @@ Embeddings are configured per bank via `memory_configure`; two engines:
 
 | Engine | `provider` | `model` | Setup |
 |---|---|---|---|
-| Local (llama.cpp, offline) | `local` | GGUF path | `scripts/download-embedding-model.sh all-minilm` (~21 MB, Apache-2.0) |
-| Remote (vectors.space) | `openai` | e.g. `text-embedding-3-small` | Free key at [vectors.space](https://vectors.space), set `AIRACCOON_VECTORSSPACE_API_KEY` |
+| Local (ONNX, in-process) | `local` | Optional ONNX path | Bundled `all-MiniLM-L6-v2` (int8, ~21 MB, Apache-2.0). No network, ~9 ms/query. |
+| Remote (OpenAI-compatible) | `openai` | Model id (e.g. `text-embedding-3-small`) | Any OpenAI-compatible `baseUrl`; set `AIRACCOON_OPENAI_API_KEY` or pass `api_key` |
 
-Other OpenAI-compatible endpoints (LM Studio, Ollama) are **not** supported by
-the pinned sqlite-memory extension — its remote engine hardcodes the
-vectors.space URL. See `docs/reference/agent-memory-server.md` for the full
-matrix and the `AIRACCOON_TEST_GGUF` usage in the embedding tests.
+The API key is held in memory for the process lifetime and **never persisted** to the
+bank. Changing the engine (`provider`/`model`/`baseUrl`) re-embeds the entire bank
+with the new engine. Other OpenAI-compatible endpoints (LM Studio, Ollama) are
+supported — pass their `baseUrl` to `memory_configure`.
 
 ## Requirements
 
@@ -82,11 +90,10 @@ dotnet test
 ```
 
 The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly, Dapper) covers the
-domain, the store (unit + real-extension integration), the tools, the prompts, the
-traits-filtered E2E suite — 185 cases, 0 skips when `AIRACCOON_TEST_GGUF` points at a
-downloaded model. The integration tests exercise the real sqlite-memory 1.3.5 +
-sqlite-vector 1.0.0 binaries and skip honestly when the host RID has no provisioned
-extensions.
+domain, the store, the tools, the prompts, and the E2E suite — 185+ cases.
+Integration tests exercise the real SQLite FTS5 and vec0 tables against in-memory
+databases. Tests that need the ONNX embedding model use the bundled int8 model
+path; see the test project's README for the full setup.
 
 ## Embedding benchmark
 
@@ -107,10 +114,10 @@ only pull ahead on one metric — nDCG@10 (0.70 vs 0.61), i.e. how well the whol
 top-10 is ordered — which matters only when the *ranking of lower hits*, not the
 first hit, decides the outcome.
 
-**Recommendation:** start with the local model (`scripts/download-embedding-model.sh
-all-minilm`). Move to a served LM Studio model only if retrieval quality on your
-own corpus proves insufficient — you trade 4–10× latency and 15–30× disk for a
-quality gain visible only in top-10 ordering.
+**Recommendation:** start with the local model (bundled, zero setup). Move to a
+served model only if retrieval quality on your own corpus proves insufficient —
+you trade 4–10× latency and 15–30× disk for a quality gain visible only in top-10
+ordering.
 
 Full numbers, metric definitions (R@5, R@10, MRR, nDCG@10, dim, latency),
 methodology and the runnable harness: [`docs/reference/embedding-benchmark.md`](docs/reference/embedding-benchmark.md).
@@ -162,19 +169,26 @@ stdio.
 AiRaccoon/
   src/AiRaccoon/              # the MCP server (thin)
     Program.cs               # transport selection + DI + MCP wiring
-    McpTransportSelector.cs
+    Setup/McpServerSetup.cs  # stdio / HTTP transport
     Tools/MemoryTools.cs     # 17 [McpServerTool] tools, 1:1 to the port
     Prompts/MemoryPrompts.cs # 2 agent usage guides
+    Access/                  # MemoryAccessGuard, ForgettingPolicyService
+    Setup/Dependencies.cs    # DI registration
   src/AiRaccoon.Core/        # pure domain (no infra deps)
-    Memory/                  # records, SearchScope, IMemoryStore port
+    Memory/                  # records, SearchQuery, IMemoryStore port
     Rating/                  # RatingPolicy, IMemoryExtension + MemoryExtensionHost
     Degradation/             # DegradationPolicy, SweepCandidate
-  src/AiRaccoon.Infrastructure/  # SQLite adapter, provisioning, sync
-    Sqlite/                  # SqliteMemoryStore (Dapper), MetaStore, factory
-    Workspace/               # WorkspaceService
+    Chunking/                # IChunker, MarkdownChunker, TokenCount
+    Access/                  # AccessMode, AccessModePolicy, AccessRequirement
+    Workspace/               # Workspace, WorkspaceStatus, IWorkspaceStore
+  src/AiRaccoon.Infrastructure/  # SQLite adapter, embeddings, sync
+    Sqlite/                  # SqliteMemoryStore (Dapper), MemorySchema, RRF
+    Embedding/               # EmbeddingService (ONNX + remote), OnnxEmbeddingGenerator
+    Chunking/                # TokenizerChunker (o200k_base)
     Degradation/             # SweepService
-    Provisioning/            # ExtensionProvisioner (per-RID, SHA-256 verified)
-    Sync/                    # SyncService (sqlite-sync)
+    Workspace/               # WorkspaceService
+    Sync/                    # SyncService (S3, VACUUM INTO, ATTACH+merge)
+    Rating/                  # RetrievalRatingExtension (no-op, P1 rewire)
   tests/AiRaccoon.Tests/     # xunit.v3 + Shouldly
   Directory.Build.props      # analyzers, warnings-as-errors
   Directory.Packages.props   # central package versions
@@ -186,13 +200,13 @@ results, with no business logic of its own. The domain layer is pure; the SQLite
 lives in Infrastructure. Warnings are errors (`TreatWarningsAsErrors`), analyzers are on,
 and package versions are managed centrally.
 
-Native extensions (sqlite-memory, sqlite-vector, sqlite-sync) are provisioned per RID on
-first run into `<data-root>/extensions/<rid>/`, pinned and SHA-256 verified. Local
-embeddings need a GGUF model configured via `memory_configure`; without a model, writes are
-stored deferred and indexed later (`memory_embed_pending`). Download the small verified
-embedding model (~21 MB, Apache-2.0) with `scripts/download-embedding-model.sh all-minilm`
-(see `docs/reference/agent-memory-server.md` for the `nomic` alternative and
-`AIRACCOON_TEST_GGUF` usage in the embedding tests).
+For the system architecture — data model, write/search/sync flows, workspace lifecycle,
+access modes, and algorithms — see [`docs/explanation/architecture.md`](docs/explanation/architecture.md).
+
+The store is our own managed SQLite layer: `MemorySchema.EnsureAsync` creates the
+tables, FTS5 and vec0 virtual tables, and triggers on first open — no native extension
+provisioning needed. The bundled ONNX embedding model (`all-MiniLM-L6-v2`, int8
+quantized, ~21 MB) runs in-process.
 
 ## Packaging & release
 
