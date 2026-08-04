@@ -214,3 +214,54 @@ on 746 chunks, 704 unique heading paths, vec_structure populated; chunk content/
 - **Verdict:** the wave delivers its purpose — section-targeted retrieval (S2 file-level, S4 ≤3,
   section hit@5 6/6) plus C2/A6/A7/recall improvements — at bounded, content-verified file-rank
   costs on A1/A4 (same-knowledge alternatives) and A3 (exact ≤3).
+
+---
+
+## Post-Wave-3 Integration — 2026-08-04 (source-affinity scoring: adjacent boost + consolidation + document-first)
+
+Corpus unchanged (752 chunks). Commit: a82ba41. Full suite 559 passed / 0 failed / 43 skipped.
+Chosen point (sweep of 32 points, docs/work/2026-08-04-wave3-source-affinity-sweep.md + ADR-0005):
+λ=0.1, consolidation threshold=0.1, doc-score formula Max.
+
+### Per-query (hybrid) — vs post-Wave-6
+
+| Query | W6 exact/file | W3 exact/file | Delta |
+|-------|--------------:|--------------:|-------|
+| A1 | 2 / 2 | 1 / 1 | RESTORED to W0 rank ✓ |
+| A2 | 1 / 1 | 1 / 1 | = |
+| A3 | 3 / 1 | 3 / 1 | = |
+| A4 | 5 / 2 | 2 / 1 | RESTORED ✓ |
+| A5 | 1 / 1 | 3 / 1 | exact 1→3 (same-file siblings above; file =) |
+| A6 | — / 2 | 2 / 2 | EXACT CHUNK FOUND @2 — the Wave-3 headline target ✓ |
+| A7 | 4 / 1 | 2 / 1 | exact 4→2 ✓ |
+| S2 | 5 / 1 | 3 / 1 | decision chunk ≤3 — the moved W6 gate ✓ |
+| C1 | 1 / 1 | 1 / 1 | = |
+| C2 | 1 / 1 | 1 / 1 | = |
+| C5 | 1 / 1 | 1 / 1 | = |
+
+Exact-chunk @3: **11/11** (post-W2: 6/11). File-level @3: 11/11. Zero-match: 0.
+
+### Metrics
+
+| Metric | W0 | W1 | W2 | W6 | W3 | Delta vs W6 |
+|--------|-----|-----|-----|-----|-----|-------------|
+| nDCG@5 (ADR) | 0.642 | 0.652 | 0.674 | 0.650 | 0.722 | +0.072 |
+| MRR (ADR) | 0.893 | 0.893 | 0.893 | 0.786 | 0.929 | +0.143 |
+| recall@5 (ADR) | 0.544 | 0.544 | 0.559 | 0.581 | 0.617 | +0.036 |
+| Invariants nDCG@5 | 1.000 | 1.000 | 0.667 | 1.000 | 1.000 | = |
+| Section hit@5 | — | — | — | 6/6 | 6/6 | = |
+
+### Notes
+
+- **A1/A4 restored to file rank 1** — the W6 same-knowledge-alternative trade is reversed by
+  document-first ranking (the expected file's chunks consolidate above the cross-file
+  alternatives; content check: rank-1 is now a chunk of the expected file itself).
+- **A5 exact 1→3** — content-verified: the top-3 are ADR-0046's own chunks (header/follow-up/
+  alternatives above the decision within the consolidated file); file rank 1 held; not a
+  knowledge regression.
+- **S2 decision chunk ≤3** — the gate the W6 integration moved to Wave 3 is met
+  (within-file sibling competition resolved by document-first).
+- **A6 exact chunk surfaced at rank 2** — the plan's Wave-3 acceptance (expected-source rank
+  improvement) is delivered beyond the file-level target.
+- **Verdict:** best state measured so far — every metric above every prior wave; all invariants
+  at rank 1; exact-chunk @3 11/11.
