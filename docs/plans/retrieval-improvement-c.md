@@ -263,7 +263,7 @@ difficulty strata defined and assigned.
   hashes — CLAUDE.md/HERMES.md share 10 identical section chunks); `ContentHash.Of(path,
   value)` reproduces every stored hash (FR-NM-7, all 752 rows); `source_file` 100%
   populated and `section` populated ⟺ the hash maps to a structured path with a `#section`
-  part (674/88); store-reported count == raw table count; H1-H3 targets excluded (state.json
+  part (664/88); store-reported count == raw table count; H1-H3 targets excluded (state.json
   / now.md markers + no AppHost / program-code source files). Existing assertions kept:
   0 pending embeds, excluded-content markers absent, expected sources present.
 - **Catalog pins** (BaselineQueryCatalogTests): 36 unique ids, all four strata used (≥3
