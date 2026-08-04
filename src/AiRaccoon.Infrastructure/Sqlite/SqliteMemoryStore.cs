@@ -375,9 +375,43 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
-    public Task<int> DeleteSourcePathAsync(string projectId, string path,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("DeleteSourcePathAsync not implemented yet (S1).");
+    /// <summary>
+    ///     Removes every committed chunk of one source file (mirror delete/rename), plus the
+    ///     per-path watch fingerprint in the same transaction — a delete-then-recreate cycle
+    ///     must not hash-skip its way back to stale chunks. The watch registration survives.
+    /// </summary>
+    public async Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteBySourcePath, new { projectId, path }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteWatchFilesByProjectPath, new { projectId, path }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted;
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
 
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
