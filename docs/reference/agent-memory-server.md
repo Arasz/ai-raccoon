@@ -133,6 +133,7 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 | `AIRACCOON_SYNC_OBJECT_KEY` | S3 object key (sync, optional; defaults to `memory-<projectId>.db`) |
 | `AIRACCOON_OPENAI_API_KEY` | API key for `provider=openai` embeddings |
 | `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path for `provider=local` (default: the bundled model) |
+| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC page-level via e_sqlite3mc; unset = plaintext) |
 
 Credentials are read from the environment only.
 
@@ -182,6 +183,12 @@ All tables, indexes, FTS5 virtual table, vec0 virtual table, and triggers live i
 the schema on first open with `IF NOT EXISTS` on every DDL statement — idempotent,
 safe to run on every bank open. No download-on-first-run provisioning, no per-RID
 extension binaries, no external SQLite modules.
+
+**Encryption at rest.** When `AIRACCOON_DB_PASSPHRASE` is set, the connection opens
+with `Password` in the connection string, enabling transparent AES-256-CBC per-page
+encryption via the bundled e_sqlite3mc engine. FTS5, vec0, and all SQL operations
+work unchanged — encryption is at the page level, invisible to queries. Without
+the passphrase the bank is plaintext (backward compatible).
 
 ## Deletion and sync semantics
 

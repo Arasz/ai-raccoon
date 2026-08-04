@@ -34,6 +34,9 @@ degradation, and opt-in S3-compatible sync. Built on the
   correlation point between a user-scope install and any project-scope install.
 - **Access modes.** `ro` (read-only), `rw` (read-write, default), `full` (includes
   destructive operations). Per-project settings override the global default.
+- **Encryption at rest (optional).** Set `AIRACCOON_DB_PASSPHRASE` to encrypt the
+  SQLite bank with AES-256-CBC via e_sqlite3mc (transparent page-level encryption —
+  FTS5 and vec0 work unchanged). Without the passphrase the bank is plaintext.
 
 The full tool contract (17 tools, 2 prompts, environment variables, error
 shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-memory-server.md).
@@ -58,7 +61,8 @@ runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messa
 | `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
 | `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
 | `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
-| `AIRACCOON_SYNC_REGION` | S3 region (sync, optional) |
+| `AIRACCOON_SYNC_REGION` | S3 region (sync) |
+| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC, optional) |
 | `AIRACCOON_SYNC_OBJECT_KEY` | Object key in the bucket (sync, optional; defaults to `memory-<projectId>.db`) |
 | `AIRACCOON_OPENAI_API_KEY` | API key for OpenAI-compatible remote embeddings |
 
