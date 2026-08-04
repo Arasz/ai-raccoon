@@ -112,6 +112,16 @@ public sealed class FtsQueryNormalizerTests
     }
 
     [Fact]
+    public void BuildPlan_MixedCaseQuery_LowercasesBeforeFiltering()
+    {
+        // Tokens are lowercased before the Reserved/Stopwords membership checks, so
+        // casing never reaches the sets — this is the contract that lets the sets use
+        // Ordinal comparison (SearchValuesVsHashSetBenchmark: 0.60x vs OrdinalIgnoreCase).
+        var plan = FtsQueryNormalizer.BuildPlan("WHAT IS ADR-0070 ABOUT?");
+        plan.Expression.ShouldBe("adr AND 0070");
+    }
+
+    [Fact]
     public void BuildPlan_EmptyOrPunctuationOnly_ReturnsEmptyPlan()
     {
         FtsQueryNormalizer.BuildPlan("").Expression.ShouldBe("");

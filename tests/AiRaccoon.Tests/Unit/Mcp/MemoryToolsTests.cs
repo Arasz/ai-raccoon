@@ -4,6 +4,7 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
@@ -103,6 +104,25 @@ public class MemoryToolsTests
         _store.LastQuery!.RrfK.ShouldBe(SearchQuery.DefaultRrfK);
         _store.LastQuery.FtsWeight.ShouldBe(1);
         _store.LastQuery.VectorWeight.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Write_ForwardsSourceFile_ToStore()
+    {
+        await _tools.Write("acme", "content", sourceFile: "docs/adr/0001-test.md", section: "decision",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastRequest!.SourceFile.ShouldBe("docs/adr/0001-test.md");
+        _store.LastRequest.Section.ShouldBe("decision");
+    }
+
+    [Fact]
+    public async Task Search_ForwardsContextLabel_ToStore()
+    {
+        await _tools.Search("acme", "query", contextLabel: "docs:adr",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.ContextLabel.ShouldBe("docs:adr");
     }
 
     [Fact]
@@ -278,6 +298,38 @@ public class MemoryToolsTests
 
         ex.Message.ShouldContain("access-denied");
         _store.Configured.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task SetStructureAlpha_WritesSettingToStore()
+    {
+        var result = await _tools.SetStructureAlpha("acme", 0.8, TestContext.Current.CancellationToken);
+
+        result.Key.ShouldBe(StructureFusion.AlphaSettingKey);
+        result.Value.ShouldBe("0.8");
+        _store.Settings[StructureFusion.AlphaSettingKey].ShouldBe("0.8");
+    }
+
+    [Fact]
+    public async Task SetStructureAlpha_OutOfRange_ThrowsInvalidParams()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.SetStructureAlpha("acme", 1.5, TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("invalid-params");
+        _store.Settings.ShouldNotContainKey(StructureFusion.AlphaSettingKey);
+    }
+
+    [Fact]
+    public async Task SetStructureAlpha_RequiresWriteAccess()
+    {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "ro";
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.SetStructureAlpha("acme", 0.5, TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("access-denied");
+        _store.Settings.ShouldNotContainKey(StructureFusion.AlphaSettingKey);
     }
 
     private sealed class FakeStore : IMemoryStore

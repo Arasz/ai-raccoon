@@ -18,6 +18,12 @@ internal static class SearchContexts
         if (query.Scope is SearchScope.All or SearchScope.Project)
         {
             contexts.Add(ContextNaming.ProjectContext(query.ProjectId));
+            if (!string.IsNullOrWhiteSpace(query.ContextLabel))
+            {
+                // Wave 2 (plan C §3 2e): a context-label filter augments the project scope
+                // with the label's custom-scoped rows.
+                contexts.Add(ContextNaming.LabelContext(query.ProjectId, query.ContextLabel));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(query.WorkspaceId) && query.Scope is not SearchScope.Shared)

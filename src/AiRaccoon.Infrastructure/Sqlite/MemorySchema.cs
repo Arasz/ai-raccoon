@@ -1,11 +1,15 @@
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Our single-file bank schema (plan §2.2): entries with on-row metadata, workspaces,
-///     settings, an FTS5 external-content index over entries(value) and an (empty until P4/P6)
-///     vec0 table. Idempotent — safe to run on every bank open.
+///     settings, an FTS5 external-content index over entries(value, source_file, section)
+///     and vec0 tables for the content embedding (P4) and the Wave 6 structure embedding
+///     (heading-path vector). Idempotent — safe to run on every bank open. Wave 2 (plan
+///     C §3): source_file carries the original file path so the FTS index can weight source
+///     matches above body-text matches; legacy banks are migrated on open (see MigrateAsync).
 /// </summary>
 internal static class MemorySchema
 {
@@ -14,6 +18,139 @@ internal static class MemorySchema
         await using var command = connection.CreateCommand();
         command.CommandText = Ddl;
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await MigrateAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Wave 2 + Wave 6 migration: legacy banks lack source_file, section (Wave 2) and
+    ///     heading_path, structure_embedding (Wave 6). The columns are added when missing;
+    ///     the FTS index is rebuilt with the three-column shape (value, source_file, section)
+    ///     when it still carries an old shape. Fresh banks created by Ddl already have the
+    ///     new shape and are untouched.
+    /// </summary>
+    private static async Task MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('entries')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("source_file"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN source_file TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("section"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN section TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("heading_path"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN heading_path TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("structure_embedding"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        var ftsSql = await connection.ExecuteScalarAsync<string?>(
+                new CommandDefinition(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (ftsSql is not null && ftsSql.Contains("source_file", StringComparison.Ordinal)
+            && ftsSql.Contains("section", StringComparison.Ordinal))
+        {
+            // New shape in place; verify it is not an empty shell left by a crash between the
+            // DROP/CREATE and the repopulate — the triggers keep it in sync only from here on.
+            var ftsRows = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            var entryRows = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (ftsRows == entryRows)
+            {
+                return;
+            }
+        }
+
+        // The old index cannot host weighted source/section columns: drop it with its
+        // triggers, recreate in the new shape, and repopulate from the content table.
+        // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
+        // (or with an empty shell) that never heals on reopen.
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        DROP TRIGGER IF EXISTS entries_fts_ai;
+                        DROP TRIGGER IF EXISTS entries_fts_ad;
+                        DROP TRIGGER IF EXISTS entries_fts_au;
+                        DROP TABLE IF EXISTS entries_fts;
+
+                        CREATE VIRTUAL TABLE entries_fts USING fts5(
+                            value,
+                            source_file,
+                            section,
+                            content='entries',
+                            content_rowid='id'
+                        );
+
+                        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        INSERT INTO entries_fts(rowid, value, source_file, section)
+                        SELECT id, value, source_file, section FROM entries;
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     // workspace_id exists now for the P8 structural-isolation wave; the FK and the
@@ -34,6 +171,8 @@ internal static class MemorySchema
                                    hash TEXT,
                                    path TEXT,
                                    value TEXT,
+                                   source_file TEXT,
+                                   section TEXT,
                                    scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
                                    project_id TEXT NULL,
                                    context_label TEXT NULL,
@@ -47,6 +186,8 @@ internal static class MemorySchema
                                    ttl_days INTEGER NULL,
                                    embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                    embedding BLOB NULL,
+                                   heading_path TEXT NULL,
+                                   structure_embedding BLOB NULL,
                                    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
                                    CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
@@ -58,6 +199,8 @@ internal static class MemorySchema
 
                                CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
                                    value,
+                                   source_file,
+                                   section,
                                    content='entries',
                                    content_rowid='id'
                                );
@@ -66,17 +209,30 @@ internal static class MemorySchema
                                -- dimension if the model is not all-MiniLM (384).
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
 
+                               -- Wave 6 structure modality: heading-path vectors, rowid = entry id.
+                               -- Written only by the re-runnable backfill (StructureBackfillService);
+                               -- the delete trigger keeps orphan rows out when an entry goes away.
+                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
+
+                               CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
+                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
+                               END;
+
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
-                                   INSERT INTO entries_fts(rowid, value) VALUES (new.id, new.value);
+                                   INSERT INTO entries_fts(rowid, value, source_file, section)
+                                   VALUES (new.id, new.value, new.source_file, new.section);
                                END;
 
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ad AFTER DELETE ON entries BEGIN
-                                   INSERT INTO entries_fts(entries_fts, rowid, value) VALUES ('delete', old.id, old.value);
+                                   INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                   VALUES ('delete', old.id, old.value, old.source_file, old.section);
                                END;
 
-                               CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF value ON entries BEGIN
-                                   INSERT INTO entries_fts(entries_fts, rowid, value) VALUES ('delete', old.id, old.value);
-                                   INSERT INTO entries_fts(rowid, value) VALUES (new.id, new.value);
+                               CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                                   INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                   VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                                   INSERT INTO entries_fts(rowid, value, source_file, section)
+                                   VALUES (new.id, new.value, new.source_file, new.section);
                                END;
 
                                -- vec0 has no triggers: embedding rows follow embed_state.

@@ -7,7 +7,9 @@ public sealed record MemoryWriteRequest(
     string Content,
     string? Context = null,
     string? AgentId = null,
-    string? WorkspaceId = null)
+    string? WorkspaceId = null,
+    string? SourceFile = null,
+    string? Section = null)
 {
     public sealed class Validator : AbstractValidator<MemoryWriteRequest>
     {
@@ -15,6 +17,8 @@ public sealed record MemoryWriteRequest(
         {
             RuleFor(x => x.ProjectId).NotNull().NotEmpty();
             RuleFor(x => x.Content).NotNull().NotEmpty();
+            RuleFor(x => x.SourceFile).MaximumLength(1024);
+            RuleFor(x => x.Section).MaximumLength(256);
         }
     }
 }

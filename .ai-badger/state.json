@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-08-04T15:27:54Z",
+  "lastUpdated": "2026-08-04T18:09:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "check-search-values",
+      "summary": "Benchmarked System.Buffers.SearchValues<string> vs HashSet on the FTS query path (BenchmarkDotNet, real 35-query corpus). Measured: SearchValues under production's OrdinalIgnoreCase REGRESSES (1.12x — its Contains is an internal HashSet; Teddy/Aho-Corasick only accelerate IndexOfAny spans); the gain is Ordinal (tokens are pre-lowercased before checks, sets are lowercase ASCII): HashSet+Ordinal 0.71x, SearchValues+Ordinal 0.60x. Replaced Reserved/Stopwords in FtsQueryNormalizer + SourcePathQuery with SearchValues.Create(Ordinal); left IndexableExtensions as HashSet OIC (input not normalized; SearchValues slower there). 2 new casing-contract tests pin the pre-lowercasing precondition. Full suite green (471 passed/43 skipped). Findings: docs/work/2026-08-04-searchvalues-vs-hashset.md; benchmark kept in benchmarks/AiRaccoon.Benchmarks. Merged to main.",
+      "hasNotes": false
+    },
+    {
+      "id": "generate-logo-for-ai-raccoon",
+      "summary": "Logo/brand work landed on main via brand commits: keep memory-keeper mark, drop B/C propositions and previews, remove remaining AiRaccoon brand assets (2eaf9b5, 1928192). No separate logo deliverables remain in the repo.",
+      "hasNotes": false
+    },
     {
       "id": "hook-metrics-and-traces",
       "summary": "OpenTelemetry-compatible observability on all 17 MCP tool paths. BCL-only (System.Diagnostics.Metrics + ActivitySource) — no OTel SDK, works with dotnet-counters. ToolCallMetrics class (Meter 'AiRaccoon.MemoryTools' + Counter<long>/Histogram<double> + ActivitySource). All 17 MemoryTools methods instrumented: MCP tool-name tags, duration buckets [1..30000]ms, per-catch-block error_type tagging for Sync. ADR-0002 documents design, non-goals, future OTel SDK path. 13 new observability tests (MetricCollector<long> + ActivityListener). Full suite: 428 passed, 0 failed.",

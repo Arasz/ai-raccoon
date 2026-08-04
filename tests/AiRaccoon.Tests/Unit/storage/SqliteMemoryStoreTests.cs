@@ -447,6 +447,80 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
 
+    [Fact]
+    public void SearchContexts_ProjectScope_WithContextLabel_AddsTheLabelContext()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Project, ContextLabel: "docs:adr");
+
+        SearchContexts.For(query).ShouldBe(
+            [ContextNaming.ProjectContext("acme"), ContextNaming.LabelContext("acme", "docs:adr")]);
+    }
+
+    [Fact]
+    public async Task Write_WithSourceFile_StoresColumn_AndSearchCarriesIdentity()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "ADR-0070 decides documentation placement",
+                SourceFile: "docs/adr/0070-documentation-structure-and-trust-model.md", Section: "decision"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "documentation placement", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        hit.SourceFile.ShouldBe("docs/adr/0070-documentation-structure-and-trust-model.md");
+        hit.TotalChunks.ShouldBe(1);
+        hit.ChunkIndex.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Write_WithSection_IndexesSectionInFts_AndSectionQueriesMatchIt()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "the widget renderer decision",
+            SourceFile: "docs/adr/0099-widget-renderer.md", Section: "decision"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "docs/adr/0099-widget-renderer.md#decision",
+                SearchScope.Project, Limit: 5, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Search_WithoutContextLabel_ExcludesCustomScopedRows()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", "docs:adr"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.ShouldBeEmpty("scope='custom' rows are invisible to the plain project scope");
+    }
+
+    [Fact]
+    public async Task Search_WithContextLabel_IncludesCustomScopedRows_AlongsideProjectRows()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "custom labeled fact", "docs:adr"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "plain project fact"),
+            TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "fact", SearchScope.Project, Limit: 5, MinScore: 0.0,
+                ContextLabel: "docs:adr"),
+            TestContext.Current.CancellationToken);
+
+        results.Select(r => r.Snippet).ShouldContain(s => s.Contains("custom labeled fact", StringComparison.Ordinal));
+        results.Select(r => r.Snippet).ShouldContain(s => s.Contains("plain project fact", StringComparison.Ordinal),
+            "the context label filter augments the project scope, it does not replace it");
+    }
+
     // The RRF rework (P6) fuses per-context batches by rank position, not best ranking.
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
@@ -554,6 +628,21 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         public int? TtlDays { get; set; }
 
         public string EmbedState { get; set; } = "";
+    }
+
+    [Fact]
+    public async Task SetSetting_RoundTripsStructureAlpha()
+    {
+        await _store.SetSettingAsync(StructureFusion.AlphaSettingKey, "0.8",
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var raw = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                "SELECT value FROM settings WHERE key = @key",
+                new { key = StructureFusion.AlphaSettingKey },
+                cancellationToken: TestContext.Current.CancellationToken));
+        raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
     }
 
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>

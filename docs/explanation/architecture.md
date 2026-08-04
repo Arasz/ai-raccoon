@@ -84,14 +84,26 @@ the schema level.
 
 ### Indexes and virtual tables
 
-- `entries_fts` — FTS5 external-content index over `entries(value)` with triggers
-  for INSERT, DELETE, and UPDATE of `value`.
+- `entries_fts` — FTS5 external-content index over `entries(value, source_file, section)`
+  with triggers for INSERT, DELETE, and UPDATE of the indexed columns. Searches rank with
+  `bm25(entries_fts, 1.0, 8.0, 16.0)`: a source-path match (ADR-0070) carries 8× and a
+  section match (decision) 16× the signal of a body-text match (ADR 0003, plan C §3
+  Wave 2c). Queries shaped like a source path
+  (`docs/adr/0011-frontend-chassis-stack.md#decision`) match the source/section columns
+  with AND semantics, so the exact chunk ranks first.
 - `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
   for semantic search. Triggers sync it with `embed_state` changes.
+- `vec_structure` — vec0 virtual table over the Wave 6 heading-path embeddings
+  (rowid = entry id). Written only by the re-runnable structure backfill
+  (`StructureBackfillService`); a delete trigger keeps orphans out.
 - `idx_entries_scope_project` — the primary lookup path for context-filtered queries.
 - `idx_entries_hash` — content dedup and per-hash lookups.
 - `idx_entries_workspace` — workspace-scoped queries.
 - `idx_entries_embed_state` — pending-embed queue scans.
+
+Legacy banks (no `source_file`/`section` columns, single-column FTS) are migrated on
+open: the columns are added and `entries_fts` is dropped, recreated in the three-column
+shape, and repopulated from `entries` (ADR 0003).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
 
@@ -199,9 +211,16 @@ modalities produce ranked lists:
    keyword modality silently returns an empty list — search degrades, never
    crashes.
 
-2. **vec0 (semantic):** when an embedding engine is configured, the query is
-   embedded and a KNN search runs against the `vec_entries` table. Without
-   an engine, this modality is simply absent.
+2. **vec0 (semantic, dual-vector):** when an embedding engine is configured, the
+   query is embedded and KNN search runs against both `vec_entries` (content)
+   and `vec_structure` (heading path). The two lists are fused with a fixed
+   alpha (Wave 6, docs/adr/0004):
+   `score = alpha × sim(q, content) + (1 − alpha) × sim(q, structure)`.
+   Chunks without a heading path contribute zero structure similarity. Alpha
+   defaults to 0.5 and is configurable per bank via the
+   `retrieval.structureAlpha` setting; without an engine, the modality is
+   simply absent, and without structure vectors the fusion degrades to
+   content-only ordering.
 
 **Per-modality candidate window:** `K = max(limit × 3, 100)` — this prevents
 overlap candidates ranked beyond the caller's limit (e.g. rank 30 when
@@ -212,8 +231,21 @@ Each context's two lists are fused with **Reciprocal Rank Fusion (RRF)**:
 is 1.0. The per-context batches are then merged with a second RRF pass at
 uniform weight, and `minScore` + `limit` are applied.
 
+### Search result identity
+
+Every result carries `SourceFile` (the original relative path, e.g.
+`docs/adr/0011-frontend-chassis-stack.md`), `ChunkIndex` (0-based position within the
+source), and `TotalChunks` — computed per source partition at query time, so per-chunk
+writes need no write-side bookkeeping. Rows without a source report `0`/`0` (ADR 0003,
+plan C §3 Wave 2b).
+
+`memory_search` also accepts `contextLabel`: when set, the project scope additionally
+searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2e).
+
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:95-152`
-> (search), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
+> (search), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:215-259`
+> (dual-vector fusion), `src/AiRaccoon.Infrastructure/Embedding/StructureFusion.cs:1-50`
+> (fusion math), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
 > (RRF), `src/AiRaccoon.Infrastructure/Sqlite/SearchResultMerger.cs:12-24`
 > (merger), `src/AiRaccoon.Infrastructure/Sqlite/SearchContexts.cs:9-29`
 > (context resolution)

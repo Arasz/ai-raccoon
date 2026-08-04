@@ -11,7 +11,8 @@ public sealed record SearchQuery(
     double MinScore = 0.7,
     int RrfK = SearchQuery.DefaultRrfK,
     int FtsWeight = 1,
-    int VectorWeight = 1)
+    int VectorWeight = 1,
+    string? ContextLabel = null)
 {
     public const int DefaultRrfK = 60;
 
@@ -24,6 +25,9 @@ public sealed record SearchQuery(
     /// <summary>Weight of the vec0 (semantic) ranked list in the RRF fusion.</summary>
     public int VectorWeight { get; } = VectorWeight;
 
+    /// <summary>When set, the project scope also searches this project's custom-scoped rows under the label.</summary>
+    public string? ContextLabel { get; } = ContextLabel;
+
     public sealed class Validator : AbstractValidator<SearchQuery>
     {
         public Validator()
@@ -35,6 +39,7 @@ public sealed record SearchQuery(
             RuleFor(x => x.RrfK).GreaterThan(0);
             RuleFor(x => x.FtsWeight).GreaterThanOrEqualTo(0);
             RuleFor(x => x.VectorWeight).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.ContextLabel).MaximumLength(256);
         }
     }
 }
