@@ -38,58 +38,67 @@ degradation, and opt-in S3-compatible sync. Built on the
   SQLite bank with AES-256-CBC via e_sqlite3mc (transparent page-level encryption —
   FTS5 and vec0 work unchanged). Without the passphrase the bank is plaintext.
 
-The full tool contract (17 tools, 2 prompts, environment variables, error
+The full tool contract (19 tools, 2 prompts, environment variables, error
 shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-memory-server.md).
 
 ## Transports
 
 - **stdio** (default) — what MCP clients expect when launching a server as a subprocess.
-- **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http` or `--transport http`; serves the
+- **Streamable HTTP** — opt-in via `--transport http`; serves the
   protocol at `/mcp` (launch profile `http`, `http://localhost:8080`).
 
-Transport selection lives in one place: `McpServerSetup` takes the resolved transport,
-chosen by `ServerConfig` as **CLI args > environment variables > defaults** — anything
-other than `http` (case-insensitive) runs stdio. All diagnostics go to stderr; stdout
-carries only MCP protocol messages.
+Transport selection lives in one place: `ServerConfig` takes the resolved transport
+from the `--transport` launch flag (anything other than `http` runs stdio). All
+diagnostics go to stderr; stdout carries only MCP protocol messages.
 
 ## Environment variables
 
+Only one environment variable is read:
+
 | Variable | Purpose |
 |---|---|
-| `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
-| `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
-| `AIRACCOON_SYNC_ENDPOINT` | S3-compatible endpoint URL (sync) |
-| `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
-| `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
-| `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
-| `AIRACCOON_SYNC_REGION` | S3 region (sync) |
 | `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC, optional) |
-| `AIRACCOON_SYNC_OBJECT_KEY` | Object key in the bucket (sync, optional; defaults to `memory-<projectId>.db`) |
-| `AIRACCOON_OPENAI_API_KEY` | API key for OpenAI-compatible remote embeddings |
 
-Credentials are read from the environment only — never from tracked files.
+All other configuration (access modes, embedding engine, retrieval alpha, sweep,
+sync, watch) lives in the settings table of the install's `memory.db` and is changed
+through the `ai-raccoon` verb commands — the CLI is the single config channel. Secrets
+(OpenAI API key, S3 access/secret keys) are stored in the settings table (encrypted at
+rest when a passphrase is set), never in the environment and never in tracked files.
 
 ## Command-line options
 
-The server parses its own arguments (System.CommandLine 2.0.10). Precedence:
-**CLI args > environment variables > built-in defaults** — every option below
-mirrors an environment variable, so nothing that works via env stops working.
+The server parses its own arguments (System.CommandLine 2.0.10) before the host
+builds. Launch-identity flags (startup-scoped only):
 
-| Option | Values | Default | Maps to |
-|---|---|---|---|
-| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
-| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
-| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
-| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
-| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
-| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
-| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
-| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
-| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+| Option | Values | Default |
+|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
+| `--install-scope` | `user`, `project` | `user` |
 
-Secrets are environment-only, never CLI options: `AIRACCOON_OPENAI_API_KEY`,
-`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE` —
-an unknown-option parse error is the defense. `--help`/`--version` and parse errors
+Runtime configuration is not read from environment variables — it lives in the
+settings table and is changed with the config verbs (one-shot processes against the
+bank; the running server hot-reloads the rows):
+
+```
+ai-raccoon access default set {ro|rw|full}      ai-raccoon access default show
+ai-raccoon access set {project-id|*} {ro|rw|full}
+ai-raccoon access unset {project-id|*}          ai-raccoon access list
+ai-raccoon model set local [path]               ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
+ai-raccoon model reset                          ai-raccoon model show
+ai-raccoon retrieval alpha set {0..1}           ai-raccoon retrieval alpha show
+ai-raccoon sweep threshold set {0..1}           ai-raccoon sweep show
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--access-key <key>] [--secret-key <key>]
+ai-raccoon sync remove                          ai-raccoon sync show
+ai-raccoon watch enable|disable {project-id|*} {true|false}
+ai-raccoon watch scope add|remove|list {project-id|*} {path}
+ai-raccoon watch concurrency {project-id|*} {1..16}
+ai-raccoon watch list
+```
+
+Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
+`sync add s3`) are persisted in the settings table and are never launch flags — an
+unknown-option parse error is the defense. `--help`/`--version` and parse errors
 print to stderr (exit 0 / exit 1); stdout carries only MCP protocol frames. Generic
 host flags (`--environment`, `--contentRoot`, `--applicationName`) are accepted
 hidden and ignored.
@@ -104,7 +113,8 @@ Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw)
 }
 ```
 
-Secrets go in the client's user-scoped config, never in a shared/tracked file:
+Encrypted-bank setups set `AIRACCOON_DB_PASSPHRASE` in the client's user-scoped
+config, never in a shared/tracked file:
 
 ```json
 {
@@ -112,7 +122,6 @@ Secrets go in the client's user-scoped config, never in a shared/tracked file:
     "ai-raccoon": {
       "command": "ai-raccoon",
       "env": {
-        "AIRACCOON_OPENAI_API_KEY": "sk-...",
         "AIRACCOON_DB_PASSPHRASE": "change-me"
       }
     }
@@ -122,17 +131,17 @@ Secrets go in the client's user-scoped config, never in a shared/tracked file:
 
 ## Embeddings
 
-Embeddings are configured per bank via `memory_configure`; two engines:
+Embeddings are configured per bank via the `ai-raccoon model` CLI verbs; two engines:
 
 | Engine | `provider` | `model` | Setup |
 |---|---|---|---|
 | Local (ONNX, in-process) | `local` | Optional ONNX path | Bundled `all-MiniLM-L6-v2` (int8, ~21 MB, Apache-2.0). No network, ~9 ms/query. |
-| Remote (OpenAI-compatible) | `openai` | Model id (e.g. `text-embedding-3-small`) | Any OpenAI-compatible `baseUrl`; set `AIRACCOON_OPENAI_API_KEY` or pass `api_key` |
+| Remote (OpenAI-compatible) | `openai` | Model id (e.g. `text-embedding-3-small`) | Any OpenAI-compatible `baseUrl`; key via `--api-key` (persisted in the settings table) |
 
-The API key is held in memory for the process lifetime and **never persisted** to the
-bank. Changing the engine (`provider`/`model`/`baseUrl`) re-embeds the entire bank
+The API key is stored in the settings table (encrypted at rest when a passphrase is
+set). Changing the engine (`provider`/`model`/`baseUrl`) re-embeds the entire bank
 with the new engine. Other OpenAI-compatible endpoints (LM Studio, Ollama) are
-supported — pass their `baseUrl` to `memory_configure`.
+supported — pass their base-url to `ai-raccoon model set openai`.
 
 ## Requirements
 
@@ -193,10 +202,10 @@ Or with the HTTP transport, using the `http` launch profile (listens on
 dotnet run --project src/AiRaccoon --launch-profile http
 ```
 
-(`MCP_TRANSPORT=http` selects the HTTP transport too, but only with
-`--no-launch-profile` — a launch profile overrides the environment variable, and the
-default `stdio` profile would silently switch you back. Without a profile the HTTP
-endpoint lands on ASP.NET's default port, not 8080.)
+(`--transport http` selects the HTTP transport too — via the `http` launch profile,
+which passes `--transport http` as `commandLineArgs`, or by appending `-- --transport
+http` to `dotnet run`. Without a profile the HTTP endpoint lands on ASP.NET's default
+port, not 8080.)
 
 ### Connect a client
 
@@ -226,7 +235,8 @@ AiRaccoon/
   src/AiRaccoon/              # the MCP server (thin)
     Program.cs               # transport selection + DI + MCP wiring
     Setup/McpServerSetup.cs  # stdio / HTTP transport
-    Tools/MemoryTools.cs     # 17 [McpServerTool] tools, 1:1 to the port
+    Tools/MemoryTools.cs     # 16 [McpServerTool] memory tools, 1:1 to the port
+    Tools/WatchTools.cs      # 3 [McpServerTool] file-watcher tools
     Prompts/MemoryPrompts.cs # 2 agent usage guides
     Access/                  # MemoryAccessGuard, ForgettingPolicyService
     Setup/Dependencies.cs    # DI registration

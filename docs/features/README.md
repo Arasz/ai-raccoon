@@ -7,9 +7,9 @@ Diátaxis tree (see `docs/README.md`); each subdirectory is one feature.
 
 | Feature                            | Status                                  | Dossier                                                                            |
 |------------------------------------|-----------------------------------------|------------------------------------------------------------------------------------|
-| [`agent-memory/`](agent-memory/)   | Implemented (merged to main 2026-08-03) | [spec-issue-1.md](agent-memory/spec-issue-1.md)                                    |
-| [`native-memory/`](native-memory/) | Implemented (merged to main 2026-08-04)  | [spec.json](native-memory/spec.json) — managed .NET memory store (own SQLite schema, Dapper queries, C# RRF, ONNX embeddings, S3 sync) replacing the pinned sqlite-memory extension |
+| [`file-watcher/`](file-watcher/)   | Implemented (merged to main 2026-08-05) | [spec.json](file-watcher/spec.json) — watch a path and mirror FS changes into memory (3 MCP tools + `watch` CLI verbs) |
 
-Each dossier's folder also carries its Gherkin behavioural contract
-(`agent-memory.feature`, 29 scenarios) and the `spec.json` manifest consumed by the
-ai-badger task flow.
+Earlier wave dossiers (agent-memory, native-memory) live under
+[`docs/work/features-*`](../work/) with their Gherkin behavioural contracts
+(`agent-memory.feature`, 29 scenarios; `native-memory.feature`) and `spec.json`
+manifests consumed by the ai-badger task flow.

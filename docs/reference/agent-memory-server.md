@@ -2,28 +2,30 @@
 
 The ai-raccoon MCP server's complete agent-facing contract: tools, prompts,
 environment variables, contexts, and error shapes. Consult this mid-task when
-integrating or debugging; see `docs/features/agent-memory/spec-issue-1.md` for the
-design rationale and `docs/features/native-memory/spec.json` for the native-store
+integrating or debugging; see `docs/work/features-agent-memory/spec-issue-1.md` for the
+design rationale and `docs/work/features-native-memory/spec.json` for the native-store
 scope.
 
 The server runs a single SQLite bank (`memory.db`) with a native .NET store:
 no sqlite-memory/sqlite-vector/sqlite-sync extensions, no download-on-first-run
 provisioning, and no `raccoon_meta.db`. All tables — entries, workspaces, settings,
-FTS5, vec0, sync_meta, and sync_tombstones — live in `memory.db` (FR-NM-1).
+watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
+`memory.db` (FR-NM-1).
 
 **Fresh-start note (P11):** this release drops existing-bank migration — the bank
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (17)
+## Tools (19)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase). Writes
 land in `project:<id>` by default; naming a `workspaceId` routes them into that
 workspace's isolated context.
 
-All 18 tools are unchanged in name from the prior release except one addition.
-`memory_configure` gained a `baseUrl` parameter for any OpenAI-compatible endpoint;
-`memory_set_structure_alpha` is new (Wave 6 — dual-vector fusion tuning).
+16 memory tools plus 3 file-watcher tools. `memory_configure` and
+`memory_set_structure_alpha` were removed by the CLI-config refactor: configuration is
+no longer an MCP tool — the CLI verbs are the single config channel (see
+[Command-line options](#command-line-options)).
 
 | Tool | Parameters | Returns |
 |---|---|---|
@@ -36,9 +38,10 @@ All 18 tools are unchanged in name from the prior release except one addition.
 | `memory_delete_context` | `projectId`, `context` | `{deleted: n}` |
 | `memory_ingest_file` | `projectId`, `path`, `context?` | `{indexed: 0\|1}` |
 | `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned: n}` |
-| `memory_configure` | `projectId`, `provider`, `baseUrl?`, `model?`, `apiKey?` | `{provider, model, engine}` |
 | `memory_embed_pending` | `projectId`, `limit?` | `{processed, pending}` |
-| `memory_set_structure_alpha` | `projectId`, `alpha` (0..1) | `{key, value}` |
+| `memory_watch_add` | `projectId`, `path` | `{projectId, path}` |
+| `memory_watch_status` | `projectId` | `{watches: [{projectId, path, state, lastError?, lastSync?}]}` |
+| `memory_watch_remove` | `projectId`, `path` | `{projectId, path}` |
 | `memory_workspace_begin` | `projectId`, `agentId?`, `name?` | `{workspaceId, context}` |
 | `memory_workspace_status` | `projectId`, `workspaceId` | `{entries, count}` |
 | `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep` | `{promoted, discarded}` |
@@ -56,19 +59,19 @@ All 18 tools are unchanged in name from the prior release except one addition.
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
   `shared`.
-- **`memory_configure`:** `provider` is `local` (bundled int8 ONNX all-MiniLM-L6-v2
-  in-process, ~23 MB, Apache-2.0, SHA-256 pinned) or `openai` (any OpenAI-compatible
-  `baseUrl`, default `https://api.openai.com/v1`). `model` is the model id for openai
-  or a custom ONNX path for local; it defaults to the bundled model for local, is
-  required for openai. `baseUrl` overrides the endpoint for openai providers.
-  `apiKey` takes precedence over `AIRACCOON_OPENAI_API_KEY`; keys are never persisted.
-  Changing the engine re-embeds the bank. The `engine` field in the result is the
-  stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
+- **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
+  the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
+  pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
+  selects any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`).
+  `model` is the model id for openai or a custom ONNX path for local; it defaults to
+  the bundled model for local, is required for openai. The API key is persisted in the
+  settings table. Changing the engine re-embeds the bank. The `engine` field in the
+  result is the stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
-- **`memory_set_structure_alpha`:** writes the dual-vector fusion alpha
-  (`retrieval.structureAlpha`, 0..1; default 0.5) used by search as
-  `score = alpha × content + (1 − alpha) × heading-path structure`. Requires rw-tier
-  access; applies to subsequent searches, no re-embedding.
+- **Structure alpha (CLI, not a tool):** `ai-raccoon retrieval alpha set {0..1}`
+  writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
+  used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
+  Applies to subsequent searches, no re-embedding.
 - **`memory_search`:** hybrid fusion from two modalities: FTS5 (keyword) and vec0
   (semantic, when an embedding engine is configured). The two ranked lists are fused
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per
@@ -90,12 +93,19 @@ All 18 tools are unchanged in name from the prior release except one addition.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
   age exceeds 30 days. `shared` entries are never swept.
-- **`memory_configure`:** `provider` is `local` (bundled int8 ONNX model in-process)
-  or `openai` (any OpenAI-compatible endpoint). For `openai`, `model` and an API key
-  (`apiKey` arg or `AIRACCOON_OPENAI_API_KEY`) are required — an explicit `apiKey`
-  parameter takes precedence over the environment variable. Until an engine is
-  configured, writes are stored deferred (`memory_stats.pending > 0`) and only become
-  searchable after `memory_embed_pending`. Changing the engine re-embeds the bank.
+- **File watching:** watching is enabled per project (or `*`) with
+  `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
+  allowlist (`watch scope add|remove|list`) and a concurrency cap (`watch concurrency
+  {project-id|*} {1..16}`, default 4) — all CLI-only. `memory_watch_add` registers a
+  file or directory and returns immediately (the initial scan runs in the background —
+  status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
+  lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
+  last error and last sync; it is available in every access tier. `memory_watch_remove`
+  stops and unregisters; a non-existent watch is a no-op. Registration failures surface
+  as `watching-disabled:` / `path-outside-scope:` / `path-not-found:` tool errors;
+  watch failures never fail the server.
+- **Deferred writes:** until an engine is configured, writes are stored deferred
+  (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 
 ## Prompts (2)
 
@@ -124,63 +134,71 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 | `full` | ✓ | ✓ | ✓ |
 
 - The **global default** is `rw`.
-- Set `AIRACCOON_ACCESS_MODE=ro|rw|full` to override the global default. The env
-  value is seeded into the settings table on first bank open and never overwrites
-  an operator-set value.
+- The global default is set with `ai-raccoon access default set {ro|rw|full}`
+  (row `access.mode.global` in the settings table; unset resolves to `rw`).
 - A **per-project override** is stored in the settings table under
   `access.mode.project:<id>` — it takes precedence over the global setting.
 
 ## Environment variables
 
+Only one environment variable is read:
+
 | Variable | Purpose |
 |---|---|
-| `AIRACCOON_DATA_ROOT` | Bank data root (default `~/.ai-raccoon`) |
-| `AIRACCOON_INSTALL_SCOPE` | `user` (default) or `project` |
-| `AIRACCOON_SYNC_ENDPOINT` | S3-compatible endpoint URL (sync) |
-| `AIRACCOON_SYNC_BUCKET` | S3 bucket name (sync) |
-| `AIRACCOON_SYNC_ACCESS_KEY` | S3 access key (sync) |
-| `AIRACCOON_SYNC_SECRET_KEY` | S3 secret key (sync) |
-| `AIRACCOON_SYNC_REGION` | S3 region (sync, optional) |
-| `AIRACCOON_SYNC_OBJECT_KEY` | S3 object key (sync, optional; defaults to `memory-<projectId>.db`) |
-| `AIRACCOON_OPENAI_API_KEY` | API key for `provider=openai` embeddings |
-| `AIRACCOON_EMBEDDING_MODEL` | Custom ONNX model path for `provider=local` (default: the bundled model) |
 | `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC page-level via e_sqlite3mc; unset = plaintext) |
 
-Credentials are read from the environment only.
+All other configuration (access modes, embedding engine, retrieval alpha, sweep,
+sync, watch) lives in the settings table and is changed with the CLI verbs below —
+environment variables are not read for runtime configuration (single-channel ruling).
+Secrets (OpenAI API key, S3 access/secret keys) are stored in the settings table
+(encrypted at rest when a passphrase is set), never in the environment and never in
+tracked files.
 
 ## Command-line options
 
 The server parses its own arguments (System.CommandLine 2.0.10) before the host
-builds. Precedence: **CLI args > environment variables > built-in defaults** —
-every option mirrors an environment variable, so env-only setups keep working
-unchanged.
+builds. Launch-identity flags are CLI-only; a verb runs a one-shot config command
+against the bank (results to stdout), bare `ai-raccoon` (with optional launch flags)
+runs the server.
 
-| Option | Values | Default | Maps to |
-|---|---|---|---|
-| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
-| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
-| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
-| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
-| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
-| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
-| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
-| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
-| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+| Option | Values | Default |
+|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
+| `--install-scope` | `user`, `project` | `user` |
 
-Secrets are environment-only, never CLI options (`AIRACCOON_OPENAI_API_KEY`,
-`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE`);
-the parser's unknown-option error is the defense. `--help`/`--version` and parse
-errors print to **stderr** (exit 0 / exit 1); stdout carries only MCP protocol
-frames. Generic host flags (`--environment`, `--contentRoot`, `--applicationName`)
-are accepted hidden and ignored. A zero-config `.mcp.json` entry is just
-`{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`; registry installs
-(`.mcp/server.json`) pass no args (`packageArguments: []`).
+Config verbs (each writes settings rows in the bank's settings table; the running
+server hot-reloads them):
+
+```
+ai-raccoon access default set {ro|rw|full}      ai-raccoon access default show
+ai-raccoon access set {project-id|*} {ro|rw|full}
+ai-raccoon access unset {project-id|*}          ai-raccoon access list
+ai-raccoon model set local [path]               ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
+ai-raccoon model reset                          ai-raccoon model show
+ai-raccoon retrieval alpha set {0..1}           ai-raccoon retrieval alpha show
+ai-raccoon sweep threshold set {0..1}           ai-raccoon sweep show
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--access-key <key>] [--secret-key <key>]
+ai-raccoon sync remove                          ai-raccoon sync show
+ai-raccoon watch enable|disable {project-id|*} {true|false}
+ai-raccoon watch scope add|remove|list {project-id|*} {path}
+ai-raccoon watch concurrency {project-id|*} {1..16}
+ai-raccoon watch list
+```
+
+Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
+`sync add s3`) are persisted in the settings table and are never launch flags — the
+parser's unknown-option error is the defense. `--help`/`--version` and parse errors
+print to **stderr** (exit 0 / exit 1). Generic host flags (`--environment`,
+`--contentRoot`, `--applicationName`) are accepted hidden and ignored. A zero-config
+`.mcp.json` entry is just `{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`;
+registry installs (`.mcp/server.json`) pass no args (`packageArguments: []`).
 
 ## Local embedding model
 
 Local embeddings run in-process on ONNX Runtime over the small int8
 all-MiniLM-L6-v2 model (dimension 384, mean-pool + L2-normalize) **bundled inside
-the tool package** — `memory_configure(provider="local")` needs no sidecar, server
+the tool package** — `ai-raccoon model set local` needs no sidecar, server
 process or download. The binary is gitignored and fetched once by the pinned script
 (SHA-256 verified); the tests FAIL (never skip) when it is missing:
 
@@ -189,17 +207,16 @@ scripts/download-embedding-model.sh          # -> src/AiRaccoon/Models/model_qin
 ```
 
 A custom ONNX model path overrides the bundled model via
-`memory_configure(provider="local", model="/path/to/model.onnx")` or
-`AIRACCOON_EMBEDDING_MODEL`.
+`ai-raccoon model set local /path/to/model.onnx`.
 
 ## Embedding configuration matrix
 
-`memory_configure` resolves exactly two engines:
+The embedding engine (configured via `ai-raccoon model …`) resolves exactly two engines:
 
 | Engine | `provider` | `model` | `baseUrl` | Key | Notes |
 |---|---|---|---|---|---|
 | Local (bundled ONNX) | `local` | optional ONNX path (default: bundled model) | ignored | none | In-process, offline, no API cost |
-| OpenAI-compatible | `openai` | model id (required), e.g. `nomic-embed-text` | optional endpoint (default `https://api.openai.com/v1`) | `apiKey` arg or `AIRACCOON_OPENAI_API_KEY` | Any OpenAI-compatible `/embeddings` backend (LM Studio, Ollama, self-hosted, OpenAI) |
+| OpenAI-compatible | `openai` | model id (required), e.g. `nomic-embed-text` | optional endpoint (default `https://api.openai.com/v1`) | `--api-key` (persisted in settings table) | Any OpenAI-compatible `/embeddings` backend (LM Studio, Ollama, self-hosted, OpenAI) |
 
 Changing the engine (provider, model or baseUrl) re-embeds the bank with the new
 engine.
@@ -212,8 +229,9 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 |---|---|
 | Missing/blank `projectId` | `invalid-params: project_id is required` |
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
-| Remote embedding provider without a key | `embedding-api-key-missing: set AIRACCOON_OPENAI_API_KEY or pass api_key for provider 'openai'` |
-| Sync without credentials | `sync-not-configured: set AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY and AIRACCOON_SYNC_SECRET_KEY` |
+| Remote embedding provider without a key | `OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'` |
+| Watch registration failures | `watching-disabled:` / `path-outside-scope:` / `path-not-found:` |
+| Sync without credentials | `sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name> --access-key <key> --secret-key <key>'` |
 
 ## Managed store
 

@@ -374,9 +374,8 @@ flowchart TD
     J -->|no| L["default: rw"]
 ```
 
-The global default is `rw`. On first bank open, the `AIRACCOON_ACCESS_MODE`
-environment variable seeds the global setting (`access.mode.global` in the
-settings table) but never overwrites an operator-set value. A per-project
+The global default is `rw`. It is set with `ai-raccoon access default set {ro|rw|full}`
+(`access.mode.global` in the settings table); unset rows resolve to `rw`. A per-project
 override (`access.mode.project:<id>`) takes precedence over the global setting.
 
 | Mode | Reads | Writes | Destructive (delete, sweep, consolidate) |

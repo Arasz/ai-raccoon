@@ -108,13 +108,13 @@
 
 ## 2. AiRaccoon Memory Tools API
 
-The ai-raccoon MCP server exposes 17 tools. The ingestion pipeline primarily uses:
+The ai-raccoon MCP server exposes 19 tools. The ingestion pipeline primarily uses:
 
 ### 2.1 Key Tools for Ingestion
 
 | Tool | Parameters | Use in Pipeline |
 |---|---|---|
-| `memory_configure` | `projectId`, `provider` (`local` or `openai`), `baseUrl?`, `model?`, `apiKey?` | **Step 0:** Set up embeddings engine before ingestion. Use `provider=local` for bundled ONNX (all-MiniLM-L6-v2, dim 384) — zero API cost, offline. |
+| `ai-raccoon model set local\|openai` (CLI, not an MCP tool) | n/a — config verbs take no tool params | **Step 0:** Set up the embeddings engine before ingestion via the CLI (`ai-raccoon model set local` for the bundled ONNX all-MiniLM-L6-v2, dim 384 — zero API cost, offline; `model set openai` for remote). Configuration is not an MCP tool since the CLI-config refactor. |
 | `memory_write` | `projectId`, `content`, `context?`, `agentId?` | **Step 3:** Write each chunk. Returns `{hash, path, context, createdAt}`. |
 | `memory_ingest_file` | `projectId`, `path`, `context?` | **Alternative:** Ingest a whole file as one entry (for small files like invariants). Returns `{indexed: 0\|1}`. |
 | `memory_ingest_directory` | `projectId`, `path`, `context?` | **Alternative:** Bulk directory ingest. Returns `{scanned: n}`. |

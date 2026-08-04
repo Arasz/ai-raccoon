@@ -90,9 +90,10 @@ without restructuring the core.
   project IDs, so cross-project dedup is not enforced — this is deliberate, keeping
   projects independent.
 - Deferred embeddings (`embed_state = 'pending'` by default) mean writes work before any
-  model is configured; search only returns embedded content, so a fresh bank needs
-  `memory_configure` + `memory_embed_pending` to become searchable. When an engine is
+  model is configured; search only returns embedded content, so a fresh bank needs an
+  engine configured via the CLI (`ai-raccoon model set local` or `model set openai …`)
+  plus `memory_embed_pending` to become searchable. When an engine is
   already configured, writes embed synchronously.
-- Embedding engine changes (`memory_configure` with a different provider/model/baseUrl)
+- Embedding engine changes (`ai-raccoon model set …` with a different provider/model/base-url)
   re-embed the entire bank: previously embedded rows are re-processed with the new engine,
   and the pending queue is left alone.

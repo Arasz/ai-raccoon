@@ -33,17 +33,20 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
   (`shared` + `project:<id>`) as a single snapshot to S3-compatible object storage
   (R2, S3, MinIO) using VACUUM INTO + If-Match CAS + row merge.
 
-## Tools (16) and prompts (2)
+## Tools (19) and prompts (2)
 
 `memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
 `memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
 `memory_embed_pending`, `memory_workspace_begin`,
 `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
-`memory_sweep`, `memory_sync` — plus the `memory-usage-guide` and
+`memory_sweep`, `memory_sync` — plus the file-watcher trio `memory_watch_add`,
+`memory_watch_status`, `memory_watch_remove` — and the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
 Configuration is deliberately NOT an MCP tool: the CLI is the single config channel
 (see below), so `memory_configure` and `memory_set_structure_alpha` were removed.
+Watching pairs the `watch` CLI verbs (enable/scope/concurrency — CLI-only) with the
+three watch tools above (registration and status).
 
 ## Configuration: the CLI is the single channel
 
