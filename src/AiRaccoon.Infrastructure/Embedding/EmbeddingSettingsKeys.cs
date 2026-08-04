@@ -7,7 +7,7 @@ public static class EmbeddingSettingsKeys
     public const string Model = "embedding.model";
     public const string BaseUrl = "embedding.baseUrl";
 
-    /// <summary>Engine fingerprint; memory_configure re-embeds when it changes.</summary>
+    /// <summary>Engine fingerprint; `ai-raccoon model set` re-embeds when it changes.</summary>
     public const string Engine = "embedding.engine";
 
     /// <summary>OpenAI API key, persisted in the settings table (single-channel ruling 2026-08-04).</summary>

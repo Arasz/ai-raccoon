@@ -24,6 +24,10 @@ if (parsed.CommandPath.Length > 0)
 
 var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
 
+// Ruling 3: appsettings.json is removed — the settings table is the single runtime
+// channel, so the host's dormant config sources are cleared.
+builder.Configuration.Sources.Clear();
+
 builder
     .ConfigureMcpServer(config.Transport)
     .Services.RegisterMemoryServices(config.Options);

@@ -568,8 +568,7 @@ public sealed class MemoryTools(
     [McpServerTool(Name = TN_MEMORY_SYNC)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to S3-compatible object storage. " +
-        "Requires AIRACCOON_SYNC_ENDPOINT, AIRACCOON_SYNC_BUCKET, AIRACCOON_SYNC_ACCESS_KEY " +
-        "and AIRACCOON_SYNC_SECRET_KEY.")]
+        "Configure the endpoint/bucket/keys with `ai-raccoon sync add s3` (settings table).")]
     public async Task<SyncToolResult> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)

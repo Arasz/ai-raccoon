@@ -228,7 +228,7 @@ public sealed class MemoryToolsAccessModeTests
 
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, null));
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, 30));
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 

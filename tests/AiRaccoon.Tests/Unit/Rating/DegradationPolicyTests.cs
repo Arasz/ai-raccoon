@@ -35,11 +35,11 @@ public class DegradationPolicyTests
 
     [Fact]
     public void ShouldDegrade_WithPerEntryTtlOverride_UsesOverride() =>
-        DegradationPolicy.ShouldDegrade(0.1, 10, 0.5, 30, 5)
+        DegradationPolicy.ShouldDegrade(0.1, 10, 0.5, 5)
             .ShouldBeTrue();
 
     [Fact]
     public void ShouldDegrade_WithPerEntryTtlOverrideGreaterThanAge_ReturnsFalse() =>
-        DegradationPolicy.ShouldDegrade(0.1, 10, 0.5, 30, 20)
+        DegradationPolicy.ShouldDegrade(0.1, 10, 0.5, 20)
             .ShouldBeFalse();
 }
