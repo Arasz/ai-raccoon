@@ -39,63 +39,78 @@
   <circle cx="192" cy="188" r="10" fill="#E4EBF3" stroke="#0A1017" stroke-width="3" stroke-opacity=".35"/>
 
   <!-- head -->
-  <ellipse cx="128" cy="86" rx="44" ry="42" fill="url(#b-fur)"/>
+  <ellipse cx="128" cy="86" rx="46" ry="44" fill="url(#b-fur)"/>
 
-  <!-- ears -->
+  <!-- ears: pointed ovals, dark inner, teal node -->
   <g stroke="#0A1017" stroke-width="4">
-    <circle cx="90" cy="50" r="16" fill="url(#b-fur)"/>
-    <circle cx="166" cy="50" r="16" fill="url(#b-fur)"/>
-    <circle cx="90" cy="51" r="8" fill="#1B232E" stroke="none"/>
-    <circle cx="166" cy="51" r="8" fill="#1B232E" stroke="none"/>
-    <circle cx="90" cy="51" r="3.4" fill="#2BD9C0" stroke="none"/>
-    <circle cx="166" cy="51" r="3.4" fill="#2BD9C0" stroke="none"/>
+    <g transform="rotate(-26 90 44)">
+      <ellipse cx="90" cy="44" rx="13" ry="17" fill="url(#b-fur)"/>
+      <ellipse cx="90" cy="46" rx="6.5" ry="9" fill="#1B232E" stroke="none"/>
+      <circle cx="90" cy="47" r="2.8" fill="#2BD9C0" stroke="none"/>
+    </g>
+    <g transform="rotate(26 166 44)">
+      <ellipse cx="166" cy="44" rx="13" ry="17" fill="url(#b-fur)"/>
+      <ellipse cx="166" cy="46" rx="6.5" ry="9" fill="#1B232E" stroke="none"/>
+      <circle cx="166" cy="47" r="2.8" fill="#2BD9C0" stroke="none"/>
+    </g>
   </g>
 
-  <!-- bandit mask -->
-  <path d="M84 86 Q86 66 108 62 L148 62 Q170 66 172 86 L176 108 Q170 128 150 132 Q136 136 128 130 Q120 136 106 132 Q86 128 80 108 Z" fill="#161C24"/>
-  <circle cx="106" cy="92" r="13" fill="#F2F5F8"/>
-  <circle cx="150" cy="92" r="13" fill="#F2F5F8"/>
+  <!-- white forehead patch, above the mask -->
+  <ellipse cx="128" cy="58" rx="26" ry="11" fill="#F7FAFC"/>
+
+  <!-- the bandit mask: one continuous band -->
+  <path d="M82 84 Q84 62 108 60 L148 60 Q172 62 174 84 L178 106 Q176 132 154 138 Q140 142 128 136 Q116 142 102 138 Q80 132 78 106 Z" fill="#161C24"/>
+
+  <!-- white spectacles within the mask -->
+  <circle cx="104" cy="98" r="10" fill="#F2F5F8"/>
+  <circle cx="152" cy="98" r="10" fill="#F2F5F8"/>
 
   <!-- eyes -->
   <g>
-    <circle cx="106" cy="92" r="10.5" fill="#0B1017"/>
-    <circle cx="150" cy="92" r="10.5" fill="#0B1017"/>
-    <circle cx="106" cy="92" r="7.5" fill="#2BD9C0"/>
-    <circle cx="150" cy="92" r="7.5" fill="#2BD9C0"/>
-    <circle cx="106" cy="92" r="3.6" fill="#07272C"/>
-    <circle cx="150" cy="92" r="3.6" fill="#07272C"/>
-    <circle cx="108.5" cy="89" r="2.6" fill="#FFFFFF"/>
-    <circle cx="152.5" cy="89" r="2.6" fill="#FFFFFF"/>
+    <circle cx="104" cy="98" r="8" fill="#0B1017"/>
+    <circle cx="152" cy="98" r="8" fill="#0B1017"/>
+    <circle cx="104" cy="98" r="5.8" fill="#2BD9C0"/>
+    <circle cx="152" cy="98" r="5.8" fill="#2BD9C0"/>
+    <circle cx="104" cy="98" r="2.8" fill="#07272C"/>
+    <circle cx="152" cy="98" r="2.8" fill="#07272C"/>
+    <circle cx="106.5" cy="95.5" r="2.1" fill="#FFFFFF"/>
+    <circle cx="154.5" cy="95.5" r="2.1" fill="#FFFFFF"/>
   </g>
 
-  <!-- muzzle -->
-  <ellipse cx="128" cy="122" rx="26" ry="17" fill="#F7FAFC"/>
-  <path d="M120 110h16q3 0 3 3q0 9-11 13-11-4-11-13q0-3 3-3z" fill="#161C24"/>
-  <g fill="none" stroke="#161C24" stroke-width="3.4" stroke-linecap="round">
-    <path d="M128 128v4"/>
-    <path d="M128 132q-6 6-11 1"/>
-    <path d="M128 132q6 6 11 1"/>
+  <!-- muzzle: short, ending above the crystal; nose at its end -->
+  <path d="M108 128 Q128 122 148 128 L152 144 Q150 152 128 154 Q106 152 104 144 Z" fill="#F7FAFC"/>
+  <path d="M119 138h18q3 0 3 3q0 7-12 9-12-2-12-9q0-3 3-3z" fill="#161C24"/>
+  <g fill="none" stroke="#161C24" stroke-width="2.8" stroke-linecap="round">
+    <path d="M124 150q4 3 8 0"/>
+  </g>
+
+  <!-- whiskers -->
+  <g fill="none" stroke="#F7FAFC" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".5">
+    <path d="M112 134Q92 130 78 136"/>
+    <path d="M110 142Q90 142 76 150"/>
+    <path d="M144 134Q164 130 178 136"/>
+    <path d="M146 142Q166 142 180 150"/>
   </g>
 
   <!-- the memory: a glowing crystal cradled in the paws -->
-  <circle cx="128" cy="164" r="32" fill="url(#b-glow)"/>
+  <circle cx="128" cy="170" r="26" fill="url(#b-glow)"/>
   <g stroke="#FFFFFF" stroke-opacity=".35" stroke-width="2">
-    <path d="M128 146 L146 156 L146 176 L128 186 L110 176 L110 156 Z" fill="url(#b-gem)" stroke="none"/>
-    <path d="M128 146 L128 186"/>
-    <path d="M110 156 L146 156"/>
-    <path d="M110 176 L146 176"/>
-    <path d="M128 146 L110 156 M128 146 L146 156"/>
+    <path d="M128 152 L146 162 L146 182 L128 192 L110 182 L110 162 Z" fill="url(#b-gem)" stroke="none"/>
+    <path d="M128 152 L128 192"/>
+    <path d="M110 162 L146 162"/>
+    <path d="M110 182 L146 182"/>
+    <path d="M128 152 L110 162 M128 152 L146 162"/>
   </g>
-  <path d="M128 148 L138 155 L128 158 L118 155 Z" fill="#FFFFFF" fill-opacity=".65"/>
+  <path d="M128 154 L138 161 L128 164 L118 161 Z" fill="#FFFFFF" fill-opacity=".65"/>
 
   <!-- paws holding the crystal -->
   <g fill="#E4EBF3" stroke="#0A1017" stroke-width="3.5" stroke-linejoin="round">
-    <ellipse cx="100" cy="168" rx="16" ry="11" transform="rotate(-18 100 168)"/>
-    <ellipse cx="156" cy="168" rx="16" ry="11" transform="rotate(18 156 168)"/>
+    <ellipse cx="100" cy="172" rx="16" ry="11" transform="rotate(-18 100 172)"/>
+    <ellipse cx="156" cy="172" rx="16" ry="11" transform="rotate(18 156 172)"/>
   </g>
   <g fill="none" stroke="#0A1017" stroke-width="2.4" stroke-linecap="round" stroke-opacity=".45">
-    <path d="M94 164v8M100 163v9"/>
-    <path d="M162 164v8M156 163v9"/>
+    <path d="M94 168v8M100 167v9"/>
+    <path d="M162 168v8M156 167v9"/>
   </g>
 
   <!-- sparkles -->
