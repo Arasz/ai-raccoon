@@ -15,7 +15,8 @@ public sealed record SearchQuery(
     string? ContextLabel = null,
     double SourceLambda = 0.1,
     double ConsolidationThreshold = 0.1,
-    DocScoreFormula DocScoreFormula = DocScoreFormula.Max)
+    DocScoreFormula DocScoreFormula = DocScoreFormula.Max,
+    CandidateWindowMode CandidateWindow = CandidateWindowMode.Max3x100)
 {
     public const int DefaultRrfK = 60;
 
@@ -39,6 +40,9 @@ public sealed record SearchQuery(
 
     /// <summary>Wave 3 document-score formula used as the secondary sort key.</summary>
     public DocScoreFormula DocScoreFormula { get; } = DocScoreFormula;
+
+    /// <summary>Per-modality candidate depth policy before RRF fusion (plan C Wave 4).</summary>
+    public CandidateWindowMode CandidateWindow { get; } = CandidateWindow;
 
     public sealed class Validator : AbstractValidator<SearchQuery>
     {

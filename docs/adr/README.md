@@ -14,3 +14,4 @@ new number. Add an ADR for any architecture-level decision via `create-task-spec
 | [0003 — Source file as first-class citizen](0003-source-file-first-class-citizen.md) | `source_file` column + weighted FTS source index + source identity on results |
 | [0004 — Dual-vector structure signal](0004-dual-vector-structure-signal.md) | heading-path storage + structure embeddings fused at fixed α for section-targeted retrieval |
 | [0005 — Source-affinity ranking](0005-source-affinity-ranking.md) | adjacent-chunk boost (λ) + source consolidation + document-first tie-break over the fused list |
+| [0006 — RRF parameter optimization](0006-rrf-parameter-optimization.md) | 96-point sweep re-confirms k=60, 1:1, minScore 0.0, window max(3×,100) as the grid optimum; window becomes a `SearchQuery` parameter |
