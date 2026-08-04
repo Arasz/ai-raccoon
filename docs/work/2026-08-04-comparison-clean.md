@@ -284,3 +284,31 @@ Commit: 353be1b. Full suite 568 passed / 0 failed / 43 skipped.
   markers absent, source_file 100% / section 664-populated, H1-H3 target content excluded.
 - **Verdict:** no retrieval behavior change (catalog data only); measurement harness is now
   stratified and integrity-pinned for Wave 5b's final report.
+
+---
+
+## Post-Wave-4 Integration — 2026-08-04 (RRF parameter optimization — measured negative result)
+
+Commit: ab44a09. Full suite 576 passed / 0 failed / 43 skipped. Corpus unchanged (752 chunks).
+
+- **96-point grid** (k {10,30,60,120} × weights {1:1,1:2,2:1} × minScore {0.0,0.3,0.5,0.7} ×
+  window {Max3x100, Max5x50}) through the REAL pipeline (SearchAsync → FTS/dual-vector →
+  RRF → source-affinity ranker → merger), W3 params fixed (λ=0.1, thr=0.1, Max), per-point
+  gates enforced (S2 ≤3, A6 file/exact ≤2, A1/A4 file 1, A7 exact ≤2, C1/C2/C5 rank 1,
+  exact@3 ≥ 10/11). Full matrix: docs/work/2026-08-04-wave4-rrf-sweep.md; ADR-0006.
+- **Result: the pre-sweep defaults (k=60, 1:1, minScore=0.0, Max3x100) are the gate-holding
+  optimum.** 24 points score above nDCG@5 0.722; every one violates ≥1 gate (k=120 → A1
+  file 2 + A6 exact 6 + exact@3 9/11; 2:1 weights → A1 file 2; Max5x50 → A1 file 2
+  everywhere; k=30 → A1/A6). 4 gate-holding points, all at 0.722 (minScore is inert at
+  k=60 — identical rows across 0.0..0.7, measured).
+- **C2 acceptance criterion CLOSED**: hybrid rank 1 (≤3) at the chosen point — the criterion
+  added at the W2 integration is satisfied and grid-stable.
+- **No fusion regression** (gate c): hybrid exact-chunk rank ≤ best single modality for all
+  11 expected-source queries (verified per query in the sweep doc).
+- **Code**: `SearchQuery.CandidateWindow` parameterizes the measured policy (default =
+  prior behavior); SweepMatrix/SweepPoint extended with minScore + window dimensions
+  (RrfGrid, TDD); MCP tool surface unchanged.
+- **Verdict:** metrics unchanged by design (defaults optimal) — nDCG@5 0.722, MRR 0.929,
+  recall@5 0.617, exact@3 11/11, invariants 1/1/1. The sweep settles the plan's
+  "beat the defaults" expectation with a measured negative: there is no better gate-holding
+  configuration in the grid.
