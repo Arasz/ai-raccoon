@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
+using AiRaccoon.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Embeddings;
@@ -23,6 +24,10 @@ public sealed class EmbeddingService
 
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
     public const int OpenAiEmbeddingContextTokens = 8191;
+
+    private readonly InfrastructureOptions _options;
+
+    public EmbeddingService(InfrastructureOptions? options = null) => _options = options ?? new InfrastructureOptions();
 
     /// <summary>
     ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
@@ -67,10 +72,10 @@ public sealed class EmbeddingService
         };
     }
 
-    private static OnnxEmbeddingGenerator CreateLocal(EmbeddingSettings settings)
+    private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
         var modelPath = string.IsNullOrWhiteSpace(settings.Model)
-            ? BundledModel.ResolveModelPath()
+            ? BundledModel.ResolveModelPath(_options.EmbeddingModelPath)
             : Path.GetFullPath(settings.Model);
         return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath());
     }

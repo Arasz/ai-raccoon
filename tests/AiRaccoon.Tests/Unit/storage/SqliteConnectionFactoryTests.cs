@@ -1,4 +1,5 @@
 using System.Data;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -16,9 +17,9 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) =>
+    private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User, string? accessMode = null) =>
         new(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope, AccessMode = accessMode },
             new NullKeyProvider());
 
     [Fact]
@@ -75,6 +76,30 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         var dbFiles = Directory.EnumerateFiles(_dataRoot, "*.db").Select(Path.GetFileName).ToList();
         dbFiles.ShouldBe(["memory.db"]);
+    }
+
+    [Fact]
+    public async Task OpenBankAsync_SeedsGlobalAccessMode_FromOptions()
+    {
+        var factory = Factory(accessMode: "ro");
+
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var mode = await connection.QuerySingleAsync<string>(
+            "SELECT value FROM settings WHERE key = @key", new { key = AccessModePolicy.GlobalSettingKey });
+        mode.ShouldBe("ro");
+    }
+
+    [Fact]
+    public async Task OpenBankAsync_NullAccessMode_LeavesSettingsUnseeded()
+    {
+        var factory = Factory();
+
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM settings WHERE key = @key", new { key = AccessModePolicy.GlobalSettingKey });
+        count.ShouldBe(0);
     }
 
     private static string CreateTempRoot() =>

@@ -27,18 +27,18 @@ public static class BundledModel
     public const string VocabUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt";
 
-    public const string ModelEnvOverrideKey = "AIRACCOON_EMBEDDING_MODEL";
-
     /// <summary>
-    ///     The ONNX model to embed with: AIRACCOON_EMBEDDING_MODEL (custom path), else the
-    ///     bundled copy next to the running tool, else the repo source copy during tests.
+    ///     The ONNX model to embed with: the merged configured path (--embedding-model /
+    ///     AIRACCOON_EMBEDDING_MODEL, null-or-whitespace = unset), else the bundled copy next
+    ///     to the running tool, else the repo source copy during tests.
     /// </summary>
-    public static string ResolveModelPath()
+    public static string ResolveModelPath() => ResolveModelPath(null);
+
+    public static string ResolveModelPath(string? configuredPath)
     {
-        var env = Environment.GetEnvironmentVariable(ModelEnvOverrideKey);
-        if (!string.IsNullOrWhiteSpace(env))
+        if (!string.IsNullOrWhiteSpace(configuredPath))
         {
-            return Path.GetFullPath(env);
+            return Path.GetFullPath(configuredPath);
         }
 
         return ResolveBundled(ModelFileName)

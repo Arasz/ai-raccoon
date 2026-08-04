@@ -10,7 +10,12 @@
         <PackageType>McpServer</PackageType>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>ai-raccoon</PackageId>
+        <ToolCommandName>ai-raccoon</ToolCommandName>
         <PackageVersion>0.1.0-beta</PackageVersion>
+        <InformationalVersion>0.1.0-beta</InformationalVersion>
+        <!-- MCP serverInfo.version reads AssemblyVersion (numeric-only); the version flag
+             reads InformationalVersion. Both must report the real version (review R7). -->
+        <AssemblyVersion>0.1.0</AssemblyVersion>
         <PackageTags>AI; MCP; server; stdio; http; sqlite; agent; memory; vector; rag</PackageTags>
         <Description>An MCP server that will expose memory API for your agent</Description>
     </PropertyGroup>
@@ -36,6 +41,7 @@
         <PackageReference Include="FluentValidation"/>
         <PackageReference Include="ModelContextProtocol"/>
         <PackageReference Include="ModelContextProtocol.AspNetCore"/>
+        <PackageReference Include="System.CommandLine"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -48,9 +54,9 @@
     </ItemGroup>
 
     <!-- Deploy the freshly built package to the local NuGet feed (.nupkg-local/)
-         when running in a local dev environment. The gate is the dotnet_env
-         environment variable (lowercase), set only for this directory:
-         export dotnet_env=local   (or direnv: "dotnet_env=local" in .envrc)
+         when running in a local dev environment. The gate is the DOTNET_ENV
+         environment variable, set only for this directory:
+         export DOTNET_ENV=local   (or direnv: "DOTNET_ENV=local" in .envrc)
          PackAsTool with a RuntimeIdentifier emits a tool shell plus a RID
          payload package; both must be pushed or `dotnet tool install` fails. -->
     <Target Name="DeployToLocalSource" AfterTargets="Build"

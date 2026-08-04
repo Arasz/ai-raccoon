@@ -44,12 +44,13 @@ shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-mem
 ## Transports
 
 - **stdio** (default) — what MCP clients expect when launching a server as a subprocess.
-- **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http`; serves the protocol at `/mcp`
-  (launch profile `http`, `http://localhost:8080`).
+- **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http` or `--transport http`; serves the
+  protocol at `/mcp` (launch profile `http`, `http://localhost:8080`).
 
-Transport selection lives in one place: `McpServerSetup` keys off the
-`MCP_TRANSPORT` environment variable — anything other than `http` (case-insensitive)
-runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messages.
+Transport selection lives in one place: `McpServerSetup` takes the resolved transport,
+chosen by `ServerConfig` as **CLI args > environment variables > defaults** — anything
+other than `http` (case-insensitive) runs stdio. All diagnostics go to stderr; stdout
+carries only MCP protocol messages.
 
 ## Environment variables
 
@@ -67,6 +68,57 @@ runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messa
 | `AIRACCOON_OPENAI_API_KEY` | API key for OpenAI-compatible remote embeddings |
 
 Credentials are read from the environment only — never from tracked files.
+
+## Command-line options
+
+The server parses its own arguments (System.CommandLine 2.0.10). Precedence:
+**CLI args > environment variables > built-in defaults** — every option below
+mirrors an environment variable, so nothing that works via env stops working.
+
+| Option | Values | Default | Maps to |
+|---|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
+| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
+| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
+| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
+| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
+| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
+| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
+| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+
+Secrets are environment-only, never CLI options: `AIRACCOON_OPENAI_API_KEY`,
+`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE` —
+an unknown-option parse error is the defense. `--help`/`--version` and parse errors
+print to stderr (exit 0 / exit 1); stdout carries only MCP protocol frames. Generic
+host flags (`--environment`, `--contentRoot`, `--applicationName`) are accepted
+hidden and ignored.
+
+Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw):
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": { "command": "ai-raccoon" }
+  }
+}
+```
+
+Secrets go in the client's user-scoped config, never in a shared/tracked file:
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": {
+      "command": "ai-raccoon",
+      "env": {
+        "AIRACCOON_OPENAI_API_KEY": "sk-...",
+        "AIRACCOON_DB_PASSPHRASE": "change-me"
+      }
+    }
+  }
+}
+```
 
 ## Embeddings
 
@@ -220,8 +272,9 @@ The server packs as a .NET tool (`PackAsTool`, package id `ai-raccoon`, type `Mc
 dotnet pack -c Release
 ```
 
-To deploy to the local NuGet feed (`.nupkg-local/`), set `dotnet_env=local` for the
-directory — the `DeployToLocalSource` build target pushes the freshly built package. The
+To deploy to the local NuGet feed (`.nupkg-local/`), set `DOTNET_ENV=local` for the
+directory (MSBuild env lookup is case-sensitive on macOS — `dotnet_env` will not
+match) — the `DeployToLocalSource` build target pushes the freshly built package. The
 package embeds `.mcp/server.json`, so MCP clients can discover inputs.
 
 ## Contributing

@@ -4,15 +4,12 @@ using AiRaccoon.Tools;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     Decides which MCP transport the server should use from the MCP_TRANSPORT
-///     environment variable. Anything other than "http" (case-insensitive) runs stdio.
+///     Wires the MCP server for a resolved transport: stdio by default, http/https from
+///     MCP_TRANSPORT or --transport (https is declared but unsupported — warning only).
 /// </summary>
 internal static partial class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
-
-    private static readonly Lazy<IReadOnlyCollection<McpTransport>> ConfiguredTransport = new(() =>
-        SelectTransports(Environment.GetEnvironmentVariable("MCP_TRANSPORT")));
 
     /// <summary>
     ///     Resolves the MCP_TRANSPORT env value to the transports to enable; anything other than "http"
@@ -25,15 +22,14 @@ internal static partial class McpServerSetup
 
     extension(WebApplication webApplication)
     {
-        public WebApplication ConfigureMcpEndpoints()
+        public WebApplication ConfigureMcpEndpoints(McpTransport transport)
         {
-            var transport = ConfiguredTransport.Value;
-            if (transport.Contains(McpTransport.Https))
+            if (transport == McpTransport.Https)
             {
                 Log.HttpsTransportNotSupported(webApplication.Logger);
             }
 
-            if (transport.Contains(McpTransport.Http))
+            if (transport == McpTransport.Http)
             {
                 webApplication.MapMcp("/mcp");
             }
@@ -44,14 +40,12 @@ internal static partial class McpServerSetup
 
     extension(WebApplicationBuilder webApplicationBuilder)
     {
-        public WebApplicationBuilder ConfigureMcpServer()
+        public WebApplicationBuilder ConfigureMcpServer(McpTransport transport)
         {
-            var transport = ConfiguredTransport.Value;
-
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
-                .ConfigureMcpTransport(transport, webApplicationBuilder.Logging)
+                .ConfigureMcpTransport([transport], webApplicationBuilder.Logging)
                 .WithTools<MemoryTools>()
                 .WithPrompts<MemoryPrompts>();
 

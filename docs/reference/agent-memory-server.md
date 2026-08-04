@@ -148,6 +148,34 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 
 Credentials are read from the environment only.
 
+## Command-line options
+
+The server parses its own arguments (System.CommandLine 2.0.10) before the host
+builds. Precedence: **CLI args > environment variables > built-in defaults** —
+every option mirrors an environment variable, so env-only setups keep working
+unchanged.
+
+| Option | Values | Default | Maps to |
+|---|---|---|---|
+| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` | `MCP_TRANSPORT` |
+| `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
+| `--install-scope` | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` |
+| `--access-mode` | `ro`, `rw`, `full` | unset (`rw` effective) | `AIRACCOON_ACCESS_MODE` |
+| `--embedding-model <path>` | any (`~` expanded) | bundled model | `AIRACCOON_EMBEDDING_MODEL` |
+| `--sync-endpoint <url>` | any | unset (sync off) | `AIRACCOON_SYNC_ENDPOINT` |
+| `--sync-bucket <name>` | any | unset | `AIRACCOON_SYNC_BUCKET` |
+| `--sync-region <name>` | any | unset | `AIRACCOON_SYNC_REGION` |
+| `--sync-object-key <key>` | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+
+Secrets are environment-only, never CLI options (`AIRACCOON_OPENAI_API_KEY`,
+`AIRACCOON_SYNC_ACCESS_KEY`, `AIRACCOON_SYNC_SECRET_KEY`, `AIRACCOON_DB_PASSPHRASE`);
+the parser's unknown-option error is the defense. `--help`/`--version` and parse
+errors print to **stderr** (exit 0 / exit 1); stdout carries only MCP protocol
+frames. Generic host flags (`--environment`, `--contentRoot`, `--applicationName`)
+are accepted hidden and ignored. A zero-config `.mcp.json` entry is just
+`{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`; registry installs
+(`.mcp/server.json`) pass no args (`packageArguments: []`).
+
 ## Local embedding model
 
 Local embeddings run in-process on ONNX Runtime over the small int8
