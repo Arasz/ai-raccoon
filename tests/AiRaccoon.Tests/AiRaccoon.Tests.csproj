@@ -37,13 +37,31 @@
         <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/CorpusModels.cs" Link="Corpus/CorpusModels.cs"/>
         <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs" Link="Corpus/RealWorldCorpus.cs"/>
         <Compile Include="../../benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldQueries.cs" Link="Corpus/RealWorldQueries.cs"/>
+        <Compile Include="..\..\docs\work\features-agent-memory\agent-memory.feature.cs">
+          <Link>bdd\features-agent-memory\agent-memory.feature.cs</Link>
+        </Compile>
+        <Compile Include="..\..\docs\work\features-native-memory\native-memory.feature.cs">
+          <Link>bdd\features-native-memory\native-memory.feature.cs</Link>
+        </Compile>
         <Content Include="unit/retrieval/assets/manifest.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <!-- Reqnroll generated-test suite: feature files from docs/work/. -->
     <ItemGroup>
-        <ReqnrollFeatureFiles Include="../../docs/work/features-native-memory/native-memory.feature" />
-        <ReqnrollFeatureFiles Include="../../docs/work/features-agent-memory/agent-memory.feature" />
+        <ReqnrollFeatureFiles Include="..\..\docs\work\features-agent-memory\agent-memory.feature">
+          <Link>bdd\features-agent-memory\agent-memory.feature</Link>
+        </ReqnrollFeatureFiles>
+        <ReqnrollFeatureFiles Include="..\..\docs\work\features-native-memory\native-memory.feature">
+          <Link>bdd\features-native-memory\native-memory.feature</Link>
+        </ReqnrollFeatureFiles>
+    </ItemGroup>
+    <ItemGroup>
+      <ReqnrollFeatureFile Include="..\..\docs\work\features-agent-memory\agent-memory.feature">
+        <Link>bdd\features-agent-memory\agent-memory.feature</Link>
+      </ReqnrollFeatureFile>
+      <ReqnrollFeatureFile Include="..\..\docs\work\features-native-memory\native-memory.feature">
+        <Link>bdd\features-native-memory\native-memory.feature</Link>
+      </ReqnrollFeatureFile>
     </ItemGroup>
 
 </Project>

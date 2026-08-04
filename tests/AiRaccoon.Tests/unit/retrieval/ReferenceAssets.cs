@@ -173,7 +173,8 @@ public sealed class ReferenceAssets
             return Path.GetFullPath(env);
         }
 
-        var relative = Path.Combine("tests", "AiRaccoon.Tests", "Retrieval", "assets");
+        // Try source-tree path first (walking up from output)
+        var relative = Path.Combine("tests", "AiRaccoon.Tests", "unit", "retrieval", "assets");
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, relative);
@@ -183,8 +184,15 @@ public sealed class ReferenceAssets
             }
         }
 
+        // Fallback: CopyToOutputDirectory places assets at <output>/unit/retrieval/assets/
+        var outputRelative = Path.Combine(AppContext.BaseDirectory, "unit", "retrieval", "assets");
+        if (File.Exists(Path.Combine(outputRelative, ManifestFileName)))
+        {
+            return outputRelative;
+        }
+
         throw new InvalidOperationException(
-            "Could not locate tests/AiRaccoon.Tests/Retrieval/assets from the test output directory; " +
+            "Could not locate unit/retrieval/assets/ from the test output directory; " +
             "set AIRACCOON_HARNESS_ASSETS to point at it.");
     }
 
