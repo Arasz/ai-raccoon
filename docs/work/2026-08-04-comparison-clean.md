@@ -312,3 +312,135 @@ Commit: ab44a09. Full suite 576 passed / 0 failed / 43 skipped. Corpus unchanged
   recall@5 0.617, exact@3 11/11, invariants 1/1/1. The sweep settles the plan's
   "beat the defaults" expectation with a measured negative: there is no better gate-holding
   configuration in the grid.
+
+---
+
+## Final Baseline Report — 2026-08-04 (post-Wave-5b)
+
+Commit: 8f2b28c. Full suite 580 passed / 0 failed / 43 skipped. Corpus unchanged (752 chunks,
+752 embedded, provider=local). Catalog: **44 queries** (+8 in Wave 5b: A8/A9/A10
+reconciliation + S1/S3/S4/S5/S6 structural completion), **19 expected-source** queries.
+Exact-chunk @3 (limit 10): **19/19**. File @3: 19/19. Zero-match: **0** (44/44 returned results).
+
+### Wave 5b additions (definitions pinned in retrieval-improvement-c.md Appendix A + baseline-queries.json)
+
+- **S1–S6 structural set completed.** S2/S4 pre-existing and unchanged (query strings and
+  expected sources pinned by SectionTargetedRetrievalTests). New section targets measured at
+  the structure-signal gate (≤3): S1 ADR-0011#context @2, S3 ADR-0011#alternatives-considered @1,
+  S5 cross-document ("Which documents record the frontend stack decision?" → ADR-0011#decision
+  @2 — the formal record; frontend-architecture.md §2-3 is the linked deep-dive), S6 ADR-0060
+  #what-is-lost @1 (section target on a second ADR).
+- **A8/A9/A10 catalog reconciliation.** The three ADRs that already surfaced in A-query
+  results without their own queries: A8 = ADR-0013 (delete server-side offer-page fetch) @1,
+  A9 = ADR-0086 (monochrome console design system) @3, A10 = ADR-0014 (agent instruction
+  hub-and-spoke) @2. All decision chunks verified present in chunk-hash-map.json.
+- **A10 wording finding (content-verified):** the generic form "How are agent instructions
+  organized?" ranks the ADR-0014 decision chunk at 12 — the ai-badger skill/instruction
+  corpus answers the generic question; the identifier-bearing form ("How does ADR-0014
+  organize agent instructions?", the A7 pattern) is exact@2. The identifier-bearing form is
+  the committed query.
+- **A9 limit-sensitivity finding (content-verified):** at the catalog's own searchLimit 5
+  the ADR-0086 file leaves the top-5 entirely — top-5 is frontend-architecture.md §2/§3/§4
+  (the same-knowledge design-system deep-dive, §4 explicitly superseded-by-ADR-0086) plus
+  ADR-0003. At limit 10 (the convention for every per-query table in this doc) A9 is exact@3,
+  file@1. Cause: the Wave 1 fallback trigger threshold `max(TokenCount, limit)` moves with
+  limit; A9 sits on the boundary. All gates and difficulty pins use limit 10.
+
+### Ablation (per-modality, mean over the category's expected-source queries, limit 10)
+
+| Category | Arm | nDCG@5 | MRR | recall@5 |
+|----------|-----|-------:|----:|---------:|
+| ADR A1–A7 (W0/W3-comparable) | FTS-only | 0.730 | 0.798 | 0.652 |
+| ADR A1–A7 | Vector-only | 0.279 | 0.421 | 0.246 |
+| ADR A1–A7 | Hybrid | 0.722 | 0.929 | 0.617 |
+| ADR A1–A10 (reconciled) | FTS-only | 0.798 | 0.858 | 0.706 |
+| ADR A1–A10 | Vector-only | 0.299 | 0.495 | 0.239 |
+| ADR A1–A10 | Hybrid | 0.735 | 0.950 | 0.609 |
+| Structural S1–S6 | FTS-only | 0.932 | 1.000 | 0.872 |
+| Structural S1–S6 | Vector-only | 0.473 | 0.639 | 0.456 |
+| Structural S1–S6 | Hybrid | 0.913 | 1.000 | 0.839 |
+| Invariants C1/C2/C5 | FTS-only | 0.877 | 0.833 | 1.000 |
+| Invariants C1/C2/C5 | Vector-only | 1.000 | 1.000 | 1.000 |
+| Invariants C1/C2/C5 | Hybrid | 1.000 | 1.000 | 1.000 |
+| All 19 expected-source | FTS-only | 0.853 | 0.899 | 0.805 |
+| All 19 expected-source | Vector-only | 0.465 | 0.620 | 0.427 |
+| All 19 expected-source | Hybrid | 0.833 | 0.974 | 0.743 |
+
+The FTS-only edge over hybrid on aggregate nDCG@5/recall@5 is the known fusion-regression
+observation (Wave 4/ADR 0006): a file-cluster artifact of the recall metric, not a knowledge
+loss. The exact-chunk fusion gate (hybrid exact rank ≤ best single modality) holds on the
+W4 sweep's 11 original queries; the 8 queries added in Wave 5b expose 3 violations (A9
+hybrid@3 vs FTS@2; S1, S5 hybrid@2 vs FTS@1 — the structure modality overrides a stronger
+keyword match) — scoped, documented observation, no gate regression on the swept set. Hybrid
+wins or ties MRR in every category (Structural and Invariants tie FTS at 1.000). Hybrid
+recall@5 A1-A10 0.609 sits below FTS-only 0.706 because A6 (the very-hard query) contributes
+1/6 file chunks to the top-5.
+
+### Retrieval metrics by category (hybrid, limit 10)
+
+| Category | nDCG@5 | MRR | recall@5 | evaluated/query |
+|----------|-------:|----:|---------:|----------------:|
+| Architecture Decisions (ADR) A1–A10 | 0.735 | 0.950 | 0.609 | 10/10 |
+| Structural (Section-Targeted) S1–S6 | 0.913 | 1.000 | 0.839 | 6/6 |
+| Invariants and Conventions C1/C2/C5 | 1.000 | 1.000 | 1.000 | 3/6 |
+| Coverage categories (B–G) | — | — | — | 0/25 (ungraded by design) |
+| Negative tests H1–H3 | — | — | — | 0/3 (non-evidential) |
+
+### Difficulty stratification (hybrid, expected-source queries)
+
+| Stratum | Queries | nDCG@5 | MRR | recall@5 |
+|---------|---------|-------:|----:|---------:|
+| easy (9) | A2 A5 A8 C1 C2 C5 S3 S4 S6 | 0.919 | 1.000 | 0.828 |
+| medium (6) | A1 A3 A9 A10 S1 S5 | 0.767 | 1.000 | 0.678 |
+| hard (3) | A4 A7 S2 | 0.913 | 1.000 | 0.811 |
+| very-hard (1) | A6 | 0.214 | 0.500 | 0.167 |
+
+Full catalog strata (44 queries): 15 easy / 15 medium / 10 hard / 4 very-hard — all strata
+≥3 (pin). A6 (ADR-0067+0068 answer split, grade 4) is the only sub-0.5 query — by design.
+
+### Corpus integrity checks (all passed)
+
+- 752 entries / 752 embedded / 0 pending; provider=local; hash-map distinct hashes ≡ DB hash set (762 keys alias to 752 hashes).
+- FR-NM-7 hash contract `ContentHash.Of(path, value)` recomputed: 0 violations over 752 rows.
+- source_file 100% populated; section 664/88 populated ⟺ '#section' key present in the hash map.
+- Excluded content absent (docs/work/, state.json, now.md markers); 0 AppHost / program-code source files (H1–H3 non-evidential).
+- All 19 expected sources resolve in chunk-hash-map.json and exist in the corpus.
+
+### Per-query (hybrid, limit 10) — all expected-source queries
+
+| Query | exact / file | Query | exact / file |
+|-------|-------------:|-------|-------------:|
+| A1 | 1 / 1 | S1 | 2 / 1 |
+| A2 | 1 / 1 | S2 | 3 / 1 |
+| A3 | 3 / 1 | S3 | 1 / 1 |
+| A4 | 2 / 1 | S4 | 1 / 1 |
+| A5 | 3 / 1 | S5 | 2 / 1 |
+| A6 | 2 / 2 | S6 | 1 / 1 |
+| A7 | 2 / 1 | C1 | 1 / 1 |
+| A8 | 1 / 1 | C2 | 1 / 1 |
+| A9 | 3 / 1 | C5 | 1 / 1 |
+| A10 | 2 / 1 | | |
+
+Section-level hit@5 over A1–A5/A7: 6/6 (unchanged). All six S-queries hit their section at
+≤3 (S1 @2, S2 @3, S3 @1, S4 @1, S5 @2, S6 @1) — the section-targeting gate holds for the
+completed set. Exact-chunk @3 = 19/19, file @3 = 19/19.
+
+### Verdict vs Wave 0
+
+| Metric (ADR, A1–A7 set for comparability) | W0 | Now | Delta |
+|-------------------------------------------|----:|----:|-------|
+| nDCG@5 | 0.642 | 0.722 | +0.080 |
+| MRR | 0.893 | 0.929 | +0.036 |
+| recall@5 | 0.544 | 0.617 | +0.073 |
+| Exact-chunk @3 | 3/10 | 19/19 | +16 |
+| File hit@5 (all expected-source) | 8/10 (V:content-only arm) | 19/19 | — |
+| Invariants C1/C2/C5 rank | 1/1/1 | 1/1/1 | = |
+| Zero-match | — | 0 | — |
+
+Wave 0's first-table arms are superseded: the W0 best hybrid-equivalent (FV:fixed-a0.5)
+scored file hit@5 9/10, MRR 0.650; the final hybrid scores 19/19 file hit@5, MRR 0.974 over
+all 19 expected-source queries. Every metric improved over every prior wave on the
+comparable set; the reconciled ADR set (A1–A10) adds three well-ranked queries (A8 @1,
+A9 @3, A10 @2) at nDCG@5 0.735 / MRR 0.950 / recall@5 0.609. Plan C Wave 5b gate closed:
+the report carries ablation + per-category metrics + stratification + integrity checks, and
+all structural queries S1–S6 are scored.

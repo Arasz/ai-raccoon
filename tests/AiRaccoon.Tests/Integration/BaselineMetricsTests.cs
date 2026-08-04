@@ -111,8 +111,8 @@ public sealed class BaselineMetricsTests : IDisposable
 
         var evaluated = metrics.Where(m => relevance.FileLevel(
             queries.First(q => q.Id == m.Id).ExpectedSource).Count > 0).ToList();
-        evaluated.Count.ShouldBeGreaterThanOrEqualTo(10,
-            "all 10 expected-source queries should be gradeable via chunk-hash-map.json");
+        evaluated.Count.ShouldBe(19,
+            "all 19 expected-source queries (A1-A10, S1-S6, C1/C2/C5) should be gradeable via chunk-hash-map.json");
 
         foreach (var metric in metrics)
         {
@@ -145,6 +145,15 @@ public sealed class BaselineMetricsTests : IDisposable
         }
 
         var categories = BuildCategoryAggregates(queries, metrics, relevance);
+
+        // Wave 5b gate (c): metrics must cover every category, including the Structural
+        // aggregate over the completed S1-S6 set and the reconciled A8-A10 ADR queries.
+        var structural = categories.Single(c => c.Category == "Structural (Section-Targeted)");
+        structural.QueryCount.ShouldBe(6, "S1-S6 must all be in the Structural category");
+        structural.EvaluatedQueryCount.ShouldBe(6, "all six Structural queries must be gradeable");
+        var adr = categories.Single(c => c.Category == "Architecture Decisions (ADR)");
+        adr.QueryCount.ShouldBe(10, "A1-A10 must all be in the ADR category");
+        adr.EvaluatedQueryCount.ShouldBe(10, "all ten ADR queries must be gradeable");
         var report = new BaselineMetricsReport(
             FixedNow.ToString("O"),
             stats.EntryCount,

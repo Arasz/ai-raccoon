@@ -93,6 +93,71 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
+    ///     Wave 5b gate: S1 (ADR-0011 Context section target) finds the Context chunk at rank ≤ 3.
+    ///     Measured rank 2 with the committed corpus (structure signal + document-first ranking).
+    /// </summary>
+    [Fact]
+    public async Task S1_ContextOfAdr0011_ContextChunkAtRankAtMost3()
+    {
+        var rank = await SectionRankAsync("What context led to the ADR-0011 frontend stack decisions?",
+            "docs:adr:0011-frontend-chassis-stack.md#context", TestContext.Current.CancellationToken);
+
+        _output.WriteLine($"S1 section rank: {rank?.ToString() ?? "not found"}");
+        rank.ShouldNotBeNull("S1: the ADR-0011 Context chunk must appear in the results.");
+        rank.Value.ShouldBeLessThanOrEqualTo(3,
+            "S1: the ADR-0011 Context chunk must rank <= 3 (section-targeted structure signal).");
+    }
+
+    /// <summary>
+    ///     Wave 5b gate: S3 (ADR-0011 Alternatives-considered section target) finds the
+    ///     Alternatives-considered chunk at rank ≤ 3. Measured rank 1 with the committed corpus.
+    /// </summary>
+    [Fact]
+    public async Task S3_AlternativesOfAdr0011_AlternativesChunkAtRankAtMost3()
+    {
+        var rank = await SectionRankAsync("What alternatives were considered for ADR-0011?",
+            "docs:adr:0011-frontend-chassis-stack.md#alternatives-considered", TestContext.Current.CancellationToken);
+
+        _output.WriteLine($"S3 section rank: {rank?.ToString() ?? "not found"}");
+        rank.ShouldNotBeNull("S3: the ADR-0011 Alternatives-considered chunk must appear in the results.");
+        rank.Value.ShouldBeLessThanOrEqualTo(3,
+            "S3: the ADR-0011 Alternatives-considered chunk must rank <= 3.");
+    }
+
+    /// <summary>
+    ///     Wave 5b gate: S5 (cross-document structural query) — the frontend stack decision is
+    ///     recorded in ADR-0011 (formal record) and docs/frontend-architecture.md §2-3 (deep-dive);
+    ///     the formal record's Decision chunk must rank ≤ 3. Measured rank 2 with the committed corpus.
+    /// </summary>
+    [Fact]
+    public async Task S5_FrontendStackDecisionDocument_FindsFormalRecordAtRankAtMost3()
+    {
+        var rank = await SectionRankAsync("Which documents record the frontend stack decision?",
+            "docs:adr:0011-frontend-chassis-stack.md#decision", TestContext.Current.CancellationToken);
+
+        _output.WriteLine($"S5 section rank: {rank?.ToString() ?? "not found"}");
+        rank.ShouldNotBeNull("S5: the ADR-0011 Decision chunk must appear in the results.");
+        rank.Value.ShouldBeLessThanOrEqualTo(3,
+            "S5: the formal decision record's chunk must rank <= 3 (cross-document structural query).");
+    }
+
+    /// <summary>
+    ///     Wave 5b gate: S6 (section target on a second ADR) — ADR-0060's What-is-lost section
+    ///     chunk must rank ≤ 3. Measured rank 1 with the committed corpus.
+    /// </summary>
+    [Fact]
+    public async Task S6_WhatIsLostByMcpDeletion_WhatIsLostChunkAtRankAtMost3()
+    {
+        var rank = await SectionRankAsync("What is lost by deleting the MCP server?",
+            "docs:adr:0060-delete-the-mcp-server.md#what-is-lost", TestContext.Current.CancellationToken);
+
+        _output.WriteLine($"S6 section rank: {rank?.ToString() ?? "not found"}");
+        rank.ShouldNotBeNull("S6: the ADR-0060 What-is-lost chunk must appear in the results.");
+        rank.Value.ShouldBeLessThanOrEqualTo(3,
+            "S6: the ADR-0060 What-is-lost chunk must rank <= 3 (section target on a second ADR).");
+    }
+
+    /// <summary>
     ///     Wave 6 gate (b) + Wave 3 amendment: "What does ADR-0011 decide?" is answered at the file
     ///     level within the top 3, and the Decision-section chunk ranks ≤ 3 — the source-affinity
     ///     ranking (plan C Wave 3) resolves the within-file sibling competition that left it at 5.

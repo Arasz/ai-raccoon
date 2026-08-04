@@ -307,6 +307,19 @@ difficulty strata defined and assigned.
 **Gate 5b**: Baseline report includes ablation breakdown, retrieval metrics, difficulty
 stratification, corpus integrity checks. Structural queries S1-S6 scored.
 
+> **Status: DONE ✓ (2026-08-04, branch task/w5b-final-report).** Delivered:
+> the S1-S6 structural set completed and pinned (definitions below in Appendix A),
+> A8/A9/A10 catalog reconciliation (the three ADRs surfacing in A-query results
+> without their own queries — ADR-0013, ADR-0086, ADR-0014), all 44 catalog queries
+> scored (nDCG@5/MRR/recall@5 per category including a Structural aggregate), and the
+> comprehensive final baseline report appended to
+> docs/work/2026-08-04-comparison-clean.md. Measured (post-W3+W4+W6, committed corpus):
+> exact-chunk @3 = 19/19 expected-source queries; ADR (A1-A10) nDCG@5 0.735, MRR 0.950,
+> recall@5 0.609; Structural (S1-S6) nDCG@5 0.913, MRR 1.000, recall@5 0.839;
+> invariants 1/1/1; zero-match 0. The W3/W4 sweep tests are pinned to their original
+> 11-query gate sets (W3GateQueryIds/W4GateQueryIds) so catalog additions cannot
+> silently shift the sweep's measured numbers (ADR 0005/0006 semantics preserved).
+
 ---
 
 ### Wave 6 — Section-Targeted Retrieval: Dual-Vector Structure Signal
@@ -449,3 +462,37 @@ storage + second vector + fusion) and does NOT depend on the source_file schema 
 > S1–S6 structural). Note: C1/C2/C5 are reachable since Wave 0 (ai-badger:invariants included
 > in corpus). A8/A9/A10 have expected sources in chunk-hash-map.json but no matching queries
 > in baseline-queries.json — a catalog reconciliation gap (Wave 5 addresses it).
+
+### Wave 5b completed definitions (2026-08-04, branch task/w5b-final-report)
+
+The original Appendix A list is not recoverable from the repo; the set below is the pinned,
+reproducible definition committed in scripts/baseline-queries.json + the retrieval test
+suite. Measured hybrid ranks are at limit 10 (the established per-query-table convention —
+comparison-clean.md; see the A9 limit-sensitivity note in the final report).
+
+**Structural S1–S6** (category `Structural (Section-Targeted)`; all expected sources resolve
+in chunk-hash-map.json; gates in SectionTargetedRetrievalTests assert the expected section at
+rank ≤ 3 — the structure-signal mechanism):
+
+| Id | Query | Expected source (section target) | Measured exact/file | Difficulty |
+|----|-------|----------------------------------|--------------------:|-----------|
+| S1 | What context led to the ADR-0011 frontend stack decisions? | docs:adr:0011-frontend-chassis-stack.md#context | 2 / 1 | medium |
+| S2 | What does ADR-0011 decide? (pre-existing, pinned — unchanged) | docs:adr:0011-frontend-chassis-stack.md#decision | 3 / 1 | hard (5a pin) |
+| S3 | What alternatives were considered for ADR-0011? | docs:adr:0011-frontend-chassis-stack.md#alternatives-considered | 1 / 1 | easy |
+| S4 | Consequences of ADR-0011? (pre-existing test, pinned — unchanged) | docs:adr:0011-frontend-chassis-stack.md#consequences | 1 / 1 | easy |
+| S5 | Which documents record the frontend stack decision? (cross-document: ADR-0011 formal record + frontend-architecture.md §2-3 deep-dive) | docs:adr:0011-frontend-chassis-stack.md#decision | 2 / 1 | medium |
+| S6 | What is lost by deleting the MCP server? (section target on a second ADR) | docs:adr:0060-delete-the-mcp-server.md#what-is-lost | 1 / 1 | easy |
+
+**A8–A10 reconciliation** (category `Architecture Decisions (ADR)`; the three ADRs that
+already surfaced in A-query results without their own catalog queries — ADR-0013, ADR-0086,
+ADR-0014; expected source = the decision chunk, verified present in chunk-hash-map.json):
+
+| Id | Query | Expected source | Measured exact/file | Difficulty |
+|----|-------|-----------------|--------------------:|-----------|
+| A8 | Why was the server-side offer page fetch deleted? | docs:adr:0013-delete-server-side-offer-page-fetch.md#decision | 1 / 1 | easy |
+| A9 | What design system does the frontend use? | docs:adr:0086-monochrome-console-design-system-for-the-frontend.md#decision | 3 / 1 | medium |
+| A10 | How does ADR-0014 organize agent instructions? (identifier-bearing — the generic form "How are agent instructions organized?" ranks 12: the ai-badger skill/instruction corpus answers it, not the ADR) | docs:adr:0014-agent-instruction-hub-and-spoke.md#decision | 2 / 1 | medium |
+
+Relevance grades: 5 for every new query except A6/A7 (4) and S5 (4 — the answer spans two
+documents by design). The W3/W4 sweep tests are pinned to their original 11-query gate sets
+so the catalog growth cannot shift their measured numbers.
