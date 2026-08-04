@@ -1,28 +1,38 @@
 # AiRaccoon — Agent Memory MCP Server
 
 An MCP server that gives AI agents persistent, project-scoped memory backed by
-[sqlite-memory](https://github.com/sqliteai/sqlite-memory). Local-first by default:
-one SQLite memory bank per install scope, local GGUF embeddings, hybrid semantic search, workspace sandboxes, a curated
-shared tier, memory degradation, and opt-in cloud sync through SQLite Cloud.
+a native .NET SQLite store. Local-first by default:
+one `memory.db` per install scope, a bundled in-process ONNX embedding model,
+hybrid FTS5+vec0 semantic search with reciprocal rank fusion, workspace sandboxes,
+a curated shared tier, memory degradation, three-tier access control, and opt-in
+S3-compatible cloud sync.
 
 Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
 
 ## What an agent gets
 
-- **One memory bank per install scope.** A user-scope install (global tool) keeps a single bank under `~/.ai-raccoon`
-  shared by every project; a project-scope install keeps its own bank under `<project>/.ai-raccoon`. Projects partition
-  the bank via context (`project:<id>`).
-- **Workspace sandboxes.** `memory_workspace_begin` mints a `workspace_id` whose context is isolated by design — notes
-  written with it stay in the outbox, never in committed project memory, until consolidated.
+- **One memory bank per install scope.** A user-scope install (global tool) keeps a single
+  bank under `~/.ai-raccoon` shared by every project; a project-scope install keeps its own
+  bank under `<project>/.ai-raccoon`. Projects partition the bank via context (`project:<id>`).
+- **Workspace sandboxes.** `memory_workspace_begin` mints a `workspace_id` whose context is
+  isolated by design — entries written with it have an FK to the workspace and an XOR CHECK
+  that keeps them out of committed project memory until consolidated.
 - **Shared promotion tier.** Plain writes land in the project. `memory_share`
-  promotes a hash into the flat `shared` context — cross-project, curated, and exempt from degradation sweeps.
-- **Hybrid search.** `memory_search` combines vector similarity and FTS5, scoped by
-  `scope=all|project|shared` and optional workspace.
-- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps remove old, low-rated project
-  entries (`shared` is protected).
-- **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts (`shared` + `project:<id>`) into a
-  configured SQLite Cloud database, which is the correlation point between a user-scope install and any project-scope
-  install.
+  promotes a hash into the flat `shared` context — cross-project, curated, and exempt
+  from degradation sweeps.
+- **Hybrid search.** `memory_search` combines FTS5 keyword and vec0 vector retrieval,
+  fused with Reciprocal Rank Fusion (default k=60, 1:1 weights). Tunable via `rrfK`,
+  `ftsWeight`, and `vectorWeight`. Scoped by `scope=all|project|shared` and optional
+  workspace. Degrades to FTS5-only when no embedding engine is configured.
+- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps
+  remove old, low-rated project entries (`shared` is protected).
+- **Access modes.** Three tiers enforced at the tool boundary: `ro` (read-only),
+  `rw` (default: read + write), `full` (adds deletion, sweep execution, and
+  workspace consolidation). Set globally with `AIRACCOON_ACCESS_MODE` or per-project
+  in the settings table.
+- **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
+  (`shared` + `project:<id>`) as a single snapshot to S3-compatible object storage
+  (R2, S3, MinIO) using VACUUM INTO + If-Match CAS + row merge.
 
 ## Tools (17) and prompts (2)
 
@@ -33,17 +43,24 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
 `memory_sweep`, `memory_sync` — plus the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
+All 17 tool names are unchanged. `memory_configure` gained a `baseUrl` parameter for
+any OpenAI-compatible endpoint.
+
 ## Environment variables
 
-| Variable                         | Purpose                                   |
-|----------------------------------|-------------------------------------------|
-| `AIRACCOON_DATA_ROOT`            | Bank data root (default `~/.ai-raccoon`)  |
-| `AIRACCOON_INSTALL_SCOPE`        | `user` (default) or `project`             |
-| `AIRACCOON_ACCESS_MODE`          | Default global access mode (`ro`\|`rw`\|`full`) |
-| `AIRACCOON_OPENAI_API_KEY`       | API key for `provider=openai` embeddings  |
-| `AIRACCOON_EMBEDDING_MODEL`      | Custom ONNX model path for `provider=local` |
-| `AIRACCOON_SQLITECLOUD_DB_ID`    | SQLite Cloud managed database id (sync)   |
-| `AIRACCOON_SQLITECLOUD_API_KEY`  | SQLite Cloud API key (sync)               |
+| Variable                         | Purpose                                           |
+|----------------------------------|---------------------------------------------------|
+| `AIRACCOON_DATA_ROOT`            | Bank data root (default `~/.ai-raccoon`)          |
+| `AIRACCOON_INSTALL_SCOPE`        | `user` (default) or `project`                     |
+| `AIRACCOON_ACCESS_MODE`          | Global access mode seed: `ro`, `rw` (default), or `full` |
+| `AIRACCOON_OPENAI_API_KEY`       | API key for `provider=openai` embeddings          |
+| `AIRACCOON_EMBEDDING_MODEL`      | Custom ONNX model path overriding the bundled all-MiniLM-L6-v2 |
+| `AIRACCOON_SYNC_ENDPOINT`        | S3-compatible endpoint URL (sync)                 |
+| `AIRACCOON_SYNC_BUCKET`          | S3 bucket name (sync)                             |
+| `AIRACCOON_SYNC_ACCESS_KEY`      | S3 access key (sync)                              |
+| `AIRACCOON_SYNC_SECRET_KEY`      | S3 secret key (sync)                              |
+| `AIRACCOON_SYNC_REGION`          | S3 region (optional)                              |
+| `AIRACCOON_SYNC_OBJECT_KEY`      | Custom S3 object key (default `memory-<projectId>.db`) |
 
 Credentials are read from the environment only — never from tracked files.
 
@@ -55,28 +72,43 @@ Credentials are read from the environment only — never from tracked files.
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
-## Native extensions
+## Architecture
 
-sqlite-memory, sqlite-vector and sqlite-sync ship as native SQLite extensions, provisioned per platform on first run
-into `<data-root>/extensions/<rid>/`:
-sqlite-memory 1.3.5, sqlite-vector 1.0.0, sqlite-sync 1.1.2 (pinned, SHA-256 verified).
+The server is a native .NET store with no sqlite-memory, sqlite-vector, or
+sqlite-sync extensions — no download-on-first-run provisioning, no `raccoon_meta.db`.
+Everything lives in one `memory.db`: entries, workspaces, settings, FTS5, vec0,
+sync_meta, and sync_tombstones.
+
+- **vec0** ships via the `HiraokaHyperTools.sqlite-vec` NuGet package — always
+  available, loaded with `connection.LoadVector()` on bank open.
+- **Layering**: `AiRaccoon.Core` (domain, pure), `AiRaccoon.Infrastructure`
+  (SQLite, embedding, sync), `AiRaccoon` (MCP tools, thin adapters).
 
 ## Embeddings
 
-The default embedding engine is the small int8 all-MiniLM-L6-v2 ONNX model bundled inside the tool package
-(`Models/`, SHA-256 pinned) — `memory_configure(provider="local")` embeds in-process with no sidecar or download.
-`memory_configure(provider="openai")` routes through any OpenAI-compatible `baseUrl` (default
-`https://api.openai.com/v1`) with a model id; it needs an API key (`api_key` arg or `AIRACCOON_OPENAI_API_KEY`).
-Without a configured engine, writes are stored deferred (`embed_state=pending`) and indexed later via
-`memory_embed_pending`. Changing the engine re-embeds the bank.
+The default embedding engine is the bundled int8 all-MiniLM-L6-v2 ONNX model
+(~23 MB, Apache-2.0, 384 dimensions, SHA-256 pinned) that ships inside the tool
+package under `Models/` — `memory_configure(provider="local")` embeds in-process
+with ONNX Runtime, no sidecar or download.
+
+`memory_configure(provider="openai")` routes through any OpenAI-compatible `baseUrl`
+(default `https://api.openai.com/v1`) with a model id; it needs an API key (`apiKey`
+arg or `AIRACCOON_OPENAI_API_KEY`). API keys are never persisted.
+
+Without a configured engine, writes are stored deferred (`embed_state=pending`) and
+indexed later via `memory_embed_pending`. Changing the engine re-embeds the bank.
+
+The `model` parameter is optional for local (defaults to the bundled model) and
+required for openai. The `AIRACCOON_EMBEDDING_MODEL` env var overrides the bundled
+model path with a custom ONNX model.
+
+## Packaging note
+
+One dotnet tool package bundles the ONNX model. A no-embed flavor
+(`ai-raccoon.NoEmbed`) is deferred to when a size-sensitive deployment needs it (D5).
 
 ## Develop
 
 - `dotnet build` / `dotnet test` from the repo root.
-- The MCP server is packaged as the `ai-raccoon` dotnet tool (multi-RID: win-x64/arm64, osx-arm64,
-  linux-x64/arm64/musl-x64).
-
-## Licensing note
-
-sqlite-memory is MIT. sqlite-vector and sqlite-sync are Elastic License 2.0 — free for open-source and non-production
-use; contact SQLite Cloud for production/managed use. See the upstream repos for details.
+- The MCP server is packaged as the `ai-raccoon` dotnet tool (multi-RID: win-x64/arm64,
+  osx-arm64, linux-x64/arm64/musl-x64).
