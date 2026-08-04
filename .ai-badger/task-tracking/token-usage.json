@@ -1208,7 +1208,23 @@
     },
     {
       "taskId": "retrieval-improvement-c-implementation",
-      "subagents": [],
+      "subagents": [
+        {
+          "description": "W1 query construction implementation",
+          "at": "2026-08-04T17:12:18.088003+00:00",
+          "totalTokens": 268977
+        },
+        {
+          "description": "W2 source identity implementation",
+          "at": "2026-08-04T17:12:18.125931+00:00",
+          "totalTokens": 511461
+        },
+        {
+          "description": "W6 dual-vector implementation",
+          "at": "2026-08-04T17:12:18.161389+00:00",
+          "totalTokens": 412087
+        }
+      ],
       "grade": null,
       "sessionId": "cli-20260804-174052",
       "checkpoints": {
@@ -1236,6 +1252,21 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 1192525,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     },
     {
