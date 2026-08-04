@@ -209,6 +209,52 @@
       "resumeCommand": "claude --resume 20260804_123231_ace2e9",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "retrieval-improvement-b",
+      "title": "Retrieval improvement plan B (parallel view)",
+      "sessionId": "hermes-1785849532",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/retrieval-improvement-b",
+      "risk": false,
+      "startedAt": "2026-08-04T13:18:52.546506+00:00",
+      "finishedAt": "2026-08-04T14:09:18.395869+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume hermes-1785849532",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "retrieval-improvement-cont",
+      "title": "Retrieval improvement: dual-vector alpha vs plan fixes comparison",
+      "sessionId": "20260804_160914_cont",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/retrieval-improvement-cont",
+      "risk": false,
+      "startedAt": "2026-08-04T14:09:14.569698+00:00",
+      "finishedAt": "2026-08-04T14:28:19.007816+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_160914_cont",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true,
+      "worktree": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/retrieval-improvement-cont"
+    },
+    {
+      "taskId": "fix-baseline",
+      "title": "Wave 0: reproducible baseline \u2014 fix jsaa-memory.db",
+      "sessionId": "20260804_161538_51457d",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/fix-baseline",
+      "risk": false,
+      "startedAt": "2026-08-04T14:19:34.885679+00:00",
+      "finishedAt": "2026-08-04T14:48:13.556151+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_161538_51457d",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }
