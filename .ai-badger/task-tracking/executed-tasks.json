@@ -122,7 +122,7 @@
     },
     {
       "taskId": "integration-review",
-      "title": "Integration review — code review + docs refresh",
+      "title": "Integration review \u2014 code review + docs refresh",
       "sessionId": "20260803_162437_9ae3d6",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -152,7 +152,7 @@
     },
     {
       "taskId": "encrypt-at-rest",
-      "title": "Encryption at rest — transparent SQLite encryption via e_sqlite3mc",
+      "title": "Encryption at rest \u2014 transparent SQLite encryption via e_sqlite3mc",
       "sessionId": "20260803_162437_9ae3d6",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -243,7 +243,7 @@
     },
     {
       "taskId": "fix-baseline",
-      "title": "Wave 0: reproducible baseline — fix jsaa-memory.db",
+      "title": "Wave 0: reproducible baseline \u2014 fix jsaa-memory.db",
       "sessionId": "20260804_161538_51457d",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -302,16 +302,32 @@
     },
     {
       "taskId": "generate-logo-for-ai-raccoon",
-      "title": "Generate AiRaccoon brand logo — 3 propositions",
+      "title": "Generate AiRaccoon brand logo \u2014 3 propositions",
       "sessionId": "hermes-1785858129",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
       "branch": "task/generate-logo-for-ai-raccoon",
       "risk": false,
       "startedAt": "2026-08-04T15:42:09.460847+00:00",
+      "finishedAt": "2026-08-04T17:33:15.043319+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume hermes-1785858129",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "add-command-line-args-parsing",
+      "title": "Add CLI args parsing to the ai-raccoon MCP server \u2014 options exploration, .mcp.json defaults, implementation, docs + global-tool test",
+      "sessionId": "20260804_192411_ee30d1",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/add-command-line-args-parsing",
+      "risk": false,
+      "startedAt": "2026-08-04T17:31:34.621141+00:00",
       "finishedAt": null,
       "state": "STARTED",
-      "resumeCommand": "claude --resume hermes-1785858129",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260804_192411_ee30d1",
       "resumeAttempts": []
     }
   ]

@@ -31,12 +31,12 @@ public sealed class SqliteMemoryStore(
     private const int DefaultOverlayTokens = 48;
     private const int EmbedBatchSize = 32;
 
+    private static readonly HashSet<string> IndexableExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
+
     // The remote API key is held for the process lifetime only — never persisted (tool contract).
     // After a restart the operator's env var provides it again at embed time.
     private string? _remoteApiKey;
-
-    private static readonly HashSet<string> IndexableExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -121,18 +121,20 @@ public sealed class SqliteMemoryStore(
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
             var limit = CandidateWindowFor(query.Limit);
 
-            // FTS modality: primary expression first; a per-context under-match — fewer rows
-            // than the query has terms, or fewer than the caller asked for (a list that small
-            // cannot be a useful ranked signal on its own; A6/C2 measured cases) — retries
-            // with the OR fallback. Decided per context so one weak context cannot force the
-            // fallback on the others; skipped when the keyword weight is zero (a weight-0
-            // list contributes nothing to RRF).
+            // FTS modality: primary expression first; a per-context under-match — at most as
+            // many rows as the query has terms, or at most as many as the caller asked for (a
+            // list that small cannot be a useful ranked signal on its own; A4/A6/C2 measured
+            // cases) — retries with the OR fallback. The boundary fires too: A4's AND primary
+            // matches exactly max(TokenCount, limit) rows yet excludes the target chunk.
+            // Decided per context so one weak context cannot force the fallback on the others;
+            // skipped when the keyword weight is zero (a weight-0 list contributes nothing to
+            // RRF).
             IReadOnlyList<MemorySearchResult> ftsResults = [];
             if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
                 ftsResults = await QueryFtsBatchAsync(connection, filter,
                     SearchParameters(plan.Expression), cancellationToken).ConfigureAwait(false);
-                if (plan.Fallback is not null && ftsResults.Count < Math.Max(plan.TokenCount, query.Limit))
+                if (plan.Fallback is not null && ftsResults.Count <= Math.Max(plan.TokenCount, query.Limit))
                 {
                     ftsResults = await QueryFtsBatchAsync(connection, filter,
                         SearchParameters(plan.Fallback), cancellationToken).ConfigureAwait(false);
@@ -175,75 +177,6 @@ public sealed class SqliteMemoryStore(
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
-    }
-
-    /// <summary>
-    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
-    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
-    /// </summary>
-    internal static int CandidateWindowFor(int limit) =>
-        (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
-
-    /// <summary>
-    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
-    ///     when no engine is configured. The chunk size never exceeds the engine's documented
-    ///     max input tokens, preventing truncation dilution at embed time.
-    /// </summary>
-    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            return (DefaultMaxTokens, DefaultOverlayTokens);
-        }
-
-        var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
-            .ConfigureAwait(false);
-        var context = EmbeddingService.ContextTokensFor(provider, model);
-        return (Math.Min(DefaultMaxTokens, context),
-            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
-    }
-
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // ftsExpression is normalized, but a pathological query can still trip the FTS5
-            // tokenizer limits; a failed keyword modality degrades to the vector list.
-            return (await connection.QueryAsync<SearchRow>(
-                        new CommandDefinition(
-                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false))
-                .Select(row => new MemorySearchResult(
-                    row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
-                .ToList();
-        }
-        catch (SqliteException)
-        {
-            return [];
-        }
-    }
-
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
-    {
-        var rows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false))
-            .ToList();
-        return rows
-            .Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
-            .ToList();
     }
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -582,6 +515,74 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Per-modality candidate window before RRF fusion (P6b plan §8): K = max(limit*3, 100)
+    ///     so overlap candidates ranked 20-100 are not starved by a per-modality LIMIT @limit.
+    /// </summary>
+    internal static int CandidateWindowFor(int limit) => (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
+
+    /// <summary>
+    ///     Chunk bounds tied to the configured engine's token window (P6b plan §8); defaults
+    ///     when no engine is configured. The chunk size never exceeds the engine's documented
+    ///     max input tokens, preventing truncation dilution at embed time.
+    /// </summary>
+    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return (DefaultMaxTokens, DefaultOverlayTokens);
+        }
+
+        var model = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
+            .ConfigureAwait(false);
+        var context = EmbeddingService.ContextTokensFor(provider, model);
+        return (Math.Min(DefaultMaxTokens, context),
+            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ftsExpression is normalized, but a pathological query can still trip the FTS5
+            // tokenizer limits; a failed keyword modality degrades to the vector list.
+            return (await connection.QueryAsync<SearchRow>(
+                        new CommandDefinition(
+                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(row => new MemorySearchResult(
+                    row.Hash, row.Seq, row.Ranking, row.Path,
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet))
+                .ToList();
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        var rows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
+            .ToList();
+        return rows
+            .Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
+            .ToList();
+    }
+
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4).</summary>
     private async Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
         CancellationToken cancellationToken)
@@ -814,8 +815,7 @@ public sealed class SqliteMemoryStore(
         return ("custom", projectId, context, null);
     }
 
-    private static MemoryEntry ToEntry(EntryRow row) =>
-        new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
+    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
 
     private static string ContextStringOf(EntryRow row)
     {
@@ -834,11 +834,9 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7).</summary>
-    private static string WritePathFor(string value) =>
-        $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
+    private static string WritePathFor(string value) => $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
-    private static bool IsIndexableFile(string path) =>
-        !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
+    private static bool IsIndexableFile(string path) => !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
 
     private static bool IsHidden(string path)
     {
