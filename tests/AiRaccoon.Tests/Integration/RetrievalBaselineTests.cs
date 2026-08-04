@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -16,14 +17,37 @@ public sealed class RetrievalBaselineTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Wave 0 corpus-exclusion markers (plan C step 5): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
+    /// <remarks>Matched against the '## Source: &lt;structured_path&gt;' header only — a bare substring scan would
+    /// false-positive on legitimate prose mentions (e.g. skills that reference state.json).</remarks>
+    private static readonly string[] ExcludedContentMarkers =
+    [
+        "docs:work", "docs:state.json", "docs:now.md",
+        "ai-badger:state.json", "remember:now.md",
+    ];
+
+    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
+
     private readonly string _dataRoot;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+    private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
     private readonly ITestOutputHelper _output;
 
     public RetrievalBaselineTests(ITestOutputHelper output)
     {
         _output = output;
+
+        // The regenerated DB carries embedding.provider='local', so SearchAsync embeds the query at
+        // query time and CreateGenerator throws if the bundled ONNX model is missing (ManagedHarness
+        // contract). Provision it before any search.
+        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        if (!ensured.AllPresent)
+        {
+            throw new InvalidOperationException(
+                $"Bundled embedding model missing: {string.Join("; ", ensured.Errors)}");
+        }
+
         _dataRoot = CreateTempRoot();
 
         // Copy the pre-built JSAA memory database into the temp data root
@@ -31,12 +55,11 @@ public sealed class RetrievalBaselineTests : IDisposable
         var dbPath = Path.Combine(_dataRoot, "memory.db");
         File.Copy(bundledDb, dbPath);
 
-        var factory = new SqliteConnectionFactory(
+        _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
             new NullKeyProvider());
-        _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(),
-            new EmbeddingService());
+        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
+            new TokenizerChunker(), new EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -46,33 +69,58 @@ public sealed class RetrievalBaselineTests : IDisposable
     {
         var queries = LoadQueries();
         queries.ShouldNotBeEmpty("baseline-queries.json should contain queries");
-        _output.WriteLine($"Loaded {queries.Length} baseline queries");
 
-        var stats = await _store.GetStatsAsync("jsaa", TestContext.Current.CancellationToken);
-        _output.WriteLine($"Database has {stats.EntryCount} entries");
+        var hashMap = LoadChunkHashMap();
+        var fileHashes = GroupByFile(hashMap);
+
+        _output.WriteLine(
+            $"Loaded {queries.Length} baseline queries, {hashMap.Count} hash-map chunks across {fileHashes.Count} files");
+
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
+        _output.WriteLine($"Database has {stats.EntryCount} entries, {stats.PendingCount} pending embeds");
 
         var scored = new List<QueryResult>();
         var totalWithResults = 0;
+        var exactMatchesAtTop3 = 0;
+        var fileMatchesAtTop3 = 0;
+        var expectedSourceQueryCount = queries.Count(q => !string.IsNullOrWhiteSpace(q.ExpectedSource));
 
         foreach (var query in queries)
         {
-            var searchQuery = new SearchQuery("jsaa", query.Query, SearchScope.Project,
+            var searchQuery = new SearchQuery(ProjectId, query.Query, SearchScope.Project,
                 Limit: query.SearchLimit, MinScore: 0.0);
             var results = await _store.SearchAsync(searchQuery, TestContext.Current.CancellationToken);
 
-            var mappedResults = results.Select((r, i) => new ResultEntry(
-                i + 1, r.Hash, r.Ranking,
-                r.Path, r.Snippet,
-                false
-            )).ToList();
+            var (exactMatch, fileMatch, firstExactRank, firstFileRank) =
+                MapResults(query, results, hashMap, fileHashes, out var mappedResults);
 
             if (mappedResults.Count > 0)
             {
                 totalWithResults++;
             }
 
+            if (firstExactRank is not null && firstExactRank <= 3)
+            {
+                exactMatchesAtTop3++;
+            }
+
+            if (firstFileRank is not null && firstFileRank <= 3)
+            {
+                fileMatchesAtTop3++;
+            }
+
+            if (query.ExpectedSource is not null)
+            {
+                _output.WriteLine(
+                    $"{query.Id}: expected '{query.ExpectedSource}' " +
+                    $"exact@{firstExactRank?.ToString() ?? "-"} file@{firstFileRank?.ToString() ?? "-"}");
+            }
+
             scored.Add(new QueryResult(query.Id, query.Category, query.Query,
-                query.ExpectedSource, query.ExpectedKnowledge, mappedResults));
+                query.ExpectedSource, query.ExpectedKnowledge,
+                exactMatch, fileMatch,
+                [.. results.Take(5).Select(r => r.Hash)],
+                mappedResults));
         }
 
         _output.WriteLine($"Results: {totalWithResults}/{queries.Length} queries returned results");
@@ -81,12 +129,173 @@ public sealed class RetrievalBaselineTests : IDisposable
         totalWithResults.ShouldBeGreaterThanOrEqualTo(1,
             "at least one query should return results from the pre-built database");
 
-        var baseline = new BaselineReport("jsaa", FixedNow,
-            queries.Length, totalWithResults, 0, scored);
+        var exactRate = expectedSourceQueryCount == 0 ? 0.0 : (double)exactMatchesAtTop3 / expectedSourceQueryCount;
+        var fileRate = expectedSourceQueryCount == 0 ? 0.0 : (double)fileMatchesAtTop3 / expectedSourceQueryCount;
+        _output.WriteLine($"Exact-chunk match rate @3: {exactMatchesAtTop3}/{expectedSourceQueryCount} ({exactRate:P1})");
+        _output.WriteLine($"File-level match rate @3: {fileMatchesAtTop3}/{expectedSourceQueryCount} ({fileRate:P1})");
+
+        var baseline = new BaselineReport(ProjectId, FixedNow,
+            queries.Length, totalWithResults,
+            expectedSourceQueryCount, exactMatchesAtTop3, fileMatchesAtTop3,
+            exactRate, fileRate, scored);
+
+        // Emit the machine-readable report first so a failing run still leaves the artifact for
+        // inspection (bin-only; the temp _dataRoot is a throwaway copy).
         var binPath = Path.Combine(AppContext.BaseDirectory, "scored-baseline.json");
         await File.WriteAllTextAsync(binPath, JsonSerializer.Serialize(baseline, _jsonOptions),
             TestContext.Current.CancellationToken);
         _output.WriteLine($"Baseline written to {binPath}");
+
+        // The report must carry the computed counts, not hardcoded placeholders (plan C step 2).
+        baseline.ExpectedSourceMatchesAtTop3.ShouldBe(exactMatchesAtTop3);
+        baseline.ExpectedSourceFileMatchesAtTop3.ShouldBe(fileMatchesAtTop3);
+
+        // The hash-map mechanism must demonstrably work end-to-end on the committed corpus: at least
+        // one query finds its exact expected chunk and at least one finds a chunk of the expected
+        // file in the top 3. The >=80% success target is a later-wave gate, not a Wave 0 gate.
+        exactMatchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
+            "at least one query should match its expected chunk (exact hash match) at rank <= 3");
+        fileMatchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
+            "at least one query should match a chunk of its expected file at rank <= 3");
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_ExcludedContentAbsent()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        foreach (var marker in ExcludedContentMarkers)
+        {
+            var count = await CountValueContainingAsync(connection, marker);
+            count.ShouldBe(0,
+                $"corpus must not contain excluded content marker '{marker}' (plan C step 5); found {count} rows");
+        }
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_AllEntriesEmbedded()
+    {
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
+        stats.PendingCount.ShouldBe(0,
+            $"Wave 0 requires a fully embedded corpus (embed_state='embedded'); " +
+            $"{stats.PendingCount} entries still pending");
+        _output.WriteLine($"Corpus: {stats.EntryCount} entries, {stats.PendingCount} pending");
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_ExpectedSourcesPresent()
+    {
+        var hashMap = LoadChunkHashMap();
+        var queries = LoadQueries();
+        var expected = queries.Where(q => !string.IsNullOrWhiteSpace(q.ExpectedSource)).ToArray();
+        expected.Length.ShouldBeGreaterThanOrEqualTo(1,
+            "baseline-queries.json should carry expectedSource entries");
+
+        foreach (var query in expected)
+        {
+            hashMap.ContainsKey(query.ExpectedSource!).ShouldBeTrue(
+                $"{query.Id}: expectedSource '{query.ExpectedSource}' is missing from " +
+                "scripts/chunk-hash-map.json");
+        }
+
+        // The regenerated corpus stores '## Source: <structured_path>' inside the value, so each
+        // expected source must appear in at least one entry (included files present).
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        foreach (var query in expected)
+        {
+            var count = await CountValueContainingAsync(connection, query.ExpectedSource!);
+            count.ShouldBeGreaterThanOrEqualTo(1,
+                $"{query.Id}: expectedSource '{query.ExpectedSource}' not found in the corpus");
+        }
+    }
+
+    private static (bool ExactMatch, bool FileMatch, int? FirstExactRank, int? FirstFileRank) MapResults(
+        BaselineQuery query, IReadOnlyList<MemorySearchResult> results,
+        Dictionary<string, string> hashMap, Dictionary<string, HashSet<string>> fileHashes,
+        out List<ResultEntry> mappedResults)
+    {
+        var exactMatch = false;
+        var fileMatch = false;
+        int? firstExactRank = null;
+        int? firstFileRank = null;
+        mappedResults = [];
+
+        foreach (var (result, index) in results.Select((r, i) => (r, i)))
+        {
+            var rank = index + 1;
+            var isExact = query.ExpectedSource is not null
+                && hashMap.TryGetValue(query.ExpectedSource, out var expectedHash)
+                && string.Equals(result.Hash, expectedHash, StringComparison.Ordinal);
+            var isFile = query.ExpectedSource is not null
+                && fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var fileSet)
+                && fileSet.Contains(result.Hash);
+
+            if (isExact)
+            {
+                exactMatch = true;
+                firstExactRank ??= rank;
+            }
+
+            if (isFile)
+            {
+                fileMatch = true;
+                firstFileRank ??= rank;
+            }
+
+            mappedResults.Add(new ResultEntry(rank, result.Hash, result.Ranking, result.Path,
+                result.Snippet, isExact, isFile));
+        }
+
+        return (exactMatch, fileMatch, firstExactRank, firstFileRank);
+    }
+
+    /// <summary>Groups chunk hashes by the path before '#': 'docs:adr:0011-....md#decision' → its file's hash set.</summary>
+    private static Dictionary<string, HashSet<string>> GroupByFile(Dictionary<string, string> hashMap)
+    {
+        var fileHashes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var (structuredPath, hash) in hashMap)
+        {
+            var fileKey = FileKey(structuredPath);
+            if (!fileHashes.TryGetValue(fileKey, out var hashes))
+            {
+                hashes = [];
+                fileHashes[fileKey] = hashes;
+            }
+
+            hashes.Add(hash);
+        }
+
+        return fileHashes;
+    }
+
+    /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → 'docs:adr:0011-frontend-chassis-stack.md'.</summary>
+    private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
+
+    private static async Task<int> CountValueContainingAsync(SqliteConnection connection, string marker)
+    {
+        using var command = connection.CreateCommand();
+        // Match the '## Source: <structured_path>' header only (plan C step 5: excluded dirs absent).
+        // A bare-substring scan would false-positive on legitimate prose mentions (e.g. a skill
+        // document that mentions .ai-badger/state.json in its body).
+        command.CommandText = "SELECT count(*) FROM entries WHERE value LIKE '%## Source: ' || $marker || '%'";
+        command.Parameters.AddWithValue("$marker", marker);
+        var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        return Convert.ToInt32(result);
+    }
+
+    private static Dictionary<string, string> LoadChunkHashMap()
+    {
+        var projectRoot = FindProjectRoot();
+        var hashMapPath = Path.Combine(projectRoot, "scripts", "chunk-hash-map.json");
+        if (!File.Exists(hashMapPath))
+        {
+            throw new InvalidOperationException(
+                $"scripts/chunk-hash-map.json not found under {projectRoot}; Wave 0 requires it " +
+                "committed so expected-source detection can be honest (plan C step 1).");
+        }
+
+        var json = File.ReadAllText(hashMapPath);
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
     }
 
     private static string ResolveBundledDbPath()
@@ -161,6 +370,9 @@ public sealed class RetrievalBaselineTests : IDisposable
         string Query,
         string? ExpectedSource,
         string? ExpectedKnowledge,
+        bool IsExpectedSource,
+        bool IsExpectedSourceFile,
+        IReadOnlyList<string> Top5Hashes,
         IReadOnlyList<ResultEntry> Results);
 
     public sealed record ResultEntry(
@@ -169,13 +381,18 @@ public sealed class RetrievalBaselineTests : IDisposable
         double Ranking,
         string Path,
         string Snippet,
-        bool IsExpectedSource);
+        bool IsExpectedSource,
+        bool IsExpectedSourceFile);
 
     public sealed record BaselineReport(
         string ProjectId,
         DateTimeOffset ExportedAt,
         int QueryCount,
         int QueriesWithResults,
+        int ExpectedSourceQueryCount,
         int ExpectedSourceMatchesAtTop3,
+        int ExpectedSourceFileMatchesAtTop3,
+        double ExpectedSourceMatchRateAtTop3,
+        double ExpectedSourceFileMatchRateAtTop3,
         IReadOnlyList<QueryResult> QueryResults);
 }
