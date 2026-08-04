@@ -82,7 +82,7 @@ public sealed class WatchDigestExecutorTests
     }
 
     [Fact]
-    public async Task Digest_FileGone_DeletesChunksAndFingerprint_NoHook()
+    public async Task Digest_FileGone_DeletesChunksAndFingerprint_AndFiresDeletedHook()
     {
         using var dir = TempDir.New("digest-delete");
         var file = dir.File("a.md");
@@ -100,7 +100,8 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges.ShouldHaveSingleItem();
+        stack.Extension.SourceChanges.Count.ShouldBe(2);
+        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
     }
 
     [Fact]
@@ -124,7 +125,7 @@ public sealed class WatchDigestExecutorTests
     }
 
     [Fact]
-    public async Task Digest_DeleteOfNeverIngestedFile_IsSilentNoOp()
+    public async Task Digest_DeleteOfNeverIngestedFile_IsSilentForMemory_ButFiresTheDeletedHook()
     {
         using var dir = TempDir.New("digest-delete-never");
         var file = dir.File("never.md");
@@ -136,7 +137,8 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         stack.Memory.Ingested.ShouldBeEmpty();
-        stack.Extension.SourceChanges.ShouldBeEmpty();
+        stack.Extension.SourceChanges.ShouldHaveSingleItem();
+        stack.Extension.SourceChanges[0].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
     }
 
     [Fact]

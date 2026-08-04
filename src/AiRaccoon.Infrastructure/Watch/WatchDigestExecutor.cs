@@ -31,6 +31,9 @@ public sealed class WatchDigestExecutor(
 
         if (!File.Exists(normalized))
         {
+            await extensionHost.OnSourceChangedAsync(
+                    new SourceChangedContext(projectId, normalized, SourceChangeKind.Deleted), cancellationToken)
+                .ConfigureAwait(false);
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
             return;
         }
