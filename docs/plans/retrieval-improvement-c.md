@@ -253,6 +253,39 @@ Split into 5a (can run early) and 5b (needs the ranking waves).
 **Gate 5a**: H1-H3 negative tests pass because the corpus excludes the content. Query
 difficulty strata defined and assigned.
 
+**Delivered (2026-08-04, Wave 5a — built on main @ 6889ee8, branch task/w5a-baseline-enrichment):**
+
+- **Difficulty rubric.** Every baseline query carries `difficulty` in
+  `scripts/baseline-queries.json`. Expected-source queries are stratified by the measured
+  hybrid exact-chunk rank (k=60, 1:1, minScore 0.0): `easy` = exact@1, `medium` = exact@2-3,
+  `hard` = exact@4-5, `very-hard` = exact outside the top-5. Coverage queries (no
+  expectedSource) are stratified structurally by answer dispersion (distinct FTS-matched
+  files at depth 20 + document structure): `easy` = single dedicated document (B4, D3, E1-E3,
+  F2), `medium` = 2-3 documents or one doc with soft phrasing (B3, B6, C3, C4, C6, D1, D2,
+  D4, G2), `hard` = 4+ documents / cross-referenced ADR chains (B1, B2, B5, F1, F3, G1, G3),
+  `very-hard` = content excluded from the corpus by design (H1-H3).
+- **Measured assignment (hybrid ranks, main @ 6889ee8):** A2/A5/C1/C2/C5 easy (exact@1);
+  A1/A3 medium (exact@2/3); A4/A7/S2 hard (exact@5/4/5 — S2's decision chunk loses to the
+  ADR metadata header, the Wave 3 document-first target); A6 very-hard (exact chunk outside
+  top-5; file@2 — the answer spans ADR-0067 + ADR-0068). Strata counts: 11/11/10/4.
+- **Relevance rubric.** Every query carries `relevanceGrade` (0-5): 5 = the expectedSource
+  chunk alone fully answers; 4 = the answer spans 2+ authoritative chunks/files (A6:
+  ADR-0067 + ADR-0068; A7: "about" needs the whole ADR); 0 = ungraded — coverage queries and
+  non-evidential negative tests ("Coverage and H1-H3 are non-evidential; not scored",
+  comparison-clean.md). All 11 expected-source queries graded 5 except A6/A7 = 4.
+- **Permanent corpus-integrity assertions** (RetrievalBaselineTests): hash-map distinct
+  hashes == entries table count and DB hash set == map value set (762 keys alias to 752
+  hashes — CLAUDE.md/HERMES.md share 10 identical section chunks); `ContentHash.Of(path,
+  value)` reproduces every stored hash (FR-NM-7, all 752 rows); `source_file` 100%
+  populated and `section` populated ⟺ the hash maps to a structured path with a `#section`
+  part (664/88); store-reported count == raw table count; H1-H3 targets excluded (state.json
+  / now.md markers + no AppHost / program-code source files). Existing assertions kept:
+  0 pending embeds, excluded-content markers absent, expected sources present.
+- **Catalog pins** (BaselineQueryCatalogTests): 36 unique ids, all four strata used (≥3
+  queries each), measured difficulty assignments pinned per query, relevance grades pinned,
+  H1-H3 flagged `negativeTest` with no expectedSource and grade 0. Schema additions are
+  backward-compatible — the existing `BaselineQuery` records ignore the new fields.
+
 #### 5b (after Waves 3+4+6 — measures final state)
 4. Add structural and cross-document test cases (S1-S6 from Appendix A)
 5. Compute nDCG@5, recall@5, MRR for all queries including structural cases
