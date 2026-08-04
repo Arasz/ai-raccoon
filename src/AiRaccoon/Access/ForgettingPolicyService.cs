@@ -11,8 +11,11 @@ namespace AiRaccoon.Access;
 public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access)
 {
     public const string SweepThresholdSettingKey = "sweep.threshold";
+    public const string SweepTtlDaysSettingKey = "sweep.ttl_days";
 
     public const double DefaultSweepThreshold = 0.3;
+
+    public const double DefaultSweepTtlDays = 30;
 
     public async Task<double> GetSweepThresholdAsync(string projectId, CancellationToken cancellationToken = default)
     {
