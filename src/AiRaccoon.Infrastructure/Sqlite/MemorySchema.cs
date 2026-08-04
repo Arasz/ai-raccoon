@@ -4,8 +4,9 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Our single-file bank schema (plan §2.2): entries with on-row metadata, workspaces,
-///     settings, an FTS5 external-content index over entries(value) and an (empty until P4/P6)
-///     vec0 table. Idempotent — safe to run on every bank open.
+///     settings, an FTS5 external-content index over entries(value) and vec0 tables for the
+///     content embedding (P4) and the Wave 6 structure embedding (heading-path vector).
+///     Idempotent — safe to run on every bank open.
 /// </summary>
 internal static class MemorySchema
 {
@@ -14,6 +15,38 @@ internal static class MemorySchema
         await using var command = connection.CreateCommand();
         command.CommandText = Ddl;
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await MigrateColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Wave 6 added heading_path/structure_embedding to entries; CREATE TABLE IF NOT EXISTS
+    // cannot add columns to a pre-existing table, so banks created before the wave get them
+    // via ALTER TABLE here (SQLite has no ADD COLUMN IF NOT EXISTS).
+    private static async Task MigrateColumnsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var tableInfo = connection.CreateCommand())
+        {
+            tableInfo.CommandText = "PRAGMA table_info(entries)";
+            await using var reader = await tableInfo.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                columns.Add(reader.GetString(1));
+            }
+        }
+
+        if (!columns.Contains("heading_path"))
+        {
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE entries ADD COLUMN heading_path TEXT";
+            await alter.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("structure_embedding"))
+        {
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE entries ADD COLUMN structure_embedding BLOB";
+            await alter.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     // workspace_id exists now for the P8 structural-isolation wave; the FK and the
@@ -47,6 +80,8 @@ internal static class MemorySchema
                                    ttl_days INTEGER NULL,
                                    embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                    embedding BLOB NULL,
+                                   heading_path TEXT NULL,
+                                   structure_embedding BLOB NULL,
                                    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
                                    CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
@@ -65,6 +100,15 @@ internal static class MemorySchema
                                -- vec0 stays empty until P4 embeds; P4 owns the embedding
                                -- dimension if the model is not all-MiniLM (384).
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
+
+                               -- Wave 6 structure modality: heading-path vectors, rowid = entry id.
+                               -- Written only by the re-runnable backfill (StructureBackfillService);
+                               -- the delete trigger keeps orphan rows out when an entry goes away.
+                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
+
+                               CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
+                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
+                               END;
 
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
                                    INSERT INTO entries_fts(rowid, value) VALUES (new.id, new.value);

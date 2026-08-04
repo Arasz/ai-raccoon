@@ -68,16 +68,30 @@ internal static class MemorySql
     // P6 vec0 modality: cosine KNN over the embedded rows, ordered by distance ascending so
     // the row position is the rank for RRF. Vector hits carry a fallback snippet built in
     // C# from the entry value (the FTS list's snippet() payload wins for docs both
-    // modalities retrieve).
+    // modalities retrieve). Wave 6: the content list feeds the dual-vector fusion.
     public const string VectorSearchByFilter = """
                                                 SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
-                                                       e.value AS Value
+                                                       e.value AS Value,
+                                                       vec_distance_cosine(v.embedding, @queryVector) AS Distance
                                                 FROM vec_entries v
                                                 JOIN entries e ON e.id = v.rowid
                                                 WHERE {filter}
                                                 ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
                                                 LIMIT @limit
                                                 """;
+
+    // Wave 6 structure modality: cosine KNN over the heading-path vectors (vec_structure),
+    // same shape as the content query so both lists fuse in C# by entry hash.
+    public const string StructureVectorSearchByFilter = """
+                                                         SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
+                                                                e.value AS Value,
+                                                                vec_distance_cosine(v.embedding, @queryVector) AS Distance
+                                                         FROM vec_structure v
+                                                         JOIN entries e ON e.id = v.rowid
+                                                         WHERE {filter}
+                                                         ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
+                                                         LIMIT @limit
+                                                         """;
 
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";

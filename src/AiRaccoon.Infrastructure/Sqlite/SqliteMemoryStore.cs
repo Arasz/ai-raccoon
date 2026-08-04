@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -113,6 +114,12 @@ public sealed class SqliteMemoryStore(
         }
 
         var ftsExpression = FtsQueryNormalizer.Normalize(query.Query);
+        var alpha = StructureFusion.DefaultAlpha;
+        if (queryVector is not null)
+        {
+            alpha = await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         foreach (var context in SearchContexts.For(query))
         {
@@ -138,7 +145,7 @@ public sealed class SqliteMemoryStore(
                 : await QueryFtsBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
             var vectorResults = queryVector is null
                 ? []
-                : await QueryVectorBatchAsync(connection, filter, parameters, cancellationToken).ConfigureAwait(false);
+                : await QueryDualVectorBatchAsync(connection, filter, parameters, alpha, cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
@@ -205,19 +212,58 @@ public sealed class SqliteMemoryStore(
         }
     }
 
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Wave 6 vector modality: the content and structure (heading-path) KNN lists fused
+    ///     with a fixed alpha into one ranked list — score = alpha * content sim + (1 - alpha)
+    ///     * structure sim. Banks without structure vectors degrade to content-only ordering
+    ///     (alpha scales every score by the same positive factor).
+    /// </summary>
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
+        CancellationToken cancellationToken)
     {
-        var rows = (await connection.QueryAsync<VectorRow>(
+        var contentRows = (await connection.QueryAsync<VectorRow>(
                     new CommandDefinition(
                         MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
-        return rows
-            .Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash)))
+        var structureRows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.StructureVectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
             .ToList();
+
+        var limit = parameters.Get<int>("limit");
+        var fused = StructureFusion.Rank(
+            contentRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
+            structureRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
+            alpha, limit);
+
+        var byHash = contentRows.Concat(structureRows)
+            .GroupBy(row => row.Hash, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        return fused
+            .Select(rank => byHash.TryGetValue(rank.Hash, out var row)
+                ? new MemorySearchResult(row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash))
+                : null)
+            .Where(result => result is not null)
+            .Select(result => result!)
+            .ToList();
+    }
+
+    private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var raw = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
+            .ConfigureAwait(false);
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
+               && alpha is >= 0.0 and <= 1.0
+            ? alpha
+            : StructureFusion.DefaultAlpha;
     }
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -893,6 +939,8 @@ public sealed class SqliteMemoryStore(
         public string Path { get; set; } = "";
 
         public string Value { get; set; } = "";
+
+        public double Distance { get; set; }
     }
 
     private sealed record SourceRow(string Path, string Value);
