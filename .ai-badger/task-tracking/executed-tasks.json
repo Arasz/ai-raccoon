@@ -122,7 +122,7 @@
     },
     {
       "taskId": "integration-review",
-      "title": "Integration review \u2014 code review + docs refresh",
+      "title": "Integration review — code review + docs refresh",
       "sessionId": "20260803_162437_9ae3d6",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -152,7 +152,7 @@
     },
     {
       "taskId": "encrypt-at-rest",
-      "title": "Encryption at rest \u2014 transparent SQLite encryption via e_sqlite3mc",
+      "title": "Encryption at rest — transparent SQLite encryption via e_sqlite3mc",
       "sessionId": "20260803_162437_9ae3d6",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -243,7 +243,7 @@
     },
     {
       "taskId": "fix-baseline",
-      "title": "Wave 0: reproducible baseline \u2014 fix jsaa-memory.db",
+      "title": "Wave 0: reproducible baseline — fix jsaa-memory.db",
       "sessionId": "20260804_161538_51457d",
       "transcriptPath": null,
       "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
@@ -285,6 +285,34 @@
       "resumeCommand": "claude --resume 20260804_165711_e2b235",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "retrieval-improvement-c-implementation",
+      "title": "Plan C implementation - Waves 1/2/6 parallel",
+      "sessionId": "cli-20260804-174052",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/retrieval-improvement-c-implementation",
+      "risk": false,
+      "startedAt": "2026-08-04T15:40:52.772573+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume cli-20260804-174052",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "generate-logo-for-ai-raccoon",
+      "title": "Generate AiRaccoon brand logo — 3 propositions",
+      "sessionId": "hermes-1785858129",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/generate-logo-for-ai-raccoon",
+      "risk": false,
+      "startedAt": "2026-08-04T15:42:09.460847+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume hermes-1785858129",
+      "resumeAttempts": []
     }
   ]
 }
