@@ -24,9 +24,23 @@ public sealed partial class WatchCatchUp(
     public void EnqueueChangedSince(string projectId, string path, long watermark) =>
         LastScan = Task.Run(() => ScanCoreAsync(projectId, path, sinceWatermark: watermark));
 
-    /// <summary>Deterministic core: files under path, optionally filtered by mtime &gt; watermark.</summary>
+    /// <summary>Deterministic core: files under path, optionally filtered by mtime &gt; watermark.
+    /// A watched FILE target enumerates itself; a missing target enumerates nothing (catch-up
+    /// reconciliation removes its stale chunks).</summary>
     internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark)
     {
+        if (!Directory.Exists(path))
+        {
+            if (File.Exists(path) &&
+                (sinceWatermark is null ||
+                 new DateTimeOffset(File.GetLastWriteTimeUtc(path)).ToUnixTimeSeconds() > sinceWatermark.Value))
+            {
+                yield return path;
+            }
+
+            yield break;
+        }
+
         foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
         {
             if (sinceWatermark is null ||

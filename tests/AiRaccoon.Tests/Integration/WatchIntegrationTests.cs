@@ -393,7 +393,8 @@ public sealed class WatchIntegrationTests
         (await second.StepUntilAsync(async () =>
         {
             var results = await second.SearchAsync("zephyrsingle", TestContext.Current.CancellationToken);
-            return results.Any(r => r.SourceFile == second.File("readme.md"));
+            return results.Any(r => r.SourceFile == second.File("readme.md") &&
+                                    r.Snippet.Contains("v2", StringComparison.Ordinal));
         }, TestContext.Current.CancellationToken)).ShouldBeTrue(
             "catch-up did not re-ingest the single-file watch target changed while down");
         (await second.CountEntriesAsync(second.File("readme.md"), "v1", TestContext.Current.CancellationToken))
