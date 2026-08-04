@@ -218,7 +218,11 @@ Select the Pareto-optimal point on nDCG@5 and MRR. Document in an ADR with sweep
 
 **Gate**: Chosen parameters beat the current defaults (k=60, 1:1, minScore=0.0) on nDCG@5
 without regressing invariants. RRF hybrid ≥ max(FTS-only, vector-only) for every expected-source
-query (no fusion regression). Sweep results committed alongside ADR.
+query (no fusion regression). Sweep results committed alongside ADR. **C2 acceptance (from the
+Wave 2 integration analysis, 2026-08-04): C2 hybrid rank ≤ 3 after the sweep — restoring the
+invariant's hybrid visibility lost when the 2d provenance cleanup removed the vector crutch
+(hybrid 18 / FTS-only 1 / vector >100 at k=60, 1:1). If no sweep point achieves it, the fusion
+design (weights/minScore/candidate window) is revisited before Wave 5b.**
 
 ---
 
