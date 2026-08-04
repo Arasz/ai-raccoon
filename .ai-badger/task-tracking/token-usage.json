@@ -1273,6 +1273,11 @@
           "description": "W4 review",
           "at": "2026-08-04T20:34:20.304759+00:00",
           "totalTokens": 113835
+        },
+        {
+          "description": "W5b implementation",
+          "at": "2026-08-04T21:11:32.981610+00:00",
+          "totalTokens": 213447
         }
       ],
       "grade": null,
@@ -1291,7 +1296,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-04T15:40:52.772297+00:00",
+          "timestamp": "2026-08-04T21:38:41.904919+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-04T21:38:41.904919+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
@@ -1311,7 +1328,7 @@
         "cacheReadTokens": 0,
         "cacheCreationTokens": 0,
         "cacheEfficiency": null,
-        "subagentTokens": 2706162,
+        "subagentTokens": 2919609,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,
@@ -1598,7 +1615,16 @@
     },
     {
       "taskId": "cli-config",
-      "subagents": [],
+      "subagents": [
+        {
+          "description": "CLI refactor implementation (verb tree, removals, sync F13)",
+          "at": "2026-08-04T21:21:58.389995+00:00",
+          "totalTokens": 66928460,
+          "delegationId": "deleg_19fe44d5",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 250
+        }
+      ],
       "grade": null,
       "sessionId": "20260804_222008_5a143c",
       "trackingSource": "hermes",
@@ -1627,6 +1653,21 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 66928460,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     }
   ]
