@@ -255,6 +255,35 @@
       "resumeCommand": "claude --resume 20260804_161538_51457d",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "continue-retrival-research",
+      "title": "Continue retrieval research: re-run suite on clean corpus, update plan C",
+      "sessionId": "20260804_165242_cont2",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/continue-retrival-research",
+      "risk": false,
+      "startedAt": "2026-08-04T14:52:42.202900+00:00",
+      "finishedAt": "2026-08-04T15:00:46.563000+00:00",
+      "state": "FINISHED",
+      "resumeCommand": "claude --resume 20260804_165242_cont2",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "hook-metrics-and-traces",
+      "title": "OpenTelemetry observability: tracing + metrics on all MCP tool paths with domain-specific counters",
+      "sessionId": "20260804_165711_e2b235",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/hook-metrics-and-traces",
+      "risk": false,
+      "startedAt": "2026-08-04T14:58:26.921243+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "resumeCommand": "claude --resume 20260804_165711_e2b235",
+      "resumeAttempts": []
     }
   ]
 }
