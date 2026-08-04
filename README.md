@@ -44,7 +44,7 @@ shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-mem
 - **Streamable HTTP** — opt-in via `MCP_TRANSPORT=http`; serves the protocol at `/mcp`
   (launch profile `http`, `http://localhost:8080`).
 
-Transport selection lives in one place: `McpTransportSelector` keys off the
+Transport selection lives in one place: `McpServerSetup` keys off the
 `MCP_TRANSPORT` environment variable — anything other than `http` (case-insensitive)
 runs stdio. All diagnostics go to stderr; stdout carries only MCP protocol messages.
 
@@ -92,8 +92,8 @@ dotnet test
 The test project (`tests/AiRaccoon.Tests`, xunit.v3 + Shouldly, Dapper) covers the
 domain, the store, the tools, the prompts, and the E2E suite — 185+ cases.
 Integration tests exercise the real SQLite FTS5 and vec0 tables against in-memory
-databases. Tests that need the ONNX embedding model require `AIRACCOON_TEST_GGUF` to
-point at a downloaded model.
+databases. Tests that need the ONNX embedding model use the bundled int8 model
+path; see the test project's README for the full setup.
 
 ## Embedding benchmark
 
@@ -169,7 +169,7 @@ stdio.
 AiRaccoon/
   src/AiRaccoon/              # the MCP server (thin)
     Program.cs               # transport selection + DI + MCP wiring
-    McpTransportSelector.cs
+    Setup/McpServerSetup.cs  # stdio / HTTP transport
     Tools/MemoryTools.cs     # 17 [McpServerTool] tools, 1:1 to the port
     Prompts/MemoryPrompts.cs # 2 agent usage guides
     Access/                  # MemoryAccessGuard, ForgettingPolicyService
