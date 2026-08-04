@@ -145,4 +145,37 @@ public sealed class WatchHostedServiceTests
 
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task ExecuteAsync_ReconcilesOnEachPoll_AndPicksUpNewRegistrations()
+    {
+        using var dir = TempDir.New("hosted-loop");
+        var (stack, source, catchUp, hosted) = NewStack();
+        stack.Enable();
+        var file = dir.File("a.md");
+        File.WriteAllText(file, "zephyrone");
+        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+            TestContext.Current.CancellationToken);
+
+        _ = hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (catchUp.LastScan is null && DateTime.UtcNow < deadline)
+            {
+                stack.Time.Advance(TimeSpan.FromMilliseconds(100));
+                await Task.Delay(10, TestContext.Current.CancellationToken);
+            }
+
+            var scan = catchUp.LastScan.ShouldNotBeNull("the poll loop did not pick up the registration");
+            source.IsWatching(Project, dir.Path).ShouldBeTrue();
+            await scan;
+            await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+            stack.Memory.Ingested.Select(i => i.Path).ShouldContain(file);
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
 }
