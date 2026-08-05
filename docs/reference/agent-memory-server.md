@@ -98,7 +98,14 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
   allowlist (`watch scope add|remove|list`) and a concurrency cap (`watch concurrency
   {project-id|*} {1..16}`, default 4) — all CLI-only. Quote the `*` wildcard in the
   shell (`'*'`); an unquoted `*` expands into the current directory's files and the CLI
-  reports each as an unrecognized argument. `memory_watch_add` registers a
+  reports each as an unrecognized argument. The `watch` family CONFIGURES watching —
+  registrations are created by agents via `memory_watch_add`; `watch list` prints the
+  config per target in block format (`target: <id>  enabled: ..  concurrency: ..  scope:`,
+  one path per line, `(none)` when empty — `enabled: true` means watching is enabled for
+  that target, not that a watch is registered), `watch registered [{project-id}]` lists
+  the persisted registrations (project, path, registered, lastChange; live state stays on
+  `memory_watch_status`), and `watch remove {project-id|*}` deletes a target's config rows
+  (e.g. a row named after a file, written by an unquoted `*`). `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
   lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),

@@ -97,7 +97,8 @@ ai-raccoon sync remove                          ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
 ai-raccoon watch concurrency {project-id|*} {1..16}
-ai-raccoon watch list
+ai-raccoon watch list                        ai-raccoon watch registered [{project-id}]
+ai-raccoon watch remove {project-id|*}
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show                     ai-raccoon encryption unset
 ```
@@ -264,13 +265,17 @@ mode's rows — a stale secret row must never survive to spread via the settings
 ai-raccoon watch enable {project-id|*} {true|false}   # opt-in; false = disable
 ai-raccoon watch scope add|remove|list {project-id|*} {path}   # allowlist entries; absolute paths cover dir + subdirs
 ai-raccoon watch concurrency {project-id|*} {1..16}   # parallel digests (default 4)
-ai-raccoon watch list
+ai-raccoon watch list                               # config per target (block format: target: <id>  enabled: ..  concurrency: ..  scope:, one path per line, (none) when empty)
+ai-raccoon watch registered [{project-id}]          # persisted registrations (project, path, registered, lastChange) — live state is on memory_watch_status
+ai-raccoon watch remove {project-id|*}              # deletes a target's config rows (e.g. a row named after a file, written by an unquoted *)
 ```
 
 Watching is **disabled until enabled**; `memory_watch_add` only accepts paths inside an
 allowed scope. `watch enable '*' true` with an empty allowlist prints a hint to add at
-least one scope. Watch configuration persists across restarts (the watcher re-registers
-and catches up on restart).
+least one scope. The `watch` family CONFIGURES watching — registrations are created by
+agents via `memory_watch_add`; `enabled: true` in `watch list` means watching is enabled
+for that target, not that a watch is registered. Watch configuration persists across
+restarts (the watcher re-registers and catches up on restart).
 
 Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw):
 

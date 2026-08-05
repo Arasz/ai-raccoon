@@ -70,7 +70,8 @@ ai-raccoon sync remove                        ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
 ai-raccoon watch concurrency {project-id|*} {1..16}
-ai-raccoon watch list
+ai-raccoon watch list                        ai-raccoon watch registered [{project-id}]
+ai-raccoon watch remove {project-id|*}
 ```
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table, which
