@@ -11,11 +11,11 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>arasz.ai-raccoon</PackageId>
         <ToolCommandName>ai-raccoon</ToolCommandName>
-        <PackageVersion>1.0.1</PackageVersion>
-        <InformationalVersion>1.0.1</InformationalVersion>
+        <PackageVersion>1.0.2</PackageVersion>
+        <InformationalVersion>1.0.2</InformationalVersion>
         <!-- MCP serverInfo.version reads AssemblyVersion (numeric-only); the version flag
              reads InformationalVersion. Both must report the real version (review R7). -->
-        <AssemblyVersion>1.0.1</AssemblyVersion>
+        <AssemblyVersion>1.0.2</AssemblyVersion>
         <PackageTags>ai mcp mcp-server model-context-protocol agent agents agent-memory memory knowledge knowledge-base server dotnet-tool global-tool tool cli sqlite vector vector-search embeddings semantic-search hybrid-search search retrieval rag llm stdio http dotnet</PackageTags>
         <PackageReleaseNotes>https://github.com/Arasz/ai-raccoon/releases</PackageReleaseNotes>
         <Authors>Rafał Araszkiewicz</Authors>

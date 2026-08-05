@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class VersionContractTests
 {
-    private const string ExpectedVersion = "1.0.1";
+    private const string ExpectedVersion = "1.0.2";
 
     [Fact]
     public void PackageMetadata_IsStable_OnePointZero()
@@ -49,6 +49,24 @@ public class VersionContractTests
         Property("PackageId").ShouldBe("arasz.ai-raccoon");
         root.GetProperty("packages")[0].GetProperty("identifier").GetString().ShouldBe("arasz.ai-raccoon");
         Property("ToolCommandName").ShouldBe("ai-raccoon");
+    }
+
+    [Fact]
+    public void McpServerJson_ConformsToRegistrySchemaConstraints()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(RepoFile("src/AiRaccoon/.mcp/server.json")));
+        var root = doc.RootElement;
+
+        root.GetProperty("description").GetString()!.Length.ShouldBeLessThanOrEqualTo(100);
+        var envVars = root.GetProperty("packages")[0].GetProperty("environmentVariables");
+        envVars.GetArrayLength().ShouldBeGreaterThan(0);
+        foreach (var envVar in envVars.EnumerateArray())
+        {
+            envVar.ValueKind.ShouldBe(JsonValueKind.Object);
+            envVar.GetProperty("name").GetString().ShouldNotBeNullOrEmpty();
+        }
+
+        root.GetProperty("repository").GetProperty("url").GetString().ShouldBe("https://github.com/Arasz/ai-raccoon");
     }
 
     [Fact]

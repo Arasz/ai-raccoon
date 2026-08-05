@@ -1,24 +1,29 @@
 {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-    "description": "Agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
+    "description": "Agent memory over MCP: project-scoped memory bank, workspace sandboxes, hybrid search, cloud sync.",
     "name": "ai-raccoon/agent-memory",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "packages": [
         {
             "registryType": "nuget",
             "identifier": "arasz.ai-raccoon",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "transport": {
                 "type": "stdio"
             },
             "packageArguments": [],
             "environmentVariables": [
-                "AIRACCOON_DB_PASSPHRASE"
+                {
+                    "name": "AIRACCOON_DB_PASSPHRASE",
+                    "description": "Passphrase for the encrypted memory bank",
+                    "isSecret": true
+                }
             ]
         }
     ],
     "repository": {
-        "url": "https://github.com/ai-raccoon/ai-raccoon",
+        "id": "1320945078",
+        "url": "https://github.com/Arasz/ai-raccoon",
         "source": "github"
     }
 }
