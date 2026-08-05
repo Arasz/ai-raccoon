@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-05T19:35:00Z",
+  "lastUpdated": "2026-08-05T19:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "embedding-model-resolution",
+      "summary": "bug-hunt (ops fix, no code/PR): real-bank search failed because embedding.model held 'nomic-embed-text' — a model NAME — and EmbeddingService.CreateLocal resolves any non-empty local model as a cwd-relative PATH (Path.GetFullPath), so the server (cwd = ai-badger integration worktree) tried to load <cwd>/nomic-embed-text. Second layer: the 1.0.4 tool package ships vocab.txt but NOT model_qint8_arm64.onnx (repo Models/ is gitignored; CI packed without it), so clean settings still fail on a fresh install. Fix per owner: model set local (no path) clears stale model/baseUrl rows (engine stays local:bundled); copied SHA-pinned ONNX (4278337f...) from dev checkout into ~/.dotnet/tools/.store/arasz.ai-raccoon/1.0.4/arasz.ai-raccoon.osx-arm64/1.0.4/tools/net10.0/osx-arm64/Models/ (first walk-up candidate, same dir as vocab.txt). Verified live: memory_search on the ~/.ai-raccoon bank via the running server (port 5094) returns hybrid results, no restart needed (resolution is per-call). Follow-up candidates: (1) CreateLocal lacks fail-fast for missing local model path; (2) production never calls BundledModel.EnsureAsync() and publish.yml doesn't provision the model, so every fresh install needs a manual copy; (3) BundledModel error text still recommends the dead AIRACCOON_EMBEDDING_MODEL env var.",
+      "hasNotes": false
+    },
     {
       "id": "fix-publish-multirid-shell",
       "summary": "nuget tool-shell race (production blocker): 6 parallel per-RID pack jobs emitted the same shell nupkg; --skip-duplicate kept whichever pushed first and its DotnetToolSettings.xml referenced ONLY linux-musl-x64 — 'dotnet tool install' rejected every other platform (verified: published 1.0.1 AND 1.0.2 shells both broken). Fix (PR #20, merged 3bfd198): scripts/patch-tool-shell.py rewrites a shell's RuntimeIdentifierPackages to all six RIDs, run in every matrix job so all candidate shells are identical and correct; self-gating (fails unless every RID present exactly once, ids match prefix, entries/[Content_Types].xml preserved, rid count == matrix). Reviewer APPROVE (2 minor + 3 nit hardening applied: prefix validation, EntryPoint/Runner preservation, ordered payloads-first push, py3.9-compatible annotations). 1.0.3 was dispatched from old main pre-merge but the fixed workflow's push won — live 1.0.3 turned out CORRECT (inspected). 1.0.4 deployed via PR #21 (merged c638ccd) and pushed by the fixed workflow: payloads first then shell, 5 duplicate shells deduped; validation pending. E2E proven on macOS: pack -> patch -> local-only feed -> dotnet tool install -> runs 1.0.3/1.0.4.",
