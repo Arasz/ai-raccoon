@@ -580,17 +580,9 @@ internal static partial class ConfigCommands
 
         foreach (var target in targets)
         {
-            var enabled = rows.GetValueOrDefault(WatchConfigKeys.EnabledProject(target))
-                          ?? rows.GetValueOrDefault(WatchConfigKeys.EnabledGlobal)
-                          ?? "false";
-            var concurrencyRaw = rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyProject(target))
-                                 ?? rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyGlobal);
-            var concurrency = int.TryParse(concurrencyRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
-                ? n
-                : 4;
-            var scope = WatchScopeList.Parse(rows.GetValueOrDefault(WatchConfigKeys.ScopeProject(target))
-                                             ?? rows.GetValueOrDefault(WatchConfigKeys.ScopeGlobal));
-            await stdout.WriteLineAsync($"{target}: enabled={enabled} concurrency={concurrency} scope={WatchScopeList.ToJson(scope)}");
+            // target "global" maps to the global keys by construction (Project("global") == Global).
+            var config = WatchConfig.Resolve(target, key => rows.GetValueOrDefault(key));
+            await stdout.WriteLineAsync(WatchListFormat.Render(target, config));
         }
 
         return 0;

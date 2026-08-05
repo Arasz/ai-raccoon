@@ -246,8 +246,9 @@ public class ConfigCommandsWatchTests
         var (exit, stdout, _) = await Run(["watch", "list"], store);
 
         exit.ShouldBe(0);
-        stdout.ShouldContain("global: enabled=true concurrency=4 scope=[]");
-        stdout.ShouldContain("acme: enabled=true concurrency=2 scope=[\"/a\"]");
+        stdout.Trim().ShouldBe(
+            "target: acme  enabled: true  concurrency: 2  scope:\n  /a\n" +
+            "target: global  enabled: true  concurrency: 4  scope: (none)");
     }
 
     [Fact]
@@ -266,8 +267,9 @@ public class ConfigCommandsWatchTests
 
         var (_, stdout, _) = await Run(["watch", "list"], store);
 
-        stdout.ShouldContain("global: enabled=false concurrency=16 scope=[]");
-        stdout.ShouldContain("acme: enabled=true concurrency=8 scope=[]");
+        stdout.Trim().ShouldBe(
+            "target: acme  enabled: true  concurrency: 8  scope: (none)\n" +
+            "target: global  enabled: false  concurrency: 16  scope: (none)");
     }
 
     [Fact]
@@ -276,6 +278,46 @@ public class ConfigCommandsWatchTests
         var (exit, stdout, _) = await Run(["watch", "list"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("global: enabled=false concurrency=4 scope=[]");
+        stdout.Trim().ShouldBe("target: global  enabled: false  concurrency: 4  scope: (none)");
+    }
+
+    [Fact]
+    public async Task WatchList_Ordering_IsOrdinalByTargetName()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [WatchConfigKeys.EnabledProject("CLAUDE.md")] = "true",
+                [WatchConfigKeys.EnabledProject("acme")] = "true",
+                [WatchConfigKeys.EnabledGlobal] = "true"
+            }
+        };
+
+        var (_, stdout, _) = await Run(["watch", "list"], store);
+
+        stdout.Trim().ShouldBe(
+            "target: CLAUDE.md  enabled: true  concurrency: 4  scope: (none)\n" +
+            "target: acme  enabled: true  concurrency: 4  scope: (none)\n" +
+            "target: global  enabled: true  concurrency: 4  scope: (none)");
+    }
+
+    [Fact]
+    public async Task WatchList_OnlyEnabledRow_ShowsResolvedGlobalScope()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [WatchConfigKeys.EnabledProject("CLAUDE.md")] = "true",
+                [WatchConfigKeys.ScopeGlobal] = "[\"/x\"]"
+            }
+        };
+
+        var (_, stdout, _) = await Run(["watch", "list"], store);
+
+        stdout.Trim().ShouldBe(
+            "target: CLAUDE.md  enabled: true  concurrency: 4  scope:\n  /x\n" +
+            "target: global  enabled: false  concurrency: 4  scope:\n  /x");
     }
 }
