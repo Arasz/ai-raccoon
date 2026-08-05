@@ -57,9 +57,16 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
             }
         }
 
-        return new BlobServiceClient(
-            new Uri($"https://{options.Account}.blob.core.windows.net"),
-            new DefaultAzureCredential());
+        try
+        {
+            return new BlobServiceClient(
+                new Uri($"https://{options.Account}.blob.core.windows.net"),
+                new DefaultAzureCredential());
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            throw new SyncNotConfiguredException(ex);
+        }
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)

@@ -47,6 +47,14 @@ public class AzureBlobCloudStoreTests
     }
 
     [Fact]
+    public void Ctor_AccountMode_InvalidAccountName_ThrowsSyncNotConfigured()
+    {
+        var options = new SyncOptions { Account = "bad name!", Container = "memories" };
+
+        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options));
+    }
+
+    [Fact]
     public void Ctor_AccountMode_BuildsClientWithAccountUri()
     {
         var options = new SyncOptions { Account = "myacct", Container = "memories" };
