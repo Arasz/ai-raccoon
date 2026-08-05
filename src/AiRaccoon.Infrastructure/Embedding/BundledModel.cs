@@ -7,9 +7,9 @@ public sealed record BundledModelResult(bool AllPresent, IReadOnlyList<string> E
 
 /// <summary>
 ///     Locates and bootstraps the bundled int8 all-MiniLM-L6-v2 ONNX model + BERT vocab that
-///     ship inside the tool package (FR-NM-3; see docs/work/features-native-memory/native-memory.feature): pinned SHA-256, resolved from
-///     AppContext.BaseDirectory/Models (or the repo source dir during tests). A custom model path comes from the
-///     embedding.model settings row, written by 'ai-raccoon model set local <path>'.
+///     ship inside the tool package (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
+///     pinned SHA-256, resolved from AppContext.BaseDirectory/Models (or the repo source dir during
+///     tests). A custom model path comes from the embedding.model settings row via 'ai-raccoon model set local'.
 /// </summary>
 public static class BundledModel
 {

@@ -14,9 +14,8 @@ internal static class CliRendering
 {
     /// <summary>
     ///     Renders help, version, or parse errors to the given writer and returns the exit
-    ///     code (0 help/version, 1 parse errors). When the errors match a shell-expanded '*'
-    ///     target, a quoting hint is appended. The optional <paramref name="cwdEntries"/>
-    ///     overrides the real current-directory listing (tests only).
+    ///     code (0 help/version, 1 parse errors); a shell-expanded '*' target appends a quoting
+    ///     hint. The optional <paramref name="cwdEntries"/> overrides the real current-directory listing (tests only).
     /// </summary>
     internal static int Render(CliParseResult result, TextWriter output, IReadOnlySet<string>? cwdEntries = null)
     {

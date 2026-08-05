@@ -5,10 +5,8 @@ namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
 ///     D1 catch-up: a never-synced watch (watermark 0) gets a full initial scan; otherwise only
-///     files with mtime strictly after the watermark are re-queued. Scans run in the background
-///     so memory_watch_add returns immediately (feature rule 4); the watermark advances as
-///     digests complete (executor side). Every scan also reconciles: fingerprinted files missing
-///     on disk were deleted while the server was down — their chunks are removed on restart.
+///     files with mtime strictly after the watermark are re-queued. Also reconciles deletions
+///     that happened while the server was down (see docs/features/file-watcher/file-watcher.feature).
 /// </summary>
 public sealed partial class WatchCatchUp(
     WatchPipeline pipeline,
