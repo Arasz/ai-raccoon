@@ -1,0 +1,36 @@
+# Full test suite — the slow integration, E2E and retrieval gates that the
+# fast-only build workflow skips. Runs nightly and on demand.
+#
+# ⚠️ SCHEDULED RUNS ARE BEST-EFFORT. GitHub documents `schedule` as subject to
+# delay during periods of high load, and runs can be dropped entirely — there is
+# no retry and nothing goes red when a window is missed. Absence of a nightly
+# run is NOT evidence that anything passed. Check with:
+#   gh run list --workflow=nightly.yml
+# and re-arm/verify on demand with:
+#   gh workflow run nightly.yml
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  full-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Full test suite
+        # nuget.config references the gitignored local feed .nupkg-local/; make it
+        # exist on the fresh runner or restore fails with NU1301.
+        run: mkdir -p .nupkg-local && dotnet test --nologo

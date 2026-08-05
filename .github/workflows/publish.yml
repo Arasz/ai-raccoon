@@ -1,0 +1,63 @@
+name: publish
+
+# Manual, human-gated publish to nuget.org via Trusted Publishing (OIDC — no API
+# key stored in the repo). The push job runs under the `production` environment:
+# the required-reviewer rule on it is the manual approval gate. The nuget.org
+# trusted-publishing policy for this repo (owner Arasz, workflow publish.yml,
+# environment production) is already active.
+#
+# Before dispatching: bump PackageVersion in src/AiRaccoon/AiRaccoon.csproj and
+# merge it — the pack step publishes whatever version the csproj carries, so a
+# second dispatch without a bump is a no-op (--skip-duplicate).
+on:
+  workflow_dispatch:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # One job per RID: PackAsTool emits a tool shell plus a per-RID payload
+        # package, and both must be pushed or `dotnet tool install` fails. All
+        # jobs emit the same shell id+version — `--skip-duplicate` makes jobs
+        # 2-6 of the shell push no-ops.
+        # Build must precede pack: packing an unbuilt project fails MSB3030.
+        rid: [win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build (${{ matrix.rid }})
+        # nuget.config references the gitignored local feed .nupkg-local/; make it
+        # exist on the fresh runner or restore fails with NU1301.
+        run: mkdir -p .nupkg-local && dotnet build src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} --nologo
+      - name: Pack (${{ matrix.rid }})
+        run: dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} --no-build -o artifacts --nologo
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nupkg-${{ matrix.rid }}
+          path: artifacts/*.nupkg
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # enable GitHub OIDC token issuance for this job
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: Arasz
+      - name: Push to nuget.org
+        run: dotnet nuget push "artifacts/**/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

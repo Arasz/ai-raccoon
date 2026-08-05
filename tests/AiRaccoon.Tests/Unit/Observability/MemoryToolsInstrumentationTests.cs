@@ -20,6 +20,7 @@ namespace AiRaccoon.Tests.Unit.Observability;
 /// <summary>Verifies that MemoryTools methods emit metrics and traces through ToolCallMetrics.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ObservabilityCollection.Name)]
 public class MemoryToolsInstrumentationTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);

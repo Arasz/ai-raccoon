@@ -1,0 +1,53 @@
+# Path-based PR labeling for the Labeler workflow (.github/workflows/labeler.yml).
+# actions/labeler v7 config syntax: https://github.com/actions/labeler#usage
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "README.md"
+          - "CLAUDE.md"
+          - "LICENSE"
+
+core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/AiRaccoon.Core/**"
+
+infrastructure:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/AiRaccoon.Infrastructure/**"
+
+mcp-server:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/AiRaccoon/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+
+benchmarks:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "benchmarks/**"
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/**"
+
+.NET:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Directory.Packages.props"
+          - "Directory.Build.props"
+          - "*.slnx"
+          - "global.json"
+
+github-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"

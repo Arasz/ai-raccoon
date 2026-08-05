@@ -12,12 +12,10 @@ __pycache__/
 /BenchmarkDotNet.Artifacts/
 # Golden-retrieval harness reference binaries (pinned by manifest.json; the bootstrap copies
 # verified copies from ~/.ai-raccoon or downloads the pinned releases). Committed inside the
-# directory: manifest.json, reference-topk.json and the asset-policy sources.
-tests/AiRaccoon.Tests/Retrieval/assets/*
-!tests/AiRaccoon.Tests/Retrieval/assets/manifest.json
-!tests/AiRaccoon.Tests/Retrieval/assets/reference-topk.json
-!tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssets.cs
-!tests/AiRaccoon.Tests/Retrieval/assets/ReferenceAssetGateTests.cs
+# directory: manifest.json and reference-topk.json.
+tests/AiRaccoon.Tests/Unit/Retrieval/assets/*
+!tests/AiRaccoon.Tests/Unit/Retrieval/assets/manifest.json
+!tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json
 # Bundled ONNX embedding model (FR-NM-3): downloaded + SHA-pinned by scripts/download-embedding-model.sh.
 # vocab.txt is committed; only the ~23 MB binary is gitignored.
 src/AiRaccoon/Models/*.onnx
