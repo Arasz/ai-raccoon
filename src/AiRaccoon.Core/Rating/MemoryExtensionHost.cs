@@ -3,7 +3,7 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Core.Rating;
 
 /// <summary>
-///     Runs registered IMemoryExtension hooks in order around every store operation (spec §6.2).
+///     Runs registered IMemoryExtension hooks in order around every store operation (see docs/work/features-agent-memory/spec-issue-1.md §6.2).
 ///     The host implements IMemoryStore and decorates the real store, so hooks observe writes,
 ///     searches, deletes, sweeps and consolidations without the MCP layer knowing they exist.
 /// </summary>
