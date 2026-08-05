@@ -475,6 +475,12 @@ def pre_llm_inject_context(
     if pending_reminder:
         parts.append(pending_reminder)
 
+    memory_grade = _load_memory_grade()
+    if memory_grade is not None:
+        grade_ask = memory_grade.pop_ask(project)
+        if grade_ask:
+            parts.append(grade_ask)
+
     # Framework version
     fw_version = _read_framework_version()
     if fw_version:
@@ -757,6 +763,47 @@ def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Memory grade — Hermes has no PostToolUse return channel into the model's
+# context, so the search line is logged at post_tool_call time and the grade ask
+# is stashed for pre_llm_inject_context to surface on the very next turn.
+# All logic lives in memory_grade.py; this section only wires it in.
+# ---------------------------------------------------------------------------
+
+MEMORY_GRADE_MODULE_NAME = "memory_grade"
+
+
+def _load_memory_grade() -> Optional[Any]:
+    """Import the sibling memory_grade module lazily; None when an older scaffold lacks it."""
+    cached = sys.modules.get(MEMORY_GRADE_MODULE_NAME)
+    if cached is not None:
+        return cached
+    path = Path(__file__).resolve().parent / "memory_grade.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(MEMORY_GRADE_MODULE_NAME, path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[MEMORY_GRADE_MODULE_NAME] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:  # pylint: disable=broad-exception-caught
+        sys.modules.pop(MEMORY_GRADE_MODULE_NAME, None)
+        logger.warning("memory_grade could not be loaded from %s", path, exc_info=True)
+        return None
+    return module
+
+
+def _maybe_log_memory_grade(tool_name: str, args: Dict[str, Any], result: str,
+                            cwd: str) -> None:
+    """After a memory_search call, log the line and stash the grade ask; silent otherwise."""
+    memory_grade = _load_memory_grade()
+    if memory_grade is None or not memory_grade.is_memory_search(tool_name):
+        return
+    memory_grade.log_search(args or {}, result, cwd)
+
+
+# ---------------------------------------------------------------------------
 # Tool call observer — equivalent to Claude's PostToolUse hook
 # ---------------------------------------------------------------------------
 
@@ -782,6 +829,11 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         _maybe_remind_commit(tool_name, cwd)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("commit reminder check failed", exc_info=True)
+
+    try:
+        _maybe_log_memory_grade(tool_name, kwargs.get("args") or {}, result, cwd)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("memory grade logging failed", exc_info=True)
 
     # Log index hit/miss metrics if the index is available
     if tool_name:

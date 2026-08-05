@@ -27,6 +27,12 @@
         "bash": "python3 \".ai-badger/skills/commit-reminder/scripts/commit_reminder_hook.py\"",
         "timeoutSec": 10,
         "matcher": "Edit|Write|MultiEdit|NotebookEdit"
+      },
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "memory_search"
       }
     ]
   }

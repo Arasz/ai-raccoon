@@ -2391,7 +2391,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-05T15:46:05.724958+00:00",
+          "timestamp": "2026-08-05T16:23:58.220892+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T16:23:58.220892+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
@@ -2402,6 +2414,342 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "watch-star-glob",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260805_182148_b02a8f",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T16:24:02.644908+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 6,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 72535,
+              "outputTokens": 8616,
+              "cacheReadTokens": 332416,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 6
+            }
+          },
+          "cumulative": {
+            "inputTokens": 72535,
+            "outputTokens": 8616,
+            "cacheReadTokens": 332416,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T17:21:41.327215+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 213,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 243181,
+              "outputTokens": 189083,
+              "cacheReadTokens": 47251072,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 223
+            }
+          },
+          "cumulative": {
+            "inputTokens": 731432,
+            "outputTokens": 402311,
+            "cacheReadTokens": 53259904,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T17:21:41.327215+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 213,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 243181,
+              "outputTokens": 189083,
+              "cacheReadTokens": 47251072,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 223
+            }
+          },
+          "cumulative": {
+            "inputTokens": 731432,
+            "outputTokens": 402311,
+            "cacheReadTokens": 53259904,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-flash": 180467
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 658897,
+        "outputTokens": 393695,
+        "cacheReadTokens": 52927488,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 53980080,
+        "grandTotal": 53980080
+      }
+    },
+    {
+      "taskId": "fix-publish-multirid-shell",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260805_183505_416e1d",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T16:46:55.176043+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T17:21:41.595708+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T17:21:41.595708+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "embedding-model-resolution",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260805_194355_fd5ab5",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T17:44:56.518836+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 2,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 73181,
+              "outputTokens": 2793,
+              "cacheReadTokens": 44416,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 2
+            }
+          },
+          "cumulative": {
+            "inputTokens": 73181,
+            "outputTokens": 2793,
+            "cacheReadTokens": 44416,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T17:51:04.417543+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 28,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 127105,
+              "outputTokens": 33952,
+              "cacheReadTokens": 3200640,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 28
+            }
+          },
+          "cumulative": {
+            "inputTokens": 126862,
+            "outputTokens": 33694,
+            "cacheReadTokens": 3200384,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T17:51:04.417543+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 28,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 127105,
+              "outputTokens": 33952,
+              "cacheReadTokens": 3200640,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 28
+            }
+          },
+          "cumulative": {
+            "inputTokens": 126862,
+            "outputTokens": 33694,
+            "cacheReadTokens": 3200384,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-flash": 31159
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 53681,
+        "outputTokens": 30901,
+        "cacheReadTokens": 3155968,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 3240550,
+        "grandTotal": 3240550
+      }
+    },
+    {
+      "taskId": "embedding-model-hardening",
+      "subagents": [
+        {
+          "description": "architect-plan",
+          "at": "2026-08-05T18:54:17.139419+00:00",
+          "totalTokens": 642898,
+          "delegationId": "deleg_eab8f1a6",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 13
+        },
+        {
+          "description": "implementation",
+          "at": "2026-08-05T18:54:17.442021+00:00",
+          "totalTokens": 8352171,
+          "delegationId": "deleg_f1b9e4ad",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 70
+        },
+        {
+          "description": "code-review",
+          "at": "2026-08-05T18:54:17.761473+00:00",
+          "totalTokens": 1212654,
+          "delegationId": "deleg_65c796cd",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 18
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260805_195139_aa2bbf",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T17:58:11.576526+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T19:25:41.537911+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T19:25:41.537911+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 10207723,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     }
   ]

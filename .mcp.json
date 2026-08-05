@@ -18,6 +18,12 @@
       "tools": [
         "*"
       ]
+    },
+    "ai-raccoon": {
+      "command": "${HOME}/.dotnet/tools/ai-raccoon",
+      "tools": [
+        "*"
+      ]
     }
   }
 }
