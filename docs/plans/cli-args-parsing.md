@@ -1,5 +1,11 @@
 # Implementation Plan — Command-Line Argument Parsing for the ai-raccoon MCP Server
 
+> **SUPERSEDED (2026-08-04):** the env-var merge layer this plan designs never shipped.
+> The CLI-config refactor (PR #3) replaced env/args/config channels with a CLI-only
+> verb tree + settings table. See `docs/work/2026-08-04-cli-config-findings.md` + owner
+> rulings; kept as an archive of the System.CommandLine decisions that DID land (parse-first,
+> all CLI text → stderr).
+
 > **Based on:** `docs/work/2026-08-04-cli-args-exploration.md` (decision: System.CommandLine 2.0.10,
 > parse-first, all CLI text → stderr).
 > **Date:** 2026-08-04 · **Branch:** `task/add-command-line-args-parsing` · **PR scope:** one PR.

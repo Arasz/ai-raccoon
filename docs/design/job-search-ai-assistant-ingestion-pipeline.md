@@ -163,12 +163,11 @@ Phase 5: Verify (stats, spot-check search)
 
 ### 3.2 Phase 0: Configure Embeddings
 
+Config is CLI-only (single channel — the `memory_configure` tool was removed in the 2026-08-04 CLI-config refactor; see `docs/work/2026-08-04-cli-config-findings.md`):
+
 ```
-memory_configure(
-  projectId="job-search-ai-assistant",
-  provider="local"
-)
-→ {provider: "local", engine: "local:bundled"}
+ai-raccoon model set local
+→ provider: local, engine: local:bundled (settings rows embedding.provider/model)
 ```
 
 ### 3.3 Phase 1: File Enumeration
@@ -630,8 +629,9 @@ scripts/scored-baseline-template.html # The scoring form
 ### Script flow:
 
 ```python
-# 1. Configure embeddings
-memory_configure(project_id="job-search-ai-assistant", provider="local")
+# 1. Configure embeddings (CLI-only channel; memory_configure was removed in the
+#    CLI-config refactor 2026-08-04)
+subprocess.run(["ai-raccoon", "model", "set", "local"], check=True)
 
 # 2. Walk project tree, classify files
 files = enumerate_files(JSAA_ROOT, INCLUDE_GLOBS, EXCLUDE_GLOBS)
