@@ -176,6 +176,7 @@ runs the server.
 | `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
+| `--port <n>` | any port; `0` = random free port | `7721` |
 
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):

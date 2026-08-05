@@ -18,17 +18,7 @@ if (parsed.CommandPath.Length > 0)
     return await ConfigVerbRunner.RunAsync(parsed, config, Console.Out, Console.Error, Console.In);
 }
 
-var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
-
-// Ruling 3: appsettings.json is removed — the settings table is the single runtime
-// channel, so the host's dormant config sources are cleared.
-builder.Configuration.Sources.Clear();
-
-builder
-    .ConfigureMcpServer(config.Transport)
-    .Services.RegisterMemoryServices(config.Options);
-
-var app = builder.Build().ConfigureMcpEndpoints(config.Transport);
+var app = McpServerSetup.CreateServerHost(config);
 
 // Eager startup open (plan §S2b): refuse to serve before the first tool call when the bank
 // cannot be opened with the configured encryption source — bws missing/network failure, a
@@ -79,5 +69,15 @@ catch (Exception ex)
 // warn, never fail, when the packaged ONNX is missing.
 await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, ct => BundledModel.EnsureAsync(ct), CancellationToken.None);
 
-await app.RunAsync();
+await app.StartAsync();
+
+// The bound port is only knowable after start (0 = random); the URL print is the
+// discoverability channel for the http transport.
+if (config.Transport == McpTransport.Http)
+{
+    var urls = string.Join(", ", ((WebApplication)app).Urls.Select(url => $"{url.TrimEnd('/')}/mcp"));
+    Console.Error.WriteLine($"ai-raccoon: http transport listening on {urls}");
+}
+
+await app.WaitForShutdownAsync();
 return 0;

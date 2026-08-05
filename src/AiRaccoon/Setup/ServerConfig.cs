@@ -3,11 +3,11 @@ using AiRaccoon.Infrastructure.Options;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     Launch identity: transport + bank options. Built by <see cref="Build"/> from the
+///     Launch identity: transport + port + bank options. Built by <see cref="Build"/> from the
 ///     launch flags (CLI only — env handling was removed by the single-channel ruling;
 ///     runtime configuration lives in the settings table via the config commands).
 /// </summary>
-internal sealed record ServerConfig(McpTransport Transport, InfrastructureOptions Options)
+internal sealed record ServerConfig(McpTransport Transport, InfrastructureOptions Options, int Port = 7721)
 {
     internal static ServerConfig Build(CliOptions? cli)
     {
@@ -20,7 +20,7 @@ internal sealed record ServerConfig(McpTransport Transport, InfrastructureOption
             Scope = cli?.InstallScope ?? InstallScope.User
         };
 
-        return new ServerConfig(transport, options);
+        return new ServerConfig(transport, options, cli?.Port ?? 7721);
     }
 
     private static McpTransport ParseTransport(string? value) =>

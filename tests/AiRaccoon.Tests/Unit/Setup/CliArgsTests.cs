@@ -27,6 +27,42 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_ParsesPortOption()
+    {
+        var parsed = CliArgs.Parse(["--port", "7721"]);
+
+        parsed.Options.ShouldNotBeNull();
+        parsed.Options.Port.ShouldBe(7721);
+        parsed.CommandPath.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_PortOnly_DoesNotShortcutToNullOptions()
+    {
+        var parsed = CliArgs.Parse(["--port", "0"]);
+
+        parsed.Options.ShouldNotBeNull();
+        parsed.Options.Port.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Parse_NoPortOption_UsesDefault()
+    {
+        var parsed = CliArgs.Parse(["--transport", "http"]);
+
+        parsed.Options.ShouldNotBeNull();
+        parsed.Options.Port.ShouldBe(7721);
+    }
+
+    [Fact]
+    public void Parse_GarbagePort_ReturnsError()
+    {
+        var parsed = CliArgs.Parse(["--port", "banana"]);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public void Parse_NoArgs_ReturnsNullOptionsAndNoCommand()
     {
         var parsed = CliArgs.Parse([]);

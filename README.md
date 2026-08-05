@@ -47,7 +47,8 @@ shapes) is in [`docs/reference/agent-memory-server.md`](docs/reference/agent-mem
 
 - **stdio** (default) — what MCP clients expect when launching a server as a subprocess.
 - **Streamable HTTP** — opt-in via `--transport http`; serves the
-  protocol at `/mcp` (launch profile `http`, `http://localhost:8080`).
+  protocol at `/mcp` on `--port` (default 7721, `0` = random free port; the bound URL is
+  printed to stderr).
 
 Transport selection lives in one place: `ServerConfig` takes the resolved transport
 from the `--transport` launch flag (anything other than `http` runs stdio). All
@@ -78,6 +79,7 @@ builds. Launch-identity flags (startup-scoped only):
 | `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
+| `--port <n>` | any port; `0` = random free port | `7721` |
 
 Runtime configuration is not read from environment variables — it lives in the
 settings table and is changed with the config verbs (one-shot processes against the

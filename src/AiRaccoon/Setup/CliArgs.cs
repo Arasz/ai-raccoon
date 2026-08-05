@@ -6,11 +6,12 @@ using AiRaccoon.Setup.Cli;
 
 namespace AiRaccoon.Setup;
 
-/// <summary>Launch identity only: 3 nullable properties; null means the option was not given.</summary>
+/// <summary>Launch identity only: 3 nullable properties (null means the option was not given) plus the port.</summary>
 internal sealed record CliOptions(
     string? Transport,
     string? DataRoot,
-    InstallScope? InstallScope);
+    InstallScope? InstallScope,
+    int Port = 7721);
 
 /// <summary>
 ///     Parse outcome: options (null on help/version/errors), the verb command path (empty means
@@ -111,13 +112,23 @@ internal static class CliArgs
         var transport = OptionValue(parseResult, "--transport", r => r.GetValueOrDefault<McpTransport>().ToString().ToLowerInvariant());
         var dataRoot = OptionValue(parseResult, "--data-root", r => r.GetValueOrDefault<string>());
         var scope = InstallScopeValue(parseResult);
+        var portResult = parseResult.GetResult("--port");
+        // A default-valued option materializes in the parse result even when absent, so
+        // explicit presence is the token count, not the OptionResult's existence.
+        var portExplicit = false;
+        var port = 7721;
+        if (portResult is OptionResult { Tokens.Count: > 0 } explicitResult)
+        {
+            portExplicit = true;
+            port = explicitResult.GetValueOrDefault<int>();
+        }
 
-        if (transport is null && dataRoot is null && scope is null)
+        if (transport is null && dataRoot is null && scope is null && !portExplicit)
         {
             return null;
         }
 
-        return new CliOptions(transport, dataRoot, scope);
+        return new CliOptions(transport, dataRoot, scope, port);
     }
 
     private static T? OptionValue<T>(ParseResult parseResult, string name, Func<OptionResult, T> read) => parseResult.GetResult(name) is OptionResult result ? read(result) : default;

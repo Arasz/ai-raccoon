@@ -60,6 +60,19 @@ public class ServerConfigTests
     }
 
     [Fact]
+    public void Build_AppliesPortFromFlag()
+    {
+        ServerConfig.Build(new CliOptions(null, null, null, 7721)).Port.ShouldBe(7721);
+        ServerConfig.Build(new CliOptions(null, null, null, 0)).Port.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Build_DefaultPort_WhenNoFlag()
+    {
+        ServerConfig.Build(null).Port.ShouldBe(7721);
+    }
+
+    [Fact]
     public void Build_InstallScopeFromFlag()
     {
         ServerConfig.Build(new CliOptions(null, null, InstallScope.Project)).Options.Scope.ShouldBe(InstallScope.Project);
