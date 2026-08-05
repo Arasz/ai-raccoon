@@ -72,6 +72,75 @@ public class AzureBlobCloudStoreTests
             () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task Push_WithETag_SendsQuotedIfMatchHeader()
+    {
+        var handler = new CannedBlobHandler(_ => Created("0x8Dnew"));
+        var store = Store(handler);
+
+        var newEtag = await store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
+            TestContext.Current.CancellationToken);
+
+        newEtag.ShouldBe("0x8Dnew");
+        var request = handler.Requests.ShouldHaveSingleItem();
+        request.Method.ShouldBe(HttpMethod.Put);
+        request.Path.ShouldBe("/memories/bank.db");
+        request.IfMatch.ShouldBe("\"0x8Dabc\"");
+    }
+
+    [Fact]
+    public async Task Push_WithoutETag_SendsNoIfMatchHeader()
+    {
+        var handler = new CannedBlobHandler(_ => Created("0x8Dnew"));
+        var store = Store(handler);
+
+        await store.PushAsync("bank.db", "snapshot"u8.ToArray(), null, TestContext.Current.CancellationToken);
+
+        handler.Requests.ShouldHaveSingleItem().IfMatch.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Push_Conflict_ThrowsSyncConflictException()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(412)));
+
+        await Should.ThrowAsync<SyncConflictException>(
+            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_ServerError_ThrowsSyncNetworkException()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(500)));
+
+        await Should.ThrowAsync<SyncNetworkException>(
+            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_ReturnsUnquotedETag()
+    {
+        var store = Store(new CannedBlobHandler(_ => Created("0x8Dnew")));
+
+        var newEtag = await store.PushAsync("bank.db", "snapshot"u8.ToArray(), null,
+            TestContext.Current.CancellationToken);
+
+        newEtag.ShouldBe("0x8Dnew");
+    }
+
+    [Fact]
+    public async Task Push_WithETagOnMissingBlob_ThrowsSyncConflictException()
+    {
+        // If-Match against a nonexistent blob also 412s (Put Blob semantics, matches S3).
+        var store = Store(new CannedBlobHandler(_ => Error(412)));
+
+        await Should.ThrowAsync<SyncConflictException>(
+            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
+                TestContext.Current.CancellationToken));
+    }
+
     private static AzureBlobCloudStore Store(CannedBlobHandler handler) => new(
         new BlobServiceClient(FakeConnectionString, new BlobClientOptions
         {
@@ -97,6 +166,18 @@ public class AzureBlobCloudStoreTests
             ["x-ms-server-encrypted"] = "true"
         },
         body);
+
+    private static CannedResponse Created(string etag) => new(
+        201,
+        new Dictionary<string, string>
+        {
+            ["ETag"] = $"\"{etag}\"",
+            ["Last-Modified"] = "Wed, 05 Aug 2026 12:00:00 GMT",
+            ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
+            ["x-ms-version"] = "2025-07-06",
+            ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT"
+        },
+        []);
 
     private static CannedResponse Error(int status) => new(
         status,
