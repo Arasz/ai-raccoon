@@ -58,7 +58,8 @@ public sealed class BaselineQueryCatalogTests
         var queries = LoadQueries();
 
         // Measured 2026-08-04 (hybrid k=60, 1:1, minScore 0.0), exact-chunk rank. Wave 5a pins were
-        // measured on main @ 6889ee8; Wave 5b additions measured in the w5b worktree (post-W3+W4+W6):
+        // measured on main @ 6889ee8; Wave 5b additions measured in a later worktree after the
+        // Wave 3/4/6 feature merges:
         // A2/A5/C1/C2/C5 exact@1; A1/A3 exact@2-3; A4/A7/S2 exact@4-5 (S2 @5 at 5a time, @3 post-W3);
         // A6 exact outside top-5. New: A8/S3/S4/S6 exact@1; S1/S5 exact@2; A9 exact@3; A10 exact@2.
         var expected = new Dictionary<string, string>
