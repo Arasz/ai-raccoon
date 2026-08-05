@@ -77,5 +77,15 @@ jobs:
         id: login
         with:
           user: Arasz
-      - name: Push to nuget.org
-        run: dotnet nuget push "artifacts/**/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Push payloads to nuget.org
+        # Payloads first, then the shells: a shell live before its payloads makes
+        # `dotnet tool install` fail in the window until the payloads land.
+        # Shells match arasz.ai-raccoon.<version>.nupkg (a digit right after the
+        # package prefix); payloads are arasz.ai-raccoon.<rid>.<version>.nupkg.
+        run: |
+          find artifacts -type f -name '*.nupkg' ! -name 'arasz.ai-raccoon.[0-9]*.nupkg' -print0 \
+            | xargs -0 -n1 dotnet nuget push --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Push shells to nuget.org
+        run: |
+          find artifacts -type f -name 'arasz.ai-raccoon.[0-9]*.nupkg' -print0 \
+            | xargs -0 -n1 dotnet nuget push --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
