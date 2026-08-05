@@ -86,5 +86,9 @@ catch (Exception ex)
     return 1;
 }
 
+// Best-effort bundled-model bootstrap (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
+// warn, never fail, when the packaged ONNX is missing.
+await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, ct => BundledModel.EnsureAsync(ct), CancellationToken.None);
+
 await app.RunAsync();
 return 0;
