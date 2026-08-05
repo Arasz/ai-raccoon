@@ -103,6 +103,83 @@ print to stderr (exit 0 / exit 1); stdout carries only MCP protocol frames. Gene
 host flags (`--environment`, `--contentRoot`, `--applicationName`) are accepted
 hidden and ignored.
 
+### Configuration commands — usage
+
+Every verb runs as a one-shot process against the install's bank (the running server
+hot-reloads the rows). Targets take `{project-id|*}`: `*` matches all projects and a
+project-specific row overrides the wildcard (more specific wins). Run any command with
+`--help` for its exact argument list.
+
+**Access modes** — who may do what in a project's memory.
+
+```
+ai-raccoon access default set {ro|rw|full}   # global default (rw unless set)
+ai-raccoon access default show
+ai-raccoon access set {project-id|*} {ro|rw|full}   # per-project override
+ai-raccoon access unset {project-id|*}              # drop the override
+ai-raccoon access list
+```
+
+Tiers: `ro` = read only, `rw` = read + write (default), `full` = adds destructive
+operations (deletion, forgetting knobs). The background file-watcher mirror runs
+regardless of tier.
+
+**Embedding model** — which engine embeds chunks.
+
+```
+ai-raccoon model set local [path]       # bundled all-MiniLM-L6-v2 (int8, ~21 MB); optional custom ONNX path
+ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]   # any OpenAI-compatible endpoint
+ai-raccoon model reset                  # back to the bundled local default
+ai-raccoon model show
+```
+
+The API key is stored in the settings table (encrypted at rest with a passphrase).
+Changing provider/model/base-url re-embeds the whole bank with the new engine.
+
+**Retrieval alpha** — the hybrid-search blend weight (structure signal vs lexical).
+
+```
+ai-raccoon retrieval alpha set {0..1}   # default: measured sweep optimum (ADR 0006)
+ai-raccoon retrieval alpha show
+```
+
+**Sweep threshold** — the degradation cutoff for old, low-rated entries.
+
+```
+ai-raccoon sweep threshold set {0..1}
+ai-raccoon sweep show
+```
+
+(The per-entry TTL knob was removed in the CLI-config refactor — degradation is
+threshold-driven only.)
+
+**Cloud sync** — S3-compatible snapshot sync (off until configured).
+
+```
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]
+ai-raccoon sync remove
+ai-raccoon sync show                      # keys redacted
+```
+
+`sync add s3` prompts for the S3 access key and secret key interactively (prompt on
+stderr, input from stdin; an empty answer aborts with exit 1 and persists nothing) —
+credentials are never accepted on the command line. `sync remove` returns to sync-off;
+`sync show` prints the endpoint/bucket with the keys redacted.
+
+**File watching** — mirror a path into memory (opt-in, project-scoped).
+
+```
+ai-raccoon watch enable {project-id|*} {true|false}   # opt-in; false = disable
+ai-raccoon watch scope add|remove|list {project-id|*} {path}   # allowlist entries; absolute paths cover dir + subdirs
+ai-raccoon watch concurrency {project-id|*} {1..16}   # parallel digests (default 4)
+ai-raccoon watch list
+```
+
+Watching is **disabled until enabled**; `memory_watch_add` only accepts paths inside an
+allowed scope. `watch enable * true` with an empty allowlist prints a hint to add at
+least one scope. Watch configuration persists across restarts (the watcher re-registers
+and catches up on restart).
+
 Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw):
 
 ```json
@@ -142,6 +219,54 @@ The API key is stored in the settings table (encrypted at rest when a passphrase
 set). Changing the engine (`provider`/`model`/`baseUrl`) re-embeds the entire bank
 with the new engine. Other OpenAI-compatible endpoints (LM Studio, Ollama) are
 supported — pass their base-url to `ai-raccoon model set openai`.
+
+## Metrics & observability
+
+Every MCP tool invocation (all 19 tools) records OpenTelemetry-compatible metrics and
+traces through the `ToolCallMetrics` meter:
+
+| Instrument | Name | Tags |
+|---|---|---|
+| Counter | `ai_raccoon_tool_invocations` | `tool`, `result` (success/error), `error_type` |
+| Histogram | `ai_raccoon_tool_duration_ms` | `tool`, `result`, `error_type` (buckets 1 ms – 30 s) |
+| ActivitySource | `AiRaccoon.MemoryTools` | `tool`, `project_id`, `error_type` |
+
+Meter and ActivitySource are both named **`AiRaccoon.MemoryTools`**.
+
+### Watch metrics live (dotnet-counters)
+
+While the server runs, monitor the meter over EventPipe (no code changes, no
+restart):
+
+```bash
+dotnet-counters monitor -p <server-pid> --counters AiRaccoon.MemoryTools
+```
+
+This prints the invocation counter and the duration histogram (count/sum/percentiles)
+per `tool`/`result` tag set, refreshing every second. Install `dotnet-counters` once
+with `dotnet tool install -g dotnet-counters`; find the server pid with
+`pgrep -f ai-raccoon` (or `dotnet run`'s own pid in dev).
+
+### Collect traces (dotnet-trace)
+
+```bash
+dotnet-trace collect -p <server-pid> --providers AiRaccoon.MemoryTools
+```
+
+The resulting trace file can be opened in PerfView/VS/VS Code; each tool call is a
+span with `tool`, `project_id` and `error_type` tags. (The ActivitySource only emits
+while a listener is attached — `dotnet-trace` attaches one.)
+
+### Notes
+
+- No OTLP export is wired yet (Wave 0 is local-only; `project_id` is a plaintext tag —
+  it may need hashing when OTLP export is added). Prometheus/Grafana integration comes
+  with that work.
+- For store-level operational state (entries, pending embeds, contexts) use the
+  `memory_stats` MCP tool in-band.
+- Instrumentation behavior itself is pinned by tests
+  (`tests/AiRaccoon.Tests/Unit/Observability/`), which attach an `ActivityListener` and
+  read the meter directly.
 
 ## Requirements
 
@@ -187,30 +312,55 @@ ordering.
 Full numbers, metric definitions (R@5, R@10, MRR, nDCG@10, dim, latency),
 methodology and the runnable harness: [`docs/reference/embedding-benchmark.md`](docs/reference/embedding-benchmark.md).
 
-## Quickstart — run it
+## How to start
 
-Run from source with the stdio transport (the default):
+### Install
+
+The server packs as a .NET tool (package id `ai-raccoon`):
 
 ```bash
-dotnet run --project src/AiRaccoon
+dotnet tool install -g ai-raccoon        # from the NuGet feed
+# or from the local feed after `dotnet pack -c Release` (DOTNET_ENV=local):
+dotnet tool install -g ai-raccoon --add-source .nupkg-local
 ```
 
-Or with the HTTP transport, using the `http` launch profile (listens on
-`http://localhost:8080`):
+Or run from source (see below). After install, `ai-raccoon` on PATH is the whole
+interface: launch flags to start the server, verb commands to configure the bank.
+
+### Run the server
+
+**stdio** (default — what MCP clients expect when launching a subprocess):
 
 ```bash
+ai-raccoon                                    # or: dotnet run --project src/AiRaccoon
+```
+
+**Streamable HTTP** (opt-in):
+
+```bash
+ai-raccoon --transport http                  # serves the MCP protocol at /mcp
+# with the launch profile (listens on http://localhost:8080):
 dotnet run --project src/AiRaccoon --launch-profile http
 ```
 
-(`--transport http` selects the HTTP transport too — via the `http` launch profile,
-which passes `--transport http` as `commandLineArgs`, or by appending `-- --transport
-http` to `dotnet run`. Without a profile the HTTP endpoint lands on ASP.NET's default
-port, not 8080.)
+Launch identity flags (startup-scoped only): `--transport stdio|http|https` (default
+`stdio`), `--data-root <path>` (default `~/.ai-raccoon`), `--install-scope user|project`
+(default `user`). All diagnostics go to stderr; stdout carries only MCP protocol frames.
 
 ### Connect a client
 
-To use the server from an MCP client (for example VS Code's `.vscode/mcp.json`, or Visual
-Studio's `.mcp.json`):
+Zero-config entry for clients that launch the server themselves (Claude Desktop,
+VS Code, etc.):
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": { "command": "ai-raccoon" }
+  }
+}
+```
+
+When the client points `command` at the repo (e.g. VS Code's `.vscode/mcp.json`):
 
 ```json
 {
@@ -224,9 +374,10 @@ Studio's `.mcp.json`):
 }
 ```
 
-`--no-launch-profile` matters: `dotnet run` otherwise prints its launch-settings notice to
-stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP clients expect on
-stdio.
+`--no-launch-profile` matters: `dotnet run` otherwise prints its launch-settings notice
+to stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP clients expect
+on stdio. For an HTTP client point it at `http://localhost:8080/mcp` (or the port from
+`--transport http`).
 
 ## Architecture
 
