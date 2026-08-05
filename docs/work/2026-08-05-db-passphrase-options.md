@@ -122,6 +122,66 @@ Reasoned from the repo's documentation surface: removing the env var touches `RE
 
 **Evidence:** Reasoning from the cited repo files (README.md:37,60,193-207; SECURITY.md:44; agent-memory-server.md:148,248; .mcp/server.json:14-27; 2026-08-04 findings F10).
 
+### F19 — Bitwarden.Secrets.Sdk 1.0.0 (published 2025-01-24, the only NuGet release) targets net6.0 with a bundled Rust native core for osx-x64, osx-arm64, linux-x64 and win-x64; it loads and runs under net10.0 on macOS arm64 — measured [MEASURED]
+
+NuGet registration lists a single listed version: `Bitwarden.Secrets.Sdk` 1.0.0, published 2025-01-24, target framework net6.0, dependency `System.Text.Json >= 8.0.5`. The 1.0.0 nupkg contains `lib/net6.0/Bitwarden.Sdk.dll` (46 KB) plus `runtimes/{osx-x64,osx-arm64,linux-x64,win-x64}/native/libbitwarden_c.*` (the Rust core; the arm64 dylib is 7.0 MB), NuGet repository-signed (`.signature.p7s`). A probe console app (net10.0, dotnet 10.0.302, macOS 26.5.2) restored the package and `new BitwardenClient(...)` succeeded in 16–306 ms — the native library loads on this platform with zero extra setup. The C# binding is explicitly beta: the README says "This is a beta release and might be missing some functionality"; the crate docs say the same. License is Bitwarden's custom "BITWARDEN SOFTWARE DEVELOPMENT KIT LICENSE AGREEMENT v1, 17 March 2023" — source-available, not OSI. Maturity note: `languages/csharp` is actively maintained (commits 2026-06-10, 2026-02-12, STJ v10 bump 2026-01-20) but **no package has shipped since 1.0.0** — everything added after 2025-01-24 (including the async API) is main-branch only. Supply-chain note mirroring F15: the shipped secret path is a ~7 MB native binary from a third-party repo, black-box from the app's perspective.
+
+**Evidence:** https://api.nuget.org/v3/registration5-gz-semver2/bitwarden.secrets.sdk/index.json (retrieved 2026-08-05: 1.0.0, 2025-01-24, net6.0, STJ >= 8.0.5); nupkg unzip listing of `/tmp/bw.nupkg` (2026-08-05); `dotnet run` of `/tmp/bwprobe/BwProbe` probe A0 (2026-08-05, macOS 26.5.2, dotnet 10.0.302); https://github.com/bitwarden/sdk-sm/blob/main/languages/csharp/README.md (retrieved 2026-08-05: beta statement); LICENSE at https://github.com/bitwarden/sdk-sm (retrieved 2026-08-05); GitHub commits API for `languages/csharp/Bitwarden.Sdk` (retrieved 2026-08-05).
+
+### F20 — The published 1.0.0 C# API is synchronous and matches the README exactly; async variants (`LoginAccessTokenAsync`, `GetByIdsAsync`, …) exist only on main, unreleased — measured [MEASURED]
+
+Reflection over the published `Bitwarden.Sdk.dll`: `BitwardenClient(BitwardenSettings? settings = null)` with `Auth`, `Projects`, `Secrets` properties and `Dispose()`; `AuthClient.LoginAccessToken(string accessToken, string stateFile = "")`; `SecretsClient` — `Get(Guid)`, `GetByIds(Guid[])`, `List(Guid orgId)`, `Sync(Guid orgId, DateTimeOffset? lastSyncedDate)`, `Create`, `Update`, `Delete`; `ProjectsClient` — `Get/List/Create/Update/Delete`; request/response DTOs (e.g. `SecretResponse { Id, Key, Value, Note, ProjectId, OrganizationId, CreationDate, RevisionDate }`); envelope `ResponseForX { Success, ErrorMessage, Data }`; exceptions `BitwardenException` and `BitwardenAuthException`. `BitwardenSettings` exposes only `ApiUrl` and `IdentityUrl` (defaults to api.bitwarden.com / identity.bitwarden.com — verified by the probe hitting those hosts). The main branch (source read at https://github.com/bitwarden/sdk-sm/tree/main/languages/csharp/Bitwarden.Sdk) adds `*Async` methods over the `run_command_async` FFI (added 2025-04-25, #993), targets net8.0 with System.Text.Json 10.0.2, and makes `stateFile` optional — none of that is in the published package.
+
+**Evidence:** Reflection dump of `~/.nuget/packages/bitwarden.secrets.sdk/1.0.0/lib/net6.0/Bitwarden.Sdk.dll` via `/tmp/bwprobe/dump` (2026-08-05); `AuthClient.cs`, `SecretsClient.cs`, `BitwardenClient.cs`, `BitwardenSettings.cs`, `CommandRunner.cs`, `Bitwarden.Sdk.csproj` from sdk-sm main (fetched 2026-08-05); probe runs A1/B1 hitting api.bitwarden.com and identity.bitwarden.com with default settings (2026-08-05).
+
+### F21 — Measured error behavior: token format is validated client-side before any network call; a format-valid fake token fails with `BitwardenAuthException` carrying the server body (`400 {"error":"invalid_client"}`, ~200–263 ms); unauthenticated secret fetch fails with `BitwardenException` (`401 Unauthorized`); a connection-refused endpoint fails instantly with the reqwest error text and an empty inner exception; `BitwardenSettings` exposes no timeout, retry, or proxy config [MEASURED]
+
+Probes against the real identity endpoint with a format-valid but fake token (`0.<uuid>.<16B b64>:<16B b64>`): malformed tokens are rejected in 0–9 ms with "Access token is not in a valid format" (pure local validation); the format-valid fake token reaches `identity.bitwarden.com/connect/token` and returns `400 Bad Request {"error":"invalid_client"}` wrapped in `BitwardenAuthException` (263 ms / 202 ms). A `Secrets.GetByIds` call without login hits `api.bitwarden.com` and returns `BitwardenException: Received error message from server: [401 Unauthorized]`. Pointing `ApiUrl`/`IdentityUrl` at a closed local port fails with `BitwardenAuthException: error sending request for url (http://127.0.0.1:9/connect/token)` in 0 ms (connection refused surfaces immediately; a blackholed network would hang until the Rust core's own HTTP timeout, which is not configurable from C#).
+
+**Evidence:** Probe runs A1, B1, C1, D1 of `/tmp/bwprobe/BwProbe` (Program.cs, `dotnet run` transcripts, 2026-08-05, macOS 26.5.2, dotnet 10.0.302; fake token `0.00000000-0000-0000-0000-000000000000.MDEyMzQ1Njc4OWFiY2RlZg==:QUJDREVGR0hJSktMTU5PUA==`).
+
+### F22 — The SDK state file: `stateFile` is a caller-supplied path; on successful login the Rust core persists authenticated client state there ("basic state to avoid reauthenticating when creating a new Client", CHANGELOG v0.4.0, #388); the bws CLI precedent stores per-token-id session state at `~/.config/bws/state/<access-token-id>` and warns about "authentication limits" without it — the file is secret-bearing, and its exact content and permissions are UNVERIFIED (needs a real token) [READ]
+
+The C# `LoginAccessToken(accessToken, stateFile)` passes the path straight into the command JSON; the Rust core (in the private bitwarden/sdk-internal monorepo, pinned rev in `Cargo.toml:26`) owns the file write. The CLI in the same repo (`bws`) resolves a default state path of `<home>/.config/bws/state/<access_token_id>` (`get_state_file`, `create_dir_all` on the dir) and passes it to the same `login_access_token`; its startup warning says to set `state_dir` "to avoid authentication limits" — i.e. the state avoids repeated token exchanges. Two measured hygiene facts: on FAILED login the SDK does not create the state file, and a pre-existing garbage state file is left untouched. One open footgun: the C# wrapper serializes `stateFile = ""` (the default) as an empty string — not null — so the Rust `Option<String>` receives `Some("")`; what a successful login does with an empty path is UNVERIFIED and must be tested with a real token before relying on "no state file".
+
+**Evidence:** `crates/bitwarden/CHANGELOG.md` v0.4.0 (2023-12-21) and v1.0.0 (2024-09-26); `crates/bws/src/state.rs:8-32` and `crates/bws/src/main.rs:87-113` in https://github.com/bitwarden/sdk-sm (cloned 2026-08-05); `CommandRunner.cs:14-19` (no null/empty stripping in the C# serializer); probe runs A1/E1 of `/tmp/bwprobe/BwProbe` (state file absent after failed login; garbage file unchanged); sdk-sm `Cargo.toml:26` (sdk-internal pin) — all retrieved 2026-08-05.
+
+### F23 — The bootstrap problem is structurally the same as F4: the access token cannot live in the settings table (it is inside the encrypted DB and unreadable before the passphrase exists — circular); the token must come from an OS-level channel that is readable pre-open, and the SDK state file does not solve this — it is only written AFTER a successful login, and it is itself a secret on disk [INFERRED]
+
+Reasoned from F4 (nothing inside the bank is readable pre-open), F11/F12 (keychain is OS-level and readable pre-open), F21 (login requires network + token), F22 (state file is produced only by a successful login). The same circularity that rules out "passphrase in the DB" rules out "token in the DB": both need the key before the key exists. The SDK state file cannot be the bootstrap store for the same reason — it is an output of authentication, not an input to it — and additionally it would place token material at a path and with permissions chosen by a third-party native core.
+
+**Evidence:** Reasoning from F4, F11, F12, F21, F22.
+
+### F24 — Ranked token-storage options for the `encryption bitwarden` flow: (1) macOS Keychain — the only option that is both readable pre-DB-open and protected at rest (F11/F12), and a leaked token is revocable/expirable and machine-account-scoped; (2) 0600 token file next to the bank — portable fallback for non-macOS, but it recreates the keyfile's backup exposure for a second secret; (3) SDK state file as the store — rejected (F22/F23); (4) interactive token entry at every server start — rejected for the MCP spawn model (F14); (5) the `bws` CLI as an alternative integration — viable and more mature, but adds a binary dependency and its session file is equally a disk secret. What the setup verb persists: token → keychain (service `ai-raccoon-db`, account `bw-<scope>`); non-secret metadata (secret id, org id) → settings table; no SDK state file by default [INFERRED]
+
+The ranking mirrors F16's logic: the token is a credential like the passphrase, so the same at-rest hierarchy applies (OS-encrypted keychain > plaintext 0600 file), and the same setup-time-prompt rule applies (F14). Option (5) is ranked as an implementation alternative, not a storage tier: `bws` stores its session at `~/.config/bws/state/<token-id>` (F22) and would need the binary installed on every host; the SDK keeps everything in-process with the token exactly where the setup verb puts it.
+
+**Evidence:** Reasoning from F11–F14, F22, F23.
+
+### F25 — Threat-model delta vs keychain/keyfile: Bitwarden SM adds remote key custody (the raw DB key never rests on this machine — only in memory after fetch), credential revocation/expiry without local rekey, machine-account scoping, audit/event logs (Teams+ plans), and cross-machine consistency; it does NOT add protection against same-user keychain reads (F12 boundary unchanged), offline start (start now requires network + Bitwarden reachability), or resistance to Bitwarden-org compromise. Trap: the secret VALUE is the DB key — rotating the secret without rekeying the DB bricks the bank [INFERRED]
+
+Access tokens are issued to a machine account and "give any machine they're applied to the ability to access only the secrets associated with that machine account"; they are never stored in Bitwarden databases, cannot be retrieved after creation (one-time display), and can be revoked at any time (revocation breaks retrieval immediately) or given an expiry (default Never). So the practical gains over keychain-direct: (a) the DB key exists only in Bitwarden's encrypted store and in server memory; (b) a compromised/leaked local credential is fixed by issuing a new token in the web UI — no local rekey of the DB, no touching other machines; (c) a dedicated machine account per app scopes what a token can read; (d) event/audit logs exist on Teams and Enterprise plans (Free has none); (e) several machines can share one DB key, each with its own token. The costs: server start now depends on api.bitwarden.com + identity.bitwarden.com; the local trust boundary is unchanged (any same-user process can still read the keychain item, F12); a Bitwarden org admin can read or change the secret (DoS by rotation); and rotation of the secret VALUE is not "change the secret in the web UI" — it is the full F5 rekey flow (update secret, `PRAGMA rekey` to the new value, verify), because the secret value IS the page key (F1/F3).
+
+**Evidence:** Reasoning from F1, F3, F5, F12, F21; https://bitwarden.com/help/access-tokens/ (retrieved 2026-08-05: machine-account scoping, never stored/one-time display, revocation, expiry); https://bitwarden.com/help/secrets-manager-plans/ (retrieved 2026-08-05: Free = 2 users / 3 projects / 3 machine accounts, Teams = 20 machine accounts + event logs, Enterprise = 50 + SCIM).
+
+### F26 — Network failure at server start: with the token in the keychain and no local key copy, an unreachable Bitwarden makes the server refuse to start (SDK throws; connection refused fails in 0 ms, F21) — the loud failure is correct and matches the locked-keychain philosophy, but an OPT-IN offline cache (the fetched passphrase mirrored to the 0600 key file as a degraded startup fallback) is the only way to keep unattended starts through outages [INFERRED]
+
+Reasoned from F21 (no timeout config; instant failure on refused connections, unbounded hang on blackholed networks — the provider must wrap the SDK call in its own timeout), F24 (keychain token), F16 (key file already exists as recovery copy). Default posture: no cache — a startup that cannot reach Bitwarden fails loudly with a message naming the cause (distinguishable from "no key configured" by checking keychain presence first). Opt-in posture: `encryption bitwarden set --offline-cache` writes the fetched key to the existing 0600 key file; every start that succeeds via cache logs "degraded: Bitwarden unreachable, using offline cache". The cache's at-rest exposure equals the F16 key-file option exactly, so the trade is purely availability-vs-at-rest.
+
+**Evidence:** Reasoning from F16, F21, F24.
+
+### F27 — Implementation sketch: `BitwardenEncryptionKeyProvider : IEncryptionKeyProvider` in src/AiRaccoon.Infrastructure/Sqlite/ (SDK dependency stays in Infrastructure — clean-layering invariant; Domain untouched); GetPassphrase(): keychain token → `new BitwardenClient(new BitwardenSettings{...})` → `Auth.LoginAccessToken(token)` (no state file) → `Secrets.Get(secretId)` → return `x'<hex>'` (secret stores the 64-hex raw key; F3) inside a 15 s timeout; DI swap at Dependencies.cs:27-28; interactive `ai-raccoon encryption bitwarden [set|remove|show]` mirroring SyncAddS3Async (token from stdin, never argv; test-fetch BEFORE persisting; token → keychain or 0600 fallback; metadata → settings table; `PRAGMA rekey` the bank to the fetched key in the same session; verify by reopen) [INFERRED]
+
+Shape: (a) `BitwardenEncryptionKeyProvider` takes `InfrastructureOptions`-derived config (scope, secret id, org id, optional api/identity URL) and a token resolver (keychain first, 0600 file fallback, env `AIRACCOON_BW_ACCESS_TOKEN` last — the env channel is acceptable for the token because it is revocable, unlike the DB key); `GetPassphrase()` is synchronous in the published SDK (F20) so it must run inside `Task.Run(...).WaitAsync(TimeSpan.FromSeconds(15))` at startup (F21/F26); returns null on "not configured" so the chain falls through, throws a wrapped `BitwardenException` on auth/network failure — the server then refuses to start, loudly (F26). (b) The interactive verb follows `ConfigCommands.cs:40,276-310`: `["encryption", "bitwarden", "set"]` prompts for the access token and the secret id/key on stderr with empty-input abort, performs a live `Secrets.Get` to validate both, then persists token → keychain (`security add-generic-password -s ai-raccoon-db -a bw-<scope> -w`, F11 pattern, with `-T` preauthorization) and metadata → `store.SetSettingAsync` (`Encryption.BitwardenSecretId`, `Encryption.BitwardenOrganizationId`); the same session then runs `PRAGMA rekey = "x'<fetched-hex>'"` (F5) so an existing passphrase or plaintext bank is sealed under the Bitwarden key, and reopens to verify. (c) DI: `Dependencies.cs:27-28` swaps `EnvEncryptionKeyProvider` for the chain `BitwardenEncryptionKeyProvider → KeyFileEncryptionKeyProvider (offline cache / recovery)`, deleting the env provider (F16); `IEncryptionKeyProvider` and `SqliteConnectionFactory` (lines 37-46) stay unchanged. (d) Layering: `Bitwarden.Secrets.Sdk` PackageReference lands only in AiRaccoon.Infrastructure, exactly like SQLitePCLRaw today.
+
+**Evidence:** Reasoning from F3, F5, F11, F14, F16, F20-F22, F26 and the repo files (IEncryptionKeyProvider.cs:6-10; EnvEncryptionKeyProvider.cs:9-15; SqliteConnectionFactory.cs:37-46; Dependencies.cs:27-31; ConfigCommands.cs:40,276-310 — all READ).
+
+### F28 — Updated recommendation: Bitwarden does NOT displace the F16 ranking for this repo's common case (single local machine, MCP-spawned server, offline-tolerant). Order stays: keychain-direct → Bitwarden SM (token in keychain; opt-in remote-key service for users who already run a Bitwarden org, need cross-machine key custody, revocation, or audit) → 0600 key file (portable fallback + recovery) → env var removed. Bitwarden ships behind an explicit setup verb, never as the default, never with the token in a plaintext file or the SDK state file [INFERRED]
+
+Reasoned from F24-F27: Bitwarden's wins (remote custody, revocation, audit, multi-machine) all target scenarios this local-first single-machine server does not have today, while its costs (startup network dependency, beta SDK with a stale published package, 7 MB native binary supply-chain surface, custom non-OSI license) are paid on every start. The correct integration is therefore an opt-in tier that reuses the already-recommended keychain as the token store — the ranking of the storage channel is unchanged; Bitwarden adds a remote key SERVICE on top of it.
+
+**Evidence:** Reasoning from F16, F24-F27.
+
 ## Option table: threat models
 
 | Option | At-rest DB theft | Same-user process snooping | Account compromise | Backups | Unattended server start |
@@ -148,3 +208,78 @@ Reasoned from the repo's documentation surface: removing the env var touches `RE
 - **e_sqlite3mc ↔ SQLCipher version parity** — raw-key behavior verified empirically (F3) but the exact upstream SQLCipher codec version embedded in SQLitePCLRaw's e_sqlite3mc 2.1.11 was not checked.
 - **`SQLitePCLRaw.lib.e_sqlite3` 2.1.11 advisory status** (CVE-2025-6965, F15) — whether a patched 2.1.x exists, and whether upgrading interacts with the pinned 2.1.11 e_sqlite3mc train.
 - **A prompt-free way to detect "no key configured" vs "keychain locked"** at startup so the failure message can distinguish "run `config db-key set`" from "unlock your keychain" — the two failure modes produce similar null results today.
+- **Real-token success path (Bitwarden, Option E)** — none of the F19–F28 findings exercise a successful `LoginAccessToken` + `Secrets.Get` with a genuine machine-account token: the SDK state-file content and on-disk permissions (F22), the `stateFile = ""` → `Some("")` behavior on success (F22), and end-to-end provider latency are all UNVERIFIED until probed against a real org.
+- **First-access keychain prompt for the `bw-<scope>` item** — same unmeasured behavior as the passphrase item (F11/F12); `-T` preauthorization at add time is the documented workaround.
+- **Bitwarden startup timeout on a blackholed network** — connection-refused fails in 0 ms (F21), but a packet-dropping network's hang duration is unmeasured; the 15 s provider timeout in F27 is a design choice, not a measurement.
+- **Token-revocation behavior at runtime** — what the server does if the keychain token is revoked between starts (expected: 400 invalid_client, loud refusal per F26) was not exercised with a real org.
+
+## Option E — Bitwarden Secrets Manager
+
+**Date:** 2026-08-05 (follow-up pass on the same record)
+**Question:** Can Bitwarden Secrets Manager serve as the source of the DB encryption passphrase through the C# SDK (github.com/bitwarden/sdk-sm/languages/csharp), where must the access token live given that the passphrase is needed *before* the DB opens, and does this change the F16 ranking?
+
+```chart:matrix
+title: Option E token-storage options by threat (1 = weak, 3 = strong)
+, at-rest theft, same-user snoop, backup leak, unattended start, setup friction
+keychain token, 3, 2, 3, 3, 2
+0600 token file, 2, 1, 1, 3, 1
+SDK state file, 1, 1, 1, 3, 1
+interactive at start, 3, 3, 3, 1, 3
+bws CLI session file, 2, 1, 1, 3, 2
+```
+
+### Package and platform facts (F19–F20)
+
+The only NuGet release is **`Bitwarden.Secrets.Sdk` 1.0.0** (2025-01-24): net6.0 assembly, `System.Text.Json >= 8.0.5`, and a bundled Rust native core (`libbitwarden_c`) for osx-x64, **osx-arm64**, linux-x64 and win-x64 — verified by unzipping the nupkg and by running a net10.0 probe on this Mac (client construction 16–306 ms, no extra setup). The published API is **synchronous** (`Auth.LoginAccessToken(token, stateFile = "")`, `Secrets.Get/GetByIds/List/Sync/...`); the async variants exist only on main and have never shipped. The binding is explicitly **beta**, the package lags main by ~18 months of commits (last C# commit 2026-06-10, still no release), the native core is a ~7 MB black-box binary (supply-chain note, cf. F15), and the license is Bitwarden's custom source-available SDK agreement, not OSI. Conclusion: platform support is real and measured, but treat the SDK as a beta dependency with a frozen published API.
+
+### The bootstrap problem (F23–F24)
+
+The access token cannot live in the settings table: that table is *inside* the encrypted bank and is unreadable before the passphrase exists — the same circularity F4 established for the passphrase itself. The token must come from an OS-level channel that is readable pre-open, and the SDK state file does not help: it is written only *after* a successful login (it is an output of authentication, not an input), and it is itself a secret on disk written by a third-party native core. The passphrase flow is: **keychain token (pre-open, OS-protected) → SDK login (network) → `Secrets.Get(secretId)` → DB key in memory only → open the bank.** The token is the bootstrap secret; the DB key never needs to exist on disk at all.
+
+### Ranked token-storage options (F24)
+
+1. **macOS Keychain — the answer.** Readable pre-DB-open, encrypted at rest in the keychain container (+FileVault, F11/F12), no plaintext file, same-user passive readers get nothing. Bonus over storing the passphrase directly: a leaked token is *revocable, expirable, and machine-account-scoped* — fix exposure in the Bitwarden web UI without touching the DB or other machines.
+2. **0600 token file next to the bank — portable fallback** (non-macOS hosts). Recreates the keyfile's backup exposure for a second secret; acceptable only where the keychain is unavailable.
+3. **SDK state file as the store — rejected.** Uncontrolled path/permissions, secret on disk, and it cannot be created without a successful login, so it cannot bootstrap anything.
+4. **Interactive token entry at every start — rejected.** The MCP spawn model has no TTY (F14); the prompt belongs to the setup verb.
+5. **`bws` CLI as an alternative integration — viable but inferior here.** More mature surface and `bws secret get`, but adds a per-host binary dependency and its own session file (`~/.config/bws/state/<token-id>`) that is equally a disk secret. The SDK keeps everything in-process.
+
+**What the setup flow persists:** the access token → keychain (service `ai-raccoon-db`, account `bw-<scope>`); non-secret metadata (secret id, organization id, optional API/identity URLs) → settings table; **no SDK state file by default**.
+
+### Security value and threat-model delta (F25–F26)
+
+Bitwarden SM adds, relative to keychain-direct and keyfile: **remote key custody** (the raw DB key rests only in Bitwarden's encrypted store and in server memory), **credential revocation/expiry without local rekey**, **machine-account scoping** (a dedicated machine account limits what a token reads), **audit/event logs** (Teams+ plans; the Free plan — 2 users / 3 projects / 3 machine accounts — has none), and **cross-machine consistency** (one DB key, many machines, per-machine tokens). It does *not* change the local trust boundary (same-user keychain reads still work, F12), it does not help offline (start now **requires** api.bitwarden.com + identity.bitwarden.com; on failure the SDK throws — connection refused fails in 0 ms — and the server should refuse to start loudly, matching the locked-keychain philosophy), and it adds a Bitwarden-org admin as a trust party (can read the secret; rotation by an attacker is a DoS). The one trap to design around: **the secret value IS the DB key** (no KDF when stored as a raw key, F3) — rotating the secret in the web UI without rekeying the bank bricks it; secret rotation is the F5 `PRAGMA rekey` flow, not a web-UI edit. An **opt-in offline cache** (fetched key mirrored to the existing 0600 key file, degraded-start log line) is the only way to keep unattended starts through outages, at exactly the F16 key-file at-rest cost.
+
+### Implementation sketch (F27)
+
+```csharp
+// src/AiRaccoon.Infrastructure/Sqlite/BitwardenEncryptionKeyProvider.cs (sketch)
+public sealed class BitwardenEncryptionKeyProvider : IEncryptionKeyProvider
+{
+    // token: keychain (security find-generic-password -s ai-raccoon-db -a bw-<scope> -w)
+    //        → 0600 file fallback → AIRACCOON_BW_ACCESS_TOKEN env (revocable, so env is tolerable)
+    public string? GetPassphrase()
+    {
+        if (!IsConfigured(out var token, out var secretId, out var orgId)) return null; // chain falls through
+        using var client = new BitwardenClient(new BitwardenSettings { ApiUrl = ..., IdentityUrl = ... });
+        return Task.Run(() =>
+        {
+            client.Auth.LoginAccessToken(token);            // no state file (F22/F24)
+            return client.Secrets.Get(secretId).Value;      // 64-hex raw key from the secret
+        }).WaitAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult() switch
+        {
+            { } hex when hex is { Length: 64 } => $"x'{hex}'", // existing Password channel, no KDF (F3)
+            _ => throw new InvalidOperationException("Bitwarden secret is not a 64-hex raw key")
+        };
+    }
+}
+```
+
+- **DI:** `Dependencies.cs:27-28` swaps `EnvEncryptionKeyProvider` for the chain `BitwardenEncryptionKeyProvider → KeyFileEncryptionKeyProvider` (offline cache / recovery); `IEncryptionKeyProvider` and `SqliteConnectionFactory` (lines 37–46) stay untouched.
+- **Config verb:** `ai-raccoon encryption bitwarden [set|remove|show]`, dispatched like `["sync","add","s3"]` (`ConfigCommands.cs:40`) with the `SyncAddS3Async` interactive pattern (token from stdin, empty-input abort, never argv, `ConfigCommands.cs:284-299`): prompt token + secret id → **live `Secrets.Get` test-fetch before persisting anything** → token → keychain (with `-T` preauthorization) → metadata → settings table → `PRAGMA rekey = "x'<fetched-hex>'"` seals an existing passphrase/plaintext bank under the Bitwarden key in the same session → reopen to verify.
+- **Layering invariant:** `Bitwarden.Secrets.Sdk` is referenced only by AiRaccoon.Infrastructure (like SQLitePCLRaw today); Domain and MCP stay clean.
+- **Runtime note:** the published SDK is synchronous, so the startup fetch must run inside the 15 s `WaitAsync` wrapper (F21/F26) — the SDK exposes no timeout of its own.
+
+### Updated overall recommendation (F28)
+
+**Bitwarden does not change the F16 ranking.** For this repo's actual shape — a local-first, single-machine, MCP-spawned, offline-tolerant server — keychain-direct stays primary, the 0600 key file stays the portable fallback/recovery copy, and the env var is removed. Bitwarden SM becomes an **opt-in tier** on top of the same keychain: valuable for users who already run a Bitwarden org and want remote key custody, cross-machine consistency, revocation, or audit; not worth its startup network dependency, beta-SDK risk, and supply-chain surface as the default. If adopted: token in the keychain, metadata in the settings table, no SDK state file, no default offline cache, and the secret treated as an immutable DB key rotated only through the rekey flow.
