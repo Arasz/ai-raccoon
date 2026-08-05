@@ -583,8 +583,7 @@ public sealed class MemoryTools(
             if (!syncSettings.IsConfigured)
             {
                 var notConfigured = new McpException(
-                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name> " +
-                    "--access-key <key> --secret-key <key>'");
+                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' and enter the credentials when prompted");
                 activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(McpException));
                 throw notConfigured;

@@ -63,7 +63,7 @@ ai-raccoon model set local [path]             ai-raccoon model set openai {model
 ai-raccoon model reset                        ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--access-key <key>] [--secret-key <key>]
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
 ai-raccoon sync remove                        ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
