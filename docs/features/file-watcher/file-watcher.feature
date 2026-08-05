@@ -75,6 +75,11 @@ Feature: File watcher
             When the server restarts
             Then watching is still enabled with scope "/repo"
 
+        Scenario: watch registered lists the registrations made by memory_watch_add
+            Given a watch for "proj-a" on path "/repo"
+            When the user runs watch registered
+            Then the CLI output lists the registered watch for "proj-a" at "/repo"
+
     Rule: Watches are project-scoped
         # 2026-08-04 (f): a watch belongs to exactly one project; created only in
         # project scope, digests land in that project's bank; all three tools take

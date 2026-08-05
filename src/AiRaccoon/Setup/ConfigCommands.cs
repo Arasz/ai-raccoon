@@ -9,6 +9,8 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
+using AiRaccoon.Infrastructure.Watch;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup;
 
@@ -22,7 +24,8 @@ internal static partial class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
-        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null, IEncryptionKeyProvider? env = null)
+        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null, IEncryptionKeyProvider? env = null,
+        IWatchStore? watchStore = null)
     {
         try
         {
@@ -51,6 +54,8 @@ internal static partial class ConfigCommands
                 ["watch", "scope", "list"] => await WatchScopeListAsync(parseResult, store, stdout, cancellationToken),
                 ["watch", "concurrency"] => await WatchConcurrencyAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
+                ["watch", "registered"] => await WatchRegisteredAsync(parseResult, watchStore, stdout, cancellationToken),
+                ["watch", "remove"] => await WatchRemoveAsync(parseResult, store, stdout, cancellationToken),
                 ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, env, cancellationToken),
                 ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, cancellationToken),
                 ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, env, cancellationToken),
@@ -493,7 +498,7 @@ internal static partial class ConfigCommands
             WatchScopeList.Parse(await store.GetSettingAsync(WatchConfigKeys.ScopeGlobal, cancellationToken)).Count == 0)
         {
             await stderr.WriteLineAsync(
-                "ai-raccoon: warning — no watch scopes configured; add at least one scope with 'ai-raccoon watch scope add * <path>'");
+                "ai-raccoon: warning — no watch scopes configured; add at least one scope with 'ai-raccoon watch scope add '*' <path>'");
         }
 
         await stdout.WriteLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");
@@ -585,6 +590,52 @@ internal static partial class ConfigCommands
             await stdout.WriteLineAsync(WatchListFormat.Render(target, config));
         }
 
+        return 0;
+    }
+
+    private static async Task<int> WatchRegisteredAsync(ParseResult parseResult, IWatchStore? watchStore,
+        TextWriter stdout, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNull(watchStore);
+        var filter = parseResult.GetValue<string?>("project-id");
+        var watches = await watchStore.ListWatchesAsync(cancellationToken);
+        var rows = watches
+            .Where(w => filter is null || w.ProjectId == filter)
+            .OrderBy(w => w.ProjectId, StringComparer.Ordinal)
+            .ThenBy(w => w.Path, WatchPath.PathComparer)
+            .ToArray();
+        if (rows.Length == 0)
+        {
+            await stdout.WriteLineAsync("no registered watches");
+            return 0;
+        }
+
+        foreach (var row in rows)
+        {
+            var registered = FormatTimestamp(row.CreatedAt);
+            var lastChange = row.LastChangeTs == 0 ? "never" : FormatTimestamp(row.LastChangeTs);
+            await stdout.WriteLineAsync($"project: {row.ProjectId}  path: {row.Path}  registered: {registered}  lastChange: {lastChange}");
+        }
+
+        return 0;
+    }
+
+    private static string FormatTimestamp(long unixSeconds) =>
+        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
+    private static async Task<int> WatchRemoveAsync(ParseResult parseResult, IMemoryStore store,
+        TextWriter stdout, CancellationToken cancellationToken)
+    {
+        var target = parseResult.GetValue<string>("target")!;
+        string[] keys = target == "*"
+            ? [WatchConfigKeys.EnabledGlobal, WatchConfigKeys.ScopeGlobal, WatchConfigKeys.ConcurrencyGlobal]
+            : [WatchConfigKeys.EnabledProject(target), WatchConfigKeys.ScopeProject(target), WatchConfigKeys.ConcurrencyProject(target)];
+        foreach (var key in keys)
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
+
+        await stdout.WriteLineAsync($"removed watch config for {target}");
         return 0;
     }
 

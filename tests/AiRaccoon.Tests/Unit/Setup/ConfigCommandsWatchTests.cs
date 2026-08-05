@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
 
@@ -17,7 +18,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ConfigCommandsWatchTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
+    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store, FakeWatchStore? watchStore = null)
     {
         var parsed = CliArgs.Parse(args);
         parsed.Errors.ShouldBeEmpty();
@@ -26,7 +27,7 @@ public class ConfigCommandsWatchTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken, watchStore: watchStore);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -61,7 +62,7 @@ public class ConfigCommandsWatchTests
         var (exit, _, err) = await Run(["watch", "enable", "*", "true"], store);
 
         exit.ShouldBe(0);
-        err.ShouldContain("scope");
+        err.ShouldContain("watch scope add '*'");
     }
 
     [Fact]
@@ -319,5 +320,135 @@ public class ConfigCommandsWatchTests
         stdout.Trim().ShouldBe(
             "target: CLAUDE.md  enabled: true  concurrency: 4  scope:\n  /x\n" +
             "target: global  enabled: false  concurrency: 4  scope:\n  /x");
+    }
+
+    // ── watch registered ──
+
+    [Fact]
+    public async Task WatchRegistered_ListsAllRegistrations_SortedByProjectThenPath()
+    {
+        var watchStore = new FakeWatchStore();
+        watchStore.Watches[("zeta", "/z")] = (1_700_000_000, 0);
+        watchStore.Watches[("acme", "/b")] = (1_700_000_000, 0);
+        watchStore.Watches[("acme", "/a")] = (1_700_000_000, 2_000_000_000);
+
+        var (exit, stdout, err) = await Run(["watch", "registered"], new FakeConfigStore(), watchStore);
+
+        exit.ShouldBe(0);
+        err.ShouldBeEmpty();
+        stdout.Trim().ShouldBe(
+            "project: acme  path: /a  registered: 2023-11-14T22:13:20Z  lastChange: 2033-05-18T03:33:20Z\n" +
+            "project: acme  path: /b  registered: 2023-11-14T22:13:20Z  lastChange: never\n" +
+            "project: zeta  path: /z  registered: 2023-11-14T22:13:20Z  lastChange: never");
+    }
+
+    [Fact]
+    public async Task WatchRegistered_ProjectFilter_LimitsToProject()
+    {
+        var watchStore = new FakeWatchStore();
+        watchStore.Watches[("acme", "/a")] = (1_700_000_000, 0);
+        watchStore.Watches[("acme", "/b")] = (1_700_000_000, 0);
+        watchStore.Watches[("zeta", "/z")] = (1_700_000_000, 0);
+
+        var (exit, stdout, err) = await Run(["watch", "registered", "acme"], new FakeConfigStore(), watchStore);
+
+        exit.ShouldBe(0);
+        err.ShouldBeEmpty();
+        stdout.Trim().ShouldBe(
+            "project: acme  path: /a  registered: 2023-11-14T22:13:20Z  lastChange: never\n" +
+            "project: acme  path: /b  registered: 2023-11-14T22:13:20Z  lastChange: never");
+
+        var (noMatchExit, noMatchStdout, _) = await Run(["watch", "registered", "nope"], new FakeConfigStore(), watchStore);
+        noMatchExit.ShouldBe(0);
+        noMatchStdout.Trim().ShouldBe("no registered watches");
+    }
+
+    [Fact]
+    public async Task WatchRegistered_NoRows_PrintsNoRegisteredWatches()
+    {
+        var (exit, stdout, err) = await Run(["watch", "registered"], new FakeConfigStore(), new FakeWatchStore());
+
+        exit.ShouldBe(0);
+        err.ShouldBeEmpty();
+        stdout.Trim().ShouldBe("no registered watches");
+    }
+
+    [Fact]
+    public async Task WatchRegistered_ReadsOnlyTheWatchesTable()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [WatchConfigKeys.EnabledGlobal] = "true",
+                [WatchConfigKeys.ScopeGlobal] = "[\"/x\"]",
+                [WatchConfigKeys.ConcurrencyGlobal] = "8"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["watch", "registered"], store, new FakeWatchStore());
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("no registered watches");
+    }
+
+    // ── watch remove ──
+
+    [Fact]
+    public async Task WatchRemove_DeletesEnabledScopeAndConcurrencyRows_ForTarget()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [WatchConfigKeys.EnabledProject("acme")] = "true",
+                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]",
+                [WatchConfigKeys.ConcurrencyProject("acme")] = "8",
+                [WatchConfigKeys.EnabledProject("zeta")] = "true"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["watch", "remove", "acme"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("removed");
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.EnabledProject("acme"));
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ScopeProject("acme"));
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ConcurrencyProject("acme"));
+        store.Settings.Keys.ShouldContain(WatchConfigKeys.EnabledProject("zeta"));
+    }
+
+    [Fact]
+    public async Task WatchRemove_Star_DeletesGlobalRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [WatchConfigKeys.EnabledGlobal] = "true",
+                [WatchConfigKeys.ScopeGlobal] = "[\"/a\"]",
+                [WatchConfigKeys.ConcurrencyGlobal] = "8"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["watch", "remove", "*"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("removed");
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.EnabledGlobal);
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ScopeGlobal);
+        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ConcurrencyGlobal);
+    }
+
+    [Fact]
+    public async Task WatchRemove_NoRows_IsExitZeroNoOp()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, _) = await Run(["watch", "remove", "acme"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("removed");
+        store.Settings.ShouldBeEmpty();
     }
 }

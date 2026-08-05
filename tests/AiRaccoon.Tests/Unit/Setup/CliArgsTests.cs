@@ -383,6 +383,29 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchList_ParsesCommandPath() => CliArgs.Parse(["watch", "list"]).CommandPath.ShouldBe(["watch", "list"]);
 
+    [Fact]
+    public void Parse_WatchRegistered_ParsesCommandPath() => CliArgs.Parse(["watch", "registered"]).CommandPath.ShouldBe(["watch", "registered"]);
+
+    [Fact]
+    public void Parse_WatchRegistered_AcceptsOptionalProjectFilter()
+    {
+        var parsed = CliArgs.Parse(["watch", "registered", "acme"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["watch", "registered"]);
+        parsed.ParseResult.GetValue<string?>("project-id").ShouldBe("acme");
+    }
+
+    [Fact]
+    public void Parse_WatchRemove_ParsesTarget()
+    {
+        var parsed = CliArgs.Parse(["watch", "remove", "acme"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["watch", "remove"]);
+        parsed.ParseResult.GetValue<string>("target").ShouldBe("acme");
+    }
+
     // ── Option placement ──
 
     [Fact]
