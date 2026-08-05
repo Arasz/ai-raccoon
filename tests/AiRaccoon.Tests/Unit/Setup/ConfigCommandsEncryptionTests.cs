@@ -56,7 +56,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken, bank: bank, bws: runner);
+            stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken, bank: bank, bws: runner,
+            env: new StubEnvProvider(envPassphrase));
         return (exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -253,8 +254,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var (exit, _, err, _) = await WithEnvPassphrase("env-pass", () =>
-            Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n")));
+        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner,
+            stdin: new StringReader("\n\n"), envPassphrase: "env-pass");
 
         exit.ShouldBe(0);
         err.ShouldContain("bank is env-keyed");
@@ -344,7 +345,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // ── encryption unset ──
 
     [Fact]
-    public async Task Unset_NoEnvPassphrase_KeepsSidecarAndWarns()
+    public async Task Unset_NoBank_RemovesRowsAndSidecar()
     {
         var store = new FakeConfigStore
         {
@@ -360,12 +361,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(1);
-        err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
-        // The sidecar and rows stay (source remains bitwarden) so the documented retry works.
-        store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
-        store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(DefaultSecretId);
-        File.Exists(SidecarPath()).ShouldBeTrue();
+        // No bank exists — nothing is stranded, so the cleanup runs regardless of the env passphrase.
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("encryption source reset to env");
+        store.Settings.ShouldBeEmpty();
+        File.Exists(SidecarPath()).ShouldBeFalse();
+        err.ShouldBeEmpty();
     }
 
     [Fact]
@@ -388,8 +389,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var (exit, stdout, _, _) = await WithEnvPassphrase("env-pass", () =>
-            Run(["encryption", "unset"], store, runner));
+        var (exit, stdout, _, _) = await Run(["encryption", "unset"], store, runner, envPassphrase: "env-pass");
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("encryption source reset to env");
@@ -426,15 +426,14 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var (exit, stdout, err, _) = await WithEnvPassphrase(null, () =>
-            Run(["encryption", "unset"], store, runner));
+        var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("encryption source reset to env");
+        exit.ShouldBe(1);
         err.ShouldContain("stays keyed to the bitwarden secret");
-        err.ShouldContain("ai-raccoon encryption unset");
-        store.Settings.ShouldBeEmpty();
-        File.Exists(SidecarPath()).ShouldBeFalse();
+        err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
+        // The sidecar + rows stay (source remains bitwarden) so the documented retry works.
+        store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+        File.Exists(SidecarPath()).ShouldBeTrue();
         await using (var reopened = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
@@ -546,4 +545,32 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             stream.Write(value);
         }
     }
+[Fact]
+    public async Task Unset_RealBank_RekeysBackFromResolverCreatedBank()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [EncryptionSettingsKeys.Source] = EncryptionSettingsKeys.SourceBitwarden,
+                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
+                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+            }
+        };
+        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
+        var bank = new SqliteConnectionFactory(Options(),
+            new EncryptionKeyResolver(Options(), new StubEnvProvider("env-pass"), runner));
+        await using (var seed = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner, envPassphrase: "env-pass");
+
+        exit.ShouldBe(0, $"stderr: {err}");
+        await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        {
+        }
+    }
+
 }

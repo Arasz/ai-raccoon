@@ -94,7 +94,7 @@ ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
 ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
-ai-raccoon encryption bitwarden [project-id] [secret-id] [-t <token>]
+ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show                     ai-raccoon encryption unset
 ```
 

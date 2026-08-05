@@ -73,6 +73,12 @@ catch (SqliteException ex) when (resolved.Passphrase is null && ex.SqliteErrorCo
         "ai-raccoon: bank is encrypted but no encryption source is configured (set AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden')");
     return 1;
 }
+catch (SqliteException ex) when (resolved.Passphrase is not null && ex.SqliteErrorCode == 26)
+{
+    Console.Error.WriteLine(
+        "ai-raccoon: encryption mismatch: the bank cannot be opened with the configured passphrase — set the correct AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden'");
+    return 1;
+}
 catch (Exception ex)
 {
     Console.Error.WriteLine($"ai-raccoon: {ex.Message}");

@@ -334,7 +334,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     [Then("^the encryption source is env$")]
     public async Task ThenEncryptionSourceIsEnv()
     {
-        _lastCli.Exit.ShouldBe(0);
+        _lastCli.Exit.ShouldBe(0, $"cli stderr: {_lastCli.Err}");
         _lastCli.Out.ShouldContain("encryption source reset to env");
         File.Exists(Ctx.SidecarPath).ShouldBeFalse();
         // The settings mirror rows are gone too. After unset the bank stays keyed with whatever
@@ -363,8 +363,9 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 
     /// <summary>
     ///     Reads the settings rows under "encryption." from the bank, opening it with the key the
-    ///     unset handler left the bank on: the derived key first (no ambient env passphrase), then
-    ///     the ambient AIRACCOON_DB_PASSPHRASE (the rekey-back case). Never reads the stub.
+    ///     unset handler left the bank on: the derived key first (no env passphrase), then the
+    ///     ambient AIRACCOON_DB_PASSPHRASE, then the context's own EnvPassphrase (the rekey-back
+    ///     case, where the handler uses the injected env provider). Never reads the stub otherwise.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>> ReadEncryptionRowsAsync()
     {
@@ -374,6 +375,8 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         {
             candidates.Add(ambient);
         }
+
+        candidates.Add(EncryptionBitwardenFeatureContext.EnvPassphrase);
 
         foreach (var key in candidates)
         {

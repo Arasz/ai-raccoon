@@ -21,7 +21,7 @@ internal static partial class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
-        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null)
+        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null, IEncryptionKeyProvider? env = null)
     {
         try
         {
@@ -49,9 +49,9 @@ internal static partial class ConfigCommands
                 ["watch", "scope", "list"] => await WatchScopeListAsync(parseResult, store, stdout, cancellationToken),
                 ["watch", "concurrency"] => await WatchConcurrencyAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
-                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, cancellationToken),
+                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, env, cancellationToken),
                 ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, cancellationToken),
-                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, cancellationToken),
+                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, env, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

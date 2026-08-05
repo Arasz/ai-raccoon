@@ -162,7 +162,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
-            new StringReader(stdin), cancellationToken: CancellationToken.None, bank: Bank, bws: NewRunner());
+            new StringReader(stdin), cancellationToken: CancellationToken.None, bank: Bank, bws: NewRunner(),
+            env: new StubEnvProvider(EnvPassphrase));
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -196,6 +197,10 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         catch (SqliteException ex) when (resolved.Passphrase is null && ex.SqliteErrorCode == 26)
         {
             return "ai-raccoon: bank is encrypted but no encryption source is configured (set AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden')";
+        }
+        catch (SqliteException ex) when (resolved.Passphrase is not null && ex.SqliteErrorCode == 26)
+        {
+            return "ai-raccoon: encryption mismatch: the bank cannot be opened with the configured passphrase — set the correct AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden'";
         }
         catch (Exception ex)
         {

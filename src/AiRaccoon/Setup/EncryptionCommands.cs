@@ -30,7 +30,7 @@ internal static partial class ConfigCommands
 
     private static async Task<int> EncryptionBitwardenAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, SqliteConnectionFactory? bank,
-        IBwsProcessRunner? bws, CancellationToken cancellationToken)
+        IBwsProcessRunner? bws, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
     {
         Guard.IsNotNull(bank);
         bws ??= new BwsProcessRunner();
@@ -119,7 +119,7 @@ internal static partial class ConfigCommands
                 // Amendment 1 (unset crash window): rekey-back landed but the sidecar was never
                 // deleted. The env key opens the bank → report and leave the sidecar consistent.
                 var sidecar = new EncryptionSourceSidecar(bankPath);
-                var envPassphrase = new EnvEncryptionKeyProvider().GetPassphrase();
+                var envPassphrase = (env ?? new EnvEncryptionKeyProvider()).GetPassphrase();
                 if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(bank, envPassphrase, cancellationToken))
                 {
@@ -174,7 +174,7 @@ internal static partial class ConfigCommands
     }
 
     private static async Task<int> EncryptionUnsetAsync(IMemoryStore store, TextWriter stdout, TextWriter stderr,
-        SqliteConnectionFactory? bank, CancellationToken cancellationToken)
+        SqliteConnectionFactory? bank, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
     {
         Guard.IsNotNull(bank);
         var bankPath = bank.BankPath;
@@ -188,26 +188,37 @@ internal static partial class ConfigCommands
             {
             }
 
-            var envPassphrase = new EnvEncryptionKeyProvider().GetPassphrase();
+            var envPassphrase = (env ?? new EnvEncryptionKeyProvider()).GetPassphrase();
             if (!string.IsNullOrEmpty(envPassphrase))
             {
+                // Rows first — the store still opens with the bitwarden key at this point.
+                await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+                await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
+                await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
+
                 // Rekey back to the env passphrase (current key resolves from the sidecar).
                 await bank.RekeyBankAsync(envPassphrase, cancellationToken);
+                sidecar.Delete();
             }
             else
             {
                 // No env passphrase: DO NOT auto-decrypt (deferred empty-rekey per plan §7.3) —
-                // warn loudly and leave the bank on the derived key with recovery instructions.
+                // warn loudly and LEAVE the sidecar + rows in place (source stays bitwarden) so
+                // the documented retry actually works: setting AIRACCOON_DB_PASSPHRASE and
+                // re-running unset reopens with the bitwarden key and rekeys back.
                 await stderr.WriteLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
+                return 1;
             }
         }
-
-        // Rows first (the store still opens with the bitwarden key), then the sidecar LAST.
-        await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
-        await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
-        sidecar.Delete();
+        else
+        {
+            // No bank exists — nothing is stranded; clean up the mirror rows and the sidecar.
+            await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+            await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
+            await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
+            sidecar.Delete();
+        }
 
         await stdout.WriteLineAsync("encryption source reset to env");
         return 0;
