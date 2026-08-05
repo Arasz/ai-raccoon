@@ -69,15 +69,5 @@ catch (Exception ex)
 // warn, never fail, when the packaged ONNX is missing.
 await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, ct => BundledModel.EnsureAsync(ct), CancellationToken.None);
 
-await app.StartAsync();
-
-// The bound port is only knowable after start (0 = random); the URL print is the
-// discoverability channel for the http transport.
-if (config.Transport == McpTransport.Http)
-{
-    var urls = string.Join(", ", ((WebApplication)app).Urls.Select(url => $"{url.TrimEnd('/')}/mcp"));
-    Console.Error.WriteLine($"ai-raccoon: http transport listening on {urls}");
-}
-
-await app.WaitForShutdownAsync();
+await app.RunAsync(config);
 return 0;

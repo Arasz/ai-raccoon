@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -82,12 +81,20 @@ public class McpServerSetupHostTests
         await host.StopAsync(TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task RunAsync_HttpHost_StartsAndStopsCleanly()
+    {
+        var config = Config(McpTransport.Http, FreePort());
+        var host = McpServerSetup.CreateServerHost(config);
+
+        var runTask = host.RunAsync(config, TestContext.Current.CancellationToken);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+        await runTask;
+    }
+
     private static ServerConfig Config(McpTransport transport, int port = 7721) =>
-        new(transport, new InfrastructureOptions
-        {
-            DataRoot = TestData.CreateTempRoot(),
-            Scope = InstallScope.User,
-        }, port);
+        ServerConfig.Build(new CliOptions(transport.ToString().ToLowerInvariant(), null, null, port));
 
     private static int FreePort()
     {

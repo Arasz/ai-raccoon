@@ -65,11 +65,32 @@ internal static partial class McpServerSetup
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
         builder.Services.RegisterMemoryServices(config.Options);
-        // Explicit endpoint: bind the configured port (5001 default, 0 = random) instead
+        builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        // Explicit endpoint: bind the configured port (7721 default, 0 = random) instead
         // of the ASP.NET default 5000, which collides with other listeners on the host.
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
         builder.ConfigureMcpServer(transports);
         return builder.Build().ConfigureMcpEndpoints(transports);
+    }
+
+    extension(IHost host)
+    {
+        /// <summary>
+        ///     Runs the server host: start, report the bound http URL (only knowable after
+        ///     start; 0 = random), then wait for shutdown. The http transport's only
+        ///     discoverability channel for a random port.
+        /// </summary>
+        public async Task RunAsync(ServerConfig config, CancellationToken cancellationToken = default)
+        {
+            await host.StartAsync(cancellationToken);
+            if (config.Transport == McpTransport.Http && host is WebApplication web)
+            {
+                var urls = string.Join(", ", web.Urls.Select(url => $"{url.TrimEnd('/')}/mcp"));
+                Log.HttpTransportListening(web.Logger, urls);
+            }
+
+            await host.WaitForShutdownAsync(cancellationToken);
+        }
     }
 
     extension(WebApplication webApplication)
@@ -105,6 +126,9 @@ internal static partial class McpServerSetup
         }
     }
 
+    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder) =>
+        loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+
     extension(IMcpServerBuilder mcpServerBuilder)
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
@@ -131,7 +155,7 @@ internal static partial class McpServerSetup
 
         private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder)
         {
-            loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+            AddStderrConsoleLogging(loggingBuilder);
             return mcpServerBuilder.WithStdioServerTransport();
         }
 
@@ -153,6 +177,9 @@ internal static partial class McpServerSetup
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "ai-raccoon: https transport is not supported")]
         public static partial void HttpsTransportNotSupported(ILogger logger);
+
+        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ai-raccoon: http transport listening on {Urls}")]
+        public static partial void HttpTransportListening(ILogger logger, string urls);
     }
 }
 
