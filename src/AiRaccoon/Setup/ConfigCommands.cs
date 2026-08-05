@@ -354,11 +354,10 @@ internal static class ConfigCommands
     private static async Task<int> SyncRemoveAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        foreach (var key in new[]
-                 {
-                     SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
-                     SyncSettingsKeys.ObjectKey, SyncSettingsKeys.AccessKey, SyncSettingsKeys.SecretKey
-                 })
+        // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't
+        // drift when rows are added later (single-active-provider ruling R1).
+        var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
+        foreach (var key in rows.Keys)
         {
             await store.DeleteSettingAsync(key, cancellationToken);
         }

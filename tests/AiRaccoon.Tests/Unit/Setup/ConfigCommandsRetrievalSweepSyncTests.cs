@@ -297,16 +297,20 @@ public class ConfigCommandsRetrievalSweepSyncTests
     }
 
     [Fact]
-    public async Task SyncRemove_DeletesAllSyncRows()
+    public async Task SyncRemove_DeletesAllSyncRows_IncludingAzure()
     {
         var store = new FakeConfigStore
         {
             Settings =
             {
+                ["sync.provider"] = "azure",
                 ["sync.endpoint"] = "http://s3.example.com",
                 ["sync.bucket"] = "memories",
                 ["sync.accessKey"] = "ak1",
-                ["sync.secretKey"] = "sk1"
+                ["sync.secretKey"] = "sk1",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.future"] = "x"
             }
         };
 
