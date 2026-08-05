@@ -20,7 +20,11 @@ public sealed class BwsProcessRunnerTests : IDisposable
     {
         var path = Path.Combine(_dataRoot, "bws");
         File.WriteAllText(path, "#!/bin/sh\n" + scriptBody + "\n");
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
         return path;
     }
 
