@@ -1,14 +1,13 @@
+using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Time.Testing;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -159,7 +158,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         Store.SetSettingAsync(WatchConfigKeys.ScopeGlobal, WatchConfigKeys.SerializeScope(paths), cancellationToken);
 
     public Task SetConcurrencyGlobalAsync(int value, CancellationToken cancellationToken = default) =>
-        Store.SetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        Store.SetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, value.ToString(CultureInfo.InvariantCulture),
             cancellationToken);
 
     public Task SetAccessTierAsync(string projectId, string tier, CancellationToken cancellationToken = default) =>

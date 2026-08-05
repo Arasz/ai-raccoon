@@ -1,11 +1,8 @@
-using System.Data.Common;
 using System.Diagnostics;
 using AiRaccoon.Access;
-using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
@@ -14,6 +11,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -89,7 +87,7 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = CreateTools(store, metrics);
 
-        var ex = await Should.ThrowAsync<ModelContextProtocol.McpException>(() =>
+        var ex = await Should.ThrowAsync<McpException>(() =>
             tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("sync-not-configured");
@@ -161,51 +159,40 @@ public class MemoryToolsInstrumentationTests
             {
                 throw new InvalidOperationException("test error");
             }
+
             return Task.FromResult(Entry ?? new MemoryEntry("h1", "p.md", "project:test", "content", 1));
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult("{}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{}");
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryStats(0, 0, []));
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "content", 1));
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "content", 1));
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult(1);
 
-        public Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        public Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        public Task<int> IngestFileAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default) => Task.FromResult(1);
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(2);
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context, CancellationToken cancellationToken = default) => Task.FromResult(2);
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbeddingConfig(provider, model ?? "m", provider == "local" ? "local" : "remote"));
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmbeddingConfig(provider, model ?? "m", provider == "local" ? "local" : "remote"));
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default)
-            => Task.FromResult(new EmbedPendingResult(0, 0));
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
-            => Task.FromResult(new MemoryEntry("h", path, context ?? "project:test", content, 1));
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MemoryEntry("h", path, context ?? "project:test", content, 1));
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
 
-        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash, CancellationToken cancellationToken = default)
-            => Task.FromResult<EntryMetadata?>(null);
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult<EntryMetadata?>(null);
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 
@@ -217,8 +204,8 @@ public class MemoryToolsInstrumentationTests
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class SimpleFakeSyncService : SyncService
@@ -229,28 +216,29 @@ public class MemoryToolsInstrumentationTests
             (_, _) => Task.FromResult<SqliteConnection>(null!),
             TimeProvider.System,
             null!)
-        { }
+        {
+        }
 
         public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(new SyncResult(0, 0, 0));
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SyncResult(0, 0, 0));
     }
 
     private sealed class SimpleFakeCloudStore : ICloudStore
     {
-        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
-            => Task.FromResult<CloudObject?>(null);
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<CloudObject?>(null);
 
-        public Task<string> PushAsync(string objectKey, byte[] data, string? etag, CancellationToken cancellationToken = default)
-            => Task.FromResult("fake-etag");
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag, CancellationToken cancellationToken = default) => Task.FromResult("fake-etag");
     }
 
     private sealed class SimpleFakeWorkspaceStore : IWorkspaceStore
     {
         public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

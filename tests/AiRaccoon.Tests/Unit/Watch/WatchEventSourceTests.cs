@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -16,8 +15,7 @@ public sealed class WatchEventSourceTests
 {
     private const string Project = "acme";
 
-    private static WatchEventSource NewSource(List<WatchEvent> events, List<WatchEventError> errors) =>
-        new(events.Add, errors.Add, NullLogger<WatchEventSource>.Instance);
+    private static WatchEventSource NewSource(List<WatchEvent> events, List<WatchEventError> errors) => new(events.Add, errors.Add, NullLogger<WatchEventSource>.Instance);
 
     [Fact]
     public void Created_TranslatesToWatchEvent_WithNormalizedPath()

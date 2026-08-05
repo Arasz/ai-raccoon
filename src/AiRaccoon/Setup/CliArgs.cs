@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.CommandLine.Help;
-using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using AiRaccoon.Infrastructure.Options;
 
@@ -132,8 +131,7 @@ internal static class CliArgs
     ///     Renders help, version, or parse errors to the given writer and returns the exit
     ///     code (0 help/version, 1 parse errors). Program.cs passes Console.Error.
     /// </summary>
-    internal static int Render(CliParseResult result, TextWriter output) =>
-        result.ParseResult.Invoke(new InvocationConfiguration { Output = output, Error = output });
+    internal static int Render(CliParseResult result, TextWriter output) => result.ParseResult.Invoke(new InvocationConfiguration { Output = output, Error = output });
 
     /// <summary>Full verb path from the root, excluding the root itself; empty = run the server.</summary>
     private static string[] CommandPathOf(ParseResult parseResult)
@@ -161,8 +159,7 @@ internal static class CliArgs
         return new CliOptions(transport, dataRoot, scope);
     }
 
-    private static T? OptionValue<T>(ParseResult parseResult, string name, Func<OptionResult, T> read) =>
-        parseResult.GetResult(name) is OptionResult result ? read(result) : default;
+    private static T? OptionValue<T>(ParseResult parseResult, string name, Func<OptionResult, T> read) => parseResult.GetResult(name) is OptionResult result ? read(result) : default;
 
     private static InstallScope? InstallScopeValue(ParseResult parseResult) =>
         parseResult.GetResult("--install-scope") is OptionResult result
@@ -172,11 +169,14 @@ internal static class CliArgs
     private static Command AccessCommand()
     {
         var access = new Command("access", "Access-mode configuration (per-project overrides the global default)");
-        var defaultCmd = new Command("default", "Global default access mode");
-        defaultCmd.Add(new Command("set", "Sets the global default") { new Argument<string>("mode") { HelpName = "ro|rw|full" } });
-        defaultCmd.Add(new Command("show", "Shows the effective global default (row value, else rw)"));
+        var defaultCmd = new Command("default", "Global default access mode")
+        {
+            new Command("set", "Sets the global default") { new Argument<string>("mode") { HelpName = "ro|rw|full" } },
+            new Command("show", "Shows the effective global default (row value, else rw)")
+        };
         access.Add(defaultCmd);
-        access.Add(new Command("set", "Sets a per-project override; '*' targets the global default") { new Argument<string>("project-id") { HelpName = "project-id|*" }, new Argument<string>("mode") { HelpName = "ro|rw|full" } });
+        access.Add(new Command("set", "Sets a per-project override; '*' targets the global default")
+            { new Argument<string>("project-id") { HelpName = "project-id|*" }, new Argument<string>("mode") { HelpName = "ro|rw|full" } });
         access.Add(new Command("unset", "Drops a per-project override (falls back to the default)") { new Argument<string>("project-id") { HelpName = "project-id|*" } });
         access.Add(new Command("list", "Lists the default and every override"));
         return access;
@@ -185,9 +185,15 @@ internal static class CliArgs
     private static Command ModelCommand()
     {
         var model = new Command("model", "Embedding engine configuration");
-        var set = new Command("set", "Sets the embedding engine");
-        set.Add(new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } });
-        set.Add(new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)") { new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne }, new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" } });
+        var set = new Command("set", "Sets the embedding engine")
+        {
+            new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
+            new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
+            {
+                new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
+                new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" }
+            }
+        };
         model.Add(set);
         model.Add(new Command("reset", "Back to default: no engine (FTS5-only search)"));
         model.Add(new Command("show", "Shows the configured provider/model/baseUrl/engine"));
@@ -197,9 +203,11 @@ internal static class CliArgs
     private static Command RetrievalCommand()
     {
         var retrieval = new Command("retrieval", "Retrieval configuration");
-        var alpha = new Command("alpha", "Dual-vector fusion alpha");
-        alpha.Add(new Command("set", "Sets retrieval.structureAlpha (0..1, default 0.5)") { new Argument<string>("alpha") { HelpName = "0..1" } });
-        alpha.Add(new Command("show", "Shows the current alpha (row value, else 0.5)"));
+        var alpha = new Command("alpha", "Dual-vector fusion alpha")
+        {
+            new Command("set", "Sets retrieval.structureAlpha (0..1, default 0.5)") { new Argument<string>("alpha") { HelpName = "0..1" } },
+            new Command("show", "Shows the current alpha (row value, else 0.5)")
+        };
         retrieval.Add(alpha);
         return retrieval;
     }
@@ -207,8 +215,10 @@ internal static class CliArgs
     private static Command SweepCommand()
     {
         var sweep = new Command("sweep", "Degradation sweep configuration (ttl_days was removed by ruling)");
-        var threshold = new Command("threshold", "Sweep rating threshold");
-        threshold.Add(new Command("set", "Sets sweep.threshold (0..1, default 0.3)") { new Argument<string>("threshold") { HelpName = "0..1" } });
+        var threshold = new Command("threshold", "Sweep rating threshold")
+        {
+            new Command("set", "Sets sweep.threshold (0..1, default 0.3)") { new Argument<string>("threshold") { HelpName = "0..1" } }
+        };
         sweep.Add(threshold);
         sweep.Add(new Command("show", "Shows the current threshold (row value, else 0.3)"));
         return sweep;
@@ -218,10 +228,13 @@ internal static class CliArgs
     {
         var sync = new Command("sync", "Cloud sync configuration");
         var add = new Command("add", "Adds S3-compatible sync");
-        var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table)") { new Argument<string>("url") { HelpName = "url" } };
-        s3.Add(new Option<string>("--bucket") { Description = "S3 bucket name", HelpName = "name", Required = true });
-        s3.Add(new Option<string>("--region") { Description = "S3 region", HelpName = "name" });
-        s3.Add(new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" });
+        var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table)")
+        {
+            new Argument<string>("url") { HelpName = "url" },
+            new Option<string>("--bucket") { Description = "S3 bucket name", HelpName = "name", Required = true },
+            new Option<string>("--region") { Description = "S3 region", HelpName = "name" },
+            new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" }
+        };
         add.Add(s3);
         sync.Add(add);
         sync.Add(new Command("remove", "Back to default: sync off"));
@@ -231,15 +244,22 @@ internal static class CliArgs
 
     private static Command WatchCommand()
     {
-        var watch = new Command("watch", "File-watcher configuration (CLI-only channel)");
-        watch.Add(new Command("enable", "Enables or disables watching for a target") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } });
-        watch.Add(new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } });
-        var scope = new Command("scope", "Scope allowlist (absolute paths, covers dir + subdirs)");
-        scope.Add(new Command("add", "Adds a scope path (normalized absolute, deduped, re-sorted)") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } });
-        scope.Add(new Command("remove", "Removes a scope path") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } });
-        scope.Add(new Command("list", "Lists a target's scope allowlist") { new Argument<string>("target") { HelpName = "project-id|*" } });
+        var watch = new Command("watch", "File-watcher configuration (CLI-only channel)")
+        {
+            new Command("enable", "Enables or disables watching for a target")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
+            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } }
+        };
+        var scope = new Command("scope", "Scope allowlist (absolute paths, covers dir + subdirs)")
+        {
+            new Command("add", "Adds a scope path (normalized absolute, deduped, re-sorted)")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("remove", "Removes a scope path") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("list", "Lists a target's scope allowlist") { new Argument<string>("target") { HelpName = "project-id|*" } }
+        };
         watch.Add(scope);
-        watch.Add(new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } });
+        watch.Add(new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
+            { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } });
         watch.Add(new Command("list", "Lists every target's enabled flag, concurrency and scopes"));
         return watch;
     }

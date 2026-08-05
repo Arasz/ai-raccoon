@@ -1,13 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;

@@ -2,8 +2,8 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
@@ -14,7 +14,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
-using Microsoft.Extensions.Logging;
+using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup;
 
@@ -45,7 +45,7 @@ public static partial class Dependencies
             async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
             async (path, ct) =>
             {
-                var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path}");
+                var conn = new SqliteConnection($"Data Source={path}");
                 await conn.OpenAsync(ct);
                 return conn;
             },

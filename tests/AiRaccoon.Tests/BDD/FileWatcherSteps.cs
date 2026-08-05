@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
@@ -7,7 +8,6 @@ using Dapper;
 using ModelContextProtocol;
 using Reqnroll;
 using Shouldly;
-using Xunit.Sdk;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -25,7 +25,18 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 {
     private const string DefaultProject = "proj-a";
 
+    /// <summary>Real path → latest content token (assertion payload for "the file").</summary>
+    private readonly Dictionary<string, string> _contentByPath = new(StringComparer.Ordinal);
+
+    /// <summary>Real path → every content token ever written (for "no intermediate save ever searchable").</summary>
+    private readonly Dictionary<string, List<string>> _contentsByPath = new(StringComparer.Ordinal);
+
     private readonly ScenarioContext _scenarioContext = scenarioContext;
+
+    /// <summary>(project, path, token) triples for multi-file assertions.</summary>
+    private readonly List<(string Project, string Path, string Token)> _searchables = [];
+
+    private IReadOnlyList<MemorySearchResult>? _beforeSearch;
 
     /// <summary>
     ///     Resolved lazily: Reqnroll instantiates binding classes before BeforeScenario hooks run,
@@ -33,31 +44,24 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     /// </summary>
     private FileWatcherFeatureContext? _ctx;
 
-    private FileWatcherFeatureContext Ctx => _ctx ??= _scenarioContext.ScenarioContainer.Resolve<FileWatcherFeatureContext>();
+    private string? _displacedContent;
+    private string? _lastCliError;
+    private string? _lastCliMessage;
 
     private Exception? _lastError;
-    private WatchTools.WatchStatusResult? _lastStatus;
-    private string? _lastCliMessage;
-    private string? _lastCliError;
     private string? _lastFile;
     private string? _lastFileContent;
-    private string? _displacedContent;
-    private IReadOnlyList<MemorySearchResult>? _beforeSearch;
+    private WatchTools.WatchStatusResult? _lastStatus;
     private string? _removedPath;
-
-    /// <summary>Real path → latest content token (assertion payload for "the file").</summary>
-    private readonly Dictionary<string, string> _contentByPath = new(StringComparer.Ordinal);
-
-    /// <summary>Real path → every content token ever written (for "no intermediate save ever searchable").</summary>
-    private readonly Dictionary<string, List<string>> _contentsByPath = new(StringComparer.Ordinal);
-
-    /// <summary>(project, path, token) triples for multi-file assertions.</summary>
-    private readonly List<(string Project, string Path, string Token)> _searchables = [];
 
     /// <summary>True once a scope was configured explicitly (the add step may then create a missing target dir).</summary>
     private bool _scopeExplicitlySet;
 
     private int _tokenSeq;
+
+    private FileWatcherFeatureContext Ctx => _ctx ??= _scenarioContext.ScenarioContainer.Resolve<FileWatcherFeatureContext>();
+
+    private static bool IsUnreadableSupported => !OperatingSystem.IsWindows();
 
     // ── Helpers ──
 
@@ -91,19 +95,16 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         return _lastCliMessage;
     }
 
-    private string NextToken(string seed) =>
-        "zephyr" + seed.Replace("/", string.Empty).Replace(".", string.Empty) + _tokenSeq++;
+    private string NextToken(string seed) => "zephyr" + seed.Replace("/", string.Empty).Replace(".", string.Empty) + _tokenSeq++;
 
     private string Map(string virtualPath) => Ctx.MapPath(virtualPath);
 
     /// <summary>Resolves a step path: virtual paths start with '/', bare names are relative to the watched repo dir.</summary>
-    private string Resolve(string pathOrName) =>
-        pathOrName.StartsWith('/') ? Map(pathOrName) : Path.Combine(Ctx.RepoDir, pathOrName);
+    private string Resolve(string pathOrName) => pathOrName.StartsWith('/') ? Map(pathOrName) : Path.Combine(Ctx.RepoDir, pathOrName);
 
     private string Normalized(string path) => WatchPath.Normalize(path);
 
-    private async Task<List<MemorySearchResult>> SearchAsync(string projectId, string token) =>
-        (await Ctx.SearchAsync(projectId, token)).ToList();
+    private async Task<List<MemorySearchResult>> SearchAsync(string projectId, string token) => (await Ctx.SearchAsync(projectId, token)).ToList();
 
     /// <summary>
     ///     Feature baseline: "the server" is configured for watching (enabled, whole bank in
@@ -187,10 +188,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             (await SearchAsync(projectId, token)).Count == 0, maxFakeSeconds);
     }
 
-    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) =>
-        _lastStatus = await Ctx.Tools.Status(projectId);
-
-    private static bool IsUnreadableSupported => !OperatingSystem.IsWindows();
+    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) => _lastStatus = await Ctx.Tools.Status(projectId);
 
     private void MakeUnreadable(string path)
     {
@@ -287,12 +285,10 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public Task WhenUserRunsWatchScopeAdd(string path) => RunCliAsync("watch", "scope", "add", "*", Map(path));
 
     [When("^the user runs watch disable ([^ ]*) (true|false)$")]
-    public Task WhenUserRunsWatchDisable(string projectId, string enabled) =>
-        RunCliAsync("watch", "disable", projectId, enabled);
+    public Task WhenUserRunsWatchDisable(string projectId, string enabled) => RunCliAsync("watch", "disable", projectId, enabled);
 
     [When("^the user runs watch concurrency ([^ ]*) ([0-9]+)$")]
-    public Task WhenUserRunsWatchConcurrency(string projectId, int value) =>
-        RunCliAsync("watch", "concurrency", projectId, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    public Task WhenUserRunsWatchConcurrency(string projectId, int value) => RunCliAsync("watch", "concurrency", projectId, value.ToString(CultureInfo.InvariantCulture));
 
     [Given("^watching enabled with scope \"([^\"]*)\"$")]
     public async Task GivenWatchingEnabledWithScope(string path)
@@ -319,16 +315,13 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     }
 
     [Then("^watching stays disabled for \"([^\"]*)\"$")]
-    public async Task ThenWatchingStaysDisabled(string projectId) =>
-        (await Ctx.ResolveConfigAsync(projectId)).Enabled.ShouldBeFalse();
+    public async Task ThenWatchingStaysDisabled(string projectId) => (await Ctx.ResolveConfigAsync(projectId)).Enabled.ShouldBeFalse();
 
     [Then("^watching stays enabled for other projects$")]
-    public async Task ThenWatchingStaysEnabledForOthers() =>
-        (await Ctx.ResolveConfigAsync("proj-b")).Enabled.ShouldBeTrue();
+    public async Task ThenWatchingStaysEnabledForOthers() => (await Ctx.ResolveConfigAsync("proj-b")).Enabled.ShouldBeTrue();
 
     [Then("^the concurrency limit for \"([^\"]*)\" is ([0-9]+)$")]
-    public async Task ThenConcurrencyLimit(string projectId, int expected) =>
-        (await Ctx.ResolveConfigAsync(projectId)).Concurrency.ShouldBe(expected);
+    public async Task ThenConcurrencyLimit(string projectId, int expected) => (await Ctx.ResolveConfigAsync(projectId)).Concurrency.ShouldBe(expected);
 
     [Then("^the command errors with invalid-value$")]
     public void ThenCommandErrorsInvalidValue() => _lastCliError.ShouldNotBeNull().ShouldContain("invalid-value");
@@ -411,12 +404,10 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public Task GivenWatchOnPath(string projectId, string path) => SetupWatchAsync(projectId, path);
 
     [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" with \"([^\"]*)\" ingested$")]
-    public Task GivenWatchWithFileIngested(string projectId, string path, string file) =>
-        SetupWatchWithIngestedAsync(projectId, path, [file]);
+    public Task GivenWatchWithFileIngested(string projectId, string path, string file) => SetupWatchWithIngestedAsync(projectId, path, [file]);
 
     [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" with \"([^\"]*)\" and \"([^\"]*)\" ingested$")]
-    public Task GivenWatchWithTwoFilesIngested(string projectId, string path, string file1, string file2) =>
-        SetupWatchWithIngestedAsync(projectId, path, [file1, file2]);
+    public Task GivenWatchWithTwoFilesIngested(string projectId, string path, string file1, string file2) => SetupWatchWithIngestedAsync(projectId, path, [file1, file2]);
 
     [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" that is still scanning$")]
     public async Task GivenWatchStillScanning(string projectId, string path)
@@ -843,8 +834,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     }
 
     [When("^\"([^\"]*)\" is touched without a content change$")]
-    public void WhenFileTouched(string file) =>
-        File.SetLastWriteTimeUtc(Resolve(file), Ctx.TimeProvider.GetUtcNow().UtcDateTime);
+    public void WhenFileTouched(string file) => File.SetLastWriteTimeUtc(Resolve(file), Ctx.TimeProvider.GetUtcNow().UtcDateTime);
 
     [When("^\"([^\"]*)\" content changes$")]
     public void WhenFileContentChanges(string file)

@@ -1,5 +1,4 @@
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Tests;
 
@@ -12,8 +11,7 @@ public static class TestData
         return root;
     }
 
-    public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") =>
-        new() { DataRoot = dataRoot, Rid = rid };
+    public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") => new() { DataRoot = dataRoot, Rid = rid };
 
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)

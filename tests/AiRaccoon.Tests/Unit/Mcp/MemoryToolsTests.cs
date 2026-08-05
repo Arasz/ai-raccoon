@@ -4,16 +4,14 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
-using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 
@@ -321,6 +319,7 @@ public class MemoryToolsTests
             Settings[key] = value;
             return Task.CompletedTask;
         }
+
         public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(
