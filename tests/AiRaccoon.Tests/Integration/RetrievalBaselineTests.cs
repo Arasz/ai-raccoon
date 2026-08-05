@@ -233,7 +233,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
 
-        // FR-NM-7 contract: stored hash == ContentHash.Of(path, value), where the committed
+        // FR-NM-7 (see docs/work/features-native-memory/native-memory.feature) contract: stored hash == ContentHash.Of(path, value), where the committed
         // corpus's path is the hash-derived filename (SHA256(content).hex() + ".md").
         var mismatches = rows
             .Where(r => !string.Equals(ContentHash.Of(r.Path, r.Value), r.Hash, StringComparison.Ordinal))

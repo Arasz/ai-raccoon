@@ -7,6 +7,8 @@ using Shouldly;
 
 namespace AiRaccoon.Tests.BDD;
 
+// Steps implement the native-memory requirements (see docs/work/features-native-memory/native-memory.feature);
+// the FR-NM section markers below map each block to its requirement ID.
 [Binding]
 public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 {
