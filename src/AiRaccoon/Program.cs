@@ -2,8 +2,9 @@ using AiRaccoon.Setup;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Data.Sqlite;
 
 var parsed = CliArgs.Parse(args);
@@ -25,7 +26,7 @@ if (parsed.CommandPath.Length > 0)
         config.Options, new EnvEncryptionKeyProvider(), bws));
     var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
     return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, Console.Out, Console.Error,
-        Console.In, bank: bank, bws: bws);
+        Console.In, bank: bank, bws: bws, watchStore: new WatchStore(bank));
 }
 
 var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs

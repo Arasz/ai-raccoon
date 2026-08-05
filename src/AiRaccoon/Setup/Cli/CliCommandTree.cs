@@ -152,13 +152,13 @@ internal static class CliCommandTree
 
     private static Command WatchCommand()
     {
-        var watch = new Command("watch", "File-watcher configuration (CLI-only channel)")
+        var watch = new Command("watch", "Watch configuration (CLI-only channel): enable/disable, scope allowlist and concurrency per target. This family CONFIGURES watching — it does not register watches; registrations are created by agents via the memory_watch_add MCP tool.")
         {
-            new Command("enable", "Enables or disables watching for a target")
+            new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
             new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } }
         };
-        var scope = new Command("scope", "Scope allowlist (absolute paths, covers dir + subdirs)")
+        var scope = new Command("scope", "Scope allowlist (absolute paths, covers dir + subdirs) — the paths a registered watch must sit under")
         {
             new Command("add", "Adds a scope path (normalized absolute, deduped, re-sorted)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
@@ -168,7 +168,10 @@ internal static class CliCommandTree
         watch.Add(scope);
         watch.Add(new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
             { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } });
-        watch.Add(new Command("list", "Lists every target's enabled flag, concurrency and scopes"));
+        watch.Add(new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those"));
+        watch.Add(new Command("registered", "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
+            { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } });
+        watch.Add(new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } });
         return watch;
     }
 }

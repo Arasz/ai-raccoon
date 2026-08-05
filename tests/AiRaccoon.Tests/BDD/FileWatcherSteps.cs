@@ -85,7 +85,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null);
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null,
+            watchStore: Ctx.WatchStore);
         _lastCliMessage = stdout.ToString() + stderr.ToString();
         if (exit != 0)
         {
@@ -289,6 +290,16 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
     [When("^the user runs watch concurrency ([^ ]*) ([0-9]+)$")]
     public Task WhenUserRunsWatchConcurrency(string projectId, int value) => RunCliAsync("watch", "concurrency", projectId, value.ToString(CultureInfo.InvariantCulture));
+
+    [When("^the user runs watch registered$")]
+    public Task WhenUserRunsWatchRegistered() => RunCliAsync("watch", "registered");
+
+    [Then("^the CLI output lists the registered watch for \\\"([^\\\"]*)\\\" at \\\"([^\\\"]*)\\\"$")]
+    public void ThenCliOutputListsRegisteredWatch(string projectId, string virtualPath)
+    {
+        _lastCliMessage.ShouldNotBeNull().ShouldContain($"project: {projectId}  path: {Map(virtualPath)}  registered: ");
+        _lastCliMessage.ShouldContain(" lastChange: never");
+    }
 
     [Given("^watching enabled with scope \"([^\"]*)\"$")]
     public async Task GivenWatchingEnabledWithScope(string path)
