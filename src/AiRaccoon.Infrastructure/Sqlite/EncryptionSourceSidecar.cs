@@ -1,10 +1,8 @@
 using System.Text.Json;
+using AiRaccoon.Core.Encryption;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
-
-/// <summary>Encryption source persisted in the sidecar: "env" or "bitwarden".</summary>
-public sealed record EncryptionSourceConfig(string Source, string? ProjectId, string? SecretId);
 
 /// <summary>The encryption source sidecar exists but cannot be read.</summary>
 public sealed class EncryptionSourceException(string message) : InvalidOperationException(message);

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests;
 using Shouldly;
