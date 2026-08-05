@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Options;
+using Azure;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging;
 
@@ -22,6 +23,39 @@ public sealed partial class AzureBlobCloudStore
         _blobs = CreateClient(options.ConnectionString);
     }
 
+    /// <summary>Test seam: build the store around an already-constructed client (canned transport).</summary>
+    internal AzureBlobCloudStore(BlobServiceClient blobs, string container, ILogger<AzureBlobCloudStore>? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(blobs);
+        ArgumentException.ThrowIfNullOrWhiteSpace(container);
+
+        _blobs = blobs;
+        _container = container;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureBlobCloudStore>.Instance;
+    }
+
+    public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var blob = _blobs.GetBlobContainerClient(_container).GetBlobClient(objectKey);
+            var response = await blob.DownloadContentAsync(cancellationToken).ConfigureAwait(false);
+
+            // Azure returns the ETag quoted; strip quotes (matches the S3 storage format).
+            var etag = response.Value.Details.ETag.ToString().Trim('"');
+            return new CloudObject(response.Value.Content.ToArray(), etag);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+        catch (RequestFailedException ex)
+        {
+            Log.PullFailed(_logger, ex.Message);
+            throw new SyncNetworkException($"Azure pull failed: {ex.Message}", ex);
+        }
+    }
+
     /// <summary>Wraps the SDK ctor so a malformed connection string surfaces as a typed sync error.</summary>
     private static BlobServiceClient CreateClient(string connectionString)
     {
@@ -33,5 +67,11 @@ public sealed partial class AzureBlobCloudStore
         {
             throw new SyncNotConfiguredException(ex);
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 202, Level = LogLevel.Error, Message = "Azure pull failed: {reason}")]
+        public static partial void PullFailed(ILogger logger, string reason);
     }
 }
