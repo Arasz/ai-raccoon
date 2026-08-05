@@ -2751,6 +2751,75 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "ai-raccoon-mcp-setup-refactor",
+      "subagents": [
+        {
+          "description": "",
+          "at": "2026-08-05T21:47:04.022975+00:00",
+          "totalTokens": 324233,
+          "delegationId": "deleg_56247e3e",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 6
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260805_230724_b9d205",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T21:08:22.589635+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T21:48:41.356243+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-05T21:48:41.356243+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 324233,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
     }
   ]
 }

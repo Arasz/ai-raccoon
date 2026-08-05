@@ -1,7 +1,7 @@
-using AiRaccoon.Setup;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Setup;
 using Microsoft.Data.Sqlite;
 
 var parsed = CliArgs.Parse(args);
@@ -20,9 +20,6 @@ if (parsed.CommandPath.Length > 0)
 
 var app = McpServerSetup.CreateServerHost(config);
 
-// Eager startup open (plan §S2b): refuse to serve before the first tool call when the bank
-// cannot be opened with the configured encryption source — bws missing/network failure, a
-// rotated/wrong key, or an encrypted bank with no source configured (all §5.4 texts).
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
 var resolver = app.Services.GetRequiredService<EncryptionKeyResolver>();
 
@@ -67,7 +64,7 @@ catch (Exception ex)
 
 // Best-effort bundled-model bootstrap (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
 // warn, never fail, when the packaged ONNX is missing.
-await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, ct => BundledModel.EnsureAsync(ct), CancellationToken.None);
+await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, BundledModel.EnsureAsync, CancellationToken.None);
 
 await app.RunAsync(config);
 return 0;

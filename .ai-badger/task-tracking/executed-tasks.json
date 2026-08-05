@@ -571,6 +571,22 @@
       "resumeCommand": "hermes --resume 20260805_195139_aa2bbf",
       "resumeAttempts": [],
       "stateJsonUpdated": false
+    },
+    {
+      "taskId": "ai-raccoon-mcp-setup-refactor",
+      "title": "MCP setup refactor: plain app host for stdio-only, web app host for HTTP/S, web+stdio for both",
+      "sessionId": "20260805_230724_b9d205",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/ai-raccoon-mcp-setup-refactor",
+      "risk": false,
+      "startedAt": "2026-08-05T21:08:22.590220+00:00",
+      "finishedAt": "2026-08-05T21:48:41.356250+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260805_230724_b9d205",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }
