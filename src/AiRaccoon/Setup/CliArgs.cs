@@ -221,9 +221,7 @@ internal static class CliArgs
         var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table)") { new Argument<string>("url") { HelpName = "url" } };
         s3.Add(new Option<string>("--bucket") { Description = "S3 bucket name", HelpName = "name", Required = true });
         s3.Add(new Option<string>("--region") { Description = "S3 region", HelpName = "name" });
-        s3.Add(new Option<string>("--object-key") { Description = "S3 object key (default memory-&lt;projectId&gt;.db)", HelpName = "key" });
-        s3.Add(new Option<string>("--access-key") { Description = "S3 access key persisted in the settings table", HelpName = "key" });
-        s3.Add(new Option<string>("--secret-key") { Description = "S3 secret key persisted in the settings table", HelpName = "key" });
+        s3.Add(new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" });
         add.Add(s3);
         sync.Add(add);
         sync.Add(new Command("remove", "Back to default: sync off"));

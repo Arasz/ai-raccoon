@@ -19,7 +19,7 @@ if (parsed.CommandPath.Length > 0)
     var store = new SqliteMemoryStore(
         new SqliteConnectionFactory(config.Options, new EnvEncryptionKeyProvider()),
         TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
-    return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, Console.Out, Console.Error);
+    return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, Console.Out, Console.Error, Console.In);
 }
 
 var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs

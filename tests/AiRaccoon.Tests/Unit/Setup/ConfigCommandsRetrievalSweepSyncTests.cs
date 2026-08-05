@@ -171,7 +171,8 @@ public class ConfigCommandsRetrievalSweepSyncTests
         store.Settings["sync.region"] = "eu-west-1";
         store.Settings["sync.objectKey"] = "old.db";
 
-        await Run(["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store);
+        await Run(["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+            new StringReader("ak1\nsk1\n"));
 
         store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
         store.Settings.ShouldNotContainKey("sync.region");

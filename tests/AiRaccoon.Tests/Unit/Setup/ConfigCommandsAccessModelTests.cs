@@ -23,7 +23,7 @@ public class ConfigCommandsAccessModelTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
             TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
