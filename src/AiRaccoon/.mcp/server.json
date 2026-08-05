@@ -2,12 +2,12 @@
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "description": "Agent memory over MCP: project-scoped memory bank, workspace sandboxes, hybrid search, cloud sync.",
     "name": "ai-raccoon/agent-memory",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "packages": [
         {
             "registryType": "nuget",
             "identifier": "arasz.ai-raccoon",
-            "version": "1.0.2",
+            "version": "1.0.3",
             "transport": {
                 "type": "stdio"
             },
