@@ -5,7 +5,7 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Access;
 
 /// <summary>
-///     Forgetting knobs (FR-NM-2): the sweep rating threshold (sweep.ttl_days was removed
+///     Forgetting knobs (FR-NM-2; see docs/work/features-native-memory/native-memory.feature): the sweep rating threshold (sweep.ttl_days was removed
 ///     by the single-channel ruling — only per-entry TTLs remain, as data not config).
 /// </summary>
 public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access)
