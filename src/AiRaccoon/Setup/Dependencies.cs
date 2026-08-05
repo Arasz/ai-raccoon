@@ -7,6 +7,7 @@ using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -24,8 +25,12 @@ public static partial class Dependencies
     {
         services.AddSingleton(options);
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IEncryptionKeyProvider>(_ =>
-            new EnvEncryptionKeyProvider());
+        services.AddSingleton<IBwsProcessRunner>(_ => new BwsProcessRunner());
+        services.AddSingleton<EncryptionKeyResolver>(sp => new EncryptionKeyResolver(
+            sp.GetRequiredService<InfrastructureOptions>(),
+            new EnvEncryptionKeyProvider(),
+            sp.GetRequiredService<IBwsProcessRunner>()));
+        services.AddSingleton<IEncryptionKeyProvider>(sp => sp.GetRequiredService<EncryptionKeyResolver>());
         services.AddSingleton(sp => new SqliteConnectionFactory(
             sp.GetRequiredService<InfrastructureOptions>(),
             sp.GetRequiredService<IEncryptionKeyProvider>()));
