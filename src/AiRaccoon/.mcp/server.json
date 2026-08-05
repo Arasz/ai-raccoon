@@ -2,12 +2,12 @@
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "description": "Agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
     "name": "ai-raccoon/agent-memory",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "packages": [
         {
             "registryType": "nuget",
             "identifier": "ai-raccoon",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "transport": {
                 "type": "stdio"
             },
