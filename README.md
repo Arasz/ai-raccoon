@@ -406,12 +406,12 @@ methodology and the runnable harness: [`docs/reference/embedding-benchmark.md`](
 
 ### Install
 
-The server packs as a .NET tool (package id `ai-raccoon`):
+The server packs as a .NET tool (package id `arasz.ai-raccoon`; the installed command is `ai-raccoon`):
 
 ```bash
-dotnet tool install -g ai-raccoon        # from the NuGet feed
+dotnet tool install -g arasz.ai-raccoon    # from the NuGet feed
 # or from the local feed after `dotnet pack -c Release` (DOTNET_ENV=local):
-dotnet tool install -g ai-raccoon --add-source .nupkg-local
+dotnet tool install -g arasz.ai-raccoon --add-source .nupkg-local
 ```
 
 Or run from source (see below). After install, `ai-raccoon` on PATH is the whole
@@ -517,7 +517,7 @@ quantized, ~21 MB) runs in-process.
 
 ## Packaging & release
 
-The server packs as a .NET tool (`PackAsTool`, package id `ai-raccoon`, type `McpServer`):
+The server packs as a .NET tool (`PackAsTool`, package id `arasz.ai-raccoon`, type `McpServer`):
 
 ```bash
 dotnet pack -c Release

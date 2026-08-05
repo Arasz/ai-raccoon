@@ -38,6 +38,20 @@ public class VersionContractTests
     }
 
     [Fact]
+    public void PackageId_MatchesServerIdentifier_CommandUnchanged()
+    {
+        var csproj = XDocument.Load(RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        using var doc = JsonDocument.Parse(File.ReadAllText(RepoFile("src/AiRaccoon/.mcp/server.json")));
+        var root = doc.RootElement;
+
+        string Property(string name) => csproj.Descendants("PropertyGroup").Elements(name).First().Value;
+
+        Property("PackageId").ShouldBe("arasz.ai-raccoon");
+        root.GetProperty("packages")[0].GetProperty("identifier").GetString().ShouldBe("arasz.ai-raccoon");
+        Property("ToolCommandName").ShouldBe("ai-raccoon");
+    }
+
+    [Fact]
     public void DeclaredVersions_CarryNoPrereleaseSuffix()
     {
         var csproj = XDocument.Load(RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
