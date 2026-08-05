@@ -285,6 +285,24 @@ public class SyncCloudStoreFactoryTests
     }
 
     [Fact]
+    public async Task Create_WithS3ChainMode_ReturnsS3CloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "true"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<S3CloudStore>();
+    }
+
+    [Fact]
     public async Task IsConfigured_S3ChainMode_True()
     {
         var options = new SyncOptions
