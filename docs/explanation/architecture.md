@@ -254,7 +254,8 @@ searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2
 ## Sync cycle
 
 Sync pushes and pulls the bank's committed contexts (`shared` + every
-`project:<id>`) to S3-compatible object storage. Workspace rows are stripped
+`project:<id>`) to a cloud object store (S3-compatible or Azure Blob, selected by the
+`sync.provider` settings row — default `s3`). Workspace rows are stripped
 before they leave the bank — they are never synced. The cycle is serialised
 by a `SemaphoreSlim(1,1)` gate.
 
@@ -264,7 +265,7 @@ sequenceDiagram
     participant T as MemoryTools
     participant S as SyncService
     participant L as Local SQLite
-    participant R as S3 Cloud Store
+    participant R as Cloud Store
 
     C->>T: memory_sync(projectId)
     T->>S: MemorySyncAsync(projectId, objectKey)

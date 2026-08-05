@@ -2,12 +2,29 @@
   "agent-memory-server": [
     "Design: one memory bank per install scope (user-scope shared across projects, project-scope local); projects partition via context; shared promotion tier reached ONLY via memory_share (curated, sweep-exempt); workspace_id presence is the isolation declaration (no isolated flag).",
     "Contract artifacts: docs/features/agent-memory/{spec-issue-1.md, agent-memory.feature (29 scenarios), spec.json}. Gherkin .feature is the behavioural contract, gated by .ai-badger/skills/create-task-spec/scripts/spec_holes.py.",
-    "Deferred (OQ-8): auto-promotion to shared based on ai-badger stack concept \u2014 the IMemoryExtension pipeline (OnConsolidateAsync/OnWriteAsync) is the seam.",
-    "Deferred (OQ-5): single cloud memory bank for all agents \u2014 V1 syncs committed contexts into one configured SQLite Cloud DB, which is the correlation point between user-scope and project-scope installs.",
-    "Deferred: Reqnroll/.feature test runner \u2014 spike verified green on xunit.v3 3.2.2 + net10.0 (Reqnroll.xunit.v3 3.3.4) but integration deferred; .feature stays the docs contract.",
+    "Deferred (OQ-8): auto-promotion to shared based on ai-badger stack concept — the IMemoryExtension pipeline (OnConsolidateAsync/OnWriteAsync) is the seam.",
+    "Deferred (OQ-5): single cloud memory bank for all agents — V1 syncs committed contexts into one configured SQLite Cloud DB, which is the correlation point between user-scope and project-scope installs.",
+    "Deferred: Reqnroll/.feature test runner — spike verified green on xunit.v3 3.2.2 + net10.0 (Reqnroll.xunit.v3 3.3.4) but integration deferred; .feature stays the docs contract.",
     "Licensing: sqlite-vector + sqlite-sync are Elastic 2.0 (free OSS/non-prod); linux-musl-x64 has no sqlite-memory release binary; provisioning refuses with a clear error.",
     "Native extension facts: content-hash dedup is global (cross-context duplicates need preserve_duplicate_paths=1 + distinct paths); defer_embeddings=1 default so writes work pre-model; memory_add_text returns 1 not the hash; memory_embed_pending rejects NULL/0 limit.",
-    "Dapper 2.1.79 quirks: parameter binding is case-sensitive against SQL param names; record ctor matching chokes on nullable params (use settable DTO); MatchNamesWithUnderscores alone does not fix ctor matching \u2014 alias columns to record names.",
+    "Dapper 2.1.79 quirks: parameter binding is case-sensitive against SQL param names; record ctor matching chokes on nullable params (use settable DTO); MatchNamesWithUnderscores alone does not fix ctor matching — alias columns to record names.",
     "Env vars: AIRACCOON_DATA_ROOT, AIRACCOON_INSTALL_SCOPE (user|project), AIRACCOON_SQLITECLOUD_DB_ID/API_KEY, AIRACCOON_VECTORSSPACE_API_KEY, AIRACCOON_TEST_GGUF (gates embedding integration tests)."
+  ],
+  "sync-with-azure-blob": [
+    "Two sync backends behind ICloudStore, selected by sync.provider row (default s3). R1: exactly one active provider — sync add <provider> deletes the other's rows BEFORE writing (crash between delete and write leaves sync off, visible, never stale secrets; settings merge LWW would otherwise spread them).",
+    "R2: unknown sync.provider values route as s3; sync show prints the RAW row so a typo is diagnosable.",
+    "Azure ETag trap: the SDK's ETag struct stores verbatim and Blobs writes IfMatch.ToString() (G format) straight into the If-Match header — must construct new ETag($\"\\\"{etag}\\\"\") quoted. Pull/upload response etags come quoted; store unquoted (Trim('\"')) to match S3. Pinned by Push_WithETag_SendsQuotedIfMatchHeader.",
+    "AzureBlobCloudStore tests use Azure SDK's public HttpClientTransport + Retry.MaxRetries=0 with a canned HttpMessageHandler — no Azurite, no network, hermetic.",
+    "sync.objectKey is SHARED across providers (never blanket-deleted); s3-only rows: endpoint/bucket/region/accessKey/secretKey; azure-only: connectionString/container.",
+    "Malformed Azure connection string (ArgumentException/FormatException from BlobServiceClient ctor) maps to SyncNotConfiguredException (typed). Pathological container names can still throw ArgumentException at request time — accepted, documented in plan risk 12.",
+    "Full-suite embedding/E2E flakes (Embeddings_*, WatchPipelineTests timing) are PRE-EXISTING on origin/main baseline — reproduced without the branch; not caused by sync changes."
+  ],
+  "sync-cloud-identity-creds": [
+    "R3 (owner ruling f:): sync --cli modes take NO token options and expect the user to be logged into az/aws CLI. Azure needs --account (the blob endpoint URI is built from it); s3 uses the plain default chain (no profile option — AWS_PROFILE env selects).",
+    "Azure no-login failure type is CredentialUnavailableException (probe 2026-08-05), NOT AuthenticationFailedException — both are mapped to SyncAuthFailedException; catch order: 404 first, then credential/auth types, then RequestFailedException 401/403, then HttpRequestException, then generic RequestFailedException.",
+    "AWS SDK v4 resolves the credential chain LAZILY: `new AmazonS3Client(config)` succeeds without credentials; the first call throws AmazonClientException. AmazonServiceException/AmazonClientException are siblings (no catch shadowing).",
+    "Raw HttpRequestException escaped both SDKs' typed exceptions (connection-refused case) and surfaced as untyped MCP 500 — now mapped to SyncNetworkException in both stores.",
+    "Malformed azure account name in --cli mode: Uri/BlobServiceClient ctor ArgumentException/FormatException -> SyncNotConfiguredException (same wrap as the connection-string path).",
+    "Worktree gotcha: the bundled ONNX model (src/AiRaccoon/Models/*.onnx) is GITIGNORED; a fresh worktree lacks it until copied, and the csproj wildcard copy evaluates at build time — build BEFORE the file exists silently skips the copy and all embedding/retrieval tests fail with 'model not found next to the tool'. Copy the model into the worktree before the full-suite gate (main checkout has it; mtime trick: build after the file is present)."
   ]
 }

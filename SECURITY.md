@@ -37,10 +37,10 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 |---|---|---|
 | stdio transport (default) | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr | The MCP client that launched the process |
 | HTTP transport (opt-in) | Serves MCP over Streamable HTTP at `/mcp` on `localhost` | Any process that can reach the listening port |
-| Memory tools (19 tools) | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to S3 | The calling MCP client |
+| Memory tools (19 tools) | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed | The pack/push commands and feed contents |
 | Embedded ONNX model | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled) | The model file shipped with the binary |
-| S3-compatible sync (opt-in) | Pushes/pulls VACUUM snapshots to/from an S3-compatible object store | Credentials from the bank's settings table |
+| Cloud sync (opt-in) | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob) | Credentials from the bank's settings table |
 | SQLite encryption (opt-in) | Transparent AES-256-CBC page-level encryption via e_sqlite3mc when `AIRACCOON_DB_PASSPHRASE` is set; FTS5 and vec0 work unchanged | Passphrase from environment variable |
 
 **The dangerous direction is the client that launches the process.** A stdio MCP server

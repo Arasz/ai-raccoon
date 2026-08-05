@@ -24,6 +24,8 @@
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3mc"/>
         <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3mc"/>
         <PackageReference Include="AWSSDK.S3"/>
+        <PackageReference Include="Azure.Identity"/>
+        <PackageReference Include="Azure.Storage.Blobs"/>
     </ItemGroup>
 
     <ItemGroup>

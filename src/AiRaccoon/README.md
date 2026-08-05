@@ -5,7 +5,7 @@ a native .NET SQLite store. Local-first by default:
 one `memory.db` per install scope, a bundled in-process ONNX embedding model,
 hybrid FTS5+vec0 semantic search with reciprocal rank fusion, workspace sandboxes,
 a curated shared tier, memory degradation, three-tier access control, and opt-in
-S3-compatible cloud sync.
+cloud sync (S3 or Azure Blob).
 
 Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
 
@@ -30,8 +30,9 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
   `rw` (default: read + write), `full` (adds deletion, sweep execution, and
   workspace consolidation). Set with the `access` CLI commands (settings table).
 - **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
-  (`shared` + `project:<id>`) as a single snapshot to S3-compatible object storage
-  (R2, S3, MinIO) using VACUUM INTO + If-Match CAS + row merge.
+  (`shared` + `project:<id>`) as a single snapshot to cloud object storage —
+  S3-compatible endpoints (R2, S3, MinIO) or Azure Blob — using VACUUM INTO +
+  If-Match CAS + row merge.
 
 ## Tools (19) and prompts (2)
 
@@ -63,7 +64,8 @@ ai-raccoon model set local [path]             ai-raccoon model set openai {model
 ai-raccoon model reset                        ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]   # key prompts, or --cli = AWS credential chain
+ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]            # connection-string prompt, or --cli = az login
 ai-raccoon sync remove                        ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -71,8 +73,44 @@ ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
 ```
 
-Secrets (OpenAI API key, S3 access/secret keys) are stored in the settings table, which
+Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table, which
 is encrypted at rest when a passphrase is configured.
+
+### Cloud sync authentication methods
+
+Four ways to authenticate, two per backend. Only one provider is active at a time
+(`sync add` clears the other provider's rows); switching modes clears the other mode's
+rows. If both modes' rows exist (manual edits), the stored secret wins the tie-break:
+connection string over az CLI, keys over chain.
+
+| Method | Configure with | Stored | Auth at sync time |
+|---|---|---|---|
+| S3 keys | `sync add s3 {url} --bucket {name}` (prompted) | `endpoint`, `bucket`, `region`, `accessKey`, `secretKey`, `objectKey` | `BasicAWSCredentials` from the stored keys |
+| S3 AWS chain | `sync add s3 {url} --bucket {name} --cli` | `endpoint`, `bucket`, `region`, `s3Chain`, `objectKey` (no secrets) | AWS default credential chain (env, `~/.aws`, SSO, IMDS) |
+| Azure connection string | `sync add azure {container}` (prompted) | `connectionString`, `container`, `objectKey` | `BlobServiceClient(connection string)` |
+| Azure az CLI | `sync add azure {container} --cli --account {name}` | `azureAccount`, `container`, `objectKey` (no secrets) | `DefaultAzureCredential` (az login / env / managed identity) |
+
+`--cli` methods store nothing long-lived — the machine's CLI login state is the
+credential (tokens short-lived and revocable); `sync add azure <container> --cli
+--account <name>` uses `DefaultAzureCredential` (az CLI login state, or
+`AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET` env vars for headless);
+`sync add s3 <url> --bucket <name> --cli` uses the AWS default credential chain
+(`aws configure`, or `aws sso login`). Prompted-secret methods suit headless/CI and
+non-AWS S3-compatible endpoints (MinIO, R2) — the secrets live in the settings table,
+encrypted at rest when a passphrase is set. Auth failures report `sync-auth-failed:`
+with a "run `az login`" / "run `aws configure` | `aws sso login`" hint; `sync show`
+redacts secrets; `sync remove` deletes every `sync.*` row.
+
+> `sync add azure` does **not** create the container — create it first (`az storage
+> container create --account-name <account> --name <container>`), or the first sync
+> fails with `sync-network:`.
+
+Azure least privilege: `az login`, then
+`az role assignment create --assignee "you@domain.com" --role "Storage Blob Data
+Contributor" --scope "<storage-account-resource-id>"` (find the id with
+`az storage account show -g <rg> -n <account> --query id`). AWS least privilege: IAM
+policy allowing only `s3:GetObject` + `s3:PutObject` on
+`arn:aws:s3:::<bucket>/<object-key-prefix>*` — the sync only GETs and PUTs one object.
 
 ## Environment variables
 

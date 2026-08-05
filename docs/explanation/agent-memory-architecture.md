@@ -36,8 +36,8 @@ virtual tables and triggers ourselves gives us:
 - **Hybrid search in C#.** Reciprocal rank fusion (RRF) runs in-process, with weights
   per modality (`ftsWeight`, `vectorWeight`) and a configurable `k` parameter — the
   extension's built-in ranking was a black box.
-- **S3-compatible sync** instead of SQLite Cloud. No managed database dependency — sync
-  pushes VACUUM snapshots to any S3-compatible object store with If-Match conflict
+- **Cloud sync** instead of SQLite Cloud. No managed database dependency — sync
+  pushes VACUUM snapshots to a cloud object store (S3-compatible or Azure Blob) with If-Match conflict
   detection, 3-retry loop, and tombstones.
 - **Engine-agnostic embeddings.** The bundled `all-MiniLM-L6-v2` (ONNX, int8, ~21 MB)
   runs in-process with zero network calls. An OpenAI-compatible provider routes through
@@ -62,10 +62,10 @@ durable facts into the project's committed memory and discard the rest. Workspac
 carry `workspace_id IS NOT NULL AND scope IS NULL` — the CHECK constraint enforces mutual
 exclusion with committed rows.
 
-## Why sync goes through one S3 object
+## Why sync goes through one cloud object
 
 `memory_sync` takes a VACUUM snapshot of the bank, strips workspace rows, and pushes it
-to an S3-compatible object store. It pulls the remote snapshot, merges entries (INSERT OR
+to a cloud object store (S3-compatible or Azure Blob) with If-Match CAS. It pulls the remote snapshot, merges entries (INSERT OR
 IGNORE by hash), merges settings (last-writer-wins), applies tombstones, and pushes back
 with If-Match for conflict detection. A user-scope install and a project-scope install on
 the same machine are independent local banks; they correlate **only through the shared

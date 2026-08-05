@@ -564,8 +564,10 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TN_MEMORY_SYNC)]
     [Description(
-        "Syncs the bank's committed contexts (shared + project:<id>) to S3-compatible object storage. " +
-        "Configure the endpoint/bucket/keys with `ai-raccoon sync add s3` (settings table).")]
+        "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
+        "Configure with `ai-raccoon sync add s3 <url> --bucket <name>` or `ai-raccoon sync add azure " +
+        "<container>` (settings table); add `--cli` to use the machine's az/aws CLI login instead of " +
+        "stored secrets.")]
     public async Task<SyncToolResult> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
@@ -583,7 +585,7 @@ public sealed class MemoryTools(
             if (!syncSettings.IsConfigured)
             {
                 var notConfigured = new McpException(
-                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' and enter the credentials when prompted");
+                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
                 activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(McpException));
                 throw notConfigured;
@@ -603,7 +605,7 @@ public sealed class MemoryTools(
                 activity?.SetTag("error_type", nameof(SyncNotConfiguredException));
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncNotConfiguredException));
                 throw new McpException(
-                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' and enter the credentials when prompted");
+                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
             }
             catch (SyncAuthFailedException ex)
             {
@@ -611,7 +613,7 @@ public sealed class MemoryTools(
                 activity?.SetTag("error_type", nameof(SyncAuthFailedException));
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncAuthFailedException));
                 throw new McpException(
-                    "sync-auth-failed: verify the keys with 'ai-raccoon sync show'");
+                    "sync-auth-failed: run 'az login' (azure --cli) or 'aws configure' / 'aws sso login' (s3 --cli), or verify the keys with 'ai-raccoon sync show'");
             }
             catch (SyncConflictException ex)
             {

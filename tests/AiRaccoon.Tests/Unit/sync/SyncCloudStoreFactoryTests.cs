@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -42,6 +43,71 @@ public class SyncCloudStoreFactoryTests
         var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
 
         cloud.ShouldBeOfType<S3CloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithAzureSettings_ReturnsAzureBlobCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories",
+                [SyncSettingsKeys.ObjectKey] = "bank.db"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<AzureBlobCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithAzureMissingConnectionString_ReturnsNullCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.Container] = "memories" }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderAzureAndS3RowsOnly_ReturnsNullCloudStore()
+    {
+        // The silently-dead trap: provider says azure but only s3 rows exist.
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "azure" } };
+        SeedFull(store);
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderS3AndFullS3Settings_ReturnsS3CloudStore()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "s3" } };
+        SeedFull(store);
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<S3CloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderRowOnly_ReturnsNullCloudStore()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "azure" } };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
     }
 
     [Fact]
@@ -99,5 +165,229 @@ public class SyncCloudStoreFactoryTests
         var cloud = await factory.CreateAsync(TestContext.Current.CancellationToken);
 
         cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    // Azurite's published dev account key — valid base64, obviously fake.
+    private const string FakeConnectionString =
+        "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;EndpointSuffix=core.windows.net";
+
+    [Fact]
+    public async Task ReadOptionsAsync_MapsAzureRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories",
+                [SyncSettingsKeys.ObjectKey] = "bank.db"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.Azure);
+        options.ConnectionString.ShouldBe(FakeConnectionString);
+        options.Container.ShouldBe("memories");
+        options.ObjectKey.ShouldBe("bank.db");
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_ProviderDefaultsToS3_WhenRowAbsent()
+    {
+        var store = new FakeConfigStore();
+        SeedFull(store);
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.S3);
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_UnknownProviderValue_DefaultsToS3()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "minio" } };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.S3);
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_MapsAzureAccountRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.AzureAccount] = "myacct",
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Account.ShouldBe("myacct");
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_MapsS3ChainRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "true"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.S3Chain.ShouldBeTrue();
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Create_WithAzureAccountMode_ReturnsAzureBlobCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.AzureAccount] = "myacct",
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<AzureBlobCloudStore>();
+    }
+
+    [Fact]
+    public async Task IsConfigured_AzureAccountMode_True()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.Azure,
+            Account = "myacct",
+            Container = "memories"
+        };
+
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Create_WithS3ChainMode_ReturnsS3CloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "true"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<S3CloudStore>();
+    }
+
+    [Fact]
+    public async Task IsConfigured_S3ChainMode_True()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.S3,
+            Endpoint = "http://s3.example.com",
+            Bucket = "memories",
+            S3Chain = true
+        };
+
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task IsConfigured_MissingBothAzureModes_False()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.Azure,
+            Container = "memories"
+        };
+
+        options.IsConfigured.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task IsConfigured_MissingBothS3Modes_False()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.S3,
+            Endpoint = "http://s3.example.com",
+            Bucket = "memories"
+        };
+
+        options.IsConfigured.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task IsConfigured_S3ChainRowParsedCaseInsensitively()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "TRUE"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.S3Chain.ShouldBeTrue();
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_AzureIsConfiguredOnlyWhenConnectionStringAndContainerPresent()
+    {
+        var full = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+        var fullOptions = await Factory(full).ReadOptionsAsync(TestContext.Current.CancellationToken);
+        fullOptions.IsConfigured.ShouldBeTrue();
+
+        var missingConnectionString = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.Container] = "memories" }
+        };
+        var noConnectionString = await Factory(missingConnectionString)
+            .ReadOptionsAsync(TestContext.Current.CancellationToken);
+        noConnectionString.IsConfigured.ShouldBeFalse();
+
+        var missingContainer = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.ConnectionString] = FakeConnectionString }
+        };
+        var noContainer = await Factory(missingContainer).ReadOptionsAsync(TestContext.Current.CancellationToken);
+        noContainer.IsConfigured.ShouldBeFalse();
     }
 }
