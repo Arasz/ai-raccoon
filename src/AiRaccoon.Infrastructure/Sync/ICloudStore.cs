@@ -1,6 +1,6 @@
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Single-file S3-compatible object store for memory.db snapshots with ETag/If-Match CAS.</summary>
+/// <summary>Single-file object store for memory.db snapshots with ETag/If-Match CAS.</summary>
 public interface ICloudStore
 {
     /// <summary>Downloads the remote snapshot and its ETag, or null if no object exists.</summary>

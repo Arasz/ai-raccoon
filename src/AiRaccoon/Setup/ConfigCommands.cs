@@ -5,6 +5,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 
 namespace AiRaccoon.Setup;
@@ -38,6 +39,7 @@ internal static class ConfigCommands
                 ["sweep", "threshold", "set"] => await SweepThresholdSetAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["sweep", "show"] => await SweepShowAsync(store, stdout, cancellationToken),
                 ["sync", "add", "s3"] => await SyncAddS3Async(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["sync", "add", "azure"] => await SyncAddAzureAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
                 ["sync", "remove"] => await SyncRemoveAsync(store, stdout, cancellationToken),
                 ["sync", "show"] => await SyncShowAsync(store, stdout, cancellationToken),
                 ["watch", "enable"] or ["watch", "disable"] => await WatchSetEnabledAsync(parseResult, store, stdout, stderr, cancellationToken),
@@ -298,6 +300,16 @@ internal static class ConfigCommands
             return 1;
         }
 
+        // R1: one active provider — drop the other backend's rows first so a crash between
+        // delete and write can't leave stale secrets behind (settings merge propagates LWW).
+        foreach (var key in new[] { SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container })
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
+
+        // Writing provider=s3 makes the switch real: without it the factory would read
+        // provider=azure and no azure rows → NullCloudStore → silently dead sync.
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, cancellationToken);
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, cancellationToken);
@@ -309,14 +321,50 @@ internal static class ConfigCommands
         return 0;
     }
 
-    private static async Task<int> SyncRemoveAsync(IMemoryStore store, TextWriter stdout,
-        CancellationToken cancellationToken)
+    private static async Task<int> SyncAddAzureAsync(ParseResult parseResult, IMemoryStore store,
+        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken)
     {
+        var container = parseResult.GetValue<string>("container")!;
+        var objectKey = Optional(parseResult, "--object-key");
+
+        // Secrets are entered interactively (single-channel ruling; never on argv).
+        // Prompt + validate BEFORE any settings write: an abort must leave the current
+        // provider untouched (partial writes would spread via the settings merge).
+        await stderr.WriteAsync("Azure Blob connection string (empty aborts): ");
+        var connectionString = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            await stderr.WriteLineAsync("ai-raccoon: connection string required — sync not configured");
+            return 1;
+        }
+
+        // R1: one active provider — drop the other backend's rows first so a crash between
+        // delete and write can't leave stale secrets behind (settings merge propagates LWW).
         foreach (var key in new[]
                  {
                      SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
-                     SyncSettingsKeys.ObjectKey, SyncSettingsKeys.AccessKey, SyncSettingsKeys.SecretKey
+                     SyncSettingsKeys.AccessKey, SyncSettingsKeys.SecretKey
                  })
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
+
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "azure", cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.ConnectionString, connectionString, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.Container, container, cancellationToken);
+        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
+
+        await stdout.WriteLineAsync($"sync configured: azure container {container}");
+        return 0;
+    }
+
+    private static async Task<int> SyncRemoveAsync(IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't
+        // drift when rows are added later (single-active-provider ruling R1).
+        var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
+        foreach (var key in rows.Keys)
         {
             await store.DeleteSettingAsync(key, cancellationToken);
         }
@@ -329,13 +377,25 @@ internal static class ConfigCommands
         CancellationToken cancellationToken)
     {
         var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
-        if (!rows.TryGetValue(SyncSettingsKeys.Endpoint, out var endpoint))
+        if (rows.Count == 0)
         {
             await stdout.WriteLineAsync("sync not configured");
             return 0;
         }
 
-        await stdout.WriteLineAsync($"endpoint: {endpoint}");
+        // R2 — unknown values route as s3; the raw row is printed so a typo is diagnosable.
+        var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
+        await stdout.WriteLineAsync($"provider: {rawProvider}");
+        if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
+        {
+            await stdout.WriteLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
+            await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
+            var connectionState = rows.ContainsKey(SyncSettingsKeys.ConnectionString) ? "set" : "unset";
+            await stdout.WriteLineAsync($"connectionString: {connectionState}");
+            return 0;
+        }
+
+        await stdout.WriteLineAsync($"endpoint: {rows.GetValueOrDefault(SyncSettingsKeys.Endpoint) ?? "(unset)"}");
         await stdout.WriteLineAsync($"bucket: {rows.GetValueOrDefault(SyncSettingsKeys.Bucket) ?? "(unset)"}");
         await stdout.WriteLineAsync($"region: {rows.GetValueOrDefault(SyncSettingsKeys.Region) ?? "(unset)"}");
         await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");

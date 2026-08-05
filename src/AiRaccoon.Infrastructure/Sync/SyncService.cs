@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Row-merge sync over S3-compatible object storage: VACUUM INTO snapshot → pull → ATTACH+merge → push If-Match.</summary>
+/// <summary>Row-merge sync over object storage: VACUUM INTO snapshot → pull → ATTACH+merge → push If-Match.</summary>
 public partial class SyncService(
     Func<CancellationToken, Task<ICloudStore>> resolveCloud,
     Func<CancellationToken, Task<SqliteConnection>> openBank,

@@ -1,18 +1,40 @@
 namespace AiRaccoon.Infrastructure.Options;
 
+/// <summary>Cloud sync backend selected by the sync.provider setting row (default s3).</summary>
+public enum SyncProvider
+{
+    S3,
+    Azure
+}
+
+/// <summary>Parses a sync.provider row; absent or unknown values behave as S3 (ruling R2).</summary>
+public static class SyncProviderParser
+{
+    public static SyncProvider Parse(string? value) =>
+        Enum.TryParse<SyncProvider>(value, ignoreCase: true, out var provider) && Enum.IsDefined(provider)
+            ? provider
+            : SyncProvider.S3;
+}
+
 /// <summary>Sync settings resolved per memory_sync call from the sync.* settings rows.</summary>
 public sealed record SyncOptions
 {
+    public SyncProvider Provider { get; init; } = SyncProvider.S3;
     public string? Endpoint { get; init; }
     public string? Bucket { get; init; }
     public string? AccessKey { get; init; }
     public string? SecretKey { get; init; }
     public string? Region { get; init; }
     public string? ObjectKey { get; init; }
+    public string? ConnectionString { get; init; }
+    public string? Container { get; init; }
 
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(Endpoint)
-        && !string.IsNullOrWhiteSpace(Bucket)
-        && !string.IsNullOrWhiteSpace(AccessKey)
-        && !string.IsNullOrWhiteSpace(SecretKey);
+    public bool IsConfigured => Provider switch
+    {
+        SyncProvider.Azure => !string.IsNullOrWhiteSpace(ConnectionString) && !string.IsNullOrWhiteSpace(Container),
+        _ => !string.IsNullOrWhiteSpace(Endpoint)
+            && !string.IsNullOrWhiteSpace(Bucket)
+            && !string.IsNullOrWhiteSpace(AccessKey)
+            && !string.IsNullOrWhiteSpace(SecretKey)
+    };
 }

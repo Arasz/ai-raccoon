@@ -150,9 +150,9 @@ Only one environment variable is read:
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
 environment variables are not read for runtime configuration (single-channel ruling).
-Secrets (OpenAI API key, S3 access/secret keys) are stored in the settings table
-(encrypted at rest when a passphrase is set), never in the environment and never in
-tracked files.
+Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are
+stored in the settings table (encrypted at rest when a passphrase is set), never in the
+environment and never in tracked files.
 
 ## Command-line options
 
@@ -179,6 +179,7 @@ ai-raccoon model reset                          ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}           ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}           ai-raccoon sweep show
 ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]
+ai-raccoon sync add azure {container} [--object-key {key}]
 ai-raccoon sync remove                          ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -186,12 +187,16 @@ ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
 ```
 
-S3 credentials are **prompted interactively** on `sync add s3` (prompt on stderr, input read
+The backend is selected by the `sync.provider` settings row (default `s3`): `sync add
+s3` writes `provider=s3`; `sync add azure` writes `provider=azure`. Each clears the
+other provider's rows, so at most one backend is configured at a time. Provider secrets
+are **prompted interactively** — the S3 access/secret keys on `sync add s3`, the Azure
+connection string on `sync add azure` (prompt on stderr, input read
 from stdin; an empty answer aborts with exit 1 and persists nothing) — never accepted on the
 command line.
 
 Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
-`sync add s3`) are persisted in the settings table and are never launch flags — the
+`sync add s3`, or the Azure connection string via `sync add azure`) are persisted in the settings table and are never launch flags — the
 parser's unknown-option error is the defense. `--help`/`--version` and parse errors
 print to **stderr** (exit 0 / exit 1). Generic host flags (`--environment`,
 `--contentRoot`, `--applicationName`) are accepted hidden and ignored. A zero-config
@@ -235,7 +240,7 @@ Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
 | Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
 | Remote embedding provider without a key | `OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'` |
 | Watch registration failures | `watching-disabled:` / `path-outside-scope:` / `path-not-found:` |
-| Sync without credentials | `sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' and enter the credentials when prompted` |
+| Sync without credentials | `sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted` |
 
 ## Managed store
 

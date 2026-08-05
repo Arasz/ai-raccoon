@@ -148,6 +148,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("s3");
         store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
         store.Settings["sync.bucket"].ShouldBe("memories");
         store.Settings["sync.region"].ShouldBe("us-east-1");
@@ -156,6 +157,33 @@ public class ConfigCommandsRetrievalSweepSyncTests
         store.Settings["sync.secretKey"].ShouldBe("sk1");
         stdout.ShouldContain("s3");
         stderr.ShouldContain("access key");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_WritesProviderRow_AndClearsAzureRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.objectKey"] = "bank.db"
+            }
+        };
+
+        var (exit, _, _) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--object-key", "bank.db"],
+            store, new StringReader("ak1\nsk1\n"));
+
+        exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("s3");
+        store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
+        store.Settings["sync.bucket"].ShouldBe("memories");
+        store.Settings["sync.objectKey"].ShouldBe("bank.db");
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        store.Settings.ShouldNotContainKey("sync.container");
     }
 
     [Fact]
@@ -195,7 +223,41 @@ public class ConfigCommandsRetrievalSweepSyncTests
     }
 
     [Fact]
-    public async Task SyncRemove_DeletesAllSyncRows()
+    public async Task SyncAddAzure_WritesRows_AndClearsS3Rows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.region"] = "us-east-1",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1",
+                ["sync.objectKey"] = "old.db"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(
+            ["sync", "add", "azure", "memories", "--object-key", "bank.db"], store,
+            new StringReader("connstr\n"));
+
+        exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("azure");
+        store.Settings["sync.connectionString"].ShouldBe("connstr");
+        store.Settings["sync.container"].ShouldBe("memories");
+        // objectKey is shared across providers: upserted, never blanket-deleted.
+        store.Settings["sync.objectKey"].ShouldBe("bank.db");
+        store.Settings.ShouldNotContainKey("sync.endpoint");
+        store.Settings.ShouldNotContainKey("sync.bucket");
+        store.Settings.ShouldNotContainKey("sync.region");
+        store.Settings.ShouldNotContainKey("sync.accessKey");
+        store.Settings.ShouldNotContainKey("sync.secretKey");
+        stdout.ShouldContain("azure container memories");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_EmptyStdin_AbortsWithoutPersistingAnything()
     {
         var store = new FakeConfigStore
         {
@@ -205,6 +267,50 @@ public class ConfigCommandsRetrievalSweepSyncTests
                 ["sync.bucket"] = "memories",
                 ["sync.accessKey"] = "ak1",
                 ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories"], store, new StringReader(""));
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("connection string required");
+        // Nothing written or deleted: the s3 install stays untouched (no provider flip).
+        store.Settings.ShouldNotContainKey("sync.provider");
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        store.Settings.ShouldNotContainKey("sync.container");
+        store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
+        store.Settings["sync.bucket"].ShouldBe("memories");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_WithoutObjectKey_ClearsStaleObjectKeyRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.objectKey"] = "old.db" }
+        };
+
+        await Run(["sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
+
+        store.Settings["sync.container"].ShouldBe("memories");
+        store.Settings.ShouldNotContainKey("sync.objectKey");
+    }
+
+    [Fact]
+    public async Task SyncRemove_DeletesAllSyncRows_IncludingAzure()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.future"] = "x"
             }
         };
 
@@ -222,6 +328,72 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         exit.ShouldBe(0);
         stdout.ShouldContain("not configured");
+    }
+
+    [Fact]
+    public async Task SyncShow_Azure_PrintsProviderContainerAndRedactedConnectionString()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.objectKey"] = "bank.db"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: azure");
+        stdout.ShouldContain("container: memories");
+        stdout.ShouldContain("objectKey: bank.db");
+        stdout.ShouldContain("connectionString: set");
+        stdout.ShouldNotContain("connstr");
+    }
+
+    [Fact]
+    public async Task SyncShow_WithoutProviderRow_DefaultsToS3()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: s3");
+        stdout.ShouldContain("endpoint: http://s3.example.com");
+        stdout.ShouldContain("bucket: memories");
+    }
+
+    [Fact]
+    public async Task SyncShow_AzureMissingSecret_ShowsUnset()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.container"] = "memories"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: azure");
+        stdout.ShouldContain("container: memories");
+        stdout.ShouldContain("connectionString: unset");
     }
 
     [Fact]
@@ -243,11 +415,34 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var (exit, stdout, _) = await Run(["sync", "show"], store);
 
         exit.ShouldBe(0);
+        stdout.ShouldContain("provider: s3");
         stdout.ShouldContain("http://s3.example.com");
         stdout.ShouldContain("memories");
         stdout.ShouldContain("region: us-east-1");
         stdout.ShouldContain("Key: set");
         stdout.ShouldNotContain("ak1");
         stdout.ShouldNotContain("sk1");
+    }
+
+    [Fact]
+    public async Task SyncShow_TypoProviderRow_PrintsRawValue_AndRoutesFieldsAsS3()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "minio",
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: minio");
+        stdout.ShouldContain("endpoint: http://s3.example.com");
     }
 }
