@@ -24,7 +24,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
-    /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (docs/adr/0004).</summary>
+    /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (see docs/adr/0004-dual-vector-structure-signal.md).</summary>
     private const int MaxFileRankRegression = 2;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
