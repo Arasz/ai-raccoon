@@ -439,3 +439,14 @@ dotnet test
 ## 8. Final gate
 
 After S6: bare `dotnet build` + `dotnet test` green from the worktree root; `git status` shows only per-path-addressed commits (never `-A`); the completion report records: wave-by-wave merge order (S1+S2a → S2b → S3+S4 → S5 → S6), the §5 contracts as merged, and the manual process-level refusal check result.
+
+---
+
+## Review amendments (plan-review 2026-08-05, APPROVE-WITH-FINDINGS — incorporated)
+
+1. **[MEDIUM, §S3 unset path]** Crash between rekey-back and sidecar-delete leaves an env-keyed bank with sidecar=bitwarden. FIX: the `encryption bitwarden` open/validation step (e) gains an **env-key retry leg** — when the derived-key open fails AND the sidecar exists AND the env passphrase is set, retry the open with the env passphrase; if that succeeds, report "bank is env-keyed; source was not switched" and keep the sidecar consistent (rewrite sidecar=env or delete it). Document the manual recovery (delete sidecar) for the no-env case.
+2. **[MEDIUM, §5.4 + §S2b eager-open catch]** "Bank encrypted, no source configured" (unset with no env passphrase) must NOT surface as a raw SqliteException. FIX: the resolver's eager-open catch gains a branch for **passphrase-null + encrypted bank** → dedicated error text: "bank is encrypted but no encryption source is configured (set AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden')". §5.4 gets the string.
+3. **[LOW, §S4]** S4 step 4 (driving ConfigCommands.RunAsync with S3's surface) is DROPPED — S3's own tests cover the config surface; S4 covers the fake-bws provider integration only.
+4. **[LOW, §S6.1]** Eager startup open changes EVERY server boot (E2E/McpServerFactory creates+opens the bank at startup) — name the E2E suite explicitly in the S6 gate wording; bare `dotnet test` is the catch.
+5. **[LOW, gates]** Pin the new test namespace: **`AiRaccoon.Tests.Unit.Encryption`** (capital E) for S1/S2a/S2b unit tests; update all gate filters accordingly.
+6. **[INFO, §S2b TDD]** Step 4 is verification, not failing-first — relabel as a verification step.
