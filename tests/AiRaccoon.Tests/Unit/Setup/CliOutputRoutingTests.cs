@@ -47,7 +47,8 @@ public class CliOutputRoutingTests
     public void Render_Version_WritesOnlyToErrorWriter()
     {
         // The rendered string is the entry assembly's version (the test host here), so only
-        // the routing contract is asserted; the tool's own 0.1.0-beta is proven by the smoke gate.
+        // the routing contract is asserted; the tool's own version string is proven by the
+        // VersionContractTests package-metadata gate.
         var parsed = CliArgs.Parse(["--version"]);
         var stderr = new StringWriter();
 
