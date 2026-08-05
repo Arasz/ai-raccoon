@@ -378,6 +378,21 @@
       "resumeCommand": "hermes --resume 20260804_222008_5a143c",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "sync-with-azure-blob",
+      "title": "Azure Blob sync: common storage interface + second implementation",
+      "sessionId": "20260805_085657_912203",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/sync-with-azure-blob",
+      "risk": false,
+      "startedAt": "2026-08-05T06:59:51.470871+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260805_085657_912203",
+      "resumeAttempts": []
     }
   ]
 }

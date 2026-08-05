@@ -1754,6 +1754,55 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "sync-with-azure-blob",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260805_085657_912203",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-05T06:59:51.470143+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 10,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 79097,
+              "outputTokens": 10853,
+              "cacheReadTokens": 580352,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 10
+            }
+          },
+          "cumulative": {
+            "inputTokens": 79097,
+            "outputTokens": 10853,
+            "cacheReadTokens": 580352,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-05T06:59:51.470143+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 10,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 79097,
+              "outputTokens": 10853,
+              "cacheReadTokens": 580352,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 10
+            }
+          },
+          "cumulative": {
+            "inputTokens": 79097,
+            "outputTokens": 10853,
+            "cacheReadTokens": 580352,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
     }
   ]
 }
