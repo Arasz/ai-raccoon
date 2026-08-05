@@ -406,7 +406,7 @@ public sealed class WatchIntegrationTests
     {
         if (OperatingSystem.IsWindows())
         {
-            // POSIX permission bits do not exist on Windows (OS matrix deferred — plan §recorded deviations).
+            // POSIX permission bits do not exist on Windows (OS matrix deferred — recorded deviations).
             return;
         }
 

@@ -12,10 +12,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     P6b plan §8 ADOPT (4): ingest chunking must respect the embedding engine's token
+///     Chunking ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): ingest chunking must respect the embedding engine's token
 ///     window — the old 512-token default exceeded the bundled all-MiniLM-L6-v2's 256-token
 ///     context, diluting embeddings via truncation. Chunk bounds are pinned by FR-NM-10
-///     (bounds, not sizes), so the defaults may change.
+///     (bounds, not sizes; see docs/work/features-native-memory/native-memory.feature), so the defaults may change.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

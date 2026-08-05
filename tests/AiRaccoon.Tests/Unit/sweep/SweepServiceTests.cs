@@ -89,7 +89,7 @@ public class SweepServiceTests
         var outcome = await service.SweepAsync("acme", 0.3, false, TestContext.Current.CancellationToken);
 
         // Missing metadata falls back to DefaultBaseScore (0.5) — above a 0.3 threshold, so the
-        // entry must NOT be swept just because it was never searched (FR-MEM-1.15).
+        // entry must NOT be swept just because it was never searched (FR-MEM-1.15; see docs/work/features-agent-memory/spec-issue-1.md).
         outcome.Candidates.ShouldBeEmpty();
         store.Deleted.ShouldBeEmpty();
     }

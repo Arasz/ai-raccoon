@@ -5,7 +5,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 /// <summary>
 ///     One RRF fusion parameter point: cutoff k, the (fts, vector) weight pair, the
 ///     minScore filter, and the candidate-window policy. MinScore and Window default to
-///     the pre-Wave-4 values so the FR-NM-4 grid points keep their original meaning.
+///     the pre-sweep values so the FR-NM-4 (see docs/work/features-native-memory/native-memory.feature) grid points keep their original meaning.
 /// </summary>
 public sealed record SweepPoint(
     int K,
@@ -18,7 +18,7 @@ public sealed record SweepPoint(
 }
 
 /// <summary>
-///     The fixed sweep matrix for the RRF fusion search (FR-NM-4): k in {10, 30, 60} x
+///     The fixed sweep matrix for the RRF fusion search (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): k in {10, 30, 60} x
 ///     weights {(1,1), (1,2), (2,1)}. Deterministic order — k ascending, then weight pair
 ///     ascending — so run-to-run comparison is stable.
 /// </summary>

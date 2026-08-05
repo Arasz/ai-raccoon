@@ -358,7 +358,7 @@ public class SyncServiceTests : IDisposable
     }
 
     //
-    // FR-NM-6 s4: workspace exclusion — workspace rows should not appear in local bank stats
+    // FR-NM-6 s4 (see docs/work/features-native-memory/native-memory.feature): workspace exclusion — workspace rows should not appear in local bank stats
     //
     [Fact]
     public async Task MemorySync_WorkspaceRowExcluded_Locally()

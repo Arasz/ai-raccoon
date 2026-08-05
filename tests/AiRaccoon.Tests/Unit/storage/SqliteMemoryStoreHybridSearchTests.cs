@@ -12,7 +12,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     FR-NM-4 hybrid search scenarios with a real vector modality: the store is configured
+///     FR-NM-4 (see docs/work/features-native-memory/native-memory.feature) hybrid search scenarios with a real vector modality: the store is configured
 ///     with the fake OpenAI-compatible endpoint so rows embed (deterministic vectors) and the
 ///     vec0 list is populated, exercising the RRF fusion across FTS5 and vec0.
 /// </summary>
@@ -71,7 +71,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_VectorOnlyHit_SnippetFallsBackToTrimmedValue_WithEllipsis()
     {
-        // ADOPT (P6b plan §8): a vector-only hit has no FTS5 snippet() — FR-NM-4 s1 still
+        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): a vector-only hit has no FTS5 snippet() — FR-NM-4 s1 (see docs/work/features-native-memory/native-memory.feature) still
         // requires a snippet on every result, so the entry value is trimmed to ~200 chars
         // ('…'-marked, keyed by hash) instead of an empty snippet.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -95,7 +95,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
-        // ADOPT (P6b plan §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
+        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
         // list must rank ascending (the exact-restatement doc, distance 0, first) and the
         // fused Ranking must stay an RRF score in 0..1 with the top exactly 1.0, never the
         // raw distance. ftsWeight 0 isolates the vector modality.
@@ -123,7 +123,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
     {
-        // ADOPT (P6b plan §8): per-modality candidate window K = max(limit*3, 100) — a doc
+        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): per-modality candidate window K = max(limit*3, 100) — a doc
         // ranked #2 in BOTH modalities must survive fusion for a limit-1 query, even though
         // neither per-modality top-1 is that doc. a is written before the engine exists so it
         // is FTS-only (rank 1 by exact restatement); c and x embed, and x is vec-rank 2.
@@ -160,7 +160,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // d1 is written before any engine exists -> FTS-indexed, never embedded (pending), so
         // it can only enter the keyword list. d2 is written after configuring the fake engine
         // -> embedded, so it only enters the vector list. The RRF winner then depends purely
-        // on the configured weights (FR-NM-4 s3: weights 2:1 vs 1:2).
+        // on the configured weights (FR-NM-4 s3; see docs/work/features-native-memory/native-memory.feature, weights 2:1 vs 1:2).
         var keywordFavoured = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "api contract design"),
             TestContext.Current.CancellationToken);
@@ -192,7 +192,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_ScopeShared_ExcludesProjectOnlyFacts()
     {
-        // FR-NM-4 s4: scope selection is unchanged — a project-only fact is invisible to a
+        // FR-NM-4 s4 (see docs/work/features-native-memory/native-memory.feature): scope selection is unchanged — a project-only fact is invisible to a
         // shared-scope search, while scope all still finds it.
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "project only fact about container registries"),

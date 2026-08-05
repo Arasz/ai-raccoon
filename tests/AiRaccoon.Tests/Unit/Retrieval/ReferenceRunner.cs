@@ -22,7 +22,7 @@ public sealed record ReferenceRun(
 /// <summary>
 ///     Runs the pinned sqlite-memory 1.3.5 extension (the reference oracle) against a temp
 ///     memory.db. Self-contained: its own inline SQL mirrors the extension surface and does not
-///     touch src/AiRaccoon.Infrastructure/Sqlite, whose rewrite (P1) must not move this oracle.
+///     touch src/AiRaccoon.Infrastructure/Sqlite, whose rewrite must not move this oracle.
 ///     Deferral defaults on; embeddings run explicitly after the corpus load, so output is
 ///     deterministic (same model file, same machine, same corpus — same rankings).
 /// </summary>
@@ -71,7 +71,7 @@ public static class ReferenceRunner
             connection.LoadExtension(ReferenceAssets.VectorModulePath);
             connection.LoadExtension(ReferenceAssets.MemoryModulePath);
 
-            // Oracle configuration mirrors the production factory (FR-MEM-1.12): deferral on,
+            // Oracle configuration mirrors the production factory (FR-MEM-1.12; see docs/work/features-agent-memory/spec-issue-1.md): deferral on,
             // path-scoped hashes on. Rows stay pending until the explicit embed below.
             SetOption(connection, "defer_embeddings", 1);
             SetOption(connection, "preserve_duplicate_paths", 1);
