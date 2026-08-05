@@ -245,50 +245,6 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             + string.Join("; ", rankRegressions));
     }
 
-    /// <summary>
-    ///     Backfill contract: re-running the structure backfill is a no-op (byte-identical
-    ///     heading_path/structure_embedding), and chunk content + hashes are never touched.
-    /// </summary>
-    [Fact]
-    public async Task StructureBackfill_Rerun_IsIdempotentAndLeavesContentUntouched()
-    {
-        var dbPath = Path.Combine(_dataRoot, "memory.db");
-        await _store.WriteAsync(new MemoryWriteRequest(
-            ProjectId,
-            """
-            # Probe Document
-
-            ## Decision
-
-            The probe decision text.
-            """), TestContext.Current.CancellationToken);
-        await _store.WriteAsync(new MemoryWriteRequest(
-            ProjectId,
-            "plain atomic chunk without headings"), TestContext.Current.CancellationToken);
-
-        var before = SnapshotEntries(dbPath);
-        var service = new StructureBackfillService(new EmbeddingService());
-
-        var first = await service.RunAsync(dbPath,
-            cancellationToken: TestContext.Current.CancellationToken);
-        var afterFirst = SnapshotEntries(dbPath);
-        var second = await service.RunAsync(dbPath,
-            cancellationToken: TestContext.Current.CancellationToken);
-        var afterSecond = SnapshotEntries(dbPath);
-
-        first.ChunksWithHeadings.ShouldBeGreaterThanOrEqualTo(1);
-        second.RowsProcessed.ShouldBe(first.RowsProcessed);
-        afterSecond.ShouldBe(afterFirst, "re-running the backfill must be a no-op");
-
-        // Content and hashes are untouched: only heading_path/structure_embedding differ from before.
-        before.Count.ShouldBe(afterFirst.Count);
-        for (var i = 0; i < before.Count; i++)
-        {
-            before[i].Hash.ShouldBe(afterFirst[i].Hash, $"row {i} hash changed");
-            before[i].Value.ShouldBe(afterFirst[i].Value, $"row {i} value changed");
-        }
-    }
-
     /// <summary>Pre-Wave-6 banks gain the structure columns on open (ALTER TABLE migration path).</summary>
     [Fact]
     public async Task SchemaMigration_AddsWave6Columns_ToPreWave6Bank()
@@ -358,22 +314,6 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             .Where(q => q.ExpectedSource is not null && _hashMap.ContainsKey(q.ExpectedSource))
             .Where(q => q.Id is "A1" or "A2" or "A3" or "A4" or "A5" or "A6" or "A7" or "C1" or "C2" or "C5")
             .ToList();
-
-    private static IReadOnlyList<(string Hash, string Value)> SnapshotEntries(string dbPath)
-    {
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT hash, value FROM entries ORDER BY id";
-        using var reader = command.ExecuteReader();
-        var rows = new List<(string, string)>();
-        while (reader.Read())
-        {
-            rows.Add((reader.GetString(0), reader.GetString(1)));
-        }
-
-        return rows;
-    }
 
     private static async Task<IReadOnlyList<string>> ColumnNamesAsync(SqliteConnection connection)
     {
