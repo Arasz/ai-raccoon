@@ -449,4 +449,53 @@ public class CliArgsTests
 
         parsed.Errors.ShouldNotBeEmpty();
     }
+
+    // ── Verb tree: encryption ──
+
+    [Fact]
+    public void Parse_EncryptionBitwarden_ParsesCommandPath()
+    {
+        var parsed = CliArgs.Parse(["encryption", "bitwarden"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["encryption", "bitwarden"]);
+        parsed.ParseResult.GetResult("-t").ShouldBeNull();
+    }
+
+    [Fact]
+    public void Parse_EncryptionBitwardenWithToken_ParsesToken()
+    {
+        var parsed = CliArgs.Parse(["encryption", "bitwarden", "-t", "tok-123"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["encryption", "bitwarden"]);
+        parsed.ParseResult.GetValue<string>("-t").ShouldBe("tok-123");
+    }
+
+    [Fact]
+    public void Parse_EncryptionShow_ParsesCommandPath() =>
+        CliArgs.Parse(["encryption", "show"]).CommandPath.ShouldBe(["encryption", "show"]);
+
+    [Fact]
+    public void Parse_EncryptionUnset_ParsesCommandPath() =>
+        CliArgs.Parse(["encryption", "unset"]).CommandPath.ShouldBe(["encryption", "unset"]);
+
+    [Fact]
+    public void Parse_EncryptionUnknownSubcommand_ReturnsError()
+    {
+        var parsed = CliArgs.Parse(["encryption", "rotate"]);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Render_Help_ListsEncryptionVerb()
+    {
+        var writer = new StringWriter();
+
+        var exit = CliArgs.Render(CliArgs.Parse(["--help"]), writer);
+
+        exit.ShouldBe(0);
+        writer.ToString().ShouldContain("encryption");
+    }
 }
