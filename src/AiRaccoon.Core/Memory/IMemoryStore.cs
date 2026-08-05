@@ -14,30 +14,30 @@ public interface IMemoryStore
 
     Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default);
 
-    /// <summary>Promotes the content behind hash into the flat shared context; the source project row may stay (FR-MEM-1.21).</summary>
+    /// <summary>Promotes the content behind hash into the flat shared context; the source project row may stay (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.21).</summary>
     Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
-    /// <summary>The bank's file tree as returned by memory_list_files (spec §4.1 memory_list).</summary>
+    /// <summary>The bank's file tree as returned by memory_list_files (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_list).</summary>
     Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 
-    /// <summary>Indexes one file into the given context (spec §4.1 memory_ingest_file).</summary>
+    /// <summary>Indexes one file into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_ingest_file).</summary>
     Task<int> IngestFileAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Indexes a directory tree into the given context (spec §4.1 memory_ingest_directory).</summary>
+    /// <summary>Indexes a directory tree into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_ingest_directory).</summary>
     Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Sets the bank's embedding provider/model/endpoint, persists them in the settings
     ///     table, records the engine fingerprint, and re-embeds previously embedded rows
-    ///     (bank-global) when the engine changes (FR-NM-3 s6). The remote API key is a
+    ///     (bank-global) when the engine changes. The remote API key is a
     ///     separate settings row (embedding.apiKey).
     /// </summary>
     Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Embeds pending deferred rows in batches (spec §4.1 memory_embed_pending).</summary>
+    /// <summary>Embeds pending deferred rows in batches (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default);
 

@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Access;
 
 /// <summary>
-///     Guard resolution/enforcement and the forgetting-knob gate (FR-NM-2 scenarios 5-6): knob
+///     Guard resolution/enforcement and the forgetting-knob gate (FR-NM-2 scenarios 5-6; see docs/work/features-native-memory/native-memory.feature): knob
 ///     adjustments are destructive, denied in rw and applied in full.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

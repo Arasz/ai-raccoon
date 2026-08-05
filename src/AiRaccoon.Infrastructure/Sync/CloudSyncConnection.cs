@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Runs the cloudsync SQL functions over the bank connection (spec §4.1).</summary>
+/// <summary>Runs the cloudsync SQL functions over the bank connection (see docs/work/features-agent-memory/spec-issue-1.md §4.1).</summary>
 internal sealed class CloudSyncConnection(SqliteConnection connection) : ICloudSyncConnection
 {
     public async Task<IReadOnlyList<string>> GetCommittedContextsAsync(CancellationToken cancellationToken)

@@ -4,7 +4,7 @@ using System.Text;
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     Content identity (FR-NM-7): SHA-256 over UTF8(path) concatenated with UTF8(value), no
+///     Content identity (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): SHA-256 over UTF8(path) concatenated with UTF8(value), no
 ///     separator — so identical content under different paths yields different hashes. Lowercase hex.
 /// </summary>
 public static class ContentHash

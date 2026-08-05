@@ -18,7 +18,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     Access-mode gating at the MCP tool boundary (FR-NM-2 scenarios 1-4, 7-8): reads are
+///     Access-mode gating at the MCP tool boundary (FR-NM-2 scenarios 1-4, 7-8; see docs/work/features-native-memory/native-memory.feature): reads are
 ///     allowed in every mode, writes need rw+, removal needs full.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

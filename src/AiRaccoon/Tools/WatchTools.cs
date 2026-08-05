@@ -9,7 +9,7 @@ using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
 
-/// <summary>Thin MCP tools over IWatchService — no business logic here (spec §6.1).</summary>
+/// <summary>Thin MCP tools over IWatchService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WatchTools(
     IWatchService watch,
     IMemoryAccessGuard access,

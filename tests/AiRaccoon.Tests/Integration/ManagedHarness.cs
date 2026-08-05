@@ -13,7 +13,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     The new side of the FR-NM-5 parity gate: the P6 managed store (FTS5 + vec0 fused with
+///     The new side of the FR-NM-5 (see docs/work/features-native-memory/native-memory.feature) parity gate: the managed store (FTS5 + vec0 fused with
 ///     RRF) loaded with the shared corpus and queried through the SweepRunner's RankSource
 ///     plug point. Same corpus, one project context, the bundled int8 ONNX engine — the
 ///     measured counterpart to the vendored sqlite-memory reference oracle.

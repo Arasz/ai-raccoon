@@ -14,7 +14,7 @@ using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
 
-/// <summary>Thin MCP tools over IMemoryStore and the workspace/sweep/sync services — no business logic here (spec §6.1).</summary>
+/// <summary>Thin MCP tools over IMemoryStore and the workspace/sweep/sync services — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class MemoryTools(
     IMemoryStore store,
     SyncService sync,

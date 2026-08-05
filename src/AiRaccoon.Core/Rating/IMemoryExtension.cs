@@ -11,7 +11,7 @@ public enum SourceChangeKind
     Renamed
 }
 
-/// <summary>Extension contract; ordered hooks run around every store operation (spec §6.2).</summary>
+/// <summary>Extension contract; ordered hooks run around every store operation (see docs/work/features-agent-memory/spec-issue-1.md §6.2).</summary>
 public interface IMemoryExtension
 {
     string Name { get; }

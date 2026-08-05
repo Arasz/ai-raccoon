@@ -8,7 +8,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     FR-NM-5 parity gate: the P6 managed store (new side) is measured against the vendored
+///     FR-NM-5 (see docs/work/features-native-memory/native-memory.feature) parity gate: the managed store (new side) is measured against the vendored
 ///     reference golden output (the pinned sqlite-memory 1.3.5 extension, k=10) on the shared
 ///     corpus. PASS = the new side does not regress below the reference by more than
 ///     NdcgParityDelta at every RRF sweep point, no regression on the degenerate query subset

@@ -87,7 +87,7 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>
-    ///     S2 (plan C §3 Wave 2 gate): the ADR-0011 file must rank within the top 3. The
+    ///     S2 (Wave 2 gate; see docs/plans/retrieval-improvement-c.md §3 Wave 2): the ADR-0011 file must rank within the top 3. The
     ///     Decision-section chunk itself is logged — the FTS cannot bridge 'decide' to the
     ///     '## Decision' heading (no stemming) and bm25's document-length normalization
     ///     crushes the 13.8 KB decision chunk; the section-level &lt;=3 target is Wave 6's
@@ -111,7 +111,7 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>
-    ///     Q2 (plan C §3 Wave 2 gate): 'ADR-0070' identifier-only returns ADR-0070's file at
+    ///     Q2 (Wave 2 gate; see docs/plans/retrieval-improvement-c.md §3 Wave 2): 'ADR-0070' identifier-only returns ADR-0070's file at
     ///     FTS-only rank &lt;=3 — the source-column fix works without the vector modality. The
     ///     decision chunk's exact rank is logged (the header chunk legitimately outranks it
     ///     for a bare identifier — it carries the ADR's title).
@@ -164,10 +164,11 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>
-    ///     C2's hybrid rank collapsed with clean content (2d): its vector rank is &gt;100, so
-    ///     the RRF fusion (k=60) sinks a perfect FTS rank 1 — the Wave 0 hybrid rank 1 was an
-    ///     artifact of the embedded provenance prefix. The source column holds the invariant
-    ///     at FTS-only rank 1; the fusion weighting is Wave 4's sweep.
+    ///     C2's hybrid rank collapsed with clean content (2d; see docs/plans/retrieval-improvement-c.md §3 2d):
+    ///     its vector rank is &gt;100, so the RRF fusion (k=60) sinks a perfect FTS rank 1 — the
+    ///     Wave 0 hybrid rank 1 was an artifact of the embedded provenance prefix. The source
+    ///     column holds the invariant at FTS-only rank 1; the fusion weighting is Wave 4's sweep
+    ///     (see docs/adr/0006-rrf-parameter-optimization.md).
     /// </summary>
     [Fact]
     public async Task InvariantC2_ScreamingArchitecture_FtsOnlyRank1()

@@ -4,7 +4,7 @@ namespace AiRaccoon.Infrastructure.Options;
 
 /// <summary>
 ///     Where the install lives: a user-scope bank is shared by all projects, a project-scope bank belongs to one
-///     project (FR-MEM-1.3).
+///     project (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.3).
 /// </summary>
 public enum InstallScope
 {
@@ -21,7 +21,7 @@ public sealed record InfrastructureOptions
 
     public InstallScope Scope { get; init; } = InstallScope.User;
 
-    /// <summary>Data root fallback: ~/.ai-raccoon (spec §5.1); the caller resolves env/CLI overrides.</summary>
+    /// <summary>Data root fallback: ~/.ai-raccoon (see docs/work/features-agent-memory/spec-issue-1.md §5.1); the caller resolves env/CLI overrides.</summary>
     public static string DefaultDataRoot() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
 }

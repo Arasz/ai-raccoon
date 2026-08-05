@@ -5,7 +5,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Source-path-shaped queries (file[#section]) match the source_file/section FTS columns
-///     with AND semantics (plan C Wave 2 2c), ranking the exact chunk first.
+///     with AND semantics (see docs/plans/retrieval-improvement-c.md §3 2c), ranking the exact chunk first.
 /// </summary>
 internal static partial class SourcePathQuery
 {

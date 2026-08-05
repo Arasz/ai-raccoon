@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 public sealed record CapturedEmbeddingRequest(string Model, IReadOnlyList<string> Inputs, string? Authorization);
 
 /// <summary>
-///     In-process fake of an OpenAI-compatible /embeddings endpoint (FR-NM-3 scenario 3):
+///     In-process fake of an OpenAI-compatible /embeddings endpoint (FR-NM-3 scenario 3; see docs/work/features-native-memory/native-memory.feature):
 ///     returns deterministic 384-dim vectors derived from the input text so tests can assert
 ///     routing and re-embedding without any external service.
 /// </summary>

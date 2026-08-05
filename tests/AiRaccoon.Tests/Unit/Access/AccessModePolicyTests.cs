@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Access;
 
-/// <summary>Pure resolution policy for ro / rw / full access modes (FR-NM-2).</summary>
+/// <summary>Pure resolution policy for ro / rw / full access modes (FR-NM-2; see docs/work/features-native-memory/native-memory.feature).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class AccessModePolicyTests

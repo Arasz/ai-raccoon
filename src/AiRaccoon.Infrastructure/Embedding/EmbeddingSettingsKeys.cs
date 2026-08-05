@@ -1,6 +1,6 @@
 namespace AiRaccoon.Infrastructure.Embedding;
 
-/// <summary>Settings-table keys for the embedding engine (FR-NM-3).</summary>
+/// <summary>Settings-table keys for the embedding engine (FR-NM-3; see docs/work/features-native-memory/native-memory.feature).</summary>
 public static class EmbeddingSettingsKeys
 {
     public const string Provider = "embedding.provider";

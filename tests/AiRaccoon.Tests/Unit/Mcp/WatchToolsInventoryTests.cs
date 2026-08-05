@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// <summary>
 ///     WatchTools tool inventory: exactly the three spec tools, each named by a TN_* const.
 ///     The existing ToolInventoryTests (18 MemoryTools tools) stays untouched — WatchTools
-///     is a separate class with its own inventory test (plan §6, R8).
+///     is a separate class with its own inventory test (see docs/plans/file-watcher-implementation.md §6, R8).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -74,7 +74,7 @@ public sealed class WatchToolsInventoryTests
         }
     }
 
-    /// <summary>DI smoke (plan S6, TDD order 4): the composition root resolves IWatchService.</summary>
+    /// <summary>DI smoke (see docs/plans/file-watcher-implementation.md §S6, TDD order 4): the composition root resolves IWatchService.</summary>
     [Fact]
     public void RegisterMemoryServices_ResolvesIWatchService()
     {

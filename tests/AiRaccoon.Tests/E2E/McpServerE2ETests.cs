@@ -171,7 +171,7 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Embeddings_WithoutConfiguration_WritesStayDeferred_AndKeywordSearchStillWorks()
     {
-        // FR-NM-3 s4: no engine configured → the write lands pending, memory_embed_pending
+        // FR-NM-3 s4 (see docs/work/features-native-memory/native-memory.feature): no engine configured → the write lands pending, memory_embed_pending
         // reports zero processed, and the interim FTS5 search still finds the row by keyword.
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "semantic e2e fact"));
@@ -192,7 +192,7 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Embeddings_ConfigureLocal_BundledEngine_EmbedsWritesEndToEnd()
     {
-        // FR-NM-3 s1: the CLI config channel configures the engine (memory_configure was
+        // FR-NM-3 s1 (see docs/work/features-native-memory/native-memory.feature): the CLI config channel configures the engine (memory_configure was
         // removed by the single-channel ruling); the running server hot-reloads the row.
         await RunConfigCliAsync("model", "set", "local");
 
@@ -206,7 +206,7 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint()
     {
-        // FR-NM-3 s3: any OpenAI-compatible baseUrl replaces the default engine.
+        // FR-NM-3 s3 (see docs/work/features-native-memory/native-memory.feature): any OpenAI-compatible baseUrl replaces the default engine.
         await RunConfigCliAsync("model", "set", "openai", "nomic-embed-text", _openAi.BaseUrl,
             "--api-key", "test-key-123");
 
@@ -224,7 +224,7 @@ public class McpServerE2ETests : IAsyncLifetime
     [Fact]
     public async Task Embeddings_EmbedPending_ProcessesTheQueueAfterConfiguration()
     {
-        // FR-NM-3 s5: deferred writes embed once an engine exists.
+        // FR-NM-3 s5 (see docs/work/features-native-memory/native-memory.feature): deferred writes embed once an engine exists.
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "queued e2e fact"));
 

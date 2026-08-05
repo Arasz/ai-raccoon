@@ -89,7 +89,8 @@ public sealed class BaselineMetricsTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 0 gate: per-query nDCG@5 / MRR / recall@5 with modality attribution, the
+    ///     Wave 0 gate (see docs/plans/retrieval-improvement-c.md §0): per-query nDCG@5 / MRR /
+    ///     recall@5 with modality attribution, the
     ///     no-fusion-regression invariant, and the machine-readable report that is the
     ///     determinism target.
     /// </summary>
@@ -124,8 +125,9 @@ public sealed class BaselineMetricsTests : IDisposable
             double.IsFinite(metric.Recall5).ShouldBeTrue($"recall@5 for {metric.Id} must be finite");
         }
 
-        // Fusion-regression observation (plan C Wave 4 target, logged in Wave 0 as a baseline
-        // data point — not a hard gate). Wave 0's gate is reproducibility + determinism.
+        // Fusion-regression observation (plan C Wave 4 target; see
+        // docs/plans/retrieval-improvement-c.md §3 Wave 4), logged in the Wave 0 baseline as a
+        // data point — not a hard gate. Wave 0's gate is reproducibility + determinism.
         var regressions = new List<string>();
         foreach (var metric in evaluated)
         {
@@ -146,7 +148,8 @@ public sealed class BaselineMetricsTests : IDisposable
 
         var categories = BuildCategoryAggregates(queries, metrics, relevance);
 
-        // Wave 5b gate (c): metrics must cover every category, including the Structural
+        // Wave 5b gate (c; see docs/plans/retrieval-improvement-c.md §3 Wave 5b): metrics must
+        // cover every category, including the Structural
         // aggregate over the completed S1-S6 set and the reconciled A8-A10 ADR queries.
         var structural = categories.Single(c => c.Category == "Structural (Section-Targeted)");
         structural.QueryCount.ShouldBe(6, "S1-S6 must all be in the Structural category");
@@ -520,7 +523,7 @@ public sealed class BaselineMetricsTests : IDisposable
     // ------------------------------------------------------------------ report records
 
     /// <summary>
-    ///     Report JSON shape (camelCase, determinism target of the Wave 0 gate):
+    ///     Report JSON shape (camelCase, determinism target of the baseline gate):
     ///     { generatedAtUtc, dbEntryCount, dbEmbeddedCount, provider, queryCount,
     ///       evaluatedQueryCount, determinismHash, queries: [...], categories: [...] }.
     ///     Per query: { id, category, query, hybridTop5Hashes, ftsTop5Hashes,

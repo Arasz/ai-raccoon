@@ -6,7 +6,7 @@ namespace AiRaccoon.Observability;
 /// <summary>
 ///     OpenTelemetry-compatible metrics and traces for AiRaccoon MCP tool invocations.
 ///     Meter name is "AiRaccoon.MemoryTools" for discoverability by dotnet-counters.
-///     project_id Activity tag: fine for Wave 0 (local only); may need hashing when OTLP export is added.
+///     project_id Activity tag: fine while local-only; may need hashing when OTLP export is added.
 /// </summary>
 public sealed class ToolCallMetrics : IDisposable
 {

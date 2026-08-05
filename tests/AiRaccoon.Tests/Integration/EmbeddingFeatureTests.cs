@@ -12,7 +12,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Store-level FR-NM-3 scenarios (pluggable embeddings; bundled in-process ONNX default):
+///     Store-level FR-NM-3 (see docs/work/features-native-memory/native-memory.feature) scenarios (pluggable embeddings; bundled in-process ONNX default):
 ///     synchronous embed on write when configured, deferred writes without configuration,
 ///     embed_pending processing, and full re-embed on engine change — against the real local
 ///     engine and a fake OpenAI-compatible endpoint.

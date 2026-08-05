@@ -317,7 +317,7 @@ stratification, corpus integrity checks. Structural queries S1-S6 scored.
 > exact-chunk @3 = 19/19 expected-source queries; ADR (A1-A10) nDCG@5 0.735, MRR 0.950,
 > recall@5 0.609; Structural (S1-S6) nDCG@5 0.913, MRR 1.000, recall@5 0.839;
 > invariants 1/1/1; zero-match 0. The W3/W4 sweep tests are pinned to their original
-> 11-query gate sets (W3GateQueryIds/W4GateQueryIds) so catalog additions cannot
+> 11-query gate sets (SourceAffinityGateQueryIds/RrfGateQueryIds) so catalog additions cannot
 > silently shift the sweep's measured numbers (ADR 0005/0006 semantics preserved).
 
 ---

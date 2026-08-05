@@ -109,7 +109,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         hit.Hash.ShouldBe(entry.Hash);
         hit.Path.ShouldBe(entry.Path);
         hit.Snippet.ShouldNotBeNullOrWhiteSpace();
-        // P6 contract: ranking is normalized into 0..1 with the top result at 1.0.
+        // Hybrid-search contract: ranking is normalized into 0..1 with the top result at 1.0.
         hit.Ranking.ShouldBeInRange(0.0, 1.0);
         hit.Ranking.ShouldBe(1.0);
     }
@@ -117,7 +117,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task Search_WithoutEmbeddingEngine_KeywordOnlyQuery_ReturnsKeywordResultsAboveMinScore()
     {
-        // FR-NM-4 s2: no engine configured -> the vec modality is absent. The keyword query
+        // FR-NM-4 s2 (see docs/work/features-native-memory/native-memory.feature): no engine configured -> the vec modality is absent. The keyword query
         // must still return results above the minimum score without crashing.
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "the only exact keyword phrase present is ziggurat"),
@@ -342,7 +342,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
-        result.Processed.ShouldBe(0); // no engine configured → nothing can be embedded (FR-NM-3 s4)
+        result.Processed.ShouldBe(0); // no engine configured → nothing can be embedded (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature)
         result.Pending.ShouldBe(1);
     }
 
@@ -521,7 +521,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "the context label filter augments the project scope, it does not replace it");
     }
 
-    // The RRF rework (P6) fuses per-context batches by rank position, not best ranking.
+    // The RRF fusion fuses per-context batches by rank position, not best ranking.
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {

@@ -1,9 +1,9 @@
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>SQL over our memory.db tables (plan §2.2); kept in one place so the store stays thin.</summary>
+/// <summary>SQL over our memory.db tables (see docs/work/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
-    // embed_state defaults to 'pending': embeddings are P4 — every write lands deferred.
+    // embed_state defaults to 'pending': every write lands deferred until the embed pipeline runs.
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                            workspace_id, agent_id, created_at, updated_at)
@@ -26,7 +26,7 @@ internal static class MemorySql
                                                         LIMIT 1
                                                         """;
 
-    // Global content dedup (FR-NM-7): the earliest committed row (workspace_id IS NULL) holding
+    // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
     public const string SelectCommittedByValue = """
                                                   SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
@@ -53,7 +53,7 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
-    // Wave 2 (plan C §3 2c): the FTS index carries source_file and section as weighted
+    // (see docs/plans/retrieval-improvement-c.md §3 2c): the FTS index carries source_file and section as weighted
     // columns — bm25(entries_fts, 1.0, 8.0, 16.0) gives a source-path match eight times and
     // a section match sixteen times the signal of a body-text match, so identifier tokens
     // (ADR-0070) and section tokens (decision) rank the owning chunk above cross-referencing
@@ -82,10 +82,10 @@ internal static class MemorySql
                                          LIMIT @limit
                                          """;
 
-    // P6 vec0 modality: cosine KNN over the embedded rows, ordered by distance ascending so
+    // vec0 modality: cosine KNN over the embedded rows, ordered by distance ascending so
     // the row position is the rank for RRF. Vector hits carry a fallback snippet built in
     // C# from the entry value (the FTS list's snippet() payload wins for docs both
-    // modalities retrieve). Wave 6: the content list feeds the dual-vector fusion.
+    // modalities retrieve). The content list feeds the dual-vector fusion.
     public const string VectorSearchByFilter = """
                                                 SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
                                                        e.value AS Value,
@@ -102,7 +102,7 @@ internal static class MemorySql
                                                 LIMIT @limit
                                                 """;
 
-    // Wave 6 structure modality: cosine KNN over the heading-path vectors (vec_structure),
+    // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
     public const string StructureVectorSearchByFilter = """

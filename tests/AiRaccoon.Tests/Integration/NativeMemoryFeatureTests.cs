@@ -8,7 +8,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     FR-NM-1 acceptance: the bank is one self-describing SQLite file and all metadata lives
+///     FR-NM-1 (see docs/work/features-native-memory/native-memory.feature) acceptance: the bank is one self-describing SQLite file and all metadata lives
 ///     inside it — no raccoon_meta.db, entry metadata on the entry row, workspace lifecycle rows
 ///     in memory.db.
 /// </summary>
@@ -79,7 +79,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         row.TtlDays.ShouldBe(15);
         row.EmbedState.ShouldBe("pending");
 
-        // The columns exist on the row, not in a sidecar table (FR-NM-1 s2).
+        // The columns exist on the row, not in a sidecar table (FR-NM-1 s2; see docs/work/features-native-memory/native-memory.feature).
         var columns = (await connection.QueryAsync<string>(
                 "SELECT name FROM pragma_table_info('entries')"))
             .ToList();

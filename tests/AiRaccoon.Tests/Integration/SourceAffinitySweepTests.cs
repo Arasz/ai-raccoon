@@ -13,9 +13,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 3 sweep: λ, consolidation threshold, doc-score formula over the grid;
-///     pins the chosen configuration (the defaults) to the Wave 3 gates. Full matrix in
-///     docs/work/2026-08-04-wave3-source-affinity-sweep.md.
+///     Wave 3 sweep (see docs/plans/retrieval-improvement-c.md §3 Wave 3): λ, consolidation
+///     threshold, doc-score formula over the grid; pins the chosen configuration (the
+///     defaults) to the Wave 3 gates. Full matrix in docs/work/2026-08-04-wave3-source-affinity-sweep.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -32,8 +32,8 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (ADR 0005).</summary>
-    private static readonly string[] W3GateQueryIds =
+    /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (see docs/adr/0005-source-affinity-ranking.md).</summary>
+    private static readonly string[] SourceAffinityGateQueryIds =
         ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -70,19 +70,21 @@ public sealed class SourceAffinitySweepTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     The Wave 3 gate: the chosen configuration (the SearchQuery defaults) passes every
+    ///     The Wave 3 gate (see docs/plans/retrieval-improvement-c.md §3 Wave 3): the chosen
+    ///     configuration (the SearchQuery defaults) passes every
     ///     gate and beats the λ=0 baseline on ADR nDCG@5. The full matrix is emitted to
     ///     docs/work/2026-08-04-wave3-source-affinity-sweep.md.
     /// </summary>
     [Fact]
-    public async Task Sweep_ChosenConfiguration_PassesAllWave3Gates()
+    public async Task Sweep_ChosenSourceAffinityConfiguration_PassesAllGates()
     {
-        // The Wave 3 gates were measured over the 11 expected-source queries that existed at
-        // sweep time (ADR 0005). Wave 5b catalog additions (A8-A10, S1/S3-S6) are scored by
+        // The Wave 3 gates (see docs/adr/0005-source-affinity-ranking.md) were measured over
+        // the 11 expected-source queries that existed at sweep time. Wave 5b catalog additions
+        // (A8-A10, S1/S3-S6; see docs/plans/retrieval-improvement-c.md §3 Wave 5b) are scored by
         // BaselineMetricsTests, not this sweep — otherwise every point's pinned numbers shift.
         var points = GridPoints();
         var queries = LoadQueries()
-            .Where(q => q.ExpectedSource is not null && W3GateQueryIds.Contains(q.Id))
+            .Where(q => q.ExpectedSource is not null && SourceAffinityGateQueryIds.Contains(q.Id))
             .ToList();
         var rows = new List<SweepRow>(points.Count);
 
@@ -108,7 +110,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(2,
             $"A6 exact chunk measured rank 2 at the chosen point; drift to {chosen.A6ExactRank} would stale the ADR claim");
 
-        // Gate (c): ADR nDCG@5 improves over the Wave 6 merged state (0.650) and the λ=0 arm.
+        // Gate (c): ADR nDCG@5 improves over the merged dual-vector state (0.650) and the λ=0 arm.
         chosen.AdrNdcg5.ShouldBeGreaterThan(0.650,
             $"ADR nDCG@5 must exceed the Wave 6 merged state 0.650; got {chosen.AdrNdcg5:F3}");
         chosen.AdrNdcg5.ShouldBeGreaterThan(baseline.AdrNdcg5,

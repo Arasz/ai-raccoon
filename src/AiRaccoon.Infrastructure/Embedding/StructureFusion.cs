@@ -7,8 +7,8 @@ public readonly record struct VectorHit(string Hash, double Sim);
 public sealed record FusedRank(string Hash, double Score);
 
 /// <summary>
-///     Fixed-alpha fusion of content and structure similarities (plan C Wave 6;
-///     docs/adr/0004): score = alpha * content + (1 - alpha) * structure, alpha default 0.5.
+///     Fixed-alpha fusion of content and structure similarities (see docs/adr/0004-dual-vector-structure-signal.md):
+///     score = alpha * content + (1 - alpha) * structure, alpha default 0.5.
 /// </summary>
 public static class StructureFusion
 {

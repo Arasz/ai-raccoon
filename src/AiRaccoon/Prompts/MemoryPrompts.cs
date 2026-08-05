@@ -3,7 +3,7 @@ using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Prompts;
 
-/// <summary>Agent-facing usage guides; the text is the protocol contract (spec §4.2).</summary>
+/// <summary>Agent-facing usage guides; the text is the protocol contract (see docs/work/features-agent-memory/spec-issue-1.md §4.2).</summary>
 public sealed class MemoryPrompts
 {
     [McpServerPrompt(Name = "memory-usage-guide")]

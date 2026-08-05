@@ -32,16 +32,16 @@ public sealed record SearchQuery(
     /// <summary>When set, the project scope also searches this project's custom-scoped rows under the label.</summary>
     public string? ContextLabel { get; } = ContextLabel;
 
-    /// <summary>Wave 3 adjacent-chunk boost: a same-source sibling at chunk index N±1 adds λ to the chunk's score.</summary>
+    /// <summary>Adjacent-chunk boost: a same-source sibling at chunk index N±1 adds λ to the chunk's score.</summary>
     public double SourceLambda { get; } = SourceLambda;
 
-    /// <summary>Wave 3 consolidation threshold: sibling visibility floor and the merge gap for weak adjacent siblings.</summary>
+    /// <summary>Consolidation threshold: sibling visibility floor and the merge gap for weak adjacent siblings.</summary>
     public double ConsolidationThreshold { get; } = ConsolidationThreshold;
 
-    /// <summary>Wave 3 document-score formula used as the secondary sort key.</summary>
+    /// <summary>Document-score formula used as the secondary sort key.</summary>
     public DocScoreFormula DocScoreFormula { get; } = DocScoreFormula;
 
-    /// <summary>Per-modality candidate depth policy before RRF fusion (plan C Wave 4).</summary>
+    /// <summary>Per-modality candidate depth policy before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md).</summary>
     public CandidateWindowMode CandidateWindow { get; } = CandidateWindow;
 
     public sealed class Validator : AbstractValidator<SearchQuery>

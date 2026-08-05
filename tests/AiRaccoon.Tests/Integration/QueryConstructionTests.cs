@@ -11,7 +11,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Wave 1 gates (plan C): AND-with-OR-fallback (no zero-matches), the diagnostic triplet
+///     Wave 1 gates (see docs/plans/retrieval-improvement-c.md §3 Wave 1): AND-with-OR-fallback
+///     (no zero-matches), the diagnostic triplet
 ///     and the FTS-only guard on the committed corpus.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
@@ -50,7 +51,7 @@ public sealed class QueryConstructionTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    /// <summary>A4 boundary regression: the AND primary at max(TokenCount, limit) rows must fire the OR fallback (measured Wave 1 case).</summary>
+    /// <summary>A4 boundary regression: the AND primary at max(TokenCount, limit) rows must fire the OR fallback (measured case).</summary>
     [Fact]
     public async Task AndPrimary_AtBoundary_A4DecisionChunkRestoredByFallback()
     {
@@ -95,7 +96,8 @@ public sealed class QueryConstructionTests : IDisposable
     }
 
     /// <summary>
-    ///     Diagnostic triplet (plan C Wave 1.4): Q2 (identifier-only) answers on the FTS-only
+    ///     Diagnostic triplet (see docs/plans/retrieval-improvement-c.md §3 Wave 1.4): Q2
+    ///     (identifier-only) answers on the FTS-only
     ///     path at rank ≤5; Q1 (full question) and Q3 (content-only) return results.
     /// </summary>
     [Fact]
@@ -119,7 +121,8 @@ public sealed class QueryConstructionTests : IDisposable
     }
 
     /// <summary>
-    ///     Plan C Wave 1 gate (d): the AND-fallback must prevent any zero-match — all 35
+    ///     Wave 1 gate (d; see docs/plans/retrieval-improvement-c.md §3 Wave 1): the AND-fallback
+    ///     must prevent any zero-match — all 35
     ///     baseline queries return results.
     /// </summary>
     [Fact]
@@ -145,7 +148,8 @@ public sealed class QueryConstructionTests : IDisposable
     }
 
     /// <summary>
-    ///     Plan C Wave 1 gate (c): no FTS-only regression below the status-quo ranker — file
+    ///     Wave 1 gate (c; see docs/plans/retrieval-improvement-c.md §3 Wave 1): no FTS-only
+    ///     regression below the status-quo ranker — file
     ///     hit@5 ≥ 6/7 on the ADR suite and file-level MRR ≥ 0.70 on the expected-source suite.
     /// </summary>
     [Fact]
@@ -185,9 +189,9 @@ public sealed class QueryConstructionTests : IDisposable
         _output.WriteLine($"FTS-only guard: ADR file hit@5 {adrHitsAt5}/{adrQueries.Length}, MRR {mrr:F4} over {expectedSource.Length} queries");
     }
 
-    /// <summary>No hybrid rank regresses vs the Wave 0 baseline (ranks pinned per plan §0 and the documented ADR MRR).</summary>
+    /// <summary>No hybrid rank regresses vs the Wave 0 baseline (ranks pinned per plan C §0; see docs/plans/retrieval-improvement-c.md §0, and the documented ADR MRR).</summary>
     [Fact]
-    public async Task HybridRanks_DoNotRegress_VsWave0()
+    public async Task HybridRanks_DoNotRegress_VsBaseline()
     {
         await EnsureModelAsync();
         var queries = LoadQueries();
@@ -210,17 +214,19 @@ public sealed class QueryConstructionTests : IDisposable
                 $"{id} must not regress vs Wave 0 rank {wave0Rank} (plan C gate a), now {rank}");
         }
 
-        // A1/A4 deviations (Wave 6 integration analysis, ADR-0004): the dual-vector structure
-        // signal ranks equally-valid same-knowledge answers above the canonical ADR chunks —
+        // A1/A4 deviations (Wave 6 integration analysis; see docs/adr/0004-dual-vector-structure-signal.md):
+        // the dual-vector structure signal ranks equally-valid same-knowledge answers above the
+        // canonical ADR chunks —
         // A1: frontend-architecture.md#3 is the evidence section ADR-0011 links to ("Full
         // evidence: docs/frontend-architecture.md §3"); A4: behaviour-specification.md#3 states
         // "The MCP server was deleted; see ADR-0060". Both expected files stay in the top-2
         // and the section-targeting payoff (S2/S4 ≤ 3) plus C2/A6/A7 restorations hold.
-        // Bounded trade, documented in the plan's Wave 6 gate amendment.
+        // Bounded trade, documented in the Wave 6 gate amendment (see docs/plans/retrieval-improvement-c.md §3 Wave 6).
 
-        // C2 (ADR-0003 + Wave 6 integration): the Wave 2 provenance cleanup (2d) collapsed C2's
+        // C2 (see docs/adr/0003-source-file-first-class-citizen.md; Wave 6 integration): the
+        // Wave 2 provenance cleanup (2d; see docs/plans/retrieval-improvement-c.md §3 2d) collapsed C2's
         // hybrid rank (vector >100, RRF sinks FTS rank 1). Wave 6's dual-vector structure
-        // signal restored it — the hybrid rank-1 assertion above is the W4 gate criterion,
+        // signal restored it — the hybrid rank-1 assertion above is the Wave 4 gate criterion,
         // already satisfied; the FTS-only rank-1 check below guards the keyword path.
         var c2 = queries.First(q => q.Id == "C2");
         var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);

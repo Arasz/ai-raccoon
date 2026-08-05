@@ -6,8 +6,8 @@ using AiRaccoon.Core.Rating;
 namespace AiRaccoon.Infrastructure.Degradation;
 
 /// <summary>
-///     Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (spec
-///     FR-MEM-1.15). Ratings and TTLs are read on-row — the meta database is gone (P1).
+///     Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (see
+///     docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.15). Ratings and TTLs are read on-row — the meta database is gone.
 /// </summary>
 public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
 {
@@ -20,7 +20,7 @@ public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
         var entries = await store.ListContextAsync(projectId, projectContext, cancellationToken).ConfigureAwait(false);
 
         // Shared rows are path-scoped (distinct hashes), but guard anyway: an entry whose
-        // content also lives in the shared tier must never be swept out of it (FR-MEM-1.15).
+        // content also lives in the shared tier must never be swept out of it (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.15).
         var sharedEntries = await store.ListContextAsync(projectId, ContextNaming.SharedContext, cancellationToken)
             .ConfigureAwait(false);
         var sharedHashes = sharedEntries.Select(e => e.Hash).ToHashSet(StringComparer.Ordinal);

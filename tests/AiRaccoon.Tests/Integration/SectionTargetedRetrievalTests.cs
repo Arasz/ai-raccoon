@@ -12,8 +12,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 6 section-targeting gates (S2/S4, section hit@5, bounded file-level
-///     no-regression) against the committed jsaa corpus; limits in docs/adr/0004.
+///     Wave 6 section-targeting gates (see docs/plans/retrieval-improvement-c.md §3 Wave 6):
+///     S2/S4, section hit@5, bounded file-level no-regression against the committed jsaa
+///     corpus; limits in docs/adr/0004-dual-vector-structure-signal.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -23,7 +24,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
-    /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (docs/adr/0004).</summary>
+    /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (see docs/adr/0004-dual-vector-structure-signal.md).</summary>
     private const int MaxFileRankRegression = 2;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
@@ -68,7 +69,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     Wave 6 gate (b), S4: "Consequences of ADR-0011?" finds the Consequences chunk at rank ≤ 3
+    ///     Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6), S4: "Consequences of ADR-0011?" finds the Consequences chunk at rank ≤ 3
     ///     in the production hybrid search. Measured rank 1 with the committed corpus.
     /// </summary>
     [Fact]
@@ -84,7 +85,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 5b gate: S1 (ADR-0011 Context section target) finds the Context chunk at rank ≤ 3.
+    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S1 (ADR-0011 Context section target) finds the Context chunk at rank ≤ 3.
     ///     Measured rank 2 with the committed corpus (structure signal + document-first ranking).
     /// </summary>
     [Fact]
@@ -100,7 +101,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 5b gate: S3 (ADR-0011 Alternatives-considered section target) finds the
+    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S3 (ADR-0011 Alternatives-considered section target) finds the
     ///     Alternatives-considered chunk at rank ≤ 3. Measured rank 1 with the committed corpus.
     /// </summary>
     [Fact]
@@ -116,7 +117,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 5b gate: S5 (cross-document structural query) — the frontend stack decision is
+    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S5 (cross-document structural query) — the frontend stack decision is
     ///     recorded in ADR-0011 (formal record) and docs/frontend-architecture.md §2-3 (deep-dive);
     ///     the formal record's Decision chunk must rank ≤ 3. Measured rank 2 with the committed corpus.
     /// </summary>
@@ -133,7 +134,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 5b gate: S6 (section target on a second ADR) — ADR-0060's What-is-lost section
+    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S6 (section target on a second ADR) — ADR-0060's What-is-lost section
     ///     chunk must rank ≤ 3. Measured rank 1 with the committed corpus.
     /// </summary>
     [Fact]
@@ -149,9 +150,10 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 6 gate (b) + Wave 3 amendment: "What does ADR-0011 decide?" is answered at the file
-    ///     level within the top 3, and the Decision-section chunk ranks ≤ 3 — the source-affinity
-    ///     ranking (plan C Wave 3) resolves the within-file sibling competition that left it at 5.
+    ///     Wave 6 gate (b) + Wave 3 amendment (see docs/plans/retrieval-improvement-c.md §3):
+    ///     "What does ADR-0011 decide?" is answered at the file level within the top 3, and the
+    ///     Decision-section chunk ranks ≤ 3 — the source-affinity ranking resolves the
+    ///     within-file sibling competition that left it at 5.
     /// </summary>
     [Fact]
     public async Task S2_WhatDoesAdr0011Decide_AnswersAtFileLevelAndFindsDecisionChunk()
@@ -178,7 +180,8 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 6 gate (b): section-level hit@5 over the six A-queries with section ground truth
+    ///     Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6): section-level
+    ///     hit@5 over the six A-queries with section ground truth
     ///     (A1–A5, A7 — A6's section ground truth is missing per
     ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6. Measured 6/6.
     /// </summary>
@@ -214,7 +217,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             $"section-level hit@5 over A1-A7 must be >= 4/6; got {hits.Count}/6");
     }
 
-    /// <summary>Wave 6 gate (b): no content-only file-level rank regression beyond the bounded tolerance (docs/adr/0004).</summary>
+    /// <summary>Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6): no content-only file-level rank regression beyond the bounded tolerance (see docs/adr/0004-dual-vector-structure-signal.md).</summary>
     [Fact]
     public async Task FileLevelRanks_FusedArm_NoRegressionBeyondTolerance()
     {
@@ -247,7 +250,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     /// <summary>Pre-Wave-6 banks gain the structure columns on open (ALTER TABLE migration path).</summary>
     [Fact]
-    public async Task SchemaMigration_AddsWave6Columns_ToPreWave6Bank()
+    public async Task SchemaMigration_AddsStructureColumns_ToLegacyBank()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var columns = await ColumnNamesAsync(connection);

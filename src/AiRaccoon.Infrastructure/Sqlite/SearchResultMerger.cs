@@ -3,8 +3,8 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Fuses per-context batches with RRF, then applies source-affinity ranking (Wave 3;
-///     docs/adr/0005) before minScore and limit — minScore filters against the boosted-max
+///     Fuses per-context batches with RRF, then applies source-affinity ranking (see
+///     docs/adr/0005-source-affinity-ranking.md) before minScore and limit — minScore filters against the boosted-max
 ///     normalization.
 /// </summary>
 internal static class SearchResultMerger

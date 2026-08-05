@@ -4,11 +4,11 @@ using AiRaccoon.Core.Rating;
 namespace AiRaccoon.Infrastructure.Rating;
 
 /// <summary>
-///     First-party extension keeping the rating pipeline wired to on-row columns (P1 rewire):
+///     First-party extension keeping the rating pipeline wired to on-row columns:
 ///     the search hit bump (access_count/last_accessed_at/rating) now happens inside
 ///     SqliteMemoryStore.SearchAsync, and deletes remove the whole row — so every hook here is a
-///     no-op. Kept registered so the extension host architecture (spec §6.2) stays intact for
-///     later waves.
+///     no-op. Kept registered so the extension host architecture (see
+///     docs/work/features-agent-memory/spec-issue-1.md §6.2) stays intact for future changes.
 /// </summary>
 public sealed class RetrievalRatingExtension : IMemoryExtension
 {

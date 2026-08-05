@@ -31,7 +31,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
     public async Task<McpClient> CreateClientAsync()
     {
-        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2
+        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2 (see docs/work/features-native-memory/native-memory.feature)
         // (the settings row is read per call by the access guard).
         await SeedGlobalAccessModeAsync();
         var httpClient = CreateClient();
