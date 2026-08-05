@@ -21,6 +21,7 @@ public class CliCommandTreeTests
 
         root.Children.OfType<Command>().Select(c => c.Name)
             .ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"]);
+        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"]);
     }
 
     [Fact]

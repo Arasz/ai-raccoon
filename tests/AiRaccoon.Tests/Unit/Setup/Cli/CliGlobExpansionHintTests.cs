@@ -1,8 +1,9 @@
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Unit.Setup.Cli;
 
 /// <summary>
 ///     Shell-glob expansion diagnostic: an unquoted '*' target (e.g. `watch enable * true`)
@@ -24,7 +25,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"]);
 
-        var hint = CliArgs.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch enable '*' true");
@@ -35,7 +36,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "scope", "add", "CLAUDE.md", "README.md", "docs", "/tmp/x"]);
 
-        var hint = CliArgs.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch scope add '*' /tmp/x");
@@ -46,10 +47,21 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "enable", "CLAUDE.md", "README.md", "true"]);
 
-        var hint = CliArgs.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch enable '*' true");
+    }
+
+    [Fact]
+    public void GlobExpansionHint_WatchConcurrencyInt32Value_StillFiresViaTypedArgument()
+    {
+        var parsed = CliArgs.Parse(["watch", "concurrency", "CLAUDE.md", "README.md", "/tmp/x"]);
+
+        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
+
+        hint.ShouldNotBeNull();
+        hint.ShouldContain("ai-raccoon watch concurrency '*' /tmp/x");
     }
 
     [Fact]
@@ -57,7 +69,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "enable", "foo", "bar", "baz"]);
 
-        CliArgs.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -65,7 +77,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "bogus"]);
 
-        CliArgs.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -73,7 +85,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["watch", "enable", "myproject", "true"]);
 
-        CliArgs.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -81,7 +93,7 @@ public class CliGlobExpansionHintTests
     {
         var parsed = CliArgs.Parse(["--bogus"]);
 
-        CliArgs.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -96,7 +108,7 @@ public class CliGlobExpansionHintTests
         names.Length.ShouldBeGreaterThanOrEqualTo(3);
         var parsed = CliArgs.Parse(["watch", "enable", .. names, "true"]);
 
-        var hint = CliArgs.GlobExpansionHint(parsed);
+        var hint = CliRendering.GlobExpansionHint(parsed);
 
         hint.ShouldNotBeNull();
     }
