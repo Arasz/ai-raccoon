@@ -17,7 +17,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Build
-        run: dotnet build --nologo
+        # nuget.config references the gitignored local feed .nupkg-local/; make it
+        # exist on the fresh runner or restore fails with NU1301.
+        run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Fast tests
         # Fast-only gate: full suite runs nightly (nightly.yml) — the Speed trait
         # split is defined in tests/AiRaccoon.Tests/TestCategories.cs.
