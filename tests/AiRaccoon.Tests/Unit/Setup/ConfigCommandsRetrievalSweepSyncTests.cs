@@ -12,7 +12,8 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ConfigCommandsRetrievalSweepSyncTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
+    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
+        TextReader? stdin = null)
     {
         var parsed = CliArgs.Parse(args);
         parsed.Errors.ShouldBeEmpty();
@@ -21,7 +22,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            TestContext.Current.CancellationToken);
+            stdin ?? TextReader.Null, TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -127,14 +128,14 @@ public class ConfigCommandsRetrievalSweepSyncTests
     // ── sync add / remove / show ──
 
     [Fact]
-    public async Task SyncAddS3_WritesAllRows_IncludingSecrets()
+    public async Task SyncAddS3_WritesAllRows_IncludingSecrets_PromptedInteractively()
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(
+        var (exit, stdout, stderr) = await Run(
             ["sync", "add", "s3", "http://s3.example.com",
-                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db",
-                "--access-key", "ak1", "--secret-key", "sk1"], store);
+                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"], store,
+            new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
         store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
@@ -144,6 +145,23 @@ public class ConfigCommandsRetrievalSweepSyncTests
         store.Settings["sync.accessKey"].ShouldBe("ak1");
         store.Settings["sync.secretKey"].ShouldBe("sk1");
         stdout.ShouldContain("s3");
+        stderr.ShouldContain("access key");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_EmptyStdin_FailsWithoutPersistingAnything()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, stderr) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+            new StringReader(""));
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("key required");
+        store.Settings.ShouldNotContainKey("sync.endpoint");
+        store.Settings.ShouldNotContainKey("sync.accessKey");
+        store.Settings.ShouldNotContainKey("sync.secretKey");
     }
 
     [Fact]
