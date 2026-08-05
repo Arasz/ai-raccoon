@@ -3,7 +3,7 @@
 An MCP server that gives AI agents persistent, project-scoped memory backed by a
 managed .NET SQLite store: local-first by default, one memory bank per install scope,
 hybrid FTS5+vec0 semantic search, workspace sandboxes, a curated shared tier, memory
-degradation, and opt-in S3-compatible sync. Built on the
+degradation, and opt-in cloud sync (S3 or Azure Blob). Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.0.0
 (net10.0).
 
@@ -29,8 +29,8 @@ degradation, and opt-in S3-compatible sync. Built on the
 - **Rating and degradation.** Search hits raise an entry's on-row retrieval rating
   (half-life decay with access-count multiplier); sweeps remove old, low-rated
   project entries (`shared` is protected).
-- **Cloud sync (optional).** `memory_sync` pushes/pulls VACUUM snapshots to an
-  S3-compatible object store with If-Match conflict detection. This is the
+- **Cloud sync (optional).** `memory_sync` pushes/pulls VACUUM snapshots to a
+  cloud object store (S3 or Azure Blob) with If-Match conflict detection. This is the
   correlation point between a user-scope install and any project-scope install.
 - **Access modes.** `ro` (read-only), `rw` (read-write, default), `full` (includes
   destructive operations). Per-project settings override the global default.
@@ -62,7 +62,7 @@ Only one environment variable is read:
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table of the install's `memory.db` and is changed
 through the `ai-raccoon` verb commands — the CLI is the single config channel. Secrets
-(OpenAI API key, S3 access/secret keys) are stored in the settings table (encrypted at
+(OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table (encrypted at
 rest when a passphrase is set), never in the environment and never in tracked files.
 
 ## Command-line options
@@ -89,6 +89,7 @@ ai-raccoon model reset                          ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}           ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}           ai-raccoon sweep show
 ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
+ai-raccoon sync add azure {container} [--object-key {key}]                            # Azure connection string is prompted interactively
 ai-raccoon sync remove                          ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -97,7 +98,8 @@ ai-raccoon watch list
 ```
 
 Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
-`sync add s3`) are persisted in the settings table and are never launch flags — an
+`sync add s3`, or the Azure Blob connection string via `sync add azure`) are persisted
+in the settings table and are never launch flags — an
 unknown-option parse error is the defense. `--help`/`--version` and parse errors
 print to stderr (exit 0 / exit 1); stdout carries only MCP protocol frames. Generic
 host flags (`--environment`, `--contentRoot`, `--applicationName`) are accepted
@@ -153,18 +155,23 @@ ai-raccoon sweep show
 (The per-entry TTL knob was removed in the CLI-config refactor — degradation is
 threshold-driven only.)
 
-**Cloud sync** — S3-compatible snapshot sync (off until configured).
+**Cloud sync** — snapshot sync to a cloud object store (S3 or Azure Blob; off until
+configured).
 
 ```
 ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]
+ai-raccoon sync add azure {container} [--object-key {key}]
 ai-raccoon sync remove
-ai-raccoon sync show                      # keys redacted
+ai-raccoon sync show                      # provider first; secrets redacted
 ```
 
-`sync add s3` prompts for the S3 access key and secret key interactively (prompt on
-stderr, input from stdin; an empty answer aborts with exit 1 and persists nothing) —
-credentials are never accepted on the command line. `sync remove` returns to sync-off;
-`sync show` prints the endpoint/bucket with the keys redacted.
+The backend is selected by the `sync.provider` settings row (default `s3`): `sync add
+s3` writes `provider=s3` and `sync add azure` writes `provider=azure`, each clearing the
+other provider's rows. Credentials are prompted interactively — `sync add s3` asks for
+the S3 access key and secret key, `sync add azure` for the connection string (prompt on
+stderr, input from stdin; an empty answer aborts with exit 1 and persists nothing) — and
+are never accepted on the command line. `sync remove` returns to sync-off; `sync show`
+prints the provider and its fields with the secrets redacted.
 
 **File watching** — mirror a path into memory (opt-in, project-scoped).
 
@@ -404,7 +411,7 @@ AiRaccoon/
     Chunking/                # TokenizerChunker (o200k_base)
     Degradation/             # SweepService
     Workspace/               # WorkspaceService
-    Sync/                    # SyncService (S3, VACUUM INTO, ATTACH+merge)
+    Sync/                    # SyncService (S3/Azure, VACUUM INTO, ATTACH+merge)
     Rating/                  # RetrievalRatingExtension (no-op, P1 rewire)
   tests/AiRaccoon.Tests/     # xunit.v3 + Shouldly
   Directory.Build.props      # analyzers, warnings-as-errors

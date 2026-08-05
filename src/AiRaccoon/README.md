@@ -5,7 +5,7 @@ a native .NET SQLite store. Local-first by default:
 one `memory.db` per install scope, a bundled in-process ONNX embedding model,
 hybrid FTS5+vec0 semantic search with reciprocal rank fusion, workspace sandboxes,
 a curated shared tier, memory degradation, three-tier access control, and opt-in
-S3-compatible cloud sync.
+cloud sync (S3 or Azure Blob).
 
 Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
 
@@ -30,8 +30,9 @@ Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
   `rw` (default: read + write), `full` (adds deletion, sweep execution, and
   workspace consolidation). Set with the `access` CLI commands (settings table).
 - **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts
-  (`shared` + `project:<id>`) as a single snapshot to S3-compatible object storage
-  (R2, S3, MinIO) using VACUUM INTO + If-Match CAS + row merge.
+  (`shared` + `project:<id>`) as a single snapshot to cloud object storage —
+  S3-compatible endpoints (R2, S3, MinIO) or Azure Blob — using VACUUM INTO +
+  If-Match CAS + row merge.
 
 ## Tools (19) and prompts (2)
 
@@ -64,6 +65,7 @@ ai-raccoon model reset                        ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
 ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
+ai-raccoon sync add azure {container} [--object-key {key}]                            # Azure connection string is prompted interactively
 ai-raccoon sync remove                        ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -71,7 +73,7 @@ ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
 ```
 
-Secrets (OpenAI API key, S3 access/secret keys) are stored in the settings table, which
+Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table, which
 is encrypted at rest when a passphrase is configured.
 
 ## Environment variables
