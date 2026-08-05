@@ -25,10 +25,10 @@ internal static class EmbeddingBootstrap
                     $"ai-raccoon: warning — bundled embedding model unavailable ({string.Join("; ", result.Errors)}); run 'ai-raccoon model set local' to restore it");
             }
         }
-        catch
+        catch (Exception ex)
         {
             await stderr.WriteLineAsync(
-                "ai-raccoon: warning — bundled embedding model check failed; run 'ai-raccoon model set local' to restore it");
+                $"ai-raccoon: warning — bundled embedding model check failed ({ex.GetType().Name}); run 'ai-raccoon model set local' to restore it");
         }
     }
 }

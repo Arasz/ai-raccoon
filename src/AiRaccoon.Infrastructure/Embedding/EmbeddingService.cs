@@ -76,7 +76,7 @@ public sealed class EmbeddingService
         if (!File.Exists(modelPath))
         {
             throw new InvalidOperationException(
-                $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path). " +
+                $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
                 "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
         }
 

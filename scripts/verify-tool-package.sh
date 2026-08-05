@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Verifies the packed global tool ships the bundled ONNX model + vocab, byte-verified
 # against the pinned SHA-256 (FR-NM-3; see docs/work/features-native-memory/native-memory.feature).
-# CI runs this before publish; run it locally after touching the model or the pack layout.
+# Run locally after touching the model or the pack layout, before dispatching publish.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VER="$(sed -n 's:.*<PackageVersion>\([^<]*\)</PackageVersion>.*:\1:p' "$REPO_ROOT/src/AiRaccoon/AiRaccoon.csproj" | head -n1)"
+VER="$(sed -n 's:.*<PackageVersion>\([^<]*\)</PackageVersion>.*:\1:p' "$REPO_ROOT/src/AiRaccoon/AiRaccoon.csproj")"
 RID="$(dotnet --info 2>/dev/null | awk -F': ' '/RID:/{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}')"
 if [ -z "$RID" ]; then
   case "$(uname -s)-$(uname -m)" in

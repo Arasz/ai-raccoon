@@ -63,8 +63,8 @@ public static class BundledModel
 
     /// <summary>
     ///     Verifies both bundled files (sha256) and, when missing, downloads the pinned copies
-    ///     into the repo's src/AiRaccoon/Models so the next build packs them. Never throws;
-    ///     collects errors for the gate test — a missing asset is a hard failure, not a skip.
+    ///     into the repo's src/AiRaccoon/Models so the next build packs them. Download failures
+    ///     become error entries — a missing asset is a hard failure for the gate test, not a skip.
     /// </summary>
     public static async Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default)
     {
@@ -80,7 +80,7 @@ public static class BundledModel
         return await EnsureDownloadsAsync(http, targetDir, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Downloads both bundled assets into targetDirectory when no verified copy sits there; never throws (see docs/work/features-native-memory/native-memory.feature).</summary>
+    /// <summary>Downloads both bundled assets into targetDirectory when no verified copy sits there; download failures become error entries (see docs/work/features-native-memory/native-memory.feature).</summary>
     internal static async Task<BundledModelResult> EnsureDownloadsAsync(HttpClient http, string targetDirectory,
         CancellationToken cancellationToken)
     {

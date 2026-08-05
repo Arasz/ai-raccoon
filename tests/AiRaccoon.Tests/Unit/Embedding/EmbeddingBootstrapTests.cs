@@ -34,4 +34,18 @@ public sealed class EmbeddingBootstrapTests
 
         stderr.ToString().ShouldBeEmpty();
     }
+
+    [Fact]
+    public async Task EmbeddingBootstrap_WhenEnsureThrows_WritesWarning()
+    {
+        // Pins the bare-catch path (e.g. the 30 s timeout surfacing as OperationCanceledException):
+        // the boot must continue with a warning, never a throw.
+        var stderr = new StringWriter();
+
+        await EmbeddingBootstrap.EnsureAtStartupAsync(stderr,
+            _ => throw new InvalidOperationException("boom"),
+            TestContext.Current.CancellationToken);
+
+        stderr.ToString().ShouldContain("model set local");
+    }
 }
