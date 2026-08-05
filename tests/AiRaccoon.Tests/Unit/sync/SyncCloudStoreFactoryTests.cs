@@ -216,6 +216,133 @@ public class SyncCloudStoreFactoryTests
     }
 
     [Fact]
+    public async Task ReadOptionsAsync_MapsAzureAccountRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.AzureAccount] = "myacct",
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Account.ShouldBe("myacct");
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_MapsS3ChainRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "true"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.S3Chain.ShouldBeTrue();
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Create_WithAzureAccountMode_ReturnsAzureBlobCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.AzureAccount] = "myacct",
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<AzureBlobCloudStore>();
+    }
+
+    [Fact]
+    public async Task IsConfigured_AzureAccountMode_True()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.Azure,
+            Account = "myacct",
+            Container = "memories"
+        };
+
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task IsConfigured_S3ChainMode_True()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.S3,
+            Endpoint = "http://s3.example.com",
+            Bucket = "memories",
+            S3Chain = true
+        };
+
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task IsConfigured_MissingBothAzureModes_False()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.Azure,
+            Container = "memories"
+        };
+
+        options.IsConfigured.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task IsConfigured_MissingBothS3Modes_False()
+    {
+        var options = new SyncOptions
+        {
+            Provider = SyncProvider.S3,
+            Endpoint = "http://s3.example.com",
+            Bucket = "memories"
+        };
+
+        options.IsConfigured.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task IsConfigured_S3ChainRowParsedCaseInsensitively()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories",
+                [SyncSettingsKeys.S3Chain] = "TRUE"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.S3Chain.ShouldBeTrue();
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task ReadOptionsAsync_AzureIsConfiguredOnlyWhenConnectionStringAndContainerPresent()
     {
         var full = new FakeConfigStore

@@ -10,4 +10,4 @@ public sealed class SyncNetworkException(string message, Exception? inner = null
 public sealed class SyncCorruptFileException(string message) : InvalidOperationException(message);
 
 /// <summary>Credentials are missing or invalid.</summary>
-public sealed class SyncAuthFailedException(string message) : InvalidOperationException(message);
+public sealed class SyncAuthFailedException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
