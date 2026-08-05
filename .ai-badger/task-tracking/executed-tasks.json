@@ -469,10 +469,42 @@
       "branch": "task/bump-version-to-1.0.1",
       "risk": false,
       "startedAt": "2026-08-05T14:54:01.902462+00:00",
+      "finishedAt": "2026-08-05T15:34:55.597039+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260805_152923_9a3b9f",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "rename-package-id-to-arasz-ai-raccoon",
+      "title": "Rename NuGet PackageId to arasz.ai-raccoon (temporary bridge while ai-raccoon reservation is pending)",
+      "sessionId": "20260805_172556_092e82",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/rename-package-id",
+      "risk": false,
+      "startedAt": "2026-08-05T15:34:55.904701+00:00",
+      "finishedAt": "2026-08-05T15:46:05.476118+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260805_172556_092e82",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "fix-mcp-server-json-ship-1-0-2",
+      "title": "Fix .mcp/server.json schema validity, ship 1.0.2 via CI",
+      "sessionId": "20260805_173915_2ddf87",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/fix-mcp-server-json",
+      "risk": false,
+      "startedAt": "2026-08-05T15:46:05.725236+00:00",
       "finishedAt": null,
       "state": "STARTED",
       "trackingSource": "hermes",
-      "resumeCommand": "hermes --resume 20260805_152923_9a3b9f",
+      "resumeCommand": "hermes --resume 20260805_173915_2ddf87",
       "resumeAttempts": []
     }
   ]

@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-08-05T13:25:00Z",
+  "lastUpdated": "2026-08-05T15:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "rename-package-id-to-arasz-ai-raccoon",
+      "summary": "PackageId bridge (PR #17, squash-merged by owner 15:37Z): ai-raccoon -> arasz.ai-raccoon while the ownerless reserved namespace on 'ai-raccoon' blocks the original id. ToolCommandName unchanged (installed command stays ai-raccoon); .mcp/server.json identifier + README install lines updated; VersionContractTests gained an id-contract fact (TDD 1 failing -> 4 passing; build 0 warnings, full suite 1049/0/43). Owner manually packed + web-uploaded all 7 packages (shell + 6 RID payloads) as arasz.ai-raccoon 1.0.1 minutes after the merge — they are UNLISTED (upload flow) and carry an INVALID .mcp/server.json (description >100 chars, environmentVariables strings instead of objects, repository.url typo github.com/ai-raccoon/ai-raccoon) so VS Code MCP config generation fails. Decision: keep 1.0.1 unlisted; ship 1.0.2 with a schema-valid server.json via CI (listed by default).",
+      "hasNotes": false
+    },
+    {
+      "id": "bump-version-to-1.0.1",
+      "summary": "Version bump 1.0.0 -> 1.0.1 (PR #16, squash-merged by owner) because the 1.0.0 push 409'd. Root cause found and PROVEN: 'ai-raccoon' is behind an OWNERLESS RESERVED NAMESPACE on nuget.org (prefix reservation) — gallery source ApiController.cs returns 409 Conflict for ReservedNamespaceFailure/OwnerlessReservedNamespaceFailure; the dotnet CLI masks any 409 as 'already exists at feed'. Evidence: 12/12 pushes conflicted across 3 versions (0.1.0-beta/1.0.0/1.0.1) and all 7 ids (ai-raccoon + 6 RID payloads); every read API invisible (flat container 404, registration BlobNotFound, search 0, FindPackagesById 0, gallery 404); control dotnet-ignore visible; web Upload confirmed the ownerless variant message verbatim. Email to support@nuget.org sent by owner (2026-08-05). Full ladder: nuget-publishing skill references/push-409-invisible-package.md. Also: installed 1.0.1 as a global tool from the local feed (works; shim named ai-raccoon — dotnet ai-raccoon never works by design, ToolCommandName shim rule).",
+      "hasNotes": false
+    },
     {
       "id": "bump-version-to-1.0.0",
       "summary": "Version bump to stable 1.0.0 (PR #15, squash-merged by owner): PackageVersion/InformationalVersion/AssemblyVersion 0.1.0-beta -> 1.0.0 in src/AiRaccoon/AiRaccoon.csproj, both version fields in .mcp/server.json, stale 0.1.0-beta comment in CliOutputRoutingTests replaced. New VersionContractTests (TDD, 3 failing -> 3 passing) pin the stable version, require csproj/server.json agreement, and forbid prerelease suffixes. Gates: build 0 warnings, full suite 1048/0/43. Grep audit: no beta/0.1.0 left in src/ or tests/ beyond corpus fixtures, model vocab, and historical plan/research docs (left untouched). Publish workflow is version-agnostic; next dispatch of publish.yml ships 1.0.0.",
