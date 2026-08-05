@@ -229,8 +229,8 @@ The global-tool install directory is `~/.dotnet/tools` on macOS/Linux (`%USERPRO
 export PATH="$PATH:$HOME/.dotnet/tools"
 ```
 
-The tool bundles the ONNX embedding model, so no model download is needed for local embedding (see `--embedding-model`
-for an override).
+The tool package bundles the ONNX embedding model, so no model download is needed for local embedding. A custom
+local model is configured via `ai-raccoon model set local <path>`.
 
 ## Develop
 
