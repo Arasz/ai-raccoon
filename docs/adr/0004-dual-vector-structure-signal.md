@@ -51,13 +51,12 @@ V:content-only per the pre-registered rule (file hit@5 9/10 vs 8/10, MRR(file)
    bundled all-MiniLM-L6-v2 model (plan §6 Q5), stored in the entries row and
    the vec_structure table. Chunks with no headings get no structure vector
    (structure similarity 0 at query time).
-4. **Backfill, not re-ingest.** A re-runnable `StructureBackfillService` +
-   `tools/AiRaccoon.StructureBackfill` reads existing chunks, parses the path
-   from the stored content, embeds unique paths, and writes
-   `heading_path` + `structure_embedding` + the vec_structure row. Content and
-   hashes are never touched (verified: chunk-hash-map.json byte-identical), and
-   re-running is a no-op (verified idempotent) — the orchestrator re-runs it
-   after the concurrent schema wave merges.
+4. **Backfill, not re-ingest.** The corpus was backfilled once (heading paths parsed from
+   stored content, unique paths embedded, `heading_path` + `structure_embedding` +
+   vec_structure rows written; content and hashes never touched — chunk-hash-map.json
+   byte-identical). The backfill mechanism (tool + service) was removed after the corpus
+   regen; a future corpus regeneration must re-create the structure vectors (ingest-time
+   heading-path writes would restore the mechanism).
 5. **Fixed-alpha fusion.** The vector modality of `SearchAsync` becomes the
    dual-vector blend: `score = alpha × sim(q, content) + (1 − alpha) ×
    sim(q, structure)`, over the union of both KNN candidate windows, sorted

@@ -94,8 +94,9 @@ the schema level.
 - `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
   for semantic search. Triggers sync it with `embed_state` changes.
 - `vec_structure` — vec0 virtual table over the Wave 6 heading-path embeddings
-  (rowid = entry id). Written only by the re-runnable structure backfill
-  (`StructureBackfillService`); a delete trigger keeps orphans out.
+  (rowid = entry id). Populated for the committed corpus (the Wave 6 backfill tool
+  was removed after the corpus regen); a delete trigger keeps orphans out. Banks
+  without structure vectors degrade to content-only fusion (docs/adr/0004).
 - `idx_entries_scope_project` — the primary lookup path for context-filtered queries.
 - `idx_entries_hash` — content dedup and per-hash lookups.
 - `idx_entries_workspace` — workspace-scoped queries.
