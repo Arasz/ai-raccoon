@@ -14,7 +14,8 @@ namespace AiRaccoon.Tests.Unit.storage;
 public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 {
     // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…'
-    private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+    private const string DerivedHex = "277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b";
+    private const string DerivedRawKey = "x'" + DerivedHex + "'";
 
     private readonly string _dataRoot = CreateTempRoot();
 
@@ -113,7 +114,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // The bank is in WAL mode (every factory open pins it) — rekey must switch to DELETE
         // journal mode internally (SQLCipher rekey is unsupported in WAL; plan §3.3).
-        await using (var probe = new SqliteConnection($"Data Source={factory.BankPath};Password=env-passphrase"))
+        // Pooling=false so the probe closes for real (a pooled connection would hold the lock).
+        await using (var probe = new SqliteConnection($"Data Source={factory.BankPath};Password=env-passphrase;Pooling=false"))
         {
             await probe.OpenAsync(TestContext.Current.CancellationToken);
             await using var jm = probe.CreateCommand();
@@ -221,8 +223,17 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
-        // D4: no cached/offline key copy — the bank directory holds only the bank itself.
-        Directory.GetFiles(_dataRoot).ShouldBe([factory.BankPath]);
+        // D4: no cached/offline key copy — the directory holds only the bank and SQLite's own
+        // journal artifacts, and none of them contains the derived key material.
+        var files = Directory.GetFiles(_dataRoot);
+        files.ShouldAllBe(file =>
+            file == factory.BankPath
+            || file.EndsWith("-wal", StringComparison.Ordinal)
+            || file.EndsWith("-shm", StringComparison.Ordinal));
+        foreach (var file in files)
+        {
+            File.ReadAllText(file, Encoding.Latin1).ShouldNotContain(DerivedHex);
+        }
     }
 
     private static string CreateTempRoot() =>
