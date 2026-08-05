@@ -1,10 +1,9 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using System.Globalization;
+using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Access;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sync;
 
@@ -449,8 +448,8 @@ internal static class ConfigCommands
         foreach (var target in targets)
         {
             var enabled = rows.GetValueOrDefault(WatchConfigKeys.EnabledProject(target))
-                           ?? rows.GetValueOrDefault(WatchConfigKeys.EnabledGlobal)
-                           ?? "false";
+                          ?? rows.GetValueOrDefault(WatchConfigKeys.EnabledGlobal)
+                          ?? "false";
             var concurrencyRaw = rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyProject(target))
                                  ?? rows.GetValueOrDefault(WatchConfigKeys.ConcurrencyGlobal);
             var concurrency = int.TryParse(concurrencyRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
@@ -464,8 +463,7 @@ internal static class ConfigCommands
         return 0;
     }
 
-    private static string? Optional(ParseResult parseResult, string name) =>
-        parseResult.GetResult(name) is not null ? parseResult.GetValue<string>(name) : null;
+    private static string? Optional(ParseResult parseResult, string name) => parseResult.GetResult(name) is not null ? parseResult.GetValue<string>(name) : null;
 
     private static async Task UpsertOrDeleteAsync(IMemoryStore store, string key, string? value,
         CancellationToken cancellationToken)

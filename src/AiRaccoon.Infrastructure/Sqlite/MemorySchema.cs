@@ -205,7 +205,7 @@ internal static class MemorySchema
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
 
                                -- Wave 6 structure modality: heading-path vectors, rowid = entry id.
-                               -- Written only by the re-runnable backfill (StructureBackfillService);
+                               -- Populated for the committed corpus (Wave 6 backfill, since removed);
                                -- the delete trigger keeps orphan rows out when an entry goes away.
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
 
