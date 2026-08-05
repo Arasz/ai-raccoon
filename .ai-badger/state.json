@@ -1,8 +1,28 @@
 {
-  "lastUpdated": "2026-08-05T15:50:00Z",
+  "lastUpdated": "2026-08-05T19:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "embedding-model-resolution",
+      "summary": "bug-hunt (ops fix, no code/PR): real-bank search failed because embedding.model held 'nomic-embed-text' — a model NAME — and EmbeddingService.CreateLocal resolves any non-empty local model as a cwd-relative PATH (Path.GetFullPath), so the server (cwd = ai-badger integration worktree) tried to load <cwd>/nomic-embed-text. Second layer: the 1.0.4 tool package ships vocab.txt but NOT model_qint8_arm64.onnx (repo Models/ is gitignored; CI packed without it), so clean settings still fail on a fresh install. Fix per owner: model set local (no path) clears stale model/baseUrl rows (engine stays local:bundled); copied SHA-pinned ONNX (4278337f...) from dev checkout into ~/.dotnet/tools/.store/arasz.ai-raccoon/1.0.4/arasz.ai-raccoon.osx-arm64/1.0.4/tools/net10.0/osx-arm64/Models/ (first walk-up candidate, same dir as vocab.txt). Verified live: memory_search on the ~/.ai-raccoon bank via the running server (port 5094) returns hybrid results, no restart needed (resolution is per-call). Follow-up candidates: (1) CreateLocal lacks fail-fast for missing local model path; (2) production never calls BundledModel.EnsureAsync() and publish.yml doesn't provision the model, so every fresh install needs a manual copy; (3) BundledModel error text still recommends the dead AIRACCOON_EMBEDDING_MODEL env var.",
+      "hasNotes": false
+    },
+    {
+      "id": "fix-publish-multirid-shell",
+      "summary": "nuget tool-shell race (production blocker): 6 parallel per-RID pack jobs emitted the same shell nupkg; --skip-duplicate kept whichever pushed first and its DotnetToolSettings.xml referenced ONLY linux-musl-x64 — 'dotnet tool install' rejected every other platform (verified: published 1.0.1 AND 1.0.2 shells both broken). Fix (PR #20, merged 3bfd198): scripts/patch-tool-shell.py rewrites a shell's RuntimeIdentifierPackages to all six RIDs, run in every matrix job so all candidate shells are identical and correct; self-gating (fails unless every RID present exactly once, ids match prefix, entries/[Content_Types].xml preserved, rid count == matrix). Reviewer APPROVE (2 minor + 3 nit hardening applied: prefix validation, EntryPoint/Runner preservation, ordered payloads-first push, py3.9-compatible annotations). 1.0.3 was dispatched from old main pre-merge but the fixed workflow's push won — live 1.0.3 turned out CORRECT (inspected). 1.0.4 deployed via PR #21 (merged c638ccd) and pushed by the fixed workflow: payloads first then shell, 5 duplicate shells deduped; validation pending. E2E proven on macOS: pack -> patch -> local-only feed -> dotnet tool install -> runs 1.0.3/1.0.4.",
+      "hasNotes": false
+    },
+    {
+      "id": "watch-star-glob",
+      "summary": "bug-hunt: 'ai-raccoon watch enable * true' broke cryptically (wall of 'Unrecognized command or argument <file>' + Boolean parse error). Root cause traced + reproduced: unquoted '*' is shell-expanded into every cwd entry before the CLI sees it; the documented {project-id|*} syntax made this the natural way to say 'all projects'. Fix (PR #19, merged 3a845d8): CliRendering detects the expansion signature (unrecognized tokens that are cwd entries, all-but-one majority, + typed-argument Boolean/Int32 fallback) and appends a hint teaching the quoted form with the command reconstructed ('ai-raccoon watch enable '*' true'); exit 1 unchanged; stderr-only discipline kept. Refactor per architect+QA plans: CliArgs.cs -> facade + Setup/Cli/CliCommandTree.cs + Setup/Cli/CliRendering.cs (75 in-scope CLI tests, full suite 1062/0/43, byte-identical rendering verified member-by-member by reviewer). Docs (README/reference/prompt) teach quoting. Reviewer: no blockers/majors; 1 minor follow-up (ConfigCommands.cs:496 warning still teaches unquoted 'watch scope add * <path>') folded into the watch-list-format task. Durable lesson: any CLI wildcard in user-facing syntax needs shell-quoting guidance at every surface that shows it.",
+      "hasNotes": false
+    },
+    {
+      "id": "fix-mcp-server-json-ship-1-0-2",
+      "summary": "Packaging fix (PR #18, squash-merged 879e55e): .mcp/server.json made schema-valid against the official server.schema.json — description within the 100-char maxLength (98), environmentVariables as KeyValueInput {name, description, isSecret} objects, repository.url corrected to Arasz/ai-raccoon. 1.0.1 (unlisted) carried the invalid file, so version bumped to 1.0.2; VersionContractTests gained McpServerJson_ConformsToRegistrySchemaConstraints (TDD 3 failing -> 5 passing); jsonschema validation of the packed file is the release gate.",
+      "hasNotes": false
+    },
     {
       "id": "rename-package-id-to-arasz-ai-raccoon",
       "summary": "PackageId bridge (PR #17, squash-merged by owner 15:37Z): ai-raccoon -> arasz.ai-raccoon while the ownerless reserved namespace on 'ai-raccoon' blocks the original id. ToolCommandName unchanged (installed command stays ai-raccoon); .mcp/server.json identifier + README install lines updated; VersionContractTests gained an id-contract fact (TDD 1 failing -> 4 passing; build 0 warnings, full suite 1049/0/43). Owner manually packed + web-uploaded all 7 packages (shell + 6 RID payloads) as arasz.ai-raccoon 1.0.1 minutes after the merge — they are UNLISTED (upload flow) and carry an INVALID .mcp/server.json (description >100 chars, environmentVariables strings instead of objects, repository.url typo github.com/ai-raccoon/ai-raccoon) so VS Code MCP config generation fails. Decision: keep 1.0.1 unlisted; ship 1.0.2 with a schema-valid server.json via CI (listed by default).",
