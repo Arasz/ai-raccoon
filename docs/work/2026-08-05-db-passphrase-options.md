@@ -291,6 +291,8 @@ public sealed class BitwardenEncryptionKeyProvider : IEncryptionKeyProvider
 3. **The secret's VALUE is an SSH private key** (unencrypted ed25519), derived to the SQLCipher raw key with the measured scheme from `docs/work/2026-08-05-db-passphrase-ssh-and-cloud-vaults.md`: `SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'` (no KDF; RSA and passphrase-protected keys are rejected).
 4. **Offline behavior: refuse to start** — no cached key copy; the bank cannot open without Bitwarden reachability. The failure is loud and actionable.
 5. Rotation remains the F27 trap: rotating the secret in the Bitwarden UI without `PRAGMA rekey` bricks the bank — the config command warns.
+6. **`encryption bitwarden` config flow (f: 2026-08-05):** (a) check `bws` presence first — if missing, emit an actionable error telling the user to install it (and configure a token); (b) collect the **project ID** and **secret ID** (defaults to the owner's: project `613165e6-7947-49e0-889b-b49d007c5b85`, secret `f1d3c8e5-5391-4aef-8611-b49d007c8702`); (c) an optional **`-t <token>`** flag for setups that do not have `BWS_ACCESS_TOKEN` in the environment — when given, it is passed to bws for that run only, never persisted.
+7. **The 0600 raw-key-file option is REMOVED** (f: 2026-08-05) — the provider family is `env` (default, kept) + `bitwarden` (bws). Keychain, SSH-key-direct, and the cloud vaults stay documented in this report as future sources, not implemented.
 
 ## Key storage options — pros / cons (consolidated)
 
@@ -304,4 +306,4 @@ public sealed class BitwardenEncryptionKeyProvider : IEncryptionKeyProvider
 | **Azure Key Vault** | Strongest at-rest posture (no key material on disk); RBAC; versioning/rotation; audit | Network + `az login` token expiry at start; Azure account dependency; soft-delete/RBAC configuration |
 | **AWS Secrets Manager** | KMS-backed; rotation; CloudTrail audit; same SDK generation as the repo's S3 | Network; AWS credential-chain state (`~/.aws`); region/permissions configuration |
 
-Design consequence: `IEncryptionKeyProvider` becomes a source-selectable family — `env` (default, kept) and `bitwarden` (bws CLI + SSH-key derivation, the owner's setup), with keychain/key-file/cloud as documented future sources behind the same interface. The `ai-raccoon encryption <source>` config command records the source + provider metadata; `encryption bitwarden` validates `bws` presence and secret reachability interactively.
+Design consequence: `IEncryptionKeyProvider` becomes a source-selectable family — `env` (default, kept) and `bitwarden` (bws CLI + SSH-key derivation, the owner's setup). Keychain and the cloud vaults stay documented in this report as future sources behind the same interface; the raw-key file is removed (decision 7). The `ai-raccoon encryption <source>` config command records the source + provider metadata; `encryption bitwarden` validates `bws` presence and secret reachability interactively (decision 6).
