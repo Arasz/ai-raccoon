@@ -1,5 +1,7 @@
 # AiRaccoon
 
+[![publish](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml)
+
 An MCP server that gives AI agents persistent, project-scoped memory backed by a
 managed .NET SQLite store: local-first by default, one memory bank per install scope,
 hybrid FTS5+vec0 semantic search, workspace sandboxes, a curated shared tier, memory
