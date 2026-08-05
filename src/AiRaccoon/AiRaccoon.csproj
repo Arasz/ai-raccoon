@@ -9,7 +9,7 @@
         <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
         <PackageType>McpServer</PackageType>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageId>ai-raccoon</PackageId>
+        <PackageId>arasz.ai-raccoon</PackageId>
         <ToolCommandName>ai-raccoon</ToolCommandName>
         <PackageVersion>1.0.1</PackageVersion>
         <InformationalVersion>1.0.1</InformationalVersion>

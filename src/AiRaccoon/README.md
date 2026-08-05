@@ -217,7 +217,7 @@ One dotnet tool package bundles the ONNX model. A no-embed flavor
 ## Install
 
 ```bash
-dotnet tool install -g ai-raccoon
+dotnet tool install -g arasz.ai-raccoon
 ```
 
 The global-tool install directory is `~/.dotnet/tools` on macOS/Linux (`%USERPROFILE%\.dotnet\tools` on Windows). If

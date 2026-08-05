@@ -6,7 +6,7 @@
     "packages": [
         {
             "registryType": "nuget",
-            "identifier": "ai-raccoon",
+            "identifier": "arasz.ai-raccoon",
             "version": "1.0.1",
             "transport": {
                 "type": "stdio"
