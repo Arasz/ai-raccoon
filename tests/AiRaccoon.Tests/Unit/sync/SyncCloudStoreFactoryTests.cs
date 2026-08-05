@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -99,5 +100,84 @@ public class SyncCloudStoreFactoryTests
         var cloud = await factory.CreateAsync(TestContext.Current.CancellationToken);
 
         cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    // Azurite's published dev account key — valid base64, obviously fake.
+    private const string FakeConnectionString =
+        "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;EndpointSuffix=core.windows.net";
+
+    [Fact]
+    public async Task ReadOptionsAsync_MapsAzureRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories",
+                [SyncSettingsKeys.ObjectKey] = "bank.db"
+            }
+        };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.Azure);
+        options.ConnectionString.ShouldBe(FakeConnectionString);
+        options.Container.ShouldBe("memories");
+        options.ObjectKey.ShouldBe("bank.db");
+        options.IsConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_ProviderDefaultsToS3_WhenRowAbsent()
+    {
+        var store = new FakeConfigStore();
+        SeedFull(store);
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.S3);
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_UnknownProviderValue_DefaultsToS3()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "minio" } };
+
+        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+
+        options.Provider.ShouldBe(SyncProvider.S3);
+    }
+
+    [Fact]
+    public async Task ReadOptionsAsync_AzureIsConfiguredOnlyWhenConnectionStringAndContainerPresent()
+    {
+        var full = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories"
+            }
+        };
+        var fullOptions = await Factory(full).ReadOptionsAsync(TestContext.Current.CancellationToken);
+        fullOptions.IsConfigured.ShouldBeTrue();
+
+        var missingConnectionString = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.Container] = "memories" }
+        };
+        var noConnectionString = await Factory(missingConnectionString)
+            .ReadOptionsAsync(TestContext.Current.CancellationToken);
+        noConnectionString.IsConfigured.ShouldBeFalse();
+
+        var missingContainer = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.ConnectionString] = FakeConnectionString }
+        };
+        var noContainer = await Factory(missingContainer).ReadOptionsAsync(TestContext.Current.CancellationToken);
+        noContainer.IsConfigured.ShouldBeFalse();
     }
 }
