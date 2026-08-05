@@ -344,7 +344,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // ── encryption unset ──
 
     [Fact]
-    public async Task Unset_RemovesRowsAndSidecar_WithoutBank()
+    public async Task Unset_NoEnvPassphrase_KeepsSidecarAndWarns()
     {
         var store = new FakeConfigStore
         {
@@ -360,11 +360,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("encryption source reset to env");
-        store.Settings.ShouldBeEmpty();
-        File.Exists(SidecarPath()).ShouldBeFalse();
-        err.ShouldBeEmpty();
+        exit.ShouldBe(1);
+        err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
+        // The sidecar and rows stay (source remains bitwarden) so the documented retry works.
+        store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+        store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(DefaultSecretId);
+        File.Exists(SidecarPath()).ShouldBeTrue();
     }
 
     [Fact]
