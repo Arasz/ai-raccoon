@@ -27,19 +27,23 @@ jobs:
         # package, and both must be pushed or `dotnet tool install` fails. All
         # jobs emit the same shell id+version — `--skip-duplicate` makes jobs
         # 2-6 of the shell push no-ops.
-        # Build must precede pack: packing an unbuilt project fails MSB3030.
+        # No separate build step: pack builds for the RID itself (see the
+        # Pack step comment about why --no-build is wrong here).
         rid: [win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - name: Build (${{ matrix.rid }})
+      - name: Pack (${{ matrix.rid }})
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.
-        run: mkdir -p .nupkg-local && dotnet build src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} --nologo
-      - name: Pack (${{ matrix.rid }})
-        run: dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} --no-build -o artifacts --nologo
+        #
+        # No --no-build: on a Web-SDK project, `dotnet build -p:RuntimeIdentifiers=X`
+        # does not emit the RID-scoped publish outputs that pack --no-build expects
+        # (MSB3030). Packing without --no-build builds for the RID itself and emits
+        # the tool shell + RID payload in one step (measured on a clean tree).
+        run: mkdir -p .nupkg-local && dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} -o artifacts --nologo
       - uses: actions/upload-artifact@v7
         with:
           name: nupkg-${{ matrix.rid }}
