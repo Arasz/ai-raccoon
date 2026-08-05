@@ -1,5 +1,6 @@
 using System.Formats.Tar;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -11,6 +12,7 @@ public sealed record PinnedAsset(
     string Kind,
     string Url,
     string Sha256,
+    string? Platform,
     string? LocalSource,
     string? Repo = null,
     string? Version = null,
@@ -19,20 +21,20 @@ public sealed record PinnedAsset(
     public bool IsArchive => AssetFile is not null;
 }
 
-/// <summary>Outcome of a bootstrap attempt; the gate test turns failures into hard test failures.</summary>
+/// <summary>Outcome of a bootstrap attempt; the gate test turns errors into hard test failures.</summary>
 public sealed record EnsureResult(bool AllPresent, IReadOnlyList<string> Errors);
 
 /// <summary>
 ///     Bootstraps the pinned reference assets into Retrieval/assets (gitignored): sqlite-memory
-///     1.3.5 full + sqlite-vector 1.0.0 modules and the all-MiniLM GGUF model. Prefers verified
-///     local copies (~/.ai-raccoon), falls back to the pinned GitHub/HuggingFace URLs, and always
-///     verifies SHA-256 — a missing or mismatched asset is reported, never silently skipped.
+///     1.3.5 full + sqlite-vector 1.0.0 modules for the current platform and the all-MiniLM GGUF
+///     model. The manifest pins per-platform module archives (macOS .dylib, Linux .so); the model
+///     is platform-independent. Prefers verified local copies (~/.ai-raccoon), falls back to the
+///     pinned GitHub/HuggingFace URLs, and always verifies SHA-256 — a missing or mismatched asset
+///     is reported, never silently skipped.
 /// </summary>
 public sealed class ReferenceAssets
 {
     public const string ManifestFileName = "manifest.json";
-    public const string MemoryModuleName = "memory.dylib";
-    public const string VectorModuleName = "vector.dylib";
     public const string ModelFileName = "all-MiniLM-L6-v2.Q5_K_M.gguf";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -46,21 +48,36 @@ public sealed class ReferenceAssets
 
     public static string ManifestPath => Path.Combine(AssetsDirectory, ManifestFileName);
 
+    /// <summary>The platform the current process runs on: "osx-arm64" or "linux-x64".</summary>
+    public static string CurrentPlatform { get; } = ResolveCurrentPlatform();
+
+    public static string MemoryModuleName => MemoryModuleAsset.Name;
+    public static string VectorModuleName => VectorModuleAsset.Name;
+
     public static string MemoryModulePath => Path.Combine(AssetsDirectory, MemoryModuleName);
-
     public static string VectorModulePath => Path.Combine(AssetsDirectory, VectorModuleName);
-
     public static string ModelPath => Path.Combine(AssetsDirectory, ModelFileName);
 
+    /// <summary>Every asset pinned by the manifest (all platforms — used by the policy tests).</summary>
     public static IReadOnlyList<PinnedAsset> PinnedAssets { get; } = LoadManifest(ManifestPath);
 
-    /// <summary>Copies or downloads every pinned asset; never throws — collects errors for the gate test.</summary>
+    /// <summary>The assets that apply to the current platform: modules for CurrentPlatform + the model.</summary>
+    public static IReadOnlyList<PinnedAsset> ActiveAssets =>
+        PinnedAssets.Where(a => a.Platform is null || a.Platform == CurrentPlatform).ToList();
+
+    private static PinnedAsset MemoryModuleAsset =>
+        ActiveAssets.Single(a => a.Repo == "sqlite-memory");
+
+    private static PinnedAsset VectorModuleAsset =>
+        ActiveAssets.Single(a => a.Repo == "sqlite-vector");
+
+    /// <summary>Copies or downloads every active pinned asset; never throws — collects errors for the gate test.</summary>
     public static async Task<EnsureResult> EnsureAsync(CancellationToken cancellationToken = default)
     {
         using var http = new HttpClient();
         var errors = new List<string>();
 
-        foreach (var asset in PinnedAssets)
+        foreach (var asset in ActiveAssets)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var target = TargetPath(asset);
@@ -149,16 +166,28 @@ public sealed class ReferenceAssets
         }
     }
 
-    private static string TargetPath(PinnedAsset asset) =>
-        asset.Name switch
-        {
-            MemoryModuleName => MemoryModulePath,
-            VectorModuleName => VectorModulePath,
-            ModelFileName => ModelPath,
-            _ => Path.Combine(AssetsDirectory, asset.Name)
-        };
+    private static string TargetPath(PinnedAsset asset) => Path.Combine(AssetsDirectory, asset.Name);
 
     private static string? ExpandHome(string? path) => path is null ? null : Path.GetFullPath(path.Replace("~", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+
+    private static string ResolveCurrentPlatform()
+    {
+        var arch = RuntimeInformation.OSArchitecture;
+        var os = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx"
+            : RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "linux"
+            : throw new PlatformNotSupportedException(
+                $"The golden-retrieval harness supports macOS and Linux; running on {RuntimeInformation.OSDescription}.");
+
+        var ridArch = arch switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X64 => "x64",
+            _ => throw new PlatformNotSupportedException(
+                $"The golden-retrieval harness supports arm64 and x64; running on {arch}.")
+        };
+
+        return $"{os}-{ridArch}";
+    }
 
     private static IReadOnlyList<PinnedAsset> LoadManifest(string manifestPath)
     {
@@ -174,7 +203,7 @@ public sealed class ReferenceAssets
         }
 
         // Try source-tree path first (walking up from output)
-        var relative = Path.Combine("tests", "AiRaccoon.Tests", "unit", "retrieval", "assets");
+        var relative = Path.Combine("tests", "AiRaccoon.Tests", "Unit", "Retrieval", "assets");
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, relative);
@@ -184,17 +213,17 @@ public sealed class ReferenceAssets
             }
         }
 
-        // Fallback: CopyToOutputDirectory places assets at <output>/unit/retrieval/assets/
-        var outputRelative = Path.Combine(AppContext.BaseDirectory, "unit", "retrieval", "assets");
+        // Fallback: CopyToOutputDirectory places assets at <output>/Unit/Retrieval/assets/
+        var outputRelative = Path.Combine(AppContext.BaseDirectory, "Unit", "Retrieval", "assets");
         if (File.Exists(Path.Combine(outputRelative, ManifestFileName)))
         {
             return outputRelative;
         }
 
         throw new InvalidOperationException(
-            "Could not locate unit/retrieval/assets/ from the test output directory; " +
+            "Could not locate Unit/Retrieval/assets/ from the test output directory; " +
             "set AIRACCOON_HARNESS_ASSETS to point at it.");
     }
 
-    private sealed record ManifestFile(int SchemaVersion, string Platform, IReadOnlyList<PinnedAsset> Assets);
+    private sealed record ManifestFile(int SchemaVersion, IReadOnlyList<PinnedAsset> Assets);
 }

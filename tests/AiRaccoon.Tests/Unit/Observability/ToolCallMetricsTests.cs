@@ -8,6 +8,7 @@ namespace AiRaccoon.Tests.Unit.Observability;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ObservabilityCollection.Name)]
 public class ToolCallMetricsTests
 {
     [Fact]

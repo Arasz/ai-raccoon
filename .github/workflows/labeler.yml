@@ -1,0 +1,20 @@
+# Path-based PR labeling (actions/labeler@v7). Fires on open/reopen only:
+# labeler v7 defaults sync-labels to false, so re-running on every synchronize
+# would add nothing.
+name: Labeler
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"

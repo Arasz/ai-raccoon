@@ -1,7 +1,15 @@
-name: nightly
-
 # Full test suite — the slow integration, E2E and retrieval gates that the
 # fast-only build workflow skips. Runs nightly and on demand.
+#
+# ⚠️ SCHEDULED RUNS ARE BEST-EFFORT. GitHub documents `schedule` as subject to
+# delay during periods of high load, and runs can be dropped entirely — there is
+# no retry and nothing goes red when a window is missed. Absence of a nightly
+# run is NOT evidence that anything passed. Check with:
+#   gh run list --workflow=nightly.yml
+# and re-arm/verify on demand with:
+#   gh workflow run nightly.yml
+name: nightly
+
 on:
   schedule:
     - cron: "0 2 * * *"
@@ -9,6 +17,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
 
 jobs:
   full-suite:
