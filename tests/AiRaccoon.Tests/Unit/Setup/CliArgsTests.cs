@@ -80,6 +80,7 @@ public class CliArgsTests
                  {
                      new[] { "--sync-access-key", "x" },
                      new[] { "--sync-secret-key", "x" },
+                     new[] { "--sync-connection-string", "x" },
                      new[] { "--db-passphrase", "x" },
                      new[] { "--openai-api-key", "x" }
                  })
@@ -261,6 +262,25 @@ public class CliArgsTests
 
         parsed.Errors.ShouldNotBeEmpty();
         parsed.Errors.ShouldContain(e => e.Contains("--bucket"));
+    }
+
+    [Fact]
+    public void Parse_SyncAddAzure_ParsesContainerAndOptions()
+    {
+        var parsed = CliArgs.Parse(["sync", "add", "azure", "memories", "--object-key", "bank.db"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["sync", "add", "azure"]);
+        parsed.ParseResult.GetValue<string>("container").ShouldBe("memories");
+        parsed.ParseResult.GetValue<string>("--object-key").ShouldBe("bank.db");
+    }
+
+    [Fact]
+    public void Parse_SyncAddAzure_NoContainer_ReturnsError()
+    {
+        var parsed = CliArgs.Parse(["sync", "add", "azure"]);
+
+        parsed.Errors.ShouldNotBeEmpty();
     }
 
     [Fact]

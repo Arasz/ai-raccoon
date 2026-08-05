@@ -227,7 +227,7 @@ internal static class CliArgs
     private static Command SyncCommand()
     {
         var sync = new Command("sync", "Cloud sync configuration");
-        var add = new Command("add", "Adds S3-compatible sync");
+        var add = new Command("add", "Adds cloud sync");
         var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table)")
         {
             new Argument<string>("url") { HelpName = "url" },
@@ -236,6 +236,12 @@ internal static class CliArgs
             new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" }
         };
         add.Add(s3);
+        var azure = new Command("azure", "Azure Blob container (connection string is prompted and persisted in the settings table)")
+        {
+            new Argument<string>("container") { HelpName = "name" },
+            new Option<string>("--object-key") { Description = "Azure blob name (default memory-<projectId>.db)", HelpName = "key" }
+        };
+        add.Add(azure);
         sync.Add(add);
         sync.Add(new Command("remove", "Back to default: sync off"));
         sync.Add(new Command("show", "Shows the sync configuration (keys redacted)"));
