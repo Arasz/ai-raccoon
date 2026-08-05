@@ -13,9 +13,11 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Plan C Wave 4 sweep: RRF k, weight ratio, minScore, candidate window over the
-///     96-point grid through the real pipeline; pins the chosen configuration (the
-///     defaults — measured grid optimum, ADR-0006) to the Wave 4 gates. W3 params fixed.
+///     Wave 4 sweep (see docs/plans/retrieval-improvement-c.md §3 Wave 4): RRF k, weight ratio,
+///     minScore, candidate window over the 96-point grid through the real pipeline; pins the
+///     chosen configuration (the defaults — measured grid optimum, see
+///     docs/adr/0006-rrf-parameter-optimization.md) to the Wave 4 gates. Source-affinity
+///     params fixed.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -39,13 +41,13 @@ public sealed class RrfParameterSweepTests : IDisposable
     private static readonly SweepPoint CurrentDefaults =
         new(60, 1, 1, 0.0, CandidateWindowMode.Max3x100);
 
-    /// <summary>Wave 3 source-affinity parameters, fixed during this sweep.</summary>
+    /// <summary>Source-affinity parameters, fixed during this sweep.</summary>
     private const double FixedSourceLambda = 0.1;
     private const double FixedConsolidationThreshold = 0.1;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>The 11 expected-source queries the Wave 4 gates were measured over (ADR 0006).</summary>
+    /// <summary>The 11 expected-source queries the Wave 4 gates were measured over (see docs/adr/0006-rrf-parameter-optimization.md).</summary>
     private static readonly string[] RrfGateQueryIds =
         ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -83,7 +85,8 @@ public sealed class RrfParameterSweepTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     The Wave 4 gate: the chosen configuration (the SearchQuery defaults) holds C2 at
+    ///     The Wave 4 gate (see docs/plans/retrieval-improvement-c.md §3 Wave 4): the chosen
+    ///     configuration (the SearchQuery defaults) holds C2 at
     ///     <= 3, shows no fusion regression, keeps every Wave 3 rank gate, and is the grid
     ///     optimum — no point beats it on nDCG@5 while holding the gates. The full matrix is
     ///     emitted to docs/work/2026-08-04-wave4-rrf-sweep.md.
@@ -91,8 +94,9 @@ public sealed class RrfParameterSweepTests : IDisposable
     [Fact]
     public async Task Sweep_ChosenRrfConfiguration_PassesAllGates()
     {
-        // The Wave 4 gates were measured over the 11 expected-source queries that existed at
-        // sweep time (ADR 0006). Wave 5b catalog additions (A8-A10, S1/S3-S6) are scored by
+        // The Wave 4 gates (see docs/adr/0006-rrf-parameter-optimization.md) were measured
+        // over the 11 expected-source queries that existed at sweep time. Wave 5b catalog
+        // additions (A8-A10, S1/S3-S6; see docs/plans/retrieval-improvement-c.md §3 Wave 5b) are scored by
         // BaselineMetricsTests, not this sweep — otherwise every point's pinned numbers shift.
         var queries = LoadQueries()
             .Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
@@ -114,7 +118,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         WriteSweepReport(rows, chosen, current, queries, fusion);
 
-        // Gate (b): C2 hybrid rank <= 3 (Wave 2 integration acceptance).
+        // Gate (b): C2 hybrid rank <= 3 (Wave 2 integration acceptance; see docs/plans/retrieval-improvement-c.md §3 Wave 2).
         chosen.C2ExactRank.ShouldNotBeNull("C2 must appear in the top 10 at the chosen point");
         chosen.C2ExactRank!.Value.ShouldBeLessThanOrEqualTo(3,
             $"C2 hybrid rank must stay <= 3; got {chosen.C2ExactRank}");
@@ -141,7 +145,7 @@ public sealed class RrfParameterSweepTests : IDisposable
                 $"vector {item.VectorExactRank?.ToString() ?? "-"})");
         }
 
-        // Gate (d): the Wave 3 state holds at the chosen point.
+        // Gate (d): the source-affinity state holds at the chosen point.
         chosen.A1FileRank.ShouldBe(1, "A1 file rank must stay 1");
         chosen.A4FileRank.ShouldBe(1, "A4 file rank must stay 1");
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
@@ -157,7 +161,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         // Gate (a): grid-optimality — the chosen point ties the documented pre-sweep
         // baseline (0.722) and no grid point beats it while holding the gates (measured
-        // negative result: the pre-sweep defaults are the unique optimum; ADR 0006).
+        // negative result: the pre-sweep defaults are the unique optimum; see docs/adr/0006-rrf-parameter-optimization.md).
         chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.722,
             $"ADR nDCG@5 must hold at the documented baseline 0.722; got {chosen.AdrNdcg5:F3}");
 
