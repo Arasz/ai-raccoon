@@ -7,7 +7,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>
 ///     Opens the install's single memory bank (memory.db) with the shared PRAGMA policy, loads
 ///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
-///     every table lives in memory.db (FR-NM-1).
+///     every table lives in memory.db (FR-NM-1; see docs/work/features-native-memory/native-memory.feature).
 /// </summary>
 public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyProvider keyProvider)
 {

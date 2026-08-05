@@ -6,7 +6,7 @@ using Microsoft.ML.Tokenizers;
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
-///     IEmbeddingGenerator over the bundled int8 all-MiniLM-L6-v2 ONNX model (FR-NM-3):
+///     IEmbeddingGenerator over the bundled int8 all-MiniLM-L6-v2 ONNX model (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
 ///     BERT WordPiece tokenization, one batched session run, mean-pool + L2-normalize
 ///     matching sentence-transformers semantics.
 /// </summary>

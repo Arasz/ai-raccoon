@@ -3,7 +3,7 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Source-affinity ranking (plan C Wave 3; docs/adr/0005): adjacent-chunk boost, source
+///     Source-affinity ranking (see docs/adr/0005-source-affinity-ranking.md): adjacent-chunk boost, source
 ///     consolidation, document-first tie-break over the fused list. λ = 0 is a no-op.
 /// </summary>
 internal static class SourceAffinityRanker

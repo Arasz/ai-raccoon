@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Single-file bank schema (plan §2.2): entries, workspaces, settings, an FTS5
+///     Single-file bank schema (see docs/work/2026-08-03-native-memory-plan.md §2.2): entries, workspaces, settings, an FTS5
 ///     external-content index (value, source_file, section) and content + structure vec0
 ///     tables. Idempotent on every bank open; legacy banks migrate (see MigrateAsync).
 /// </summary>
@@ -19,7 +19,7 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Adds the Wave 2 (source_file, section) and Wave 6 (heading_path, structure_embedding)
+    ///     Adds the (source_file, section) and (heading_path, structure_embedding)
     ///     columns when missing and rebuilds the FTS index when it predates the three-column
     ///     shape. Fresh banks are untouched.
     /// </summary>
@@ -200,12 +200,12 @@ internal static class MemorySchema
                                    content_rowid='id'
                                );
 
-                               -- vec0 stays empty until P4 embeds; P4 owns the embedding
+                               -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
                                -- dimension if the model is not all-MiniLM (384).
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
 
-                               -- Wave 6 structure modality: heading-path vectors, rowid = entry id.
-                               -- Populated for the committed corpus (Wave 6 backfill, since removed);
+                               -- Structure modality: heading-path vectors, rowid = entry id.
+                               -- Populated for the committed corpus (backfill since removed);
                                -- the delete trigger keeps orphan rows out when an entry goes away.
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
 

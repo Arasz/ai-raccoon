@@ -7,7 +7,7 @@ using OpenAI.Embeddings;
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
-///     Resolves the bank's embedding engine from settings (FR-NM-3): provider local → the
+///     Resolves the bank's embedding engine from settings (FR-NM-3; see docs/work/features-native-memory/native-memory.feature): provider local → the
 ///     bundled int8 ONNX model in-process; provider openai → any OpenAI-compatible endpoint
 ///     (baseUrl override). The engine fingerprint is what `model set` persists so a
 ///     provider/model change triggers a full re-embed.
@@ -16,7 +16,7 @@ public sealed class EmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
-    /// <summary>Maximum input tokens of the bundled all-MiniLM-L6-v2 model (P6b plan §8).</summary>
+    /// <summary>Maximum input tokens of the bundled all-MiniLM-L6-v2 model (see docs/work/2026-08-03-native-memory-plan.md §8).</summary>
     public const int BundledModelContextTokens = 256;
 
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
@@ -25,7 +25,7 @@ public sealed class EmbeddingService
 
     /// <summary>
     ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
-    ///     the model's window (P6b plan §8); unknown engines default conservatively.
+    ///     the model's window (see docs/work/2026-08-03-native-memory-plan.md §8); unknown engines default conservatively.
     /// </summary>
     public static int ContextTokensFor(string provider, string? model)
     {

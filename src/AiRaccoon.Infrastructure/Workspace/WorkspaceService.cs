@@ -7,7 +7,7 @@ namespace AiRaccoon.Infrastructure.Workspace;
 
 /// <summary>
 ///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
-///     discard (spec §3.2).
+///     discard (see docs/work/features-agent-memory/spec-issue-1.md §3.2).
 /// </summary>
 public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider)
 {
@@ -53,7 +53,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         {
             var entry = byHash[hash];
             // Promote via memory_add_content(path, value, 'project:<id>') — preserves the
-            // entry's logical path and lands it in the project context (spec §3.2). Using
+            // entry's logical path and lands it in the project context (see docs/work/features-agent-memory/spec-issue-1.md §3.2). Using
             // add_content rather than add_text avoids the global content-hash dedup, which
             // would skip content that already exists in the workspace context.
             await store.AddContentAsync(

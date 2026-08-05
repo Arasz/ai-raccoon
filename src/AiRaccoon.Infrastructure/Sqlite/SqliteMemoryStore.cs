@@ -13,7 +13,7 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     IMemoryStore over the single-file memory.db (plan §2.2): plain SQL, FTS5 + vec0
+///     IMemoryStore over the single-file memory.db (see docs/work/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
 ///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
 public sealed class SqliteMemoryStore(
@@ -23,7 +23,7 @@ public sealed class SqliteMemoryStore(
     EmbeddingService embeddings)
     : IMemoryStore
 {
-    // Chunk bounds (P6b plan §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
+    // Chunk bounds (see docs/work/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
     // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
     // chunk size is clamped to the configured engine's window where the engine knows it.
     private const int DefaultMaxTokens = 256;
@@ -44,7 +44,7 @@ public sealed class SqliteMemoryStore(
         var bucket = BucketFor(context, request.ProjectId);
 
         // memory_write carries no logical path; derive a stable one from the content itself so
-        // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7).
+        // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
         var hash = ContentHash.Of(path, request.Content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -52,7 +52,7 @@ public sealed class SqliteMemoryStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         // Global content dedup within the project's committed set: identical content anywhere in
-        // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7).
+        // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var existing = await connection.QueryFirstOrDefaultAsync<EntryRow>(
                 Def(MemorySql.SelectCommittedByValue,
                     new { value = request.Content, projectId = request.ProjectId }, cancellationToken))
@@ -99,7 +99,7 @@ public sealed class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // Hybrid modalities (FR-NM-4): a keyword list from FTS5 and a semantic list from vec0.
+        // Hybrid modalities (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): a keyword list from FTS5 and a semantic list from vec0.
         // No engine configured -> the query cannot be embedded, so the vec modality is absent
         // and search degrades to FTS5-only results (never a crash).
         var settings = await ReadEmbeddingSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -113,19 +113,21 @@ public sealed class SqliteMemoryStore(
         }
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        // Wave 2 (plan C §3 2c): source-path queries match the source/section columns
-        // with AND semantics so the exact chunk ranks first (see SourcePathQuery); the
-        // OR fallback does not apply — the path expression is exact by construction.
-        // Wave 3: the source-affinity pass is skipped for path queries — the exact chunk
-        // is the answer by construction and sibling boosts would displace it.
+        // Source-path queries (plan C §3 2c; see docs/plans/retrieval-improvement-c.md): match
+        // the source/section columns with AND semantics so the exact chunk ranks first (see
+        // SourcePathQuery); the OR fallback does not apply — the path expression is exact by
+        // construction.
+        // The source-affinity pass is skipped for path queries — the exact chunk is the
+        // answer by construction and sibling boosts would displace it.
         var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
         if (isPathQuery)
         {
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
-        // Wave 6 (plan C §3): dual-vector fusion alpha — the fixed blend between the content
-        // and structure (heading-path) similarities, read once per search from settings.
+        // Dual-vector fusion alpha (see docs/plans/retrieval-improvement-c.md §3 Wave 6): the
+        // fixed blend between the content and structure (heading-path) similarities, read once
+        // per search from settings.
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
@@ -177,7 +179,7 @@ public sealed class SqliteMemoryStore(
             {
                 var parameters = new DynamicParameters();
                 parameters.Add("query", ftsExpression);
-                // Per-modality candidate window (P6b plan §8): K = max(limit*3, 100) so RRF can
+                // Per-modality candidate window (see docs/work/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
                 // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
                 // the caller's limit and minScore still apply in the final merger pass.
                 parameters.Add("limit", limit);
@@ -202,7 +204,7 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Per-modality candidate window before RRF fusion (plan C Wave 4; ADR-0006):
+    ///     Per-modality candidate window before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md):
     ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
     ///     starved by a per-modality LIMIT.
     /// </summary>
@@ -259,8 +261,9 @@ public sealed class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Wave 6 vector modality: content and structure KNN lists fused by fixed alpha
-    ///     (docs/adr/0004); banks without structure vectors degrade to content-only order.
+    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
+    ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
+    ///     degrade to content-only order.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
         SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
@@ -327,7 +330,7 @@ public sealed class SqliteMemoryStore(
         }
 
         // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
-        // (FR-NM-7) differs from the source row's by construction. AddContentAsync is idempotent:
+        // (FR-NM-7; see docs/work/features-native-memory/native-memory.feature) differs from the source row's by construction. AddContentAsync is idempotent:
         // re-sharing finds the existing shared row.
         return await AddContentAsync(projectId, $"shared/{source.Path}", source.Value,
                 ContextNaming.SharedContext, cancellationToken)
@@ -415,7 +418,7 @@ public sealed class SqliteMemoryStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         // Entry count is scoped to this project's committed context: workspace scratch and
-        // other projects' rows are excluded. Pending comes from embed_state (P4 embeds them).
+        // other projects' rows are excluded. Pending comes from embed_state, filled by the embed pipeline.
         var entries = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.CountProjectEntries, new { projectId }, cancellationToken)).ConfigureAwait(false);
         var pendingCount = await connection.ExecuteScalarAsync<int>(
@@ -506,7 +509,7 @@ public sealed class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        // Engine change → re-embed the whole bank with the new engine (FR-NM-3 s6): settings
+        // Engine change → re-embed the whole bank with the new engine (FR-NM-3 s6; see docs/work/features-native-memory/native-memory.feature): settings
         // are bank-global, so every embedded row re-embeds; the pending queue is untouched —
         // memory_embed_pending owns it (s5).
         if (!string.Equals(previous, engine, StringComparison.Ordinal))
@@ -691,7 +694,7 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
-    /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4).</summary>
+    /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
     private async Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
         CancellationToken cancellationToken)
     {
@@ -920,8 +923,8 @@ public sealed class SqliteMemoryStore(
 
         if (context.StartsWith("label:", StringComparison.Ordinal))
         {
-            // Wave 2 (plan C §3 2e): the label context contributes the label's custom-scoped
-            // rows only — project-scoped rows are already in the project batch (SearchContexts),
+            // Label context (see docs/plans/retrieval-improvement-c.md §3 2e): contributes the
+            // label's custom-scoped rows only — project-scoped rows are already in the project batch (SearchContexts),
             // and a union here would double-count them in RRF.
             var rest = context["label:".Length..];
             var colon = rest.IndexOf(':');
@@ -977,7 +980,7 @@ public sealed class SqliteMemoryStore(
         };
     }
 
-    /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7).</summary>
+    /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
     private static string WritePathFor(string value) => $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
     private static bool IsIndexableFile(string path) => !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));

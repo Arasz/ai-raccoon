@@ -4,7 +4,7 @@ using System.Text;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Deterministic ~200-char snippet for hits without an FTS5 snippet (FR-NM-4 s1); the
+///     Deterministic ~200-char snippet for hits without an FTS5 snippet (FR-NM-4 s1; see docs/work/features-native-memory/native-memory.feature); the
 ///     window start derives from the entry hash so long values do not always open on their head.
 /// </summary>
 internal static class SnippetFallback

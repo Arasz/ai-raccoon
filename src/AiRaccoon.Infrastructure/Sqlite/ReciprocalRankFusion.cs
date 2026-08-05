@@ -3,7 +3,7 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Reciprocal rank fusion (FR-NM-4): score = sum of weight / (k + rank) per retrieving
+///     Reciprocal rank fusion (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): score = sum of weight / (k + rank) per retrieving
 ///     list, normalized to max 1.0; the first list carrying a result supplies its payload.
 /// </summary>
 internal static class ReciprocalRankFusion

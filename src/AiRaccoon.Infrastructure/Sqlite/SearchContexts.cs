@@ -3,7 +3,7 @@ using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>The bank contexts a search query reads, per scope (spec §4.1): one memory_search query per in-scope context.</summary>
+/// <summary>The bank contexts a search query reads, per scope (see docs/work/features-agent-memory/spec-issue-1.md §4.1): one memory_search query per in-scope context.</summary>
 internal static class SearchContexts
 {
     public static IReadOnlyList<string> For(SearchQuery query)
@@ -20,8 +20,8 @@ internal static class SearchContexts
             contexts.Add(ContextNaming.ProjectContext(query.ProjectId));
             if (!string.IsNullOrWhiteSpace(query.ContextLabel))
             {
-                // Wave 2 (plan C §3 2e): a context-label filter augments the project scope
-                // with the label's custom-scoped rows.
+                // A context-label filter augments the project scope with the label's custom-scoped
+                // rows (see docs/plans/retrieval-improvement-c.md §3 2e).
                 contexts.Add(ContextNaming.LabelContext(query.ProjectId, query.ContextLabel));
             }
         }
