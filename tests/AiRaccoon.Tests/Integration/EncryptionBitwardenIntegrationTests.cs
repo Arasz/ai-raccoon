@@ -77,8 +77,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         }
     }
 
-    // fake bws: emulates `bws secret get <id>` (plan §5.3). The token comes from argv `-t <token>`
-    // or the inherited BWS_ACCESS_TOKEN; anything else is rejected with bws-style stderr + exit 1.
+    // fake bws: emulates `bws secret get <id>` (plan §5.3). A token may arrive via argv `-t <token>`
+    // or the inherited BWS_ACCESS_TOKEN; when one is present it must equal the known test token,
+    // else bws-style stderr + exit 1. No token → serve the key (the plan's fixture recipe).
     private const string FakeBwsScript = """
 #!/bin/sh
 DIR="$(dirname "$0")"
@@ -93,8 +94,7 @@ while [ "$#" -gt 0 ]; do
 done
 if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
 if [ -z "$TOKEN" ]; then TOKEN="$BWS_ACCESS_TOKEN"; fi
-if [ -z "$TOKEN" ]; then echo "bws: no access token (set BWS_ACCESS_TOKEN or pass -t)" >&2; exit 1; fi
-if [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
+if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
 case "$ID" in
   f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
   wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
@@ -104,67 +104,86 @@ case "$ID" in
 esac
 """;
 
+    /// <summary>Runs body with BWS_ACCESS_TOKEN set to token (null = removed); restores the previous value.</summary>
+    private static async Task WithBwsAccessToken(string? token, Func<Task> body)
+    {
+        var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", token);
+        try
+        {
+            await body();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", previous);
+        }
+    }
+
     [Fact]
     public async Task EnvKeyedBank_RekeyedToDerivedKey_ReopensThroughFakeBwsWithDerivedKey()
     {
         InstallFakeBws();
-
-        // 1. Create the bank keyed with the env passphrase (no sidecar → env is the source).
-        var envFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider("env-passphrase"));
-        await using (var connection = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await WithBwsAccessToken(null, async () =>
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
-            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
+            // 1. Create the bank keyed with the env passphrase (no sidecar → env is the source).
+            var envFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider("env-passphrase"));
+            await using (var connection = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
 
-        // 2. Rekey env → derived (the config command's rekey step; sidecar not yet written, so the
-        //    resolver still resolves the env passphrase as the current key).
-        var rekeyFactory = new SqliteConnectionFactory(Options(), Resolver());
-        await rekeyFactory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
+            // 2. Rekey env → derived (the config command's rekey step; sidecar not yet written, so the
+            //    resolver still resolves the env passphrase as the current key).
+            var rekeyFactory = new SqliteConnectionFactory(Options(), Resolver());
+            await rekeyFactory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
-        // 3. The config command then persists the sidecar.
-        WriteSidecar();
+            // 3. The config command then persists the sidecar.
+            WriteSidecar();
 
-        // 4. Every later open resolves through the fake bws: real child process → provider → derived key.
-        var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
-        await using (var reopen = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken))
-        {
-            reopen.State.ShouldBe(ConnectionState.Open);
-            await using var check = reopen.CreateCommand();
-            check.CommandText = "SELECT count(*) FROM t";
-            (await check.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe(0L);
-        }
+            // 4. Every later open resolves through the fake bws: real child process → provider → derived key.
+            var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
+            await using (var reopen = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                reopen.State.ShouldBe(ConnectionState.Open);
+                await using var check = reopen.CreateCommand();
+                check.CommandText = "SELECT count(*) FROM t";
+                (await check.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe(0L);
+            }
 
-        // 5. Reopen again — the derived key keeps opening the bank.
-        await using var again = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
-        again.State.ShouldBe(ConnectionState.Open);
+            // 5. Reopen again — the derived key keeps opening the bank.
+            await using var again = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            again.State.ShouldBe(ConnectionState.Open);
+        });
     }
 
     [Fact]
     public async Task BankKeyedWithKeyA_FakeBwsServesDifferentKey_OpenFailsWithSqliteCode26()
     {
         InstallFakeBws();
-
-        // Bank keyed with the synthetic key (the §5.1 vector).
-        var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
-        await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await WithBwsAccessToken(null, async () =>
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
-            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
+            // Bank keyed with the synthetic key (the §5.1 vector).
+            var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
+            await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
 
-        // The fake bws now serves key2.pem — a valid key that derives to something else.
-        WriteSidecar(WrongKeySecretId);
-        var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
+            // The fake bws now serves key2.pem — a valid key that derives to something else.
+            WriteSidecar(WrongKeySecretId);
+            var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
 
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
-        {
-            await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            var ex = await Should.ThrowAsync<SqliteException>(async () =>
+            {
+                await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            });
+
+            ex.SqliteErrorCode.ShouldBe(26);
         });
-
-        ex.SqliteErrorCode.ShouldBe(26);
     }
 
     [Fact]
@@ -180,47 +199,48 @@ esac
     }
 
     [Fact]
-    public void FakeBwsExitsNonZero_ResolverThrowsBwsFailedWithStderr()
+    public async Task FakeBwsExitsNonZero_ResolverThrowsBwsFailedWithStderr()
     {
         InstallFakeBws();
-        WriteSidecar(UnknownSecretId);
+        await WithBwsAccessToken(null, async () =>
+        {
+            WriteSidecar(UnknownSecretId);
 
-        var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
+            var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
 
-        ex.Message.ShouldBe($"bws failed (exit 1): bws: secret not found: {UnknownSecretId}");
+            ex.Message.ShouldBe($"bws failed (exit 1): bws: secret not found: {UnknownSecretId}");
+            await Task.CompletedTask;
+        });
     }
 
     [Fact]
-    public void FakeBwsSleepsPastTimeout_RunnerThrowsTimeoutText()
+    public async Task FakeBwsSleepsPastTimeout_RunnerThrowsTimeoutText()
     {
         InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            var ex = Should.Throw<BwsInvocationException>(
+                () => new BwsProcessRunner(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
 
-        var ex = Should.Throw<BwsInvocationException>(
-            () => new BwsProcessRunner(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
-
-        ex.Message.ShouldBe("bws timed out after 2s");
+            ex.Message.ShouldBe("bws timed out after 2s");
+            await Task.CompletedTask;
+        });
     }
 
     [Fact]
     public async Task TokenFromBwsAccessTokenEnv_ResolvesAndOpensBank()
     {
         InstallFakeBws();
-        WriteSidecar();
-
-        var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
-        Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", KnownToken);
-        try
+        await WithBwsAccessToken(KnownToken, async () =>
         {
+            WriteSidecar();
+
             var factory = new SqliteConnectionFactory(Options(), Resolver());
 
             await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
             connection.State.ShouldBe(ConnectionState.Open);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", previous);
-        }
+        });
     }
 
     [Fact]
@@ -232,59 +252,56 @@ esac
             .Run(["secret", "get", SecretId], KnownToken, TimeSpan.FromSeconds(15));
 
         result.ExitCode.ShouldBe(0);
-        result.Stdout.Trim().ShouldBe(BuildPem(
+        result.Stdout.ShouldBe(BuildPem(
             Enumerable.Range(0, 32).Select(i => (byte)i).ToArray(),
             Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
     }
 
     [Fact]
-    public void BadToken_FakeBwsStderrSurfacedThroughResolver()
+    public async Task BadToken_FakeBwsStderrSurfacedThroughResolver()
     {
         InstallFakeBws();
-        WriteSidecar();
-
-        var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
-        Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", "definitely-wrong-token");
-        try
+        await WithBwsAccessToken("definitely-wrong-token", async () =>
         {
+            WriteSidecar();
+
             var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
 
             ex.Message.ShouldBe("bws failed (exit 1): bws: invalid access token");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", previous);
-        }
+            await Task.CompletedTask;
+        });
     }
 
     [Fact]
     public async Task FakeBwsEmitsGarbage_BankUnchangedAndMalformedErrorSurfaced()
     {
         InstallFakeBws();
-
-        // Bank keyed with the derived key (as if the config command had completed).
-        var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
-        await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await WithBwsAccessToken(null, async () =>
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
-            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
+            // Bank keyed with the derived key (as if the config command had completed).
+            var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
+            await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
 
-        // The sidecar now points at a secret whose value is not a key.
-        WriteSidecar(GarbageSecretId);
-        var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
+            // The sidecar now points at a secret whose value is not a key.
+            WriteSidecar(GarbageSecretId);
+            var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
 
-        var ex = await Should.ThrowAsync<MalformedPrivateKeyException>(async () =>
-        {
-            await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            var ex = await Should.ThrowAsync<MalformedPrivateKeyException>(async () =>
+            {
+                await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            });
+
+            ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
+
+            // The bank is untouched: it still opens with the derived key.
+            await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            untouched.State.ShouldBe(ConnectionState.Open);
         });
-
-        ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
-
-        // The bank is untouched: it still opens with the derived key.
-        await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
-        untouched.State.ShouldBe(ConnectionState.Open);
     }
 
     /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
