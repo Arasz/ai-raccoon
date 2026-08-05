@@ -31,6 +31,27 @@ public class MemoryPromptsTests
     }
 
     [Fact]
+    public void MemoryUsageGuide_TeachesMemoryFirstRetrievalLadder()
+    {
+        var guide = _prompts.MemoryUsageGuide();
+
+        guide.ShouldContain("Search memory first");
+        guide.ShouldContain("web search");
+        guide.ShouldContain("write the finding back");
+    }
+
+    [Fact]
+    public void MemoryUsageGuide_TeachesWatchUsage()
+    {
+        var guide = _prompts.MemoryUsageGuide();
+
+        guide.ShouldContain("memory_watch_add");
+        guide.ShouldContain("watch scope add");
+        guide.ShouldContain("memory_watch_status");
+        guide.ShouldContain("memory_watch_remove");
+    }
+
+    [Fact]
     public void WorkspaceConsolidationGuide_ListsTheRitualSteps()
     {
         var guide = _prompts.WorkspaceConsolidationGuide("ws-1", "acme");

@@ -111,7 +111,7 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
 
 | Prompt | Purpose |
 |---|---|
-| `memory-usage-guide` | Protocol: always pass `project_id`; when a workspace is active, write with its `workspace_id`; writes land in the project by default; promote cross-project knowledge via `memory_share`; search `scope=all` sees shared + project. |
+| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon watch scope add` + `enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
 | `workspace-consolidation-guide` | Ritual: list the outbox, promote durable facts, drop noise. |
 
 ## Contexts
