@@ -8,8 +8,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     Background re-watch loop: on a poll, load registrations; disabled projects keep their
 ///     registrations but start no checking (decision §10.3); enabled ones get a watcher + catch-up
-///     scan; removed or disabled-flipped registrations stop their watcher. StopAsync disposes
-///     every FileSystemWatcher (restart re-watch starts from persisted state on the next boot).
+///     scan; removed or disabled-flipped registrations stop their watcher. Restart re-watch starts from persisted state.
 /// </summary>
 public sealed partial class WatchHostedService : BackgroundService
 {

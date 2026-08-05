@@ -28,9 +28,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private const string BwsNotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
-    // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized: the env var is process-global.
-    private static readonly object EnvLock = new();
-
+    // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with ConfigVerbRunnerTests
+    // via TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -62,7 +61,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private static T WithEnvPassphrase<T>(string? value, Func<T> action)
     {
-        lock (EnvLock)
+        TestData.EnvVarGate.Wait();
+        try
         {
             var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
             try
@@ -74,6 +74,10 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             {
                 Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
             }
+        }
+        finally
+        {
+            TestData.EnvVarGate.Release();
         }
     }
 

@@ -54,11 +54,9 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     }
 
     /// <summary>
-    ///     Rekeys the bank to a new key (raw x'…' or passphrase). Runs on a DELETE-journal
-    ///     connection — SQLCipher rekey is unsupported in WAL (plan §3.3) — then verifies by
-    ///     reopening with the new key (SqliteException code 26 on mismatch). The current-key
-    ///     pool is drained first: pooled connections hold the bank open, which blocks the
-    ///     exclusive-access journal switch. Callers must not hold an open bank connection.
+    ///     Rekeys the bank to a new key (raw x'…' or passphrase) on a DELETE-journal connection —
+    ///     SQLCipher rekey is unsupported in WAL (plan §3.3) — then verifies by reopening. The
+    ///     current-key pool is drained first; callers must not hold an open bank connection.
     /// </summary>
     public async Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default)
     {

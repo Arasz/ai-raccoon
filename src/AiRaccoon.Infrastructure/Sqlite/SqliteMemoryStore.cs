@@ -264,8 +264,8 @@ public sealed class SqliteMemoryStore(
     /// <summary>
     ///     Removes every committed chunk of one source path and everything under it (a deleted
     ///     directory cascades to its subtree), plus the per-path watch fingerprints in the same
-    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale
-    ///     chunks. The watch registration survives.
+    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale chunks.
+    ///     The watch registration survives.
     /// </summary>
     public async Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)

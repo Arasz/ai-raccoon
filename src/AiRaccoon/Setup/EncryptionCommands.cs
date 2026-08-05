@@ -10,10 +10,8 @@ namespace AiRaccoon.Setup;
 
 /// <summary>
 ///     encryption bitwarden/show/unset handlers (plan §S3): bws presence check, interactive id
-///     collection with the owner defaults, per-run-only -t token, reachability validation, the
-///     rotation warning, the rekey→sidecar→settings persist order, the amendment-1 env-key
-///     retry leg for the unset crash window, and the unset rekey-back/recovery paths. The
-///     sidecar is the pre-open source of truth; the settings rows mirror it post-open (§4).
+///     collection with owner defaults, per-run-only -t token, reachability validation, and the
+///     rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
 /// </summary>
 internal static partial class ConfigCommands
 {

@@ -13,10 +13,10 @@ internal sealed record CliOptions(
     InstallScope? InstallScope);
 
 /// <summary>
-///     Parse outcome: options (null on help/version/errors), the verb command path (empty
-///     means run the server), the help/version flags, the collected error messages, and the
-///     raw parse result for rendering and value reads (help/errors go to the writer passed
-///     to <see cref="CliArgs.Render"/> — never to stdout).
+///     Parse outcome: options (null on help/version/errors), the verb command path (empty means
+///     run the server), the help/version flags, the collected error messages, and the raw parse
+///     result for rendering and value reads (help/errors go to the writer passed to
+///     <see cref="CliArgs.Render"/> — never to stdout).
 /// </summary>
 internal sealed record CliParseResult(
     CliOptions? Options,
@@ -30,8 +30,7 @@ internal sealed record CliParseResult(
 ///     The only type touching System.CommandLine: builds the verb-style config command tree
 ///     plus the launch-identity options, parses args, and renders help/errors/version through
 ///     a caller-supplied writer. A verb routes to ConfigCommands; no verb launches the MCP
-///     server. Secrets are never declared as options — the unknown-option parse error is the
-///     defense (they move through settings via the config commands' documented options).
+///     server. Secrets are never declared as options — the unknown-option parse error is the defense.
 /// </summary>
 internal static class CliArgs
 {

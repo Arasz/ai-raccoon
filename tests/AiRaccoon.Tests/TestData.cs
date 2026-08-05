@@ -4,6 +4,9 @@ namespace AiRaccoon.Tests;
 
 public static class TestData
 {
+    /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by ConfigVerbRunnerTests and ConfigCommandsEncryptionTests).</summary>
+    public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
+
     public static string CreateTempRoot(string prefix = "ai-raccoon-tests")
     {
         var root = Path.Combine(Path.GetTempPath(), prefix, Guid.NewGuid().ToString("N"));
