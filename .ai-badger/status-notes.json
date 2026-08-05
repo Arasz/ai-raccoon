@@ -18,5 +18,13 @@
     "sync.objectKey is SHARED across providers (never blanket-deleted); s3-only rows: endpoint/bucket/region/accessKey/secretKey; azure-only: connectionString/container.",
     "Malformed Azure connection string (ArgumentException/FormatException from BlobServiceClient ctor) maps to SyncNotConfiguredException (typed). Pathological container names can still throw ArgumentException at request time — accepted, documented in plan risk 12.",
     "Full-suite embedding/E2E flakes (Embeddings_*, WatchPipelineTests timing) are PRE-EXISTING on origin/main baseline — reproduced without the branch; not caused by sync changes."
+  ],
+  "sync-cloud-identity-creds": [
+    "R3 (owner ruling f:): sync --cli modes take NO token options and expect the user to be logged into az/aws CLI. Azure needs --account (the blob endpoint URI is built from it); s3 uses the plain default chain (no profile option — AWS_PROFILE env selects).",
+    "Azure no-login failure type is CredentialUnavailableException (probe 2026-08-05), NOT AuthenticationFailedException — both are mapped to SyncAuthFailedException; catch order: 404 first, then credential/auth types, then RequestFailedException 401/403, then HttpRequestException, then generic RequestFailedException.",
+    "AWS SDK v4 resolves the credential chain LAZILY: `new AmazonS3Client(config)` succeeds without credentials; the first call throws AmazonClientException. AmazonServiceException/AmazonClientException are siblings (no catch shadowing).",
+    "Raw HttpRequestException escaped both SDKs' typed exceptions (connection-refused case) and surfaced as untyped MCP 500 — now mapped to SyncNetworkException in both stores.",
+    "Malformed azure account name in --cli mode: Uri/BlobServiceClient ctor ArgumentException/FormatException -> SyncNotConfiguredException (same wrap as the connection-string path).",
+    "Worktree gotcha: the bundled ONNX model (src/AiRaccoon/Models/*.onnx) is GITIGNORED; a fresh worktree lacks it until copied, and the csproj wildcard copy evaluates at build time — build BEFORE the file exists silently skips the copy and all embedding/retrieval tests fail with 'model not found next to the tool'. Copy the model into the worktree before the full-suite gate (main checkout has it; mtime trick: build after the file is present)."
   ]
 }
