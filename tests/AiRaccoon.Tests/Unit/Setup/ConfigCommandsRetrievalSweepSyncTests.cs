@@ -331,6 +331,72 @@ public class ConfigCommandsRetrievalSweepSyncTests
     }
 
     [Fact]
+    public async Task SyncShow_Azure_PrintsProviderContainerAndRedactedConnectionString()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.objectKey"] = "bank.db"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: azure");
+        stdout.ShouldContain("container: memories");
+        stdout.ShouldContain("objectKey: bank.db");
+        stdout.ShouldContain("connectionString: set");
+        stdout.ShouldNotContain("connstr");
+    }
+
+    [Fact]
+    public async Task SyncShow_WithoutProviderRow_DefaultsToS3()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: s3");
+        stdout.ShouldContain("endpoint: http://s3.example.com");
+        stdout.ShouldContain("bucket: memories");
+    }
+
+    [Fact]
+    public async Task SyncShow_AzureMissingSecret_ShowsUnset()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.container"] = "memories"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: azure");
+        stdout.ShouldContain("container: memories");
+        stdout.ShouldContain("connectionString: unset");
+    }
+
+    [Fact]
     public async Task SyncShow_Configured_PrintsRedactedSecrets()
     {
         var store = new FakeConfigStore
@@ -349,6 +415,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var (exit, stdout, _) = await Run(["sync", "show"], store);
 
         exit.ShouldBe(0);
+        stdout.ShouldContain("provider: s3");
         stdout.ShouldContain("http://s3.example.com");
         stdout.ShouldContain("memories");
         stdout.ShouldContain("region: us-east-1");

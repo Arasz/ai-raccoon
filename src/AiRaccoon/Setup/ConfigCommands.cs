@@ -5,6 +5,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 
 namespace AiRaccoon.Setup;
@@ -370,13 +371,27 @@ internal static class ConfigCommands
         CancellationToken cancellationToken)
     {
         var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
-        if (!rows.TryGetValue(SyncSettingsKeys.Endpoint, out var endpoint))
+        if (rows.Count == 0)
         {
             await stdout.WriteLineAsync("sync not configured");
             return 0;
         }
 
-        await stdout.WriteLineAsync($"endpoint: {endpoint}");
+        // Resolved provider: row value or default s3 (R2 — unknown values behave as s3).
+        var provider = SyncProviderParser.Parse(rows.GetValueOrDefault(SyncSettingsKeys.Provider))
+            .ToString()
+            .ToLowerInvariant();
+        await stdout.WriteLineAsync($"provider: {provider}");
+        if (provider == "azure")
+        {
+            await stdout.WriteLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
+            await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
+            var connectionState = rows.ContainsKey(SyncSettingsKeys.ConnectionString) ? "set" : "unset";
+            await stdout.WriteLineAsync($"connectionString: {connectionState}");
+            return 0;
+        }
+
+        await stdout.WriteLineAsync($"endpoint: {rows.GetValueOrDefault(SyncSettingsKeys.Endpoint) ?? "(unset)"}");
         await stdout.WriteLineAsync($"bucket: {rows.GetValueOrDefault(SyncSettingsKeys.Bucket) ?? "(unset)"}");
         await stdout.WriteLineAsync($"region: {rows.GetValueOrDefault(SyncSettingsKeys.Region) ?? "(unset)"}");
         await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
