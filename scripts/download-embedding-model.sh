@@ -5,7 +5,7 @@
 # Default (onnx): the int8-quantized all-MiniLM-L6-v2 ONNX model (~23 MB) plus its
 # BERT vocab, pinned by SHA-256, into src/AiRaccoon/Models/ — the location packed
 # into the tool package and resolved at runtime via AppContext.BaseDirectory/Models
-# (env override: AIRACCOON_EMBEDDING_MODEL for a custom model path).
+# (custom model paths are configured via 'ai-raccoon model set local <path>' — the embedding.model settings row).
 #
 # Legacy (gguf): the Q5_K_M GGUF model used by the golden-retrieval harness reference
 # embedder (tests/Retrieval/assets bootstrap handles that copy on its own).
@@ -72,6 +72,5 @@ fi
 if [ "$MODEL" = "onnx" ]; then
   echo ""
   echo "bundled model ready — it ships inside the tool package (packed from src/AiRaccoon/Models)."
-  echo "custom path override: memory_configure(provider=\"local\", model=\"/path/to/model.onnx\")"
-  echo "                      or export AIRACCOON_EMBEDDING_MODEL=/path/to/model.onnx"
+  echo "custom path override: 'ai-raccoon model set local /path/to/model.onnx' (the embedding.model settings row)"
 fi

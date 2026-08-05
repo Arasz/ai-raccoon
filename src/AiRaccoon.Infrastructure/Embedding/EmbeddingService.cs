@@ -71,6 +71,15 @@ public sealed class EmbeddingService
         var modelPath = string.IsNullOrWhiteSpace(settings.Model)
             ? BundledModel.ResolveModelPath()
             : Path.GetFullPath(settings.Model);
+
+        // Fail fast on a missing/name-shaped path instead of a cryptic ONNX NoSuchFile error.
+        if (!File.Exists(modelPath))
+        {
+            throw new InvalidOperationException(
+                $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
+                "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
+        }
+
         return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath());
     }
 

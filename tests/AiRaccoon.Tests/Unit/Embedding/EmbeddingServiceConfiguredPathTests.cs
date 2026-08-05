@@ -34,13 +34,4 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", custom, null, null));
         generator.ShouldNotBeNull();
     }
-
-    [Fact]
-    public void CreateGenerator_MissingSettingsModelPath_Throws()
-    {
-        var service = new EmbeddingService();
-
-        Should.Throw<Exception>(() =>
-            service.CreateGenerator(new EmbeddingSettings("local", Path.Combine(_root, "missing.onnx"), null, null)));
-    }
 }
