@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-04T16:58:34Z",
+  "generated_at": "2026-08-05T20:55:46Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -1212,6 +1212,195 @@
       "status": "unknown",
       "url": "http://127.0.0.1:64342/stream",
       "tools": {}
+    },
+    {
+      "name": "plugin:github:github",
+      "status": "unreachable",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "tools": {}
+    },
+    {
+      "name": "plugin:playwright:playwright",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "plugin:microsoft-docs:microsoft-learn",
+      "status": "unknown",
+      "url": "https://learn.microsoft.com/api/mcp",
+      "tools": {}
+    },
+    {
+      "name": "plugin:terraform:terraform",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "plugin:dotnet-claude-kit:cwm-roslyn-navigator",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "plugin:dotnet-msbuild:binlog",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "plugin:aspire:context7",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "ai-raccoon",
+      "status": "ok",
+      "tools": {
+        "memory_write": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Persist a durable, project-scoped fact with its source path — one fact per entry, never raw chatter.",
+          "origin": "catalog"
+        },
+        "memory_search": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Search project/shared memory (scope=all, project, or shared) with 2-3 formulations before web or code search.",
+          "origin": "catalog"
+        },
+        "memory_list": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List entries in a project's memory bank, optionally filtered.",
+          "origin": "catalog"
+        },
+        "memory_stats": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Report bank size and entry counts for a project.",
+          "origin": "catalog"
+        },
+        "memory_share": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Promote a durable, cross-project entry to the shared tier — curated and never swept.",
+          "origin": "catalog"
+        },
+        "memory_delete": {
+          "tags": [
+            "write",
+            "unsafe"
+          ],
+          "intent": "Delete a specific memory entry by id.",
+          "origin": "catalog"
+        },
+        "memory_delete_context": {
+          "tags": [
+            "write",
+            "unsafe"
+          ],
+          "intent": "Delete entries by context; requires full access mode.",
+          "origin": "catalog"
+        },
+        "memory_ingest_file": {
+          "tags": [
+            "write",
+            "files",
+            "batch"
+          ],
+          "intent": "Bulk-load a file's contents into project memory as entries.",
+          "origin": "catalog"
+        },
+        "memory_ingest_directory": {
+          "tags": [
+            "write",
+            "files",
+            "batch"
+          ],
+          "intent": "Bulk-load every supported file under a directory into project memory.",
+          "origin": "catalog"
+        },
+        "memory_embed_pending": {
+          "tags": [
+            "run",
+            "batch",
+            "slow"
+          ],
+          "intent": "Embed pending entries; omit the limit argument to process all.",
+          "origin": "catalog"
+        },
+        "memory_workspace_begin": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Start an isolated workspace outbox for in-progress notes.",
+          "origin": "catalog"
+        },
+        "memory_workspace_status": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List what the active workspace outbox holds.",
+          "origin": "catalog"
+        },
+        "memory_workspace_consolidate": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Finish a workspace: keep durable facts, promote cross-project ones with memory_share, drop the rest.",
+          "origin": "catalog"
+        },
+        "memory_workspace_discard": {
+          "tags": [
+            "write",
+            "unsafe"
+          ],
+          "intent": "Discard an active workspace and its outbox without consolidating.",
+          "origin": "catalog"
+        },
+        "memory_sweep": {
+          "tags": [
+            "write",
+            "batch"
+          ],
+          "intent": "Remove old, low-rated project entries; shared entries are exempt.",
+          "origin": "catalog"
+        },
+        "memory_sync": {
+          "tags": [
+            "run"
+          ],
+          "intent": "Exchange memory snapshots with cloud storage when configured.",
+          "origin": "catalog"
+        },
+        "memory_watch_add": {
+          "tags": [
+            "write",
+            "files"
+          ],
+          "intent": "Register an absolute path to mirror into memory; the initial scan runs in the background.",
+          "origin": "catalog"
+        },
+        "memory_watch_status": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Report watch state (scanning/healthy/retrying/stopped) for a project; empty when none.",
+          "origin": "catalog"
+        },
+        "memory_watch_remove": {
+          "tags": [
+            "write",
+            "files"
+          ],
+          "intent": "Stop mirroring a watched path; a no-op when the path is not watched.",
+          "origin": "catalog"
+        }
+      }
     }
   ]
 }
