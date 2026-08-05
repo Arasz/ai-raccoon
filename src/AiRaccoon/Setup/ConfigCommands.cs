@@ -38,6 +38,7 @@ internal static class ConfigCommands
                 ["sweep", "threshold", "set"] => await SweepThresholdSetAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["sweep", "show"] => await SweepShowAsync(store, stdout, cancellationToken),
                 ["sync", "add", "s3"] => await SyncAddS3Async(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["sync", "add", "azure"] => await SyncAddAzureAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
                 ["sync", "remove"] => await SyncRemoveAsync(store, stdout, cancellationToken),
                 ["sync", "show"] => await SyncShowAsync(store, stdout, cancellationToken),
                 ["watch", "enable"] or ["watch", "disable"] => await WatchSetEnabledAsync(parseResult, store, stdout, stderr, cancellationToken),
@@ -306,6 +307,40 @@ internal static class ConfigCommands
         await store.SetSettingAsync(SyncSettingsKeys.SecretKey, secretKey, cancellationToken);
 
         await stdout.WriteLineAsync($"sync configured: {url} bucket {bucket}");
+        return 0;
+    }
+
+    private static async Task<int> SyncAddAzureAsync(ParseResult parseResult, IMemoryStore store,
+        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken)
+    {
+        var container = parseResult.GetValue<string>("container")!;
+        var objectKey = Optional(parseResult, "--object-key");
+
+        // Secrets are entered interactively (single-channel ruling; never on argv).
+        // Prompt + validate BEFORE any settings write: an abort must leave the current
+        // provider untouched (partial writes would spread via the settings merge).
+        await stderr.WriteAsync("Azure Blob connection string (empty aborts): ");
+        var connectionString = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            await stderr.WriteLineAsync("ai-raccoon: connection string required — sync not configured");
+            return 1;
+        }
+
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "azure", cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.ConnectionString, connectionString, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.Container, container, cancellationToken);
+        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
+        foreach (var key in new[]
+                 {
+                     SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
+                     SyncSettingsKeys.AccessKey, SyncSettingsKeys.SecretKey
+                 })
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
+
+        await stdout.WriteLineAsync($"sync configured: azure container {container}");
         return 0;
     }
 

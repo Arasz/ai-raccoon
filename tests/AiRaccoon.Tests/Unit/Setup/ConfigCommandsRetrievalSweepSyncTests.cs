@@ -195,6 +195,80 @@ public class ConfigCommandsRetrievalSweepSyncTests
     }
 
     [Fact]
+    public async Task SyncAddAzure_WritesRows_AndClearsS3Rows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.region"] = "us-east-1",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1",
+                ["sync.objectKey"] = "old.db"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(
+            ["sync", "add", "azure", "memories", "--object-key", "bank.db"], store,
+            new StringReader("connstr\n"));
+
+        exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("azure");
+        store.Settings["sync.connectionString"].ShouldBe("connstr");
+        store.Settings["sync.container"].ShouldBe("memories");
+        // objectKey is shared across providers: upserted, never blanket-deleted.
+        store.Settings["sync.objectKey"].ShouldBe("bank.db");
+        store.Settings.ShouldNotContainKey("sync.endpoint");
+        store.Settings.ShouldNotContainKey("sync.bucket");
+        store.Settings.ShouldNotContainKey("sync.region");
+        store.Settings.ShouldNotContainKey("sync.accessKey");
+        store.Settings.ShouldNotContainKey("sync.secretKey");
+        stdout.ShouldContain("azure container memories");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_EmptyStdin_AbortsWithoutPersistingAnything()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories"], store, new StringReader(""));
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("connection string required");
+        // Nothing written or deleted: the s3 install stays untouched (no provider flip).
+        store.Settings.ShouldNotContainKey("sync.provider");
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        store.Settings.ShouldNotContainKey("sync.container");
+        store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
+        store.Settings["sync.bucket"].ShouldBe("memories");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_WithoutObjectKey_ClearsStaleObjectKeyRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.objectKey"] = "old.db" }
+        };
+
+        await Run(["sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
+
+        store.Settings["sync.container"].ShouldBe("memories");
+        store.Settings.ShouldNotContainKey("sync.objectKey");
+    }
+
+    [Fact]
     public async Task SyncRemove_DeletesAllSyncRows()
     {
         var store = new FakeConfigStore
