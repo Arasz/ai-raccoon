@@ -1,0 +1,17 @@
+namespace AiRaccoon.Infrastructure.Encryption;
+
+/// <summary>Outcome of a bws process invocation.</summary>
+public sealed record BwsResult(int ExitCode, string Stdout, string Stderr);
+
+/// <summary>
+///     Runs the bws CLI. Injectable so callers can substitute a fake runner, and the executable
+///     path is constructor-injectable so tests can point at an absolute fake-bws path (no PATH mutation).
+/// </summary>
+public interface IBwsProcessRunner
+{
+    /// <summary>
+    ///     Runs <c>bws [args]</c>, appending <c>-t &lt;token&gt;</c> when a token is given. The child
+    ///     inherits the environment, so BWS_ACCESS_TOKEN flows through at server start.
+    /// </summary>
+    BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout);
+}

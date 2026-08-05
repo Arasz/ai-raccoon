@@ -45,6 +45,9 @@
         <ReqnrollFeatureFiles Include="..\..\docs\features\file-watcher\file-watcher.feature">
             <Link>BDD\features-file-watcher\file-watcher.feature</Link>
         </ReqnrollFeatureFiles>
+        <ReqnrollFeatureFiles Include="..\..\docs\features\encryption-bitwarden\encryption-bitwarden.feature">
+            <Link>BDD\features-encryption-bitwarden\encryption-bitwarden.feature</Link>
+        </ReqnrollFeatureFiles>
     </ItemGroup>
 
     <ItemGroup>

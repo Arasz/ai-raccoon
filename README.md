@@ -96,7 +96,21 @@ ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
 ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
+ai-raccoon encryption bitwarden [-t <token>]
+ai-raccoon encryption show                     ai-raccoon encryption unset
 ```
+
+**Encryption key sources.** The bank's encryption key comes from `AIRACCOON_DB_PASSPHRASE`
+(env, default) or — via `encryption bitwarden` — from a Bitwarden Secrets Manager secret
+fetched with the `bws` CLI: the secret holds an unencrypted ed25519 SSH private key whose
+seed is derived into the raw SQLCipher key (`SHA-256("ai-raccoon-db-key/v1" ‖ seed)`).
+`encryption bitwarden` checks `bws` presence (install guidance when missing), collects the
+project id + secret id (defaults: project `613165e6-7947-49e0-889b-b49d007c5b85`, secret
+`f1d3c8e5-5391-4aef-8611-b49d007c8702`), accepts an optional `-t <token>` for runs without
+`BWS_ACCESS_TOKEN` (used for that run only, never persisted), validates reachability, warns
+that rotating the secret in the Bitwarden UI without `PRAGMA rekey` bricks the bank, then
+rekeys the bank and persists the source. The server refuses to start loudly when the
+configured source cannot produce the key (bws missing, network failure, wrong key).
 
 Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
 `sync add s3`, or the Azure Blob connection string via `sync add azure`) are persisted

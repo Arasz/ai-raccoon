@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Options;
+using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -19,7 +20,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
-    private string BankDirectory =>
+    private static string BankDirectoryFor(InfrastructureOptions options) =>
         options.Scope switch
         {
             InstallScope.User => options.DataRoot,
@@ -28,30 +29,98 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
                 "Unknown install scope.")
         };
 
-    public string BankPath => Path.Combine(BankDirectory, "memory.db");
+    /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
+    public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
 
-    public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
+    public string BankPath => BankPathFor(options);
+
+    public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>
+        await OpenBankWithKeyAsync(keyProvider.GetPassphrase(), cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
+    public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(BankDirectory);
+        Directory.CreateDirectory(BankDirectoryFor(options));
 
-        var passphrase = keyProvider.GetPassphrase();
-        var csb = new SqliteConnectionStringBuilder
-        {
-            DataSource = BankPath,
-            Mode = SqliteOpenMode.ReadWriteCreate
-        };
-        if (passphrase is not null)
-        {
-            csb.Password = passphrase;
-        }
-
-        var connection = new SqliteConnection(csb.ToString());
+        var connection = new SqliteConnection(BuildConnectionString(key));
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
 
         connection.EnableExtensions();
         // vec0 ships in the NuGet package — always available, no provisioning.
         connection.LoadVector();
         await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        return connection;
+    }
+
+    /// <summary>
+    ///     Rekeys the bank to a new key (raw x'…' or passphrase). Runs on a DELETE-journal
+    ///     connection — SQLCipher rekey is unsupported in WAL (plan §3.3) — then verifies by
+    ///     reopening with the new key (SqliteException code 26 on mismatch). The current-key
+    ///     pool is drained first: pooled connections hold the bank open, which blocks the
+    ///     exclusive-access journal switch. Callers must not hold an open bank connection.
+    /// </summary>
+    public async Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(newKey);
+
+        var currentKey = keyProvider.GetPassphrase();
+        SqliteConnection.ClearPool(new SqliteConnection(BuildConnectionString(currentKey)));
+
+        await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))
+        {
+            // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password
+            // (plan §5.2, measured F3) — it escapes both raw x'…' keys and passphrases.
+            await using var quoteCommand = connection.CreateCommand();
+            quoteCommand.CommandText = "SELECT quote($newKey)";
+            quoteCommand.Parameters.AddWithValue("$newKey", newKey);
+            var quoted = (string)(await quoteCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+
+            await using var rekeyCommand = connection.CreateCommand();
+            rekeyCommand.CommandText = $"PRAGMA rekey = {quoted}";
+            await rekeyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // Verify: the bank must reopen with the new key, or the rekey did not land.
+        await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    private string BuildConnectionString(string? key)
+    {
+        var csb = new SqliteConnectionStringBuilder
+        {
+            DataSource = BankPath,
+            Mode = SqliteOpenMode.ReadWriteCreate
+        };
+        if (key is not null)
+        {
+            csb.Password = key;
+        }
+
+        return csb.ToString();
+    }
+
+    private async Task<SqliteConnection> OpenRekeyConnectionAsync(string? key, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(BankDirectoryFor(options));
+
+        var csb = new SqliteConnectionStringBuilder
+        {
+            DataSource = BankPath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false
+        };
+        if (key is not null)
+        {
+            csb.Password = key;
+        }
+
+        var connection = new SqliteConnection(csb.ToString());
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var journal = connection.CreateCommand();
+        journal.CommandText = "PRAGMA journal_mode=DELETE";
+        await journal.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         return connection;
     }

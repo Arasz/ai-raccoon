@@ -15,6 +15,10 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         scenarioContext.ScenarioContainer.RegisterInstanceAs(ctx);
         scenarioContext.ScenarioContainer.RegisterInstanceAs<MemoryFeatureContext>(ctx);
         scenarioContext.ScenarioContainer.RegisterInstanceAs<IMemoryStore>(ctx.Store);
+
+        // The encryption-bitwarden feature's context (real resolver-backed bank + fake-bws
+        // runner); registered under its own type — the native-memory registrations stay as-is.
+        scenarioContext.ScenarioContainer.RegisterInstanceAs(new EncryptionBitwardenFeatureContext());
     }
 
     [AfterScenario]
@@ -27,5 +31,6 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         }
 
         ctx.Dispose();
+        scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>().Dispose();
     }
 }

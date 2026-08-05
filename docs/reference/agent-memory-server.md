@@ -185,7 +185,19 @@ ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
 ai-raccoon watch concurrency {project-id|*} {1..16}
 ai-raccoon watch list
+ai-raccoon encryption bitwarden [-t <token>]
+ai-raccoon encryption show                      ai-raccoon encryption unset
 ```
+
+**Encryption key sources.** Default: `AIRACCOON_DB_PASSPHRASE` (env). Alternative:
+`encryption bitwarden` fetches an unencrypted ed25519 SSH private key from a Bitwarden
+Secrets Manager secret via the `bws` CLI and derives the raw SQLCipher key
+(`SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'`, no KDF). The command checks
+`bws` presence (install guidance when missing), collects project id + secret id
+(owner defaults: `613165e6-7947-49e0-889b-b49d007c5b85` / `f1d3c8e5-5391-4aef-8611-b49d007c8702`),
+accepts a per-run-only `-t <token>`, warns that rotating the secret in the Bitwarden UI
+without `PRAGMA rekey` bricks the bank, then rekeys + persists. Server startup refuses
+loudly when the configured source cannot produce the key.
 
 The backend is selected by the `sync.provider` settings row (default `s3`): `sync add
 s3` writes `provider=s3`; `sync add azure` writes `provider=azure`. Each clears the

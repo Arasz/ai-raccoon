@@ -1,0 +1,77 @@
+{
+    "name": "encryption-bitwarden",
+    "title": "Encryption key sources — env (default, kept) + Bitwarden Secrets Manager via bws CLI",
+    "status": "agreed",
+    "specFile": "docs/features/encryption-bitwarden/encryption-bitwarden.feature",
+    "gate": {
+        "ownerGateReview": {
+            "form": "owner rulings f: 2026-08-05 (docs/work/2026-08-05-db-passphrase-options.md 'Owner decisions' section, superseding report F28)",
+            "feedback": "docs/work/2026-08-05-db-passphrase-options.md",
+            "answered": 9,
+            "open": 0,
+            "note": "All decisions ruled inline by the owner during the 2026-08-05 research follow-ups: env kept, bws CLI (not SDK), SSH-key secret value with measured derivation, refuse-to-start offline, rotation warning, raw-key file removed."
+        }
+    },
+    "cards": [
+        { "id": "D1", "card": "Env var fate", "ruling": "AIRACCOON_DB_PASSPHRASE STAYS as the default key source (zero-setup path; the single-channel ruling's documented exception)." },
+        { "id": "D2", "card": "Bitwarden integration surface", "ruling": "bws CLI, not the SDK: provider shells out to 'bws secret get <id>' at bank open; SDK caveats (beta, sync API, custom license, 7MB native binary) are moot." },
+        { "id": "D3", "card": "Secret value semantics", "ruling": "The secret's VALUE is an unencrypted ed25519 SSH private key; derived with SHA-256(\"ai-raccoon-db-key/v1\" || seed) -> x'<64hex>' raw SQLCipher key (no KDF, measured). RSA and passphrase-protected keys rejected." },
+        { "id": "D4", "card": "Offline behavior", "ruling": "Refuse to start, loudly; no cached key copy." },
+        { "id": "D5", "card": "Rotation", "ruling": "Rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — the config command warns." },
+        { "id": "D6", "card": "Config flow", "ruling": "encryption bitwarden: (a) bws presence check with install guidance error; (b) collect project id + secret id (owner defaults 613165e6-7947-49e0-889b-b49d007c5b85 / f1d3c8e5-5391-4aef-8611-b49d007c8702); (c) optional -t <token> for runs without BWS_ACCESS_TOKEN — passed for that run only, never persisted." },
+        { "id": "D7", "card": "Raw-key file option", "ruling": "REMOVED. Provider family = env + bitwarden; keychain/cloud stay documented future sources." },
+        { "id": "D8", "card": "Source surface", "ruling": "Inferred (flag at gate): encryption show prints the current source; encryption unset returns to the env default." },
+        { "id": "D9", "card": "Provider wiring", "ruling": "IEncryptionKeyProvider becomes a source-selectable family; selection persisted in the settings table (encryption.source, encryption.bitwarden.projectId, encryption.bitwarden.secretId) — settings rows are read pre-open from the bank header path only where safe; the source SELECTION lives outside the encrypted content (settings table is inside the bank — the selection is read AFTER open from settings; the env path is the pre-open bootstrap, bitwarden selection must be resolvable pre-open, so the source selection is stored in a small unencrypted sidecar or derived from bank presence — implementation decision flagged)." }
+    ],
+    "scope": {
+        "in": [
+            "IEncryptionKeyProvider source family: env (default, kept) + bitwarden (bws CLI)",
+            "BitwardenEncryptionKeyProvider: runs 'bws secret get <secret-id>' (optionally with -t token), parses the ed25519 private key, derives SHA-256(\"ai-raccoon-db-key/v1\" || seed) -> x'<64hex>', returns it through the existing Password channel",
+            "Reject RSA and passphrase-protected (encrypted) private keys with clear errors",
+            "ai-raccoon encryption bitwarden: bws presence check (actionable install/token error when missing), interactive collection of project id + secret id (owner defaults), optional -t <token> never persisted, reachability validation, rotation-trap warning",
+            "ai-raccoon encryption show: prints the current source + bitwarden secret id when active",
+            "ai-raccoon encryption unset: returns to the env default",
+            "Refuse to start when the bitwarden source cannot produce a key (missing bws, network failure, bad secret) — loud, actionable error",
+            "Env path unchanged: AIRACCOON_DB_PASSPHRASE continues to work as today"
+        ],
+        "out": [
+            "Bitwarden SDK package (Bitwarden.Secrets.Sdk) — bws CLI only",
+            "Raw-key file option (removed per D7)",
+            "Keychain / SSH-key-direct / Azure KV / AWS SM providers (documented future sources, not implemented)",
+            "Token persistence of any kind (the -t token is per-run only; BWS_ACCESS_TOKEN stays the user's own env config)",
+            "Cached/offline key copies (refuse-to-start per D4)"
+        ]
+    },
+    "nonFunctional": [
+        "No new NuGet package for Bitwarden — the bws binary is the integration surface",
+        "Secrets never on argv beyond the user's own -t flag, and never persisted by ai-raccoon",
+        "Refuse-to-start semantics: the bank cannot open without the configured source's key; failures are loud and actionable",
+        "Clean layering: derivation (pure crypto from the SSH key seed) in Core; bws process invocation in Infrastructure; config command in the CLI layer",
+        "TDD mandatory: scenario + unit tests for derivation (deterministic, wrong-key rejection), provider errors, config flow",
+        "TreatWarningsAsErrors; dotnet build + dotnet test green"
+    ],
+    "constraints": {
+        "packages": [],
+        "targets": {
+            "feature": "docs/features/encryption-bitwarden/encryption-bitwarden.feature",
+            "manifest": "docs/features/encryption-bitwarden/spec.json",
+            "implementation": "src/AiRaccoon.Core (derivation) + src/AiRaccoon.Infrastructure/Sqlite (BitwardenEncryptionKeyProvider) + src/AiRaccoon/Setup (encryption commands)",
+            "tests": "tests/AiRaccoon.Tests (derivation unit tests, provider tests with a fake bws, config command tests)"
+        },
+        "risks": [
+            "The source SELECTION must be resolvable pre-DB-open (the bank is encrypted; the settings table is inside it) — the bitwarden selection cannot live only in the settings table; a small unencrypted sidecar next to the bank or env override is required. Implementation must decide and pin this (D9).",
+            "Rotation trap: web-UI rotation without PRAGMA rekey bricks the bank — warning at config time is the mitigation",
+            "bws output parsing: secret value format must be validated as an OpenSSH ed25519 private key (RFC 8709) before derivation; malformed values must error clearly",
+            "Passphrase-protected keys: detection via the OpenSSH 'bcrypt' cipher field — must be rejected, not mis-derived",
+            "The measured derivation label ('ai-raccoon-db-key/v1') is a stability contract — changing it silently breaks existing banks"
+        ]
+    },
+    "deferred": [
+        {
+            "id": "D10",
+            "decision": "Keychain / SSH-key-direct / Azure Key Vault / AWS Secrets Manager providers",
+            "fallback": "Documented future sources behind the same IEncryptionKeyProvider interface (research: docs/work/2026-08-05-db-passphrase-options.md + ssh-and-cloud-vaults.md)",
+            "tag": "deferred"
+        }
+    ]
+}
