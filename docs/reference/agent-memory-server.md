@@ -150,9 +150,9 @@ Only one environment variable is read:
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
 environment variables are not read for runtime configuration (single-channel ruling).
-Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table
-(encrypted at rest when a passphrase is set), never in the environment and never in
-tracked files.
+Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are
+stored in the settings table (encrypted at rest when a passphrase is set), never in the
+environment and never in tracked files.
 
 ## Command-line options
 

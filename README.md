@@ -62,8 +62,9 @@ Only one environment variable is read:
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table of the install's `memory.db` and is changed
 through the `ai-raccoon` verb commands — the CLI is the single config channel. Secrets
-(OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table (encrypted at
-rest when a passphrase is set), never in the environment and never in tracked files.
+(OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in
+the settings table (encrypted at rest when a passphrase is set), never in the environment
+and never in tracked files.
 
 ## Command-line options
 

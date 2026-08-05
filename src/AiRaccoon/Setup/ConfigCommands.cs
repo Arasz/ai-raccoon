@@ -300,6 +300,13 @@ internal static class ConfigCommands
             return 1;
         }
 
+        // R1: one active provider — drop the other backend's rows first so a crash between
+        // delete and write can't leave stale secrets behind (settings merge propagates LWW).
+        foreach (var key in new[] { SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container })
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
+
         // Writing provider=s3 makes the switch real: without it the factory would read
         // provider=azure and no azure rows → NullCloudStore → silently dead sync.
         await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", cancellationToken);
@@ -309,10 +316,6 @@ internal static class ConfigCommands
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.AccessKey, accessKey, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.SecretKey, secretKey, cancellationToken);
-        foreach (var key in new[] { SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container })
-        {
-            await store.DeleteSettingAsync(key, cancellationToken);
-        }
 
         await stdout.WriteLineAsync($"sync configured: {url} bucket {bucket}");
         return 0;
@@ -335,10 +338,8 @@ internal static class ConfigCommands
             return 1;
         }
 
-        await store.SetSettingAsync(SyncSettingsKeys.Provider, "azure", cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.ConnectionString, connectionString, cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Container, container, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
+        // R1: one active provider — drop the other backend's rows first so a crash between
+        // delete and write can't leave stale secrets behind (settings merge propagates LWW).
         foreach (var key in new[]
                  {
                      SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
@@ -347,6 +348,11 @@ internal static class ConfigCommands
         {
             await store.DeleteSettingAsync(key, cancellationToken);
         }
+
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "azure", cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.ConnectionString, connectionString, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.Container, container, cancellationToken);
+        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
 
         await stdout.WriteLineAsync($"sync configured: azure container {container}");
         return 0;
@@ -377,12 +383,10 @@ internal static class ConfigCommands
             return 0;
         }
 
-        // Resolved provider: row value or default s3 (R2 — unknown values behave as s3).
-        var provider = SyncProviderParser.Parse(rows.GetValueOrDefault(SyncSettingsKeys.Provider))
-            .ToString()
-            .ToLowerInvariant();
-        await stdout.WriteLineAsync($"provider: {provider}");
-        if (provider == "azure")
+        // R2 — unknown values route as s3; the raw row is printed so a typo is diagnosable.
+        var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
+        await stdout.WriteLineAsync($"provider: {rawProvider}");
+        if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
         {
             await stdout.WriteLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
             await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");

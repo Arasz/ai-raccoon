@@ -423,4 +423,26 @@ public class ConfigCommandsRetrievalSweepSyncTests
         stdout.ShouldNotContain("ak1");
         stdout.ShouldNotContain("sk1");
     }
+
+    [Fact]
+    public async Task SyncShow_TypoProviderRow_PrintsRawValue_AndRoutesFieldsAsS3()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "minio",
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: minio");
+        stdout.ShouldContain("endpoint: http://s3.example.com");
+    }
 }

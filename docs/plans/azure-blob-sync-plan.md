@@ -235,8 +235,8 @@ single-active-provider ruling enforced.
   `--sync-connection-string` automatically).
 - Modify: `src/AiRaccoon/Setup/ConfigCommands.cs` — new `SyncAddAzureAsync` (container arg,
   interactive connection-string prompt mirroring `SyncAddS3Async`; writes `provider=azure`,
-  `connectionString`, `container`, upsert/delete `objectKey`; deletes the 6 s3 rows);
-  `SyncAddS3Async` additionally deletes the 3 azure rows and writes `provider=s3`;
+  `connectionString`, `container`, upsert/delete `objectKey`; deletes the 5 s3-only rows);
+  `SyncAddS3Async` additionally deletes the 2 azure-only rows and writes `provider=s3`;
   `SyncRemoveAsync` → prefix-delete over `sync.*`; `SyncShowAsync` → provider-resolved display
   with `connectionString` redacted ("set"/"unset").
 - Modify: `tests/AiRaccoon.Tests/Unit/Setup/CliArgsTests.cs` — add
