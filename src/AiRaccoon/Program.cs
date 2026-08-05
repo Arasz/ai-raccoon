@@ -18,12 +18,14 @@ var config = ServerConfig.Build(parsed.Options);
 if (parsed.CommandPath.Length > 0)
 {
     // Config verbs run as one-shot processes against the bank (single config channel);
-    // they share the server's bank resolution so --data-root/--install-scope apply.
-    var store = new SqliteMemoryStore(
-        new SqliteConnectionFactory(config.Options, new EncryptionKeyResolver(
-            config.Options, new EnvEncryptionKeyProvider(), new BwsProcessRunner())),
-        TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
-    return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, Console.Out, Console.Error, Console.In);
+    // they share the server's bank resolution so --data-root/--install-scope apply. The
+    // bank factory + bws runner are handed to the config commands for the encryption verbs.
+    var bws = new BwsProcessRunner();
+    var bank = new SqliteConnectionFactory(config.Options, new EncryptionKeyResolver(
+        config.Options, new EnvEncryptionKeyProvider(), bws));
+    var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+    return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, Console.Out, Console.Error,
+        Console.In, bank: bank, bws: bws);
 }
 
 var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs

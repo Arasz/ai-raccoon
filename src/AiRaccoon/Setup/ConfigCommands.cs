@@ -5,6 +5,8 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Encryption;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 
 namespace AiRaccoon.Setup;
@@ -15,10 +17,11 @@ namespace AiRaccoon.Setup;
 ///     returns the process exit code. User-run commands get no access-tier checks; errors
 ///     go to stderr, results to stdout.
 /// </summary>
-internal static class ConfigCommands
+internal static partial class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default)
+        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
+        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null)
     {
         try
         {
@@ -46,6 +49,9 @@ internal static class ConfigCommands
                 ["watch", "scope", "list"] => await WatchScopeListAsync(parseResult, store, stdout, cancellationToken),
                 ["watch", "concurrency"] => await WatchConcurrencyAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
+                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, cancellationToken),
+                ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, cancellationToken),
+                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

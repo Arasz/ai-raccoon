@@ -36,7 +36,7 @@ internal static class CliArgs
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    private static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch"];
+    private static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"];
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
@@ -49,6 +49,7 @@ internal static class CliArgs
         root.Add(SweepCommand());
         root.Add(SyncCommand());
         root.Add(WatchCommand());
+        root.Add(EncryptionCommand());
         return root;
     }
 
@@ -240,6 +241,20 @@ internal static class CliArgs
         sync.Add(new Command("remove", "Back to default: sync off"));
         sync.Add(new Command("show", "Shows the sync configuration (keys redacted)"));
         return sync;
+    }
+
+    private static Command EncryptionCommand()
+    {
+        var encryption = new Command("encryption", "Bank encryption source configuration");
+        var bitwarden = new Command("bitwarden",
+            "Configures Bitwarden Secrets Manager as the bank key source (interactive ids; rekeys the bank)")
+        {
+            new Option<string>("-t") { Description = "access token for this run only — never persisted; defaults to BWS_ACCESS_TOKEN", HelpName = "token" }
+        };
+        encryption.Add(bitwarden);
+        encryption.Add(new Command("show", "Shows the current encryption source"));
+        encryption.Add(new Command("unset", "Returns to the env default (rekeys the bank when AIRACCOON_DB_PASSPHRASE is set)"));
+        return encryption;
     }
 
     private static Command WatchCommand()
