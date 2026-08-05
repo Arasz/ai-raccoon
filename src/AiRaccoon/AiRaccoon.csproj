@@ -16,8 +16,14 @@
         <!-- MCP serverInfo.version reads AssemblyVersion (numeric-only); the version flag
              reads InformationalVersion. Both must report the real version (review R7). -->
         <AssemblyVersion>0.1.0</AssemblyVersion>
-        <PackageTags>AI; MCP; server; stdio; http; sqlite; agent; memory; vector; rag</PackageTags>
-        <Description>An MCP server that will expose memory API for your agent</Description>
+        <PackageTags>ai mcp mcp-server model-context-protocol agent agents agent-memory memory knowledge knowledge-base server dotnet-tool global-tool tool cli sqlite vector vector-search embeddings semantic-search hybrid-search search retrieval rag llm stdio http</PackageTags>
+        <Authors>Rafał Araszkiewicz</Authors>
+        <Copyright>Copyright (c) 2026 Rafał Araszkiewicz</Copyright>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/Arasz/ai-raccoon</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/Arasz/ai-raccoon</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <Description>An MCP server that gives AI agents persistent, project-scoped memory: a memory bank over sqlite-memory with hybrid vector+BM25 search, workspace sandboxes, a shared promotion tier, and optional S3/Azure sync.</Description>
     </PropertyGroup>
 
     <!-- Self-contained single-file publishing lives in Properties/PublishProfiles/

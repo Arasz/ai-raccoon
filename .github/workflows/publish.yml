@@ -1,0 +1,53 @@
+name: publish
+
+# Manual, human-gated publish to nuget.org via Trusted Publishing (OIDC — no API
+# key stored in the repo). The push job runs under the `production` environment:
+# create it in Settings > Environments with yourself as required reviewer, so the
+# push waits for a manual Approve. On nuget.org (Account > Trusted Publishing)
+# create a policy for this repo: workflow file `publish.yml`, environment
+# `production`, and set the NUGET_USER secret to the nuget.org username.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # One job per RID: PackAsTool emits a tool shell plus a per-RID payload
+        # package, and both must be pushed or `dotnet tool install` fails. The
+        # shell package is identical across RIDs — push uses --skip-duplicate.
+        rid: [win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack (${{ matrix.rid }})
+        run: dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} -o artifacts --nologo
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nupkg-${{ matrix.rid }}
+          path: artifacts/*.nupkg
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # enable GitHub OIDC token issuance for this job
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - name: Push to nuget.org
+        run: dotnet nuget push "artifacts/**/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
