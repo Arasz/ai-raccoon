@@ -267,7 +267,7 @@ ai-raccoon watch scope add|remove|list {project-id|*} {path}   # allowlist entri
 ai-raccoon watch concurrency {project-id|*} {1..16}   # parallel digests (default 4)
 ai-raccoon watch list                               # config per target (block format: target: <id>  enabled: ..  concurrency: ..  scope:, one path per line, (none) when empty)
 ai-raccoon watch registered [{project-id}]          # persisted registrations (project, path, registered, lastChange) — live state is on memory_watch_status
-ai-raccoon watch remove {project-id|*}              # deletes a target's config rows (e.g. a row named after a file, written by an unquoted *)
+ai-raccoon watch remove {project-id|*}              # deletes a target's config rows ('*' clears only the global config; remove each file-name row individually, e.g. one written by an unquoted *)
 ```
 
 Watching is **disabled until enabled**; `memory_watch_add` only accepts paths inside an

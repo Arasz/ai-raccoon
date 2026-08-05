@@ -105,7 +105,8 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
   that target, not that a watch is registered), `watch registered [{project-id}]` lists
   the persisted registrations (project, path, registered, lastChange; live state stays on
   `memory_watch_status`), and `watch remove {project-id|*}` deletes a target's config rows
-  (e.g. a row named after a file, written by an unquoted `*`). `memory_watch_add` registers a
+  (`'*'` clears only the global config; a file-name ghost row — written by an unquoted `*` —
+  is removed individually, e.g. `watch remove CLAUDE.md`). `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
   lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
