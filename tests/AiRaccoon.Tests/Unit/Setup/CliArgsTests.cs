@@ -284,6 +284,29 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_SyncAddAzure_CliMode_ParsesAccountOption()
+    {
+        var parsed = CliArgs.Parse(
+            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["sync", "add", "azure"]);
+        parsed.ParseResult.GetValue<bool>("--cli").ShouldBeTrue();
+        parsed.ParseResult.GetValue<string>("--account").ShouldBe("myacct");
+    }
+
+    [Fact]
+    public void Parse_SyncAddS3_CliMode_ParsesCliOption()
+    {
+        var parsed = CliArgs.Parse(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"]);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["sync", "add", "s3"]);
+        parsed.ParseResult.GetValue<bool>("--cli").ShouldBeTrue();
+    }
+
+    [Fact]
     public void Parse_SyncRemove_ParsesCommandPath() => CliArgs.Parse(["sync", "remove"]).CommandPath.ShouldBe(["sync", "remove"]);
 
     [Fact]

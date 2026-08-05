@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using Azure.Core.Pipeline;
+using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -35,6 +36,93 @@ public class AzureBlobCloudStoreTests
         var options = new SyncOptions { ConnectionString = FakeConnectionString };
 
         Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options));
+    }
+
+    [Fact]
+    public void Ctor_NeitherMode_ThrowsArgumentException()
+    {
+        var options = new SyncOptions { Container = "memories" };
+
+        Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options));
+    }
+
+    [Fact]
+    public void Ctor_AccountMode_InvalidAccountName_ThrowsSyncNotConfigured()
+    {
+        var options = new SyncOptions { Account = "bad name!", Container = "memories" };
+
+        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options));
+    }
+
+    [Fact]
+    public void Ctor_AccountMode_BuildsClientWithAccountUri()
+    {
+        var options = new SyncOptions { Account = "myacct", Container = "memories" };
+
+        var client = AzureBlobCloudStore.CreateClient(options);
+
+        client.Uri.ShouldBe(new Uri("https://myacct.blob.core.windows.net/"));
+    }
+
+    [Fact]
+    public void Ctor_BothModes_ConnectionStringWins()
+    {
+        var options = new SyncOptions
+        {
+            Account = "myacct",
+            ConnectionString = FakeConnectionString,
+            Container = "memories"
+        };
+
+        var client = AzureBlobCloudStore.CreateClient(options);
+
+        client.Uri.ShouldBe(new Uri("https://devstoreaccount1.blob.core.windows.net/"));
+    }
+
+    [Fact]
+    public async Task Pull_NoAzureLogin_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new ThrowingBlobHandler(new CredentialUnavailableException("no az login state")));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(
+            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Pull_Unauthorized_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(401)));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(
+            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Pull_Forbidden_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(403)));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(
+            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Pull_HttpRequestException_ThrowsSyncNetwork()
+    {
+        var store = Store(new ThrowingBlobHandler(new HttpRequestException("connection reset")));
+
+        await Should.ThrowAsync<SyncNetworkException>(
+            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_Unauthorized_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(401)));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(
+            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), null,
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -141,7 +229,7 @@ public class AzureBlobCloudStoreTests
                 TestContext.Current.CancellationToken));
     }
 
-    private static AzureBlobCloudStore Store(CannedBlobHandler handler) => new(
+    private static AzureBlobCloudStore Store(HttpMessageHandler handler) => new(
         new BlobServiceClient(FakeConnectionString, new BlobClientOptions
         {
             Retry = { MaxRetries = 0 },
@@ -192,6 +280,12 @@ public class AzureBlobCloudStoreTests
     private sealed record CannedResponse(int Status, IReadOnlyDictionary<string, string> Headers, byte[] Body);
 
     private sealed record RecordedRequest(HttpMethod Method, string Path, string? IfMatch);
+
+    private sealed class ThrowingBlobHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) => throw exception;
+    }
 
     private sealed class CannedBlobHandler(Func<HttpRequestMessage, CannedResponse> responder) : HttpMessageHandler
     {

@@ -445,4 +445,228 @@ public class ConfigCommandsRetrievalSweepSyncTests
         stdout.ShouldContain("provider: minio");
         stdout.ShouldContain("endpoint: http://s3.example.com");
     }
+
+    // ── sync add --cli (cloud-identity credential modes) ──
+
+    [Fact]
+    public async Task SyncAddAzure_CliMode_WritesAccountRow_NoPrompt()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, stderr) = await Run(
+            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"], store);
+
+        exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("azure");
+        store.Settings["sync.azureAccount"].ShouldBe("myacct");
+        store.Settings["sync.container"].ShouldBe("memories");
+        store.Settings["sync.objectKey"].ShouldBe("bank.db");
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        stdout.ShouldContain("(az CLI)");
+        stderr.ShouldNotContain("connection string");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_CliMode_MissingAccount_ReturnsError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories", "--cli"], store);
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("--account is required with --cli");
+        store.Settings.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_CliMode_ClearsStaleConnectionStringRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.connectionString"] = "connstr" }
+        };
+
+        var (exit, _, _) = await Run(
+            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct"], store);
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        store.Settings["sync.azureAccount"].ShouldBe("myacct");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_CliMode_WritesChainRow_NoPrompt()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, stderr) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories",
+                "--cli", "--region", "us-east-1", "--object-key", "bank.db"], store);
+
+        exit.ShouldBe(0);
+        store.Settings["sync.provider"].ShouldBe("s3");
+        store.Settings["sync.s3Chain"].ShouldBe("true");
+        store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
+        store.Settings["sync.bucket"].ShouldBe("memories");
+        store.Settings["sync.region"].ShouldBe("us-east-1");
+        store.Settings["sync.objectKey"].ShouldBe("bank.db");
+        store.Settings.ShouldNotContainKey("sync.accessKey");
+        store.Settings.ShouldNotContainKey("sync.secretKey");
+        stdout.ShouldContain("(AWS credential chain)");
+        stderr.ShouldNotContain("access key");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_CliMode_ClearsAzureRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories",
+                ["sync.azureAccount"] = "myacct"
+            }
+        };
+
+        var (exit, _, _) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey("sync.connectionString");
+        store.Settings.ShouldNotContainKey("sync.container");
+        store.Settings.ShouldNotContainKey("sync.azureAccount");
+        store.Settings["sync.s3Chain"].ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_CliMode_ClearsStaleKeyRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.accessKey"] = "ak1", ["sync.secretKey"] = "sk1" }
+        };
+
+        var (exit, _, _) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey("sync.accessKey");
+        store.Settings.ShouldNotContainKey("sync.secretKey");
+        store.Settings["sync.s3Chain"].ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task SyncAddAzure_ConnStringMode_ClearsStaleAccountRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.azureAccount"] = "myacct" }
+        };
+
+        var (exit, _, _) = await Run(["sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey("sync.azureAccount");
+        store.Settings["sync.connectionString"].ShouldBe("connstr");
+    }
+
+    [Fact]
+    public async Task SyncAddS3_KeyMode_ClearsStaleChainRow()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { ["sync.s3Chain"] = "true" }
+        };
+
+        var (exit, _, _) = await Run(
+            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+            new StringReader("ak1\nsk1\n"));
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey("sync.s3Chain");
+        store.Settings["sync.accessKey"].ShouldBe("ak1");
+        store.Settings["sync.secretKey"].ShouldBe("sk1");
+    }
+
+    [Fact]
+    public async Task SyncShow_AzureAccountMode_PrintsAccountSetAndConnectionStringUnset()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.azureAccount"] = "myacct",
+                ["sync.container"] = "memories"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: azure");
+        stdout.ShouldContain("account: set");
+        stdout.ShouldContain("connectionString: unset");
+    }
+
+    [Fact]
+    public async Task SyncShow_AzureConnStringMode_PrintsAccountUnset()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.provider"] = "azure",
+                ["sync.connectionString"] = "connstr",
+                ["sync.container"] = "memories"
+            }
+        };
+
+        var (_, stdout, _) = await Run(["sync", "show"], store);
+
+        stdout.ShouldContain("account: unset");
+        stdout.ShouldContain("connectionString: set");
+    }
+
+    [Fact]
+    public async Task SyncShow_S3ChainMode_PrintsChainTrueAndKeysUnset()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.s3Chain"] = "true"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["sync", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("chain: true");
+        stdout.ShouldContain("accessKey: unset");
+        stdout.ShouldContain("secretKey: unset");
+    }
+
+    [Fact]
+    public async Task SyncShow_S3KeyMode_PrintsChainFalse()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
+
+        var (_, stdout, _) = await Run(["sync", "show"], store);
+
+        stdout.ShouldContain("chain: false");
+        stdout.ShouldContain("accessKey: set");
+    }
 }

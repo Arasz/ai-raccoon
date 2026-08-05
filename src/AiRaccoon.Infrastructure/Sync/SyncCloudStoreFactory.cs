@@ -23,6 +23,10 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
         var connectionString = await store.GetSettingAsync(SyncSettingsKeys.ConnectionString, cancellationToken)
             .ConfigureAwait(false);
         var container = await store.GetSettingAsync(SyncSettingsKeys.Container, cancellationToken).ConfigureAwait(false);
+        var account = await store.GetSettingAsync(SyncSettingsKeys.AzureAccount, cancellationToken).ConfigureAwait(false);
+        var s3Chain = bool.TryParse(
+            await store.GetSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken).ConfigureAwait(false),
+            out var chain);
         return new SyncOptions
         {
             Provider = SyncProviderParser.Parse(provider),
@@ -33,7 +37,9 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
             Region = region,
             ObjectKey = objectKey,
             ConnectionString = connectionString,
-            Container = container
+            Container = container,
+            Account = account,
+            S3Chain = s3Chain
         };
     }
 

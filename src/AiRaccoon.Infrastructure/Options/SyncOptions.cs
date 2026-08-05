@@ -29,12 +29,23 @@ public sealed record SyncOptions
     public string? ConnectionString { get; init; }
     public string? Container { get; init; }
 
+    /// <summary>Azure storage account name for the DefaultAzureCredential (--cli) mode; non-secret.</summary>
+    public string? Account { get; init; }
+
+    /// <summary>True when s3 uses the AWS default credential chain (--cli mode) instead of persisted keys.</summary>
+    public bool S3Chain { get; init; }
+
+    /// <summary>
+    ///     True when the provider's rows are complete. When both credential modes are present
+    ///     (manual settings edits) the tie-break is deterministic: connection string wins for
+    ///     azure, persisted keys win for s3 — documented, not an error.
+    /// </summary>
     public bool IsConfigured => Provider switch
     {
-        SyncProvider.Azure => !string.IsNullOrWhiteSpace(ConnectionString) && !string.IsNullOrWhiteSpace(Container),
+        SyncProvider.Azure => (!string.IsNullOrWhiteSpace(ConnectionString) || !string.IsNullOrWhiteSpace(Account))
+            && !string.IsNullOrWhiteSpace(Container),
         _ => !string.IsNullOrWhiteSpace(Endpoint)
             && !string.IsNullOrWhiteSpace(Bucket)
-            && !string.IsNullOrWhiteSpace(AccessKey)
-            && !string.IsNullOrWhiteSpace(SecretKey)
+            && ((!string.IsNullOrWhiteSpace(AccessKey) && !string.IsNullOrWhiteSpace(SecretKey)) || S3Chain)
     };
 }

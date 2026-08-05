@@ -612,7 +612,7 @@ public sealed class MemoryTools(
                 activity?.SetTag("error_type", nameof(SyncAuthFailedException));
                 observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncAuthFailedException));
                 throw new McpException(
-                    "sync-auth-failed: verify the keys with 'ai-raccoon sync show'");
+                    "sync-auth-failed: run 'az login' (azure --cli) or 'aws configure' / 'aws sso login' (s3 --cli), or verify the keys with 'ai-raccoon sync show'");
             }
             catch (SyncConflictException ex)
             {

@@ -89,8 +89,8 @@ ai-raccoon model set local [path]               ai-raccoon model set openai {mod
 ai-raccoon model reset                          ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}           ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}           ai-raccoon sweep show
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
-ai-raccoon sync add azure {container} [--object-key {key}]                            # Azure connection string is prompted interactively
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]   # key prompts, or --cli = AWS credential chain
+ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]            # connection-string prompt, or --cli = az login
 ai-raccoon sync remove                          ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -160,8 +160,8 @@ threshold-driven only.)
 configured).
 
 ```
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]
-ai-raccoon sync add azure {container} [--object-key {key}]
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]
+ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]
 ai-raccoon sync remove
 ai-raccoon sync show                      # provider first; secrets redacted
 ```
@@ -173,6 +173,51 @@ the S3 access key and secret key, `sync add azure` for the connection string (pr
 stderr, input from stdin; an empty answer aborts with exit 1 and persists nothing) — and
 are never accepted on the command line. `sync remove` returns to sync-off; `sync show`
 prints the provider and its fields with the secrets redacted.
+
+**`--cli` credential modes** (no secret prompts — the machine's CLI login state is the
+credential): `sync add azure <container> --cli --account <name>` uses
+`DefaultAzureCredential` (az CLI login, or `AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/
+`AZURE_CLIENT_SECRET` env vars for headless use); `sync add s3 <url> --bucket <name>
+--cli` uses the AWS default credential chain (`aws configure`, or `aws sso login` for
+short-lived SSO tokens). Nothing long-lived is stored in the settings table — only the
+non-secret account name / `s3Chain` marker — and the tokens are short-lived and
+revocable. Auth failures surface as `sync-auth-failed:` with a "run `az login`" /
+"run `aws configure` | `aws sso login`" hint.
+
+> `sync add azure` does **not** create the container — create it first (e.g. `az storage
+> container create --account-name <account> --name <container>`), or the first sync
+> fails with `sync-network:`.
+
+**Azure (az CLI mode) least privilege** — sign in once, then scope a role to the storage
+account:
+
+```bash
+az login                                        # sign in once (Azure CLI)
+az storage account show -g <rg> -n <account> --query id   # find the storage account resource id
+az role assignment create --assignee "you@domain.com" --role "Storage Blob Data Contributor" \
+  --scope "<storage-account-resource-id>"       # least privilege: scope to account or container
+```
+
+**AWS (chain mode) least privilege** — the sync only GETs and PUTs one object, so the
+IAM policy can be scoped to its key prefix:
+
+```bash
+aws configure   # or: aws sso login (short-lived SSO tokens)
+```
+
+```json
+{ "Version": "2012-10-17", "Statement": [ { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"],
+  "Resource": "arn:aws:s3:::<bucket>/<object-key-prefix>*" } ] }
+```
+
+Prefer SSO/short-lived credentials over static keys in `~/.aws/credentials`.
+
+| Mode | Command | Stored in the settings table | Credential source |
+|---|---|---|---|
+| Azure connection string | `sync add azure <container>` | `connectionString`, `container`, `objectKey` | settings table (prompted) |
+| Azure az CLI | `sync add azure <container> --cli --account <name>` | `azureAccount`, `container`, `objectKey` | DefaultAzureCredential (az login / env / managed identity) |
+| S3 keys | `sync add s3 <url> --bucket <name>` | `endpoint`, `bucket`, `region`, `accessKey`, `secretKey`, `objectKey` | settings table (prompted) |
+| S3 AWS chain | `sync add s3 <url> --bucket <name> --cli` | `endpoint`, `bucket`, `region`, `s3Chain`, `objectKey` | AWS default credential chain (env / `~/.aws` / SSO / IMDS) |
 
 **File watching** — mirror a path into memory (opt-in, project-scoped).
 

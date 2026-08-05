@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Options;
 using Azure;
+using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Logging;
@@ -16,12 +17,15 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
     public AzureBlobCloudStore(SyncOptions options, ILogger<AzureBlobCloudStore>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Container);
+        if (string.IsNullOrWhiteSpace(options.ConnectionString) && string.IsNullOrWhiteSpace(options.Account))
+        {
+            throw new ArgumentException("A connection string or an account name is required.", nameof(options));
+        }
 
         _container = options.Container;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureBlobCloudStore>.Instance;
-        _blobs = CreateClient(options.ConnectionString);
+        _blobs = CreateClient(options);
     }
 
     /// <summary>Test seam: build the store around an already-constructed client (canned transport).</summary>
@@ -33,6 +37,36 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         _blobs = blobs;
         _container = container;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureBlobCloudStore>.Instance;
+    }
+
+    /// <summary>
+    ///     Builds the blob client for the configured mode: connection string when present
+    ///     (tie-break), else the account name with DefaultAzureCredential (--cli mode).
+    /// </summary>
+    internal static BlobServiceClient CreateClient(SyncOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+        {
+            try
+            {
+                return new BlobServiceClient(options.ConnectionString);
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException)
+            {
+                throw new SyncNotConfiguredException(ex);
+            }
+        }
+
+        try
+        {
+            return new BlobServiceClient(
+                new Uri($"https://{options.Account}.blob.core.windows.net"),
+                new DefaultAzureCredential());
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            throw new SyncNotConfiguredException(ex);
+        }
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
@@ -50,7 +84,27 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         {
             return null;
         }
+        catch (CredentialUnavailableException ex)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
+        catch (AuthenticationFailedException ex)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
+        catch (RequestFailedException ex) when (ex.Status is 401 or 403)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
         catch (RequestFailedException ex)
+        {
+            Log.PullFailed(_logger, ex.Message);
+            throw new SyncNetworkException($"Azure pull failed: {ex.Message}", ex);
+        }
+        catch (HttpRequestException ex)
         {
             Log.PullFailed(_logger, ex.Message);
             throw new SyncNetworkException($"Azure pull failed: {ex.Message}", ex);
@@ -84,23 +138,30 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         {
             throw new SyncConflictException("Remote changed since last pull — If-Match precondition failed.");
         }
+        catch (CredentialUnavailableException ex)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
+        catch (AuthenticationFailedException ex)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
+        catch (RequestFailedException ex) when (ex.Status is 401 or 403)
+        {
+            Log.AuthFailed(_logger, ex.Message);
+            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+        }
         catch (RequestFailedException ex)
         {
             Log.PushFailed(_logger, ex.Message);
             throw new SyncNetworkException($"Azure push failed: {ex.Message}", ex);
         }
-    }
-
-    /// <summary>Wraps the SDK ctor so a malformed connection string surfaces as a typed sync error.</summary>
-    private static BlobServiceClient CreateClient(string connectionString)
-    {
-        try
+        catch (HttpRequestException ex)
         {
-            return new BlobServiceClient(connectionString);
-        }
-        catch (Exception ex) when (ex is ArgumentException or FormatException)
-        {
-            throw new SyncNotConfiguredException(ex);
+            Log.PushFailed(_logger, ex.Message);
+            throw new SyncNetworkException($"Azure push failed: {ex.Message}", ex);
         }
     }
 
@@ -111,5 +172,8 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
 
         [LoggerMessage(EventId = 203, Level = LogLevel.Error, Message = "Azure push failed: {reason}")]
         public static partial void PushFailed(ILogger logger, string reason);
+
+        [LoggerMessage(EventId = 204, Level = LogLevel.Error, Message = "Azure auth failed: {reason}")]
+        public static partial void AuthFailed(ILogger logger, string reason);
     }
 }

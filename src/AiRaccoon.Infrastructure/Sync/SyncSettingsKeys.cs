@@ -21,4 +21,10 @@ public static class SyncSettingsKeys
 
     /// <summary>Azure blob container name.</summary>
     public const string Container = "sync.container";
+
+    /// <summary>Azure storage account name for --cli mode (DefaultAzureCredential; non-secret).</summary>
+    public const string AzureAccount = "sync.azureAccount";
+
+    /// <summary>Marker row ("true") for s3 --cli mode (AWS default credential chain; non-secret).</summary>
+    public const string S3Chain = "sync.s3Chain";
 }
