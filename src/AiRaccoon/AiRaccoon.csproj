@@ -67,13 +67,18 @@
          PackAsTool with a RuntimeIdentifier emits a tool shell plus a RID
          payload package; both must be pushed or `dotnet tool install` fails. -->
     <Target Name="DeployToLocalSource" AfterTargets="Build"
-            Condition="'$(DOTNET_ENV)' == 'local'"
+            Condition="'$(DOTNET_ENV)' == 'local' and '$(SuppressDeployToLocalSource)' != 'true'"
             Inputs="$(MSBuildProjectFullPath);$(TargetPath)"
             Outputs="$(PackageOutputPath)$(PackageId).$(NETCoreSdkRuntimeIdentifier).$(PackageVersion).nupkg">
         <MakeDir Directories="$(MSBuildThisFileDirectory)../../.nupkg-local/"/>
         <!-- Pack only for the host RID: the project's multi-RID RuntimeIdentifiers
-             list would otherwise force a full per-RID publish during pack. -->
-        <Exec Command="dotnet pack &quot;$(MSBuildProjectFullPath)&quot; -c &quot;$(Configuration)&quot; -p:RuntimeIdentifiers=$(NETCoreSdkRuntimeIdentifier) -o &quot;$(PackageOutputPath)&quot; --no-build --no-restore"/>
+             list would otherwise force a full per-RID publish during pack.
+             SuppressDeployToLocalSource breaks the recursion: the nested pack
+             inherits DOTNET_ENV=local and its own Build would re-enter this
+             target forever (observed hang). The nested pack builds for the RID
+             itself instead of using the no-build flag: on a Web-SDK project the
+             outer build does not emit RID-scoped publish outputs (MSB3030). -->
+        <Exec Command="dotnet pack &quot;$(MSBuildProjectFullPath)&quot; -c &quot;$(Configuration)&quot; -p:RuntimeIdentifiers=$(NETCoreSdkRuntimeIdentifier) -p:SuppressDeployToLocalSource=true -o &quot;$(PackageOutputPath)&quot;"/>
         <Exec Command="dotnet nuget push &quot;$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg&quot; --source &quot;$(MSBuildThisFileDirectory)../../.nupkg-local&quot; --skip-duplicate"/>
         <Exec Command="dotnet nuget push &quot;$(PackageOutputPath)$(PackageId).$(NETCoreSdkRuntimeIdentifier).$(PackageVersion).nupkg&quot; --source &quot;$(MSBuildThisFileDirectory)../../.nupkg-local&quot; --skip-duplicate"/>
     </Target>
