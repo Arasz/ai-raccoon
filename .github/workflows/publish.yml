@@ -25,8 +25,11 @@ jobs:
       matrix:
         # One job per RID: PackAsTool emits a tool shell plus a per-RID payload
         # package, and both must be pushed or `dotnet tool install` fails. All
-        # jobs emit the same shell id+version — `--skip-duplicate` makes jobs
-        # 2-6 of the shell push no-ops.
+        # jobs emit the same shell id+version — each job patches its own shell
+        # (patch-tool-shell.py) to list ALL six RuntimeIdentifierPackages, so
+        # whichever shell --skip-duplicate keeps is correct. The patch is
+        # self-gating: it fails the job unless the patched settings list every
+        # RID exactly once.
         # No separate build step: pack builds for the RID itself (see the
         # Pack step comment about why --no-build is wrong here).
         rid: [win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64]
@@ -44,6 +47,15 @@ jobs:
         # (MSB3030). Packing without --no-build builds for the RID itself and emits
         # the tool shell + RID payload in one step (measured on a clean tree).
         run: mkdir -p .nupkg-local && dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=${{ matrix.rid }} -o artifacts --nologo
+      - name: Patch the tool shell to reference every RID
+        # The SDK writes only the packed RID into the shell's DotnetToolSettings.xml;
+        # a multi-RID tool shell must list every payload package or `dotnet tool
+        # install` rejects all other platforms (the published 1.0.2 shell referenced
+        # linux-musl-x64 only and was uninstallable on macOS). The RID list must stay
+        # in sync with the matrix above.
+        run: |
+          VER=$(python3 -c 'import re;m=re.search(r"<PackageVersion>([^<]+)</PackageVersion>",open("src/AiRaccoon/AiRaccoon.csproj").read());print(m.group(1))')
+          python3 scripts/patch-tool-shell.py artifacts/arasz.ai-raccoon.$VER.nupkg win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
       - uses: actions/upload-artifact@v7
         with:
           name: nupkg-${{ matrix.rid }}
