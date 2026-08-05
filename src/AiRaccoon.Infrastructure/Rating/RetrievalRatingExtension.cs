@@ -6,8 +6,7 @@ namespace AiRaccoon.Infrastructure.Rating;
 /// <summary>
 ///     First-party extension keeping the rating pipeline wired to on-row columns: the search hit
 ///     bump now happens inside SqliteMemoryStore.SearchAsync and deletes remove the whole row, so
-///     every hook here is a no-op — kept registered to preserve the extension-host architecture
-///     (see docs/work/features-agent-memory/spec-issue-1.md §6.2).
+///     every hook here is a no-op — kept registered to preserve the extension-host architecture (see docs/work/features-agent-memory/spec-issue-1.md §6.2).
 /// </summary>
 public sealed class RetrievalRatingExtension : IMemoryExtension
 {

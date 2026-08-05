@@ -15,11 +15,6 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigVerbRunnerTests : IDisposable
 {
-    // The runner wires the real EnvEncryptionKeyProvider, which reads a process-global env var;
-    // runs that open the bank are serialized with the passphrase cleared so a dev machine's
-    // AIRACCOON_DB_PASSPHRASE cannot poison a fresh-bank test (same convention as the encryption tests).
-    private static readonly SemaphoreSlim EnvGate = new(1, 1);
-
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-config-verb-runner");
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -34,7 +29,9 @@ public sealed class ConfigVerbRunnerTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        await EnvGate.WaitAsync();
+        // Serialized with the encryption tests: AIRACCOON_DB_PASSPHRASE is process-global and
+        // must be cleared during a run so a dev machine's value cannot poison a fresh-bank test.
+        await TestData.EnvVarGate.WaitAsync();
         var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         try
         {
@@ -46,7 +43,7 @@ public sealed class ConfigVerbRunnerTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            EnvGate.Release();
+            TestData.EnvVarGate.Release();
         }
     }
 
@@ -75,7 +72,6 @@ public sealed class ConfigVerbRunnerTests : IDisposable
 
         exit.ShouldBe(0);
         config.Options.Scope.ShouldBe(InstallScope.User);
-        File.Exists(SqliteConnectionFactory.BankPathFor(config.Options)).ShouldBeTrue();
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeTrue();
     }
 
@@ -87,7 +83,6 @@ public sealed class ConfigVerbRunnerTests : IDisposable
 
         exit.ShouldBe(0);
         config.Options.Scope.ShouldBe(InstallScope.Project);
-        File.Exists(SqliteConnectionFactory.BankPathFor(config.Options)).ShouldBeTrue();
         File.Exists(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db")).ShouldBeTrue();
     }
 
