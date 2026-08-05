@@ -21,8 +21,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, TestContext.Current.CancellationToken);
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -133,8 +132,10 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var store = new FakeConfigStore();
 
         var (exit, stdout, stderr) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com",
-                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"], store,
+            [
+                "sync", "add", "s3", "http://s3.example.com",
+                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"
+            ], store,
             new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
