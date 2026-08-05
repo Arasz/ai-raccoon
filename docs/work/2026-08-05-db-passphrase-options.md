@@ -283,3 +283,25 @@ public sealed class BitwardenEncryptionKeyProvider : IEncryptionKeyProvider
 ### Updated overall recommendation (F28)
 
 **Bitwarden does not change the F16 ranking.** For this repo's actual shape — a local-first, single-machine, MCP-spawned, offline-tolerant server — keychain-direct stays primary, the 0600 key file stays the portable fallback/recovery copy, and the env var is removed. Bitwarden SM becomes an **opt-in tier** on top of the same keychain: valuable for users who already run a Bitwarden org and want remote key custody, cross-machine consistency, revocation, or audit; not worth its startup network dependency, beta-SDK risk, and supply-chain surface as the default. If adopted: token in the keychain, metadata in the settings table, no SDK state file, no default offline cache, and the secret treated as an immutable DB key rotated only through the rekey flow.
+
+## Owner decisions (f: 2026-08-05) — supersede F28 where they differ
+
+1. **The env var STAYS** — `AIRACCOON_DB_PASSPHRASE` remains a supported key source (zero-setup default; the single-channel ruling's exception stands).
+2. **Bitwarden via the `bws` CLI** is the owner's chosen source (not the SDK): `bws` is installed and its access token is configured. Project `613165e6-7947-49e0-889b-b49d007c5b85`; secret **`ai-raccoon-encryption`** (id `f1d3c8e5-5391-4aef-8611-b49d007c8702` — use the ID; names change). The provider shells out to `bws secret get <id>` at bank open; the SDK's caveats (beta, sync API, custom license, 7 MB native binary) are moot.
+3. **The secret's VALUE is an SSH private key** (unencrypted ed25519), derived to the SQLCipher raw key with the measured scheme from `docs/work/2026-08-05-db-passphrase-ssh-and-cloud-vaults.md`: `SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'` (no KDF; RSA and passphrase-protected keys are rejected).
+4. **Offline behavior: refuse to start** — no cached key copy; the bank cannot open without Bitwarden reachability. The failure is loud and actionable.
+5. Rotation remains the F27 trap: rotating the secret in the Bitwarden UI without `PRAGMA rekey` bricks the bank — the config command warns.
+
+## Key storage options — pros / cons (consolidated)
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Env var** (`AIRACCOON_DB_PASSPHRASE`, KEPT) | Zero setup; works for unattended/client-spawned starts; cross-platform; client `.mcp.json` friendly | Plaintext visible in process environments (Linux `/proc/<pid>/environ`), client configs, and backups; no rotation without rekey; weak passphrases are brute-forceable (KDF) |
+| **macOS Keychain** | OS-encrypted at rest; readable pre-DB-open; per-user access control; no plaintext on disk; measured add/find round-trip | macOS-only (DPAPI / Secret Service needed elsewhere); login-keychain prompt behavior; Time Machine keychain-exclusion caveat |
+| **0600 raw-key file** | Simple, portable, zero deps; raw key = no KDF/brute-force surface; recovery copy | Key rests on disk with the same protection as the DB (single-user compromise leaks both); rotation = rekey |
+| **SSH key (ed25519)** as source | Reuses an existing credential; zero new dependencies; measured derivation; ~256-bit entropy | Key reuse (the same key protects SSH access and the DB); key replacement requires rekey; passphrase-protected keys unusable; RSA encodings unstable |
+| **Bitwarden SM via `bws`** (owner's choice) | Remote key custody (key never rests on disk); scoped/revocable token; audit; cross-machine consistency; offline DB theft useless | Network dependency at start (refuse-to-start per ruling); `bws` binary + its own token config; web-UI rotation without rekey bricks the bank; free-tier limits |
+| **Azure Key Vault** | Strongest at-rest posture (no key material on disk); RBAC; versioning/rotation; audit | Network + `az login` token expiry at start; Azure account dependency; soft-delete/RBAC configuration |
+| **AWS Secrets Manager** | KMS-backed; rotation; CloudTrail audit; same SDK generation as the repo's S3 | Network; AWS credential-chain state (`~/.aws`); region/permissions configuration |
+
+Design consequence: `IEncryptionKeyProvider` becomes a source-selectable family — `env` (default, kept) and `bitwarden` (bws CLI + SSH-key derivation, the owner's setup), with keychain/key-file/cloud as documented future sources behind the same interface. The `ai-raccoon encryption <source>` config command records the source + provider metadata; `encryption bitwarden` validates `bws` presence and secret reachability interactively.
