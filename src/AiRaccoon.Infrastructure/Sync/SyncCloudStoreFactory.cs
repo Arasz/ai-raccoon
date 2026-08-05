@@ -40,8 +40,17 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
     public async Task<ICloudStore> CreateAsync(CancellationToken cancellationToken = default)
     {
         var options = await ReadOptionsAsync(cancellationToken).ConfigureAwait(false);
-        return options.IsConfigured
-            ? new S3CloudStore(options, loggerFactory.CreateLogger<S3CloudStore>())
-            : new NullCloudStore();
+        if (!options.IsConfigured)
+        {
+            // Provider row present without its credential rows must not crash the ctor
+            // (silently-dead trap: provider says azure, only s3 rows exist).
+            return new NullCloudStore();
+        }
+
+        return options.Provider switch
+        {
+            SyncProvider.Azure => new AzureBlobCloudStore(options, loggerFactory.CreateLogger<AzureBlobCloudStore>()),
+            _ => new S3CloudStore(options, loggerFactory.CreateLogger<S3CloudStore>())
+        };
     }
 }

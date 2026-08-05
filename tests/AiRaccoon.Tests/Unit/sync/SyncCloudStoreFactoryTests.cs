@@ -46,6 +46,71 @@ public class SyncCloudStoreFactoryTests
     }
 
     [Fact]
+    public async Task Create_WithAzureSettings_ReturnsAzureBlobCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Provider] = "azure",
+                [SyncSettingsKeys.ConnectionString] = FakeConnectionString,
+                [SyncSettingsKeys.Container] = "memories",
+                [SyncSettingsKeys.ObjectKey] = "bank.db"
+            }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<AzureBlobCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithAzureMissingConnectionString_ReturnsNullCloudStore()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings = { [SyncSettingsKeys.Provider] = "azure", [SyncSettingsKeys.Container] = "memories" }
+        };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderAzureAndS3RowsOnly_ReturnsNullCloudStore()
+    {
+        // The silently-dead trap: provider says azure but only s3 rows exist.
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "azure" } };
+        SeedFull(store);
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderS3AndFullS3Settings_ReturnsS3CloudStore()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "s3" } };
+        SeedFull(store);
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<S3CloudStore>();
+    }
+
+    [Fact]
+    public async Task Create_WithProviderRowOnly_ReturnsNullCloudStore()
+    {
+        var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "azure" } };
+
+        var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
+
+        cloud.ShouldBeOfType<NullCloudStore>();
+    }
+
+    [Fact]
     public async Task Create_WithEndpointBucketButNoSecrets_ReturnsNullCloudStore()
     {
         var store = new FakeConfigStore
