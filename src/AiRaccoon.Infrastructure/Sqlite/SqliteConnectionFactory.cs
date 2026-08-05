@@ -19,7 +19,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
-    private string BankDirectory =>
+    private static string BankDirectoryFor(InfrastructureOptions options) =>
         options.Scope switch
         {
             InstallScope.User => options.DataRoot,
@@ -28,11 +28,14 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
                 "Unknown install scope.")
         };
 
-    public string BankPath => Path.Combine(BankDirectory, "memory.db");
+    /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
+    public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
+
+    public string BankPath => BankPathFor(options);
 
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(BankDirectory);
+        Directory.CreateDirectory(BankDirectoryFor(options));
 
         var passphrase = keyProvider.GetPassphrase();
         var csb = new SqliteConnectionStringBuilder
