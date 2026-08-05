@@ -258,7 +258,7 @@ public class McpServerE2ETests : IAsyncLifetime
                 new InfrastructureOptions { DataRoot = _factory.DataRoot },
                 new EnvEncryptionKeyProvider()),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
+        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
             CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }

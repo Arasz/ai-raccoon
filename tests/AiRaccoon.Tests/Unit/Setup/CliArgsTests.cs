@@ -244,8 +244,7 @@ public class CliArgsTests
     {
         var parsed = CliArgs.Parse(
             ["sync", "add", "s3", "http://s3.example.com",
-                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db",
-                "--access-key", "ak", "--secret-key", "sk"]);
+                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"]);
 
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldBe(["sync", "add", "s3"]);
@@ -253,8 +252,6 @@ public class CliArgsTests
         parsed.ParseResult.GetValue<string>("--bucket").ShouldBe("memories");
         parsed.ParseResult.GetValue<string>("--region").ShouldBe("us-east-1");
         parsed.ParseResult.GetValue<string>("--object-key").ShouldBe("bank.db");
-        parsed.ParseResult.GetValue<string>("--access-key").ShouldBe("ak");
-        parsed.ParseResult.GetValue<string>("--secret-key").ShouldBe("sk");
     }
 
     [Fact]

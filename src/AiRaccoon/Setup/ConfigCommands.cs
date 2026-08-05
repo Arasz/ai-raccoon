@@ -18,7 +18,7 @@ namespace AiRaccoon.Setup;
 internal static class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
+        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -37,7 +37,7 @@ internal static class ConfigCommands
                 ["retrieval", "alpha", "show"] => await RetrievalAlphaShowAsync(store, stdout, cancellationToken),
                 ["sweep", "threshold", "set"] => await SweepThresholdSetAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["sweep", "show"] => await SweepShowAsync(store, stdout, cancellationToken),
-                ["sync", "add", "s3"] => await SyncAddS3Async(parseResult, store, stdout, cancellationToken),
+                ["sync", "add", "s3"] => await SyncAddS3Async(parseResult, store, stdout, stderr, stdin, cancellationToken),
                 ["sync", "remove"] => await SyncRemoveAsync(store, stdout, cancellationToken),
                 ["sync", "show"] => await SyncShowAsync(store, stdout, cancellationToken),
                 ["watch", "enable"] or ["watch", "disable"] => await WatchSetEnabledAsync(parseResult, store, stdout, stderr, cancellationToken),
@@ -274,21 +274,36 @@ internal static class ConfigCommands
     // ── sync ──
 
     private static async Task<int> SyncAddS3Async(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, CancellationToken cancellationToken)
+        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken)
     {
         var url = parseResult.GetValue<string>("url")!;
         var bucket = parseResult.GetValue<string>("--bucket")!;
         var region = Optional(parseResult, "--region");
         var objectKey = Optional(parseResult, "--object-key");
-        var accessKey = Optional(parseResult, "--access-key");
-        var secretKey = Optional(parseResult, "--secret-key");
+
+        // Secrets are entered interactively (single-channel ruling; never on argv).
+        await stderr.WriteAsync("S3 access key (empty aborts): ");
+        var accessKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+        if (string.IsNullOrEmpty(accessKey))
+        {
+            await stderr.WriteLineAsync("ai-raccoon: access key required — sync not configured");
+            return 1;
+        }
+
+        await stderr.WriteAsync("S3 secret key (empty aborts): ");
+        var secretKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+        if (string.IsNullOrEmpty(secretKey))
+        {
+            await stderr.WriteLineAsync("ai-raccoon: secret key required — sync not configured");
+            return 1;
+        }
 
         await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, cancellationToken);
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, cancellationToken);
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.AccessKey, accessKey, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.SecretKey, secretKey, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.AccessKey, accessKey, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.SecretKey, secretKey, cancellationToken);
 
         await stdout.WriteLineAsync($"sync configured: {url} bucket {bucket}");
         return 0;
