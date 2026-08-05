@@ -187,7 +187,7 @@ public sealed class QueryConstructionTests : IDisposable
 
     /// <summary>No hybrid rank regresses vs the Wave 0 baseline (ranks pinned per plan §0 and the documented ADR MRR).</summary>
     [Fact]
-    public async Task HybridRanks_DoNotRegress_VsWave0()
+    public async Task HybridRanks_DoNotRegress_VsBaseline()
     {
         await EnsureModelAsync();
         var queries = LoadQueries();

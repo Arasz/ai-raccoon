@@ -247,7 +247,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     /// <summary>Pre-Wave-6 banks gain the structure columns on open (ALTER TABLE migration path).</summary>
     [Fact]
-    public async Task SchemaMigration_AddsWave6Columns_ToPreWave6Bank()
+    public async Task SchemaMigration_AddsStructureColumns_ToLegacyBank()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var columns = await ColumnNamesAsync(connection);
