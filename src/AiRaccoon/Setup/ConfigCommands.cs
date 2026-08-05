@@ -299,12 +299,19 @@ internal static class ConfigCommands
             return 1;
         }
 
+        // Writing provider=s3 makes the switch real: without it the factory would read
+        // provider=azure and no azure rows → NullCloudStore → silently dead sync.
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, cancellationToken);
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, cancellationToken);
         await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.AccessKey, accessKey, cancellationToken);
         await store.SetSettingAsync(SyncSettingsKeys.SecretKey, secretKey, cancellationToken);
+        foreach (var key in new[] { SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container })
+        {
+            await store.DeleteSettingAsync(key, cancellationToken);
+        }
 
         await stdout.WriteLineAsync($"sync configured: {url} bucket {bucket}");
         return 0;
