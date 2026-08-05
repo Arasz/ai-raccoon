@@ -3,7 +3,6 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
 using Shouldly;
 using Xunit;
 
@@ -144,11 +143,18 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private sealed class FakeBwsRunner : IBwsProcessRunner
     {
-        private readonly BwsResult? _result;
         private readonly BwsInvocationException? _exception;
+        private readonly BwsResult? _result;
 
-        public FakeBwsRunner(BwsResult result) => _result = result;
-        public FakeBwsRunner(BwsInvocationException exception) => _exception = exception;
+        public FakeBwsRunner(BwsResult result)
+        {
+            _result = result;
+        }
+
+        public FakeBwsRunner(BwsInvocationException exception)
+        {
+            _exception = exception;
+        }
 
         public IReadOnlyList<string>? Args { get; private set; }
         public string? Token { get; private set; }
@@ -169,15 +175,15 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
     private sealed class OpenSshKeyBuilder
     {
-        private static readonly byte[] Seed00To1F = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly byte[] PublicKey01To20 = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
-
-        private string _magic = "openssh-key-v1\0";
+        private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+        private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
+        private uint _checkint1 = 0x01234567;
+        private uint _checkint2 = 0x01234567;
         private string _cipherName = "none";
         private string _kdfName = "none";
         private string _keyType = "ssh-ed25519";
-        private uint _checkint1 = 0x01234567;
-        private uint _checkint2 = 0x01234567;
+
+        private string _magic = "openssh-key-v1\0";
 
         public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
         {
@@ -198,13 +204,13 @@ public sealed class EncryptionKeyResolverTests : IDisposable
             body.Write(Encoding.ASCII.GetBytes(_magic));
             WriteString(body, _cipherName);
             WriteString(body, _kdfName);
-            WriteString(body, Array.Empty<byte>());
+            WriteString(body, []);
             WriteUInt32(body, 1);
             WriteString(body, BuildPublicKeyBlob());
             WriteString(body, BuildPrivateSection());
 
             return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-                + "\n-----END OPENSSH PRIVATE KEY-----\n";
+                                                           + "\n-----END OPENSSH PRIVATE KEY-----\n";
         }
 
         private byte[] BuildPublicKeyBlob()
@@ -222,14 +228,13 @@ public sealed class EncryptionKeyResolverTests : IDisposable
             WriteUInt32(section, _checkint2);
             WriteString(section, _keyType);
             WriteString(section, PublicKey01To20);
-            WriteString(section, Seed00To1F.Concat(PublicKey01To20).ToArray());
-            WriteString(section, Array.Empty<byte>());
-            section.Write(new byte[8 - ((int)section.Length % 8)]);
+            WriteString(section, [.. Seed00To1F, .. PublicKey01To20]);
+            WriteString(section, []);
+            section.Write(new byte[8 - (int)section.Length % 8]);
             return section.ToArray();
         }
 
-        private static void WriteUInt32(Stream stream, uint value) =>
-            stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
         private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 

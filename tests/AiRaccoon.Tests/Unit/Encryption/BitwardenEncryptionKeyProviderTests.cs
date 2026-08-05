@@ -2,7 +2,6 @@ using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
 using Shouldly;
 using Xunit;
 
@@ -46,8 +45,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().WithKeyType("ssh-rsa").Build(), ""));
 
-        var ex = Should.Throw<UnsupportedKeyTypeException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<UnsupportedKeyTypeException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldBe("only ed25519 keys are supported");
     }
@@ -57,8 +55,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().WithEncrypted().Build(), ""));
 
-        var ex = Should.Throw<PassphraseProtectedKeyException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<PassphraseProtectedKeyException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldBe("passphrase-protected keys are not supported");
     }
@@ -68,8 +65,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, "not a key at all", ""));
 
-        var ex = Should.Throw<MalformedPrivateKeyException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<MalformedPrivateKeyException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
     }
@@ -79,8 +75,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(7, "", "network error\nmore detail"));
 
-        var ex = Should.Throw<BwsInvocationException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldBe("bws failed (exit 7): network error");
     }
@@ -90,8 +85,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(3, "", ""));
 
-        var ex = Should.Throw<BwsInvocationException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldBe("bws failed (exit 3): (no stderr)");
     }
@@ -102,8 +96,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
         var runner = new FakeBwsRunner(new BwsInvocationException(
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)"));
 
-        var ex = Should.Throw<BwsInvocationException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldContain("bws not found — install the Bitwarden CLI (bws)");
     }
@@ -113,19 +106,25 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsInvocationException("bws timed out after 15s"));
 
-        var ex = Should.Throw<BwsInvocationException>(
-            () => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
 
         ex.Message.ShouldBe("bws timed out after 15s");
     }
 
     private sealed class FakeBwsRunner : IBwsProcessRunner
     {
-        private readonly BwsResult? _result;
         private readonly BwsInvocationException? _exception;
+        private readonly BwsResult? _result;
 
-        public FakeBwsRunner(BwsResult result) => _result = result;
-        public FakeBwsRunner(BwsInvocationException exception) => _exception = exception;
+        public FakeBwsRunner(BwsResult result)
+        {
+            _result = result;
+        }
+
+        public FakeBwsRunner(BwsInvocationException exception)
+        {
+            _exception = exception;
+        }
 
         public IReadOnlyList<string>? Args { get; private set; }
         public string? Token { get; private set; }
@@ -148,16 +147,16 @@ public sealed class BitwardenEncryptionKeyProviderTests
     /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
     private sealed class OpenSshKeyBuilder
     {
-        private static readonly byte[] Seed00To1F = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly byte[] PublicKey01To20 = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
-
-        private string _magic = "openssh-key-v1\0";
-        private string _cipherName = "none";
-        private string _kdfName = "none";
-        private string _keyType = "ssh-ed25519";
+        private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+        private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
         private uint _checkint1 = 0x01234567;
         private uint _checkint2 = 0x01234567;
+        private string _cipherName = "none";
         private bool _invalidBase64;
+        private string _kdfName = "none";
+        private string _keyType = "ssh-ed25519";
+
+        private string _magic = "openssh-key-v1\0";
 
         public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
         {
@@ -184,7 +183,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
             body.Write(Encoding.ASCII.GetBytes(_magic));
             WriteString(body, _cipherName);
             WriteString(body, _kdfName);
-            WriteString(body, Array.Empty<byte>());
+            WriteString(body, []);
             WriteUInt32(body, 1);
             WriteString(body, BuildPublicKeyBlob());
             WriteString(body, BuildPrivateSection());
@@ -213,14 +212,13 @@ public sealed class BitwardenEncryptionKeyProviderTests
             WriteUInt32(section, _checkint2);
             WriteString(section, _keyType);
             WriteString(section, PublicKey01To20);
-            WriteString(section, Seed00To1F.Concat(PublicKey01To20).ToArray());
-            WriteString(section, Array.Empty<byte>());
-            section.Write(new byte[8 - ((int)section.Length % 8)]);
+            WriteString(section, [.. Seed00To1F, .. PublicKey01To20]);
+            WriteString(section, []);
+            section.Write(new byte[8 - (int)section.Length % 8]);
             return section.ToArray();
         }
 
-        private static void WriteUInt32(Stream stream, uint value) =>
-            stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
         private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 

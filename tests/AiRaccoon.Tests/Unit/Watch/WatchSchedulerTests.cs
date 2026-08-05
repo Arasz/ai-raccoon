@@ -12,14 +12,11 @@ public sealed class WatchSchedulerTests
     private static readonly string FloodWatch = "/flood";
     private static readonly string SmallWatch = "/small";
 
-    private static WatchJob Job(string projectId, string watch, int index) =>
-        new(new WatchEvent(projectId, System.IO.Path.Combine(watch, $"f{index}.md"), WatchEventKind.Changed), watch);
+    private static WatchJob Job(string projectId, string watch, int index) => new(new WatchEvent(projectId, Path.Combine(watch, $"f{index}.md"), WatchEventKind.Changed), watch);
 
-    private static IReadOnlyList<WatchJob> Jobs(string projectId, string watch, int count) =>
-        Enumerable.Range(1, count).Select(i => Job(projectId, watch, i)).ToArray();
+    private static IReadOnlyList<WatchJob> Jobs(string projectId, string watch, int count) => [.. Enumerable.Range(1, count).Select(i => Job(projectId, watch, i))];
 
-    private static IReadOnlyDictionary<string, int> Concurrency(params (string Project, int Limit)[] entries) =>
-        entries.ToDictionary(e => e.Project, e => e.Limit);
+    private static IReadOnlyDictionary<string, int> Concurrency(params (string Project, int Limit)[] entries) => entries.ToDictionary(e => e.Project, e => e.Limit);
 
     [Fact]
     public async Task RunBatch_TenJobsAcrossThreeWatches_AtMostFourConcurrent_AllComplete()
@@ -92,7 +89,7 @@ public sealed class WatchSchedulerTests
             TestContext.Current.CancellationToken);
 
         runner.Order.Count.ShouldBe(11);
-        runner.Order[1].ShouldBe(System.IO.Path.Combine(SmallWatch, "f1.md"));
+        runner.Order[1].ShouldBe(Path.Combine(SmallWatch, "f1.md"));
         runner.Order.Count(p => p.Contains(SmallWatch, StringComparison.Ordinal)).ShouldBe(1);
     }
 
@@ -174,8 +171,8 @@ public sealed class WatchSchedulerTests
     /// <summary>Holds admitted jobs until Release, recording concurrency and start order.</summary>
     private sealed class GatedRunner
     {
-        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object _lock = new();
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _current;
 
         public int Expected { get; init; }

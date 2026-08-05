@@ -57,7 +57,7 @@ public sealed class WatchStore(SqliteConnectionFactory factory) : IWatchStore
         var rows = await connection.QueryAsync<WatchRegistration>(
                 new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return rows.ToArray();
+        return [.. rows];
     }
 
     public async Task UpdateLastChangeAsync(string projectId, string path, long lastChangeTs,
@@ -98,6 +98,6 @@ public sealed class WatchStore(SqliteConnectionFactory factory) : IWatchStore
                 new CommandDefinition(MemorySql.SelectWatchFilesByProject, new { projectId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return rows.ToArray();
+        return [.. rows];
     }
 }

@@ -99,11 +99,11 @@ internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath)
             true);
         if (ids.Count > MaxSequenceLength)
         {
-            ids = ids.Take(MaxSequenceLength).ToList();
+            ids = [.. ids.Take(MaxSequenceLength)];
         }
 
         var mask = new int[ids.Count];
         Array.Fill(mask, 1);
-        return (ids.ToArray(), mask);
+        return ([.. ids], mask);
     }
 }

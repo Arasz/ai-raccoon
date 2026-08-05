@@ -45,16 +45,18 @@ public static class StructureFusion
             .GroupBy(hit => hit.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First().Sim, StringComparer.Ordinal);
 
-        return contentSims.Keys
-            .Union(structureSims.Keys, StringComparer.Ordinal)
-            .Select(hash =>
-            {
-                var structureSim = structureSims.TryGetValue(hash, out var sim) ? sim : (double?)null;
-                return new FusedRank(hash, Fused(contentSims.GetValueOrDefault(hash), structureSim, alpha));
-            })
-            .OrderByDescending(rank => rank.Score)
-            .ThenBy(rank => rank.Hash, StringComparer.Ordinal)
-            .Take(limit)
-            .ToList();
+        return
+        [
+            .. contentSims.Keys
+                .Union(structureSims.Keys, StringComparer.Ordinal)
+                .Select(hash =>
+                {
+                    var structureSim = structureSims.TryGetValue(hash, out var sim) ? sim : (double?)null;
+                    return new FusedRank(hash, Fused(contentSims.GetValueOrDefault(hash), structureSim, alpha));
+                })
+                .OrderByDescending(rank => rank.Score)
+                .ThenBy(rank => rank.Hash, StringComparer.Ordinal)
+                .Take(limit)
+        ];
     }
 }

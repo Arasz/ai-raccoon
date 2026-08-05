@@ -29,7 +29,7 @@ internal static class SourceAffinityRanker
         var scores = candidates.ToDictionary(
             candidate => candidate.Hash,
             candidate => candidate.Ranking
-                        + lambda * SiblingCount(candidate, bySource, maxRaw, consolidationThreshold),
+                         + lambda * SiblingCount(candidate, bySource, maxRaw, consolidationThreshold),
             StringComparer.Ordinal);
 
         var docScore = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -123,6 +123,6 @@ internal static class SourceAffinityRanker
 
         return merged.Count == 0
             ? order
-            : order.Where(result => !merged.Contains(result.Hash)).ToList();
+            : [.. order.Where(result => !merged.Contains(result.Hash))];
     }
 }

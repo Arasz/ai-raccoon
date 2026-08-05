@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SshKeyDerivationTests
 {
-    private static readonly byte[] Seed00To1F = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+    private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
 
     [Fact]
     public void DeriveRawKey_SyntheticSeed00To1F_ReturnsPinnedVector()

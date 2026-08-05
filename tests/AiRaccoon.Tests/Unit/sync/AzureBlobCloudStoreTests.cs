@@ -1,3 +1,4 @@
+using System.Net;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using Azure.Core.Pipeline;
@@ -5,7 +6,6 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
-using System.Net;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.sync;
@@ -84,8 +84,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new ThrowingBlobHandler(new CredentialUnavailableException("no az login state")));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -93,8 +92,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(401)));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -102,8 +100,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(403)));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -111,8 +108,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new ThrowingBlobHandler(new HttpRequestException("connection reset")));
 
-        await Should.ThrowAsync<SyncNetworkException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -120,21 +116,20 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(401)));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), null,
-                TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Pull_ExistingBlob_ReturnsDataAndUnquotedETag()
     {
-        var handler = new CannedBlobHandler(_ => Ok("snapshot"u8.ToArray(), "0x8Dabc"));
+        var handler = new CannedBlobHandler(_ => Ok([.. "snapshot"u8], "0x8Dabc"));
         var store = Store(handler);
 
         var result = await store.PullAsync("bank.db", TestContext.Current.CancellationToken);
 
         result.ShouldNotBeNull();
-        result.Data.ShouldBe("snapshot"u8.ToArray());
+        result.Data.ShouldBe([.. "snapshot"u8]);
         result.ETag.ShouldBe("0x8Dabc");
         var request = handler.Requests.ShouldHaveSingleItem();
         request.Method.ShouldBe(HttpMethod.Get);
@@ -156,8 +151,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(500)));
 
-        await Should.ThrowAsync<SyncNetworkException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -166,7 +160,7 @@ public class AzureBlobCloudStoreTests
         var handler = new CannedBlobHandler(_ => Created("0x8Dnew"));
         var store = Store(handler);
 
-        var newEtag = await store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
+        var newEtag = await store.PushAsync("bank.db", [.. "snapshot"u8], "0x8Dabc",
             TestContext.Current.CancellationToken);
 
         newEtag.ShouldBe("0x8Dnew");
@@ -182,7 +176,7 @@ public class AzureBlobCloudStoreTests
         var handler = new CannedBlobHandler(_ => Created("0x8Dnew"));
         var store = Store(handler);
 
-        await store.PushAsync("bank.db", "snapshot"u8.ToArray(), null, TestContext.Current.CancellationToken);
+        await store.PushAsync("bank.db", [.. "snapshot"u8], null, TestContext.Current.CancellationToken);
 
         handler.Requests.ShouldHaveSingleItem().IfMatch.ShouldBeNull();
     }
@@ -192,9 +186,8 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(412)));
 
-        await Should.ThrowAsync<SyncConflictException>(
-            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
-                TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncConflictException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], "0x8Dabc",
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -202,9 +195,8 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Error(500)));
 
-        await Should.ThrowAsync<SyncNetworkException>(
-            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
-                TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], "0x8Dabc",
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -212,7 +204,7 @@ public class AzureBlobCloudStoreTests
     {
         var store = Store(new CannedBlobHandler(_ => Created("0x8Dnew")));
 
-        var newEtag = await store.PushAsync("bank.db", "snapshot"u8.ToArray(), null,
+        var newEtag = await store.PushAsync("bank.db", [.. "snapshot"u8], null,
             TestContext.Current.CancellationToken);
 
         newEtag.ShouldBe("0x8Dnew");
@@ -224,58 +216,61 @@ public class AzureBlobCloudStoreTests
         // If-Match against a nonexistent blob also 412s (Put Blob semantics, matches S3).
         var store = Store(new CannedBlobHandler(_ => Error(412)));
 
-        await Should.ThrowAsync<SyncConflictException>(
-            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), "0x8Dabc",
-                TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncConflictException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], "0x8Dabc",
+            TestContext.Current.CancellationToken));
     }
 
-    private static AzureBlobCloudStore Store(HttpMessageHandler handler) => new(
-        new BlobServiceClient(FakeConnectionString, new BlobClientOptions
-        {
-            Retry = { MaxRetries = 0 },
-            Transport = new HttpClientTransport(handler)
-        }),
-        "memories",
-        NullLogger<AzureBlobCloudStore>.Instance);
+    private static AzureBlobCloudStore Store(HttpMessageHandler handler) =>
+        new(
+            new BlobServiceClient(FakeConnectionString, new BlobClientOptions
+            {
+                Retry = { MaxRetries = 0 },
+                Transport = new HttpClientTransport(handler)
+            }),
+            "memories",
+            NullLogger<AzureBlobCloudStore>.Instance);
 
-    private static CannedResponse Ok(byte[] body, string etag) => new(
-        200,
-        new Dictionary<string, string>
-        {
-            ["ETag"] = $"\"{etag}\"",
-            ["Content-Type"] = "application/octet-stream",
-            ["Last-Modified"] = "Wed, 05 Aug 2026 12:00:00 GMT",
-            ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
-            ["x-ms-version"] = "2025-07-06",
-            ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT",
-            ["x-ms-blob-type"] = "BlockBlob",
-            ["x-ms-lease-status"] = "unlocked",
-            ["x-ms-lease-state"] = "available",
-            ["x-ms-server-encrypted"] = "true"
-        },
-        body);
+    private static CannedResponse Ok(byte[] body, string etag) =>
+        new(
+            200,
+            new Dictionary<string, string>
+            {
+                ["ETag"] = $"\"{etag}\"",
+                ["Content-Type"] = "application/octet-stream",
+                ["Last-Modified"] = "Wed, 05 Aug 2026 12:00:00 GMT",
+                ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
+                ["x-ms-version"] = "2025-07-06",
+                ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT",
+                ["x-ms-blob-type"] = "BlockBlob",
+                ["x-ms-lease-status"] = "unlocked",
+                ["x-ms-lease-state"] = "available",
+                ["x-ms-server-encrypted"] = "true"
+            },
+            body);
 
-    private static CannedResponse Created(string etag) => new(
-        201,
-        new Dictionary<string, string>
-        {
-            ["ETag"] = $"\"{etag}\"",
-            ["Last-Modified"] = "Wed, 05 Aug 2026 12:00:00 GMT",
-            ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
-            ["x-ms-version"] = "2025-07-06",
-            ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT"
-        },
-        []);
+    private static CannedResponse Created(string etag) =>
+        new(
+            201,
+            new Dictionary<string, string>
+            {
+                ["ETag"] = $"\"{etag}\"",
+                ["Last-Modified"] = "Wed, 05 Aug 2026 12:00:00 GMT",
+                ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
+                ["x-ms-version"] = "2025-07-06",
+                ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT"
+            },
+            []);
 
-    private static CannedResponse Error(int status) => new(
-        status,
-        new Dictionary<string, string>
-        {
-            ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
-            ["x-ms-version"] = "2025-07-06",
-            ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT"
-        },
-        []);
+    private static CannedResponse Error(int status) =>
+        new(
+            status,
+            new Dictionary<string, string>
+            {
+                ["x-ms-request-id"] = "00000000-0000-0000-0000-000000000000",
+                ["x-ms-version"] = "2025-07-06",
+                ["Date"] = "Wed, 05 Aug 2026 12:00:00 GMT"
+            },
+            []);
 
     private sealed record CannedResponse(int Status, IReadOnlyDictionary<string, string> Headers, byte[] Body);
 
@@ -284,7 +279,8 @@ public class AzureBlobCloudStoreTests
     private sealed class ThrowingBlobHandler(Exception exception) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
-            CancellationToken cancellationToken) => throw exception;
+            CancellationToken cancellationToken) =>
+            throw exception;
     }
 
     private sealed class CannedBlobHandler(Func<HttpRequestMessage, CannedResponse> responder) : HttpMessageHandler

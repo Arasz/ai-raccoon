@@ -13,6 +13,16 @@ internal sealed class WatchTestStack
 {
     public static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
+    public WatchTestStack()
+    {
+        var host = new MemoryExtensionHost(Memory, [Extension]);
+        Executor = new WatchDigestExecutor(host, Store, host, Time);
+        Pipeline = new WatchPipeline(
+            new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time,
+            NullLogger<WatchPipeline>.Instance);
+        Service = new WatchService(Store, Memory, Pipeline, Time);
+    }
+
     public FakeTimeProvider Time { get; } = new(FixedNow);
 
     public FakeMemoryStore Memory { get; } = new();
@@ -27,48 +37,36 @@ internal sealed class WatchTestStack
 
     public WatchService Service { get; }
 
-    public WatchTestStack()
-    {
-        var host = new MemoryExtensionHost(Memory, [Extension]);
-        Executor = new WatchDigestExecutor(host, Store, host, Time);
-        Pipeline = new WatchPipeline(
-            new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time,
-            NullLogger<WatchPipeline>.Instance);
-        Service = new WatchService(Store, Memory, Pipeline, Time);
-    }
+    public void Enable(string projectId = "acme") => Memory.Settings[WatchConfigKeys.EnabledProject(projectId)] = "true";
 
-    public void Enable(string projectId = "acme") =>
-        Memory.Settings[WatchConfigKeys.EnabledProject(projectId)] = "true";
-
-    public void AllowScope(string path, string projectId = "acme") =>
-        Memory.Settings[WatchConfigKeys.ScopeProject(projectId)] = WatchConfigKeys.SerializeScope([path]);
+    public void AllowScope(string path, string projectId = "acme") => Memory.Settings[WatchConfigKeys.ScopeProject(projectId)] = WatchConfigKeys.SerializeScope([path]);
 }
 
 /// <summary>Unique disposable temp directory for digest tests (files must exist on disk for the executor).</summary>
 internal sealed class TempDir : IDisposable
 {
-    public string Path { get; }
-
     private TempDir(string root)
     {
         Path = System.IO.Path.Combine(root, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path);
     }
 
-    public static TempDir New(string name) => new(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ai-raccoon-watch-tests", name));
-
-    public string File(string name) => System.IO.Path.Combine(Path, name);
+    public string Path { get; }
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(Path, recursive: true);
+            Directory.Delete(Path, true);
         }
         catch (IOException)
         {
         }
     }
+
+    public static TempDir New(string name) => new(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ai-raccoon-watch-tests", name));
+
+    public string File(string name) => System.IO.Path.Combine(Path, name);
 }
 
 /// <summary>In-memory IWatchStore: watches + per-file fingerprints, with call counters.</summary>
@@ -106,8 +104,7 @@ internal sealed class FakeWatchStore : IWatchStore
 
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<WatchRegistration>>(
-            Watches.Select(w => new WatchRegistration(w.Key.ProjectId, w.Key.Path, w.Value.CreatedAt, w.Value.LastChangeTs))
-                .ToArray());
+            [.. Watches.Select(w => new WatchRegistration(w.Key.ProjectId, w.Key.Path, w.Value.CreatedAt, w.Value.LastChangeTs))]);
 
     public Task UpdateLastChangeAsync(string projectId, string path, long lastChangeTs,
         CancellationToken cancellationToken = default)
@@ -134,10 +131,11 @@ internal sealed class FakeWatchStore : IWatchStore
 
     public Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<string>>(FileHashes.Keys
-            .Where(k => k.StartsWith(projectId + "\u0000", StringComparison.Ordinal))
-            .Select(k => k[(projectId.Length + 1)..])
-            .ToArray());
+        Task.FromResult<IReadOnlyList<string>>([
+            .. FileHashes.Keys
+                .Where(k => k.StartsWith(projectId + "\u0000", StringComparison.Ordinal))
+                .Select(k => k[(projectId.Length + 1)..])
+        ]);
 
     /// <summary>Mirrors the real DeleteSourcePathAsync transaction: chunks + fingerprint die together.</summary>
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
@@ -193,8 +191,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.FromResult(0);
     }
 
-    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Settings.GetValueOrDefault(key));
+    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.GetValueOrDefault(key));
 
     public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
@@ -214,29 +211,25 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
-    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<int> DeleteContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<MemoryEntry> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default) =>
@@ -270,11 +263,10 @@ internal sealed class FakeMemoryStore : IMemoryStore
 /// <summary>IMemoryExtension fake: records OnSourceChangedAsync dispatches, can be made to throw.</summary>
 internal sealed class RecordingExtension : IMemoryExtension
 {
-    public string Name => "Recording";
-
     public List<SourceChangedContext> SourceChanges { get; } = [];
 
     public bool ThrowOnSourceChanged { get; set; }
+    public string Name => "Recording";
 
     public Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken)
     {
@@ -297,6 +289,5 @@ internal sealed class RecordingExtension : IMemoryExtension
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
 
-    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }

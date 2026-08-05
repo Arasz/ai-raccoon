@@ -173,7 +173,7 @@ public sealed class SqliteMemoryStore(
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
                 [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
-                query.RrfK, minScore: 0, limit: int.MaxValue));
+                query.RrfK, 0, int.MaxValue));
 
             DynamicParameters SearchParameters(string ftsExpression)
             {
@@ -201,115 +201,6 @@ public sealed class SqliteMemoryStore(
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
-    }
-
-    /// <summary>
-    ///     Per-modality candidate window before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md):
-    ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
-    ///     starved by a per-modality LIMIT.
-    /// </summary>
-    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3x100) =>
-        mode == CandidateWindowMode.Max5x50
-            ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
-            : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
-
-    /// <summary>
-    ///     Chunk bounds tied to the configured engine's token window; the chunk size never
-    ///     exceeds the engine's max input tokens (avoids truncation dilution at embed time).
-    /// </summary>
-    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            return (DefaultMaxTokens, DefaultOverlayTokens);
-        }
-
-        var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
-            .ConfigureAwait(false);
-        var context = EmbeddingService.ContextTokensFor(provider, model);
-        return (Math.Min(DefaultMaxTokens, context),
-            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
-    }
-
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // ftsExpression is normalized, but a pathological query can still trip the FTS5
-            // tokenizer limits; a failed keyword modality degrades to the vector list.
-            return (await connection.QueryAsync<SearchRow>(
-                        new CommandDefinition(
-                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false))
-                .Select(row => new MemorySearchResult(
-                    row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
-                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
-                .ToList();
-        }
-        catch (SqliteException)
-        {
-            return [];
-        }
-    }
-
-    /// <summary>
-    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
-    ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
-    ///     degrade to content-only order.
-    /// </summary>
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
-        CancellationToken cancellationToken)
-    {
-        var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false))
-            .ToList();
-        var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.StructureVectorSearchByFilter.Replace("{filter}", filter), parameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false))
-            .ToList();
-
-        var limit = parameters.Get<int>("limit");
-        var fused = StructureFusion.Rank(
-            contentRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
-            structureRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
-            alpha, limit);
-
-        var byHash = contentRows.Concat(structureRows)
-            .GroupBy(row => row.Hash, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-
-        return fused
-            .Select(rank => byHash[rank.Hash])
-            .Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
-                row.SourceFile, row.ChunkIndex, row.TotalChunks))
-            .ToList();
-    }
-
-    private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var raw = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
-            .ConfigureAwait(false);
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
-               && alpha is >= 0.0 and <= 1.0
-            ? alpha
-            : StructureFusion.DefaultAlpha;
     }
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -692,6 +583,119 @@ public sealed class SqliteMemoryStore(
         await connection.ExecuteAsync(
                 Def(MemorySql.UpdateEntryTtl, new { projectId, hash, ttlDays }, cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Per-modality candidate window before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md):
+    ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
+    ///     starved by a per-modality LIMIT.
+    /// </summary>
+    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3x100) =>
+        mode == CandidateWindowMode.Max5x50
+            ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
+            : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
+
+    /// <summary>
+    ///     Chunk bounds tied to the configured engine's token window; the chunk size never
+    ///     exceeds the engine's max input tokens (avoids truncation dilution at embed time).
+    /// </summary>
+    private async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return (DefaultMaxTokens, DefaultOverlayTokens);
+        }
+
+        var model = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
+            .ConfigureAwait(false);
+        var context = EmbeddingService.ContextTokensFor(provider, model);
+        return (Math.Min(DefaultMaxTokens, context),
+            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ftsExpression is normalized, but a pathological query can still trip the FTS5
+            // tokenizer limits; a failed keyword modality degrades to the vector list.
+            return
+            [
+                .. (await connection.QueryAsync<SearchRow>(
+                        new CommandDefinition(
+                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(row => new MemorySearchResult(
+                    row.Hash, row.Seq, row.Ranking, row.Path,
+                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
+            ];
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
+    ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
+    ///     degrade to content-only order.
+    /// </summary>
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
+        SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
+        CancellationToken cancellationToken)
+    {
+        var contentRows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
+            .ToList();
+        var structureRows = (await connection.QueryAsync<VectorRow>(
+                    new CommandDefinition(
+                        MemorySql.StructureVectorSearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false))
+            .ToList();
+
+        var limit = parameters.Get<int>("limit");
+        var fused = StructureFusion.Rank(
+            contentRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
+            structureRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
+            alpha, limit);
+
+        var byHash = contentRows.Concat(structureRows)
+            .GroupBy(row => row.Hash, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        return
+        [
+            .. fused
+                .Select(rank => byHash[rank.Hash])
+                .Select(row => new MemorySearchResult(
+                    row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
+                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
+        ];
+    }
+
+    private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var raw = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
+            .ConfigureAwait(false);
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
+               && alpha is >= 0.0 and <= 1.0
+            ? alpha
+            : StructureFusion.DefaultAlpha;
     }
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>

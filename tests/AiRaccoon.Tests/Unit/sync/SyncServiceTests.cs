@@ -490,7 +490,7 @@ public class SyncServiceTests : IDisposable
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Corrupt the remote with invalid bytes.
-        cloud.Set("test-object", new byte[] { 0x00, 0x01, 0x02 }); // not a valid SQLite file
+        cloud.Set("test-object", [0x00, 0x01, 0x02]); // not a valid SQLite file
 
         // Write a real local entry.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -526,7 +526,11 @@ public class SyncServiceTests : IDisposable
         // writes) take effect without a restart — two calls resolve twice.
         var resolutions = 0;
         var service = new SyncService(
-            _ => { resolutions++; return Task.FromResult<ICloudStore>(new FakeCloudStore()); },
+            _ =>
+            {
+                resolutions++;
+                return Task.FromResult<ICloudStore>(new FakeCloudStore());
+            },
             ct => CreateAndOpenAsync(BankPath, ct),
             async (path, ct) =>
             {

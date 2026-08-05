@@ -236,13 +236,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         }
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("airaccoon-store-tests");
-
-    private sealed class FakeBwsRunner(BwsResult result) : IBwsProcessRunner
-    {
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => result;
-    }
+    private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     /// <summary>Valid unencrypted ed25519 openssh-key-v1 PEM built from synthetic bytes (seed 00..1f).</summary>
     private static string ValidEd25519Pem()
@@ -254,7 +248,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         body.Write(Encoding.ASCII.GetBytes("openssh-key-v1\0"));
         WriteString(body, "none");
         WriteString(body, "none");
-        WriteString(body, Array.Empty<byte>());
+        WriteString(body, []);
         WriteUInt32(body, 1);
         using (var pubBlob = new MemoryStream())
         {
@@ -268,17 +262,16 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         WriteUInt32(priv, 0x01234567);
         WriteString(priv, "ssh-ed25519");
         WriteString(priv, pub);
-        WriteString(priv, seed.Concat(pub).ToArray());
-        WriteString(priv, Array.Empty<byte>());
-        priv.Write(new byte[8 - ((int)priv.Length % 8)]);
+        WriteString(priv, [.. seed, .. pub]);
+        WriteString(priv, []);
+        priv.Write(new byte[8 - (int)priv.Length % 8]);
         WriteString(body, priv.ToArray());
 
         return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-            + "\n-----END OPENSSH PRIVATE KEY-----\n";
+                                                       + "\n-----END OPENSSH PRIVATE KEY-----\n";
     }
 
-    private static void WriteUInt32(Stream stream, uint value) =>
-        stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+    private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
     private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 
@@ -286,6 +279,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     {
         WriteUInt32(stream, (uint)value.Length);
         stream.Write(value);
+    }
+
+    private sealed class FakeBwsRunner(BwsResult result) : IBwsProcessRunner
+    {
+        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => result;
     }
 
     private sealed class StubEncryptionKeyProvider(string? passphrase) : IEncryptionKeyProvider

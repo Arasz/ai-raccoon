@@ -104,7 +104,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
     private string Normalized(string path) => WatchPath.Normalize(path);
 
-    private async Task<List<MemorySearchResult>> SearchAsync(string projectId, string token) => (await Ctx.SearchAsync(projectId, token)).ToList();
+    private async Task<List<MemorySearchResult>> SearchAsync(string projectId, string token) => [.. await Ctx.SearchAsync(projectId, token)];
 
     /// <summary>
     ///     Feature baseline: "the server" is configured for watching (enabled, whole bank in
@@ -238,7 +238,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
             if (k > 1)
             {
-                Ctx.TimeProvider.Advance(TimeSpan.FromSeconds(1L << (k - 2)));
+                Ctx.TimeProvider.Advance(TimeSpan.FromSeconds(1L << k - 2));
             }
 
             await Ctx.Pipeline.TickOnceAsync(CancellationToken.None);
@@ -548,7 +548,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         if (IsUnreadableSupported)
         {
             MakeUnreadable(file);
-            await DriveFailuresAsync(file, 1, firstQueued: true);
+            await DriveFailuresAsync(file, 1, true);
         }
     }
 
@@ -574,7 +574,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         await GivenWatchWhoseDigestsFail(projectId);
         if (IsUnreadableSupported)
         {
-            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 4, firstQueued: true);
+            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 4, true);
         }
     }
 
@@ -706,7 +706,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         Ctx.WriteFile(Path.Combine(dir, "x.md"), token + " content");
         File.Move(Path.Combine(dir, "x.md"), Path.Combine(dir, "y.md"));
         Ctx.WriteFile(Path.Combine(dir, "y.md"), token + " content");
-        File.Move(Path.Combine(dir, "y.md"), Path.Combine(dir, "x.md"), overwrite: true);
+        File.Move(Path.Combine(dir, "y.md"), Path.Combine(dir, "x.md"), true);
         Ctx.WriteFile(Path.Combine(dir, "x.md"), token + " final");
         _contentByPath[Path.Combine(dir, "x.md")] = token;
         _lastFile = Path.Combine(dir, "x.md");
@@ -813,7 +813,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var oldPath = Resolve(file);
         var newPath = Resolve(newFile);
         _displacedContent = _contentByPath.TryGetValue(newPath, out var existing) ? existing : null;
-        File.Move(oldPath, newPath, overwrite: true);
+        File.Move(oldPath, newPath, true);
         _lastFile = newPath;
         _lastFileContent = _contentByPath.TryGetValue(oldPath, out var token) ? token : null;
         if (token is not null)
@@ -866,7 +866,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         if (IsUnreadableSupported)
         {
-            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 1, firstQueued: true);
+            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 1, true);
         }
     }
 
@@ -888,7 +888,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         if (IsUnreadableSupported)
         {
-            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 5, firstQueued: true);
+            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 5, true);
         }
     }
 
@@ -1177,14 +1177,14 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [Then("^it is searchable for \"([^\"]*)\" within one second$")]
     public async Task ThenSearchableWithinOneSecond(string projectId)
     {
-        var ok = await EnsureSearchableAsync(projectId, _lastFileContent!, _lastFile, maxFakeSeconds: 1);
+        var ok = await EnsureSearchableAsync(projectId, _lastFileContent!, _lastFile, 1);
         ok.ShouldBeTrue("the content did not become searchable within one (fake) second");
     }
 
     [Then("^the new content is searchable within one second$")]
     public async Task ThenNewContentSearchableWithinOneSecond()
     {
-        var ok = await EnsureSearchableAsync(DefaultProject, _lastFileContent!, _lastFile, maxFakeSeconds: 1);
+        var ok = await EnsureSearchableAsync(DefaultProject, _lastFileContent!, _lastFile, 1);
         ok.ShouldBeTrue("the new content did not become searchable within one (fake) second");
     }
 
@@ -1310,7 +1310,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public async Task ThenFileNotPresentAfterNextTick()
     {
         var path = Path.Combine(Ctx.RepoDir, "file.md");
-        var ok = await Ctx.StepUntilAsync(async () => (await CountEntriesAsync(path, null)) == 0);
+        var ok = await Ctx.StepUntilAsync(async () => await CountEntriesAsync(path, null) == 0);
         ok.ShouldBeTrue("the deleted file's chunks are still present");
         _lastFileContent.ShouldNotBeNull();
         (await SearchAsync(DefaultProject, _lastFileContent!)).Count.ShouldBe(0);
@@ -1401,7 +1401,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public async Task ThenSmallWatchChangeSearchablePromptly()
     {
         var (project, path, token) = _searchables.Single();
-        (await EnsureSearchableAsync(project, token, path, maxFakeSeconds: 1)).ShouldBeTrue(
+        (await EnsureSearchableAsync(project, token, path, 1)).ShouldBeTrue(
             "the small watch's change was not searchable promptly");
     }
 
@@ -1486,7 +1486,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         if (IsUnreadableSupported)
         {
-            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 1, firstQueued: false);
+            await DriveFailuresAsync(BrokenFile(Ctx.RepoDir), 1, false);
             var status = await StatusAsync(DefaultProject);
             status.Watches[0].State.ShouldBe(WatchState.Retrying,
                 "the counter reset on success — one new failure must not stop the watch");

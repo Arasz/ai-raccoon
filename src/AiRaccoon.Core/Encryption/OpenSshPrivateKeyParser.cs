@@ -10,9 +10,9 @@ public static class OpenSshPrivateKeyParser
 {
     private const string BeginFrame = "-----BEGIN OPENSSH PRIVATE KEY-----";
     private const string EndFrame = "-----END OPENSSH PRIVATE KEY-----";
-    private static readonly byte[] Magic = "openssh-key-v1\0"u8.ToArray();
-    private static readonly byte[] Ed25519 = "ssh-ed25519"u8.ToArray();
-    private static readonly byte[] None = "none"u8.ToArray();
+    private static readonly byte[] Magic = [.. "openssh-key-v1\0"u8];
+    private static readonly byte[] Ed25519 = [.. "ssh-ed25519"u8];
+    private static readonly byte[] None = [.. "none"u8];
 
     public static byte[] ParseSeed(string pem)
     {
@@ -129,7 +129,7 @@ public static class OpenSshPrivateKeyParser
         reader.ReadString(); // comment
 
         var padding = reader.Remaining;
-        if ((padding is < 1 or > 8) || section.Length % 8 != 0)
+        if (padding is < 1 or > 8 || section.Length % 8 != 0)
         {
             throw new MalformedPrivateKeyException("invalid padding");
         }
@@ -139,7 +139,7 @@ public static class OpenSshPrivateKeyParser
             throw new MalformedPrivateKeyException("embedded public key does not match the public key field");
         }
 
-        return privateKey[..32].ToArray();
+        return [.. privateKey[..32]];
     }
 
     /// <summary>Big-endian field reader over an openssh-key-v1 blob; any overrun is a malformed key.</summary>
@@ -163,7 +163,7 @@ public static class OpenSshPrivateKeyParser
         public uint ReadUInt32()
         {
             var bytes = ReadBytes(4);
-            return (uint)((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]);
+            return (uint)(bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]);
         }
 
         public ReadOnlySpan<byte> ReadString()

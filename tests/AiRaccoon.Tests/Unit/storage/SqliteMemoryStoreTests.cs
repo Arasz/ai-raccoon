@@ -479,7 +479,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task Write_WithSection_IndexesSectionInFts_AndSectionQueriesMatchIt()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "the widget renderer decision",
-            SourceFile: "docs/adr/0099-widget-renderer.md", Section: "decision"),
+                SourceFile: "docs/adr/0099-widget-renderer.md", Section: "decision"),
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
@@ -576,7 +576,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     [Fact]
     public void Merge_EmptyBatches_ReturnsEmpty() =>
-        SearchResultMerger.Merge([Array.Empty<MemorySearchResult>(), Array.Empty<MemorySearchResult>()], 10)
+        SearchResultMerger.Merge([[], []], 10)
             .ShouldBeEmpty();
 
     private static MemorySearchResult Hit(string hash, int seq, string path) => new(hash, seq, 0, path, "s");
@@ -598,8 +598,22 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new { hash });
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("airaccoon-store-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
+
+    [Fact]
+    public async Task SetSetting_RoundTripsStructureAlpha()
+    {
+        await _store.SetSettingAsync(StructureFusion.AlphaSettingKey, "0.8",
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var raw = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                "SELECT value FROM settings WHERE key = @key",
+                new { key = StructureFusion.AlphaSettingKey },
+                cancellationToken: TestContext.Current.CancellationToken));
+        raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
+    }
 
     private sealed class EntryRow
     {
@@ -628,21 +642,6 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         public int? TtlDays { get; set; }
 
         public string EmbedState { get; set; } = "";
-    }
-
-    [Fact]
-    public async Task SetSetting_RoundTripsStructureAlpha()
-    {
-        await _store.SetSettingAsync(StructureFusion.AlphaSettingKey, "0.8",
-            TestContext.Current.CancellationToken);
-
-        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var raw = await connection.ExecuteScalarAsync<string?>(
-            new CommandDefinition(
-                "SELECT value FROM settings WHERE key = @key",
-                new { key = StructureFusion.AlphaSettingKey },
-                cancellationToken: TestContext.Current.CancellationToken));
-        raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
     }
 
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>

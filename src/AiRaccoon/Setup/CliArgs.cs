@@ -90,7 +90,7 @@ internal static class CliArgs
             // `ai-raccoon [--transport|--data-root|--install-scope]` runs the server
             // instead of failing on the required-subcommand rule.
             parseResult = BuildLaunchRootCommand().Parse(args, new ParserConfiguration { EnablePosixBundling = true });
-            errors = parseResult.Errors.Select(e => e.Message).ToList();
+            errors = [.. parseResult.Errors.Select(e => e.Message)];
         }
 
         var commandPath = CommandPathOf(parseResult);
@@ -143,7 +143,7 @@ internal static class CliArgs
             path.Insert(0, current.Command.Name);
         }
 
-        return path.Count <= 1 ? [] : path.Skip(1).ToArray();
+        return path.Count <= 1 ? [] : [.. path.Skip(1)];
     }
 
     private static CliOptions? ReadOptions(ParseResult parseResult)

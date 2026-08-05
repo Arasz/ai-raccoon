@@ -27,10 +27,10 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     // Owner-default project/secret ids (plan D6) and the synthetic fixtures the fake serves.
     public const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     public const string SecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
-    public const string WrongKeySecretId = "wrong-key-secret-id";        // serves key2.pem → a different derived key
-    public const string BcryptSecretId = "bcrypt-secret-id";             // serves a passphrase-protected key
-    public const string RsaSecretId = "rsa-secret-id";                   // serves an ssh-rsa key
-    public const string UnreachableSecretId = "unreachable-secret-id";   // fake exits 1 "connection refused"
+    public const string WrongKeySecretId = "wrong-key-secret-id"; // serves key2.pem → a different derived key
+    public const string BcryptSecretId = "bcrypt-secret-id"; // serves a passphrase-protected key
+    public const string RsaSecretId = "rsa-secret-id"; // serves an ssh-rsa key
+    public const string UnreachableSecretId = "unreachable-secret-id"; // fake exits 1 "connection refused"
 
     // Obviously fake; the fake bws accepts exactly this token via argv -t and rejects any other.
     public const string KnownToken = "test-bws-token-0123";
@@ -38,20 +38,49 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>The env leg of the resolver: a fixed stub passphrase (never the ambient environment).</summary>
     public const string EnvPassphrase = "env-passphrase";
 
-    private static readonly byte[] Seed00To1F = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-    private static readonly byte[] PublicKey01To20 = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+    // fake bws: `--version` succeeds (presence check); `secret get <id>` serves the matching
+    // fixture; a token is accepted only via argv -t and must equal the known test token. The
+    // inherited BWS_ACCESS_TOKEN is deliberately ignored — the env-token channel is S4's
+    // concern, and the BDD suite must not depend on the ambient shell. Every invocation is
+    // appended to bws-calls.log so steps can assert what the CLI actually ran.
+    private const string FakeBwsScript = """
+                                         #!/bin/sh
+                                         DIR="$(dirname "$0")"
+                                         echo "$@" >> "$DIR/bws-calls.log"
+                                         TOKEN=""
+                                         ID=""
+                                         while [ "$#" -gt 0 ]; do
+                                           case "$1" in
+                                             -t) TOKEN="$2"; shift 2 ;;
+                                             --version) echo "bws 1.0.0 (fake)"; exit 0 ;;
+                                             get) ID="$2"; shift 2 ;;
+                                             *) shift ;;
+                                           esac
+                                         done
+                                         if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
+                                         if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
+                                         case "$ID" in
+                                           f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
+                                           wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
+                                           bcrypt-secret-id) cat "$DIR/key-bcrypt.pem"; exit 0 ;;
+                                           rsa-secret-id) cat "$DIR/key-rsa.pem"; exit 0 ;;
+                                           unreachable-secret-id) echo "bws: error: request failed (connection refused)" >&2; exit 1 ;;
+                                           garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
+                                           *) echo "bws: secret not found: $ID" >&2; exit 1 ;;
+                                         esac
+                                         """;
 
-    private readonly InfrastructureOptions _options;
-    private readonly PathSwitchingRunner _runner;
+    private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+    private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
 
     public EncryptionBitwardenFeatureContext()
     {
-        _options = new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+        var options = new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         FakeBwsDir = Path.Combine(DataRoot, "fake-bws");
         BwsExecutable = Path.Combine(FakeBwsDir, "bws");
-        _runner = new PathSwitchingRunner(() => BwsExecutable);
-        Resolver = new EncryptionKeyResolver(_options, new StubEnvProvider(EnvPassphrase), _runner);
-        Bank = new SqliteConnectionFactory(_options, Resolver);
+        var runner = new PathSwitchingRunner(() => BwsExecutable);
+        Resolver = new EncryptionKeyResolver(options, new StubEnvProvider(EnvPassphrase), runner);
+        Bank = new SqliteConnectionFactory(options, Resolver);
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
     }
 
@@ -81,9 +110,6 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     public string CallsLogPath => Path.Combine(FakeBwsDir, "bws-calls.log");
 
-    /// <summary>Outcome of one in-process CLI run (the same dispatch as Program.cs).</summary>
-    public sealed record CliRun(int Exit, string Out, string Err);
-
     /// <summary>
     ///     Writes the fake bws script + the synthetic ed25519 fixtures (key.pem = §5.1 vector seed,
     ///     key2.pem = a different seed) and makes the script executable. Absolute path; no PATH mutation.
@@ -93,8 +119,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         Directory.CreateDirectory(FakeBwsDir);
         WriteKeyFixture("key.pem", BuildEd25519Pem(Seed00To1F, PublicKey01To20));
         WriteKeyFixture("key2.pem", BuildEd25519Pem(
-            Enumerable.Range(0x20, 32).Select(i => (byte)i).ToArray(),
-            Enumerable.Range(0x21, 32).Select(i => (byte)i).ToArray()));
+            [.. Enumerable.Range(0x20, 32).Select(i => (byte)i)],
+            [.. Enumerable.Range(0x21, 32).Select(i => (byte)i)]));
         File.WriteAllText(Path.Combine(FakeBwsDir, "bws"), FakeBwsScript);
         if (!OperatingSystem.IsWindows())
         {
@@ -129,7 +155,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     {
         InstallFakeBws();
         WriteSidecar(SecretId);
-        await using (var probe = await Bank.OpenBankAsync(cancellationToken))
+        await using (await Bank.OpenBankAsync(cancellationToken))
         {
         }
 
@@ -162,8 +188,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
-            new StringReader(stdin), cancellationToken: CancellationToken.None, bank: Bank, bws: NewRunner(),
-            env: new StubEnvProvider(EnvPassphrase));
+            new StringReader(stdin), CancellationToken.None, Bank, NewRunner(),
+            new StubEnvProvider(EnvPassphrase));
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -210,10 +236,15 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     public IBwsProcessRunner NewRunner() => new BwsProcessRunner(BwsExecutable);
 
+    /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
+    private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new OpenSshKeyBuilder().Build(seed, pub);
+
+    /// <summary>Outcome of one in-process CLI run (the same dispatch as Program.cs).</summary>
+    public sealed record CliRun(int Exit, string Out, string Err);
+
     private sealed class PathSwitchingRunner(Func<string> path) : IBwsProcessRunner
     {
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) =>
-            new BwsProcessRunner(path()).Run(args, token, timeout);
+        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => new BwsProcessRunner(path()).Run(args, token, timeout);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
@@ -223,44 +254,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
-
-    // fake bws: `--version` succeeds (presence check); `secret get <id>` serves the matching
-    // fixture; a token is accepted only via argv -t and must equal the known test token. The
-    // inherited BWS_ACCESS_TOKEN is deliberately ignored — the env-token channel is S4's
-    // concern, and the BDD suite must not depend on the ambient shell. Every invocation is
-    // appended to bws-calls.log so steps can assert what the CLI actually ran.
-    private const string FakeBwsScript = """
-#!/bin/sh
-DIR="$(dirname "$0")"
-echo "$@" >> "$DIR/bws-calls.log"
-TOKEN=""
-ID=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -t) TOKEN="$2"; shift 2 ;;
-    --version) echo "bws 1.0.0 (fake)"; exit 0 ;;
-    get) ID="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
-if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
-case "$ID" in
-  f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
-  wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
-  bcrypt-secret-id) cat "$DIR/key-bcrypt.pem"; exit 0 ;;
-  rsa-secret-id) cat "$DIR/key-rsa.pem"; exit 0 ;;
-  unreachable-secret-id) echo "bws: error: request failed (connection refused)" >&2; exit 1 ;;
-  garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
-  *) echo "bws: secret not found: $ID" >&2; exit 1 ;;
-esac
-""";
-
-    /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
-    private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new OpenSshKeyBuilder().Build(seed, pub);
 
     private sealed class OpenSshKeyBuilder
     {
@@ -290,7 +285,7 @@ esac
             body.Write("openssh-key-v1\0"u8);
             WriteString(body, _cipherName);
             WriteString(body, _kdfName);
-            WriteString(body, Array.Empty<byte>());
+            WriteString(body, []);
             WriteUInt32(body, 1);
             WriteString(body, BuildPublicKeyBlob(pub));
             WriteString(body, BuildPrivateSection(seed, pub));
@@ -316,14 +311,13 @@ esac
             WriteUInt32(section, 0x01234567);
             WriteString(section, _keyType);
             WriteString(section, pub);
-            WriteString(section, seed.Concat(pub).ToArray());
-            WriteString(section, Array.Empty<byte>());
-            section.Write(new byte[8 - ((int)section.Length % 8)]);
+            WriteString(section, [.. seed, .. pub]);
+            WriteString(section, []);
+            section.Write(new byte[8 - (int)section.Length % 8]);
             return section.ToArray();
         }
 
-        private static void WriteUInt32(Stream stream, uint value) =>
-            stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
         private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 

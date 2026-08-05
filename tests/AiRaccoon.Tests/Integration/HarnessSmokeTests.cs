@@ -55,8 +55,8 @@ public sealed class HarnessSmokeTests
 
             // Deterministic: an independent run produces the identical ranking (Kendall-tau 1).
             RetrievalMetrics.KendallTau(
-                    cachedResult.Hits.Select(h => h.Path).ToList(),
-                    freshResult.Hits.Select(h => h.Path).ToList())
+                    [.. cachedResult.Hits.Select(h => h.Path)],
+                    [.. freshResult.Hits.Select(h => h.Path)])
                 .ShouldBe(1.0, $"{queryId} ranking differs between identical runs");
 
             // Sane quality: corpus queries have verified ground truth, so the reference oracle

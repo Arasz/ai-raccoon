@@ -33,11 +33,13 @@ public static class WatchScopeList
         ArgumentNullException.ThrowIfNull(current);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var normalized = Path.GetFullPath(path);
-        return current
-            .Append(normalized)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(p => p, StringComparer.Ordinal)
-            .ToList();
+        return
+        [
+            .. current
+                .Append(normalized)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(p => p, StringComparer.Ordinal)
+        ];
     }
 
     public static IReadOnlyList<string> Remove(IEnumerable<string> current, string path)
@@ -45,8 +47,10 @@ public static class WatchScopeList
         ArgumentNullException.ThrowIfNull(current);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var normalized = Path.GetFullPath(path);
-        return current
-            .Where(p => !string.Equals(p, normalized, StringComparison.Ordinal))
-            .ToList();
+        return
+        [
+            .. current
+                .Where(p => !string.Equals(p, normalized, StringComparison.Ordinal))
+        ];
     }
 }

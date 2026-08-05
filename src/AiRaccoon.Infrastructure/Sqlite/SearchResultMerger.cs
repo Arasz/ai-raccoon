@@ -23,11 +23,13 @@ internal static class SearchResultMerger
         var lists = batches
             .Select(batch => (batch, Weight: 1.0))
             .ToList();
-        var fused = ReciprocalRankFusion.Fuse(lists, rrfK, minScore: 0.0, limit: int.MaxValue);
+        var fused = ReciprocalRankFusion.Fuse(lists, rrfK, 0.0, int.MaxValue);
         var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula);
-        return ranked
-            .Where(result => result.Ranking >= minScore)
-            .Take(limit)
-            .ToList();
+        return
+        [
+            .. ranked
+                .Where(result => result.Ranking >= minScore)
+                .Take(limit)
+        ];
     }
 }

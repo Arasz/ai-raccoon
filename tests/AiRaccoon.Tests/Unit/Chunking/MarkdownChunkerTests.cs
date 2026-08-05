@@ -15,7 +15,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("aaaa\nbbbb\ncccc\ndddd\n", 10, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "aaaa\nbbbb\n", "cccc\ndddd\n" });
+        chunks.ShouldBe(["aaaa\nbbbb\n", "cccc\ndddd\n"]);
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("aaaa\nbbbb\ncccc\ndddd\n", 10, 5, CharCount);
 
-        chunks.ShouldBe(new[] { "aaaa\nbbbb\n", "bbbb\ncccc\n", "cccc\ndddd\n" });
+        chunks.ShouldBe(["aaaa\nbbbb\n", "bbbb\ncccc\n", "cccc\ndddd\n"]);
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("aaaa\nbbbb\n", 10, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "aaaa\nbbbb\n" });
+        chunks.ShouldBe(["aaaa\nbbbb\n"]);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class MarkdownChunkerTests
 
         var chunks = MarkdownChunker.Split(text, 12, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "# Title\n\n", "```csharp\nvar x = 1;\nvar y = 2;\n```\n", "\nTail.\n" });
+        chunks.ShouldBe(["# Title\n\n", "```csharp\nvar x = 1;\nvar y = 2;\n```\n", "\nTail.\n"]);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class MarkdownChunkerTests
 
         var chunks = MarkdownChunker.Split(fence, 5, 0, CharCount);
 
-        chunks.ShouldBe(new[] { fence });
+        chunks.ShouldBe([fence]);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("~~~\ncode\n~~~\n", 5, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "~~~\ncode\n~~~\n" });
+        chunks.ShouldBe(["~~~\ncode\n~~~\n"]);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("```\ncode\nmore\n", 5, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "```\ncode\nmore\n" });
+        chunks.ShouldBe(["```\ncode\nmore\n"]);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class MarkdownChunkerTests
 
         var chunks = MarkdownChunker.Split(text, 3, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "a\n\n", "```\nx\n```\n", "\nb\n", "\n", "```\ny\n```\n" });
+        chunks.ShouldBe(["a\n\n", "```\nx\n```\n", "\nb\n", "\n", "```\ny\n```\n"]);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("aa\r\nbb\r\ncc", 5, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "aa\n", "bb\ncc" });
+        chunks.ShouldBe(["aa\n", "bb\ncc"]);
         chunks.ShouldAllBe(chunk => !chunk.Contains('\r'));
     }
 
@@ -113,7 +113,7 @@ public class MarkdownChunkerTests
     {
         var chunks = MarkdownChunker.Split("aa\nbb\ncc", 4, 0, CharCount);
 
-        chunks.ShouldBe(new[] { "aa\n", "bb\n", "cc" });
+        chunks.ShouldBe(["aa\n", "bb\n", "cc"]);
     }
 
     [Fact]

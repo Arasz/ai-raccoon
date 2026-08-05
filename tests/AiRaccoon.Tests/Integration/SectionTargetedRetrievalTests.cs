@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
@@ -38,9 +39,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     private readonly string _dataRoot;
     private readonly SqliteConnectionFactory _factory;
-    private readonly SqliteMemoryStore _store;
-    private readonly ITestOutputHelper _output;
     private readonly Dictionary<string, string> _hashMap;
+    private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public SectionTargetedRetrievalTests(ITestOutputHelper output)
     {
@@ -222,8 +223,8 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     public async Task FileLevelRanks_FusedArm_NoRegressionBeyondTolerance()
     {
         var queries = FileLevelQueries();
-        var contentOnly = await FileRanksAsync(queries, alpha: 1.0, TestContext.Current.CancellationToken);
-        var fused = await FileRanksAsync(queries, alpha: StructureFusion.DefaultAlpha,
+        var contentOnly = await FileRanksAsync(queries, 1.0, TestContext.Current.CancellationToken);
+        var fused = await FileRanksAsync(queries, StructureFusion.DefaultAlpha,
             TestContext.Current.CancellationToken);
 
         var hit5Regressions = queries
@@ -233,7 +234,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             .ToList();
         var rankRegressions = queries
             .Where(query => contentOnly[query.Id] is not null && fused[query.Id] is not null
-                            && fused[query.Id]! > contentOnly[query.Id]! + MaxFileRankRegression)
+                                                              && fused[query.Id]! > contentOnly[query.Id]! + MaxFileRankRegression)
             .Select(query => $"{query.Id}: {contentOnly[query.Id]} -> {fused[query.Id]}")
             .ToList();
 
@@ -280,7 +281,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         IReadOnlyList<BaselineQuery> queries, double alpha, CancellationToken cancellationToken)
     {
         await _store.SetSettingAsync(StructureFusion.AlphaSettingKey,
-            alpha.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+            alpha.ToString(CultureInfo.InvariantCulture), cancellationToken);
         var ranks = new Dictionary<string, int?>(StringComparer.Ordinal);
         foreach (var query in queries)
         {
@@ -303,20 +304,22 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinScore: 0.0, RrfK: 60,
             FtsWeight: 1, VectorWeight: 1), cancellationToken);
-        return results.ToList();
+        return [.. results];
     }
 
     private List<BaselineQuery> QueriesWithSectionGroundTruth() =>
-        LoadQueries()
+    [
+        .. LoadQueries()
             .Where(q => q.Id is "A1" or "A2" or "A3" or "A4" or "A5" or "A7")
             .Where(q => q.ExpectedSource is not null && _hashMap.ContainsKey(q.ExpectedSource))
-            .ToList();
+    ];
 
     private List<BaselineQuery> FileLevelQueries() =>
-        LoadQueries()
+    [
+        .. LoadQueries()
             .Where(q => q.ExpectedSource is not null && _hashMap.ContainsKey(q.ExpectedSource))
             .Where(q => q.Id is "A1" or "A2" or "A3" or "A4" or "A5" or "A6" or "A7" or "C1" or "C2" or "C5")
-            .ToList();
+    ];
 
     private static async Task<IReadOnlyList<string>> ColumnNamesAsync(SqliteConnection connection)
     {

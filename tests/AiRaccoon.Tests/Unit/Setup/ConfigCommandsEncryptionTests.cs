@@ -4,7 +4,6 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
-using AiRaccoon.Tests;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -25,6 +24,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+
     private const string BwsNotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
@@ -41,8 +41,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
-    private void WriteSidecar(string source, string projectId, string secretId) =>
-        new EncryptionSourceSidecar(BankPath()).Write(new EncryptionSourceConfig(source, projectId, secretId));
+    private void WriteSidecar(string source, string projectId, string secretId) => new EncryptionSourceSidecar(BankPath()).Write(new EncryptionSourceConfig(source, projectId, secretId));
 
     private async Task<(int Exit, string Out, string Err, SqliteConnectionFactory Bank)> Run(string[] args,
         FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
@@ -56,8 +55,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken, bank: bank, bws: runner,
-            env: new StubEnvProvider(envPassphrase));
+            stdin ?? TextReader.Null, TestContext.Current.CancellationToken, bank, runner,
+            new StubEnvProvider(envPassphrase));
         return (exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -86,7 +85,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsInvocationException(BwsNotFoundText));
 
-        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"));
+        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
         exit.ShouldBe(1);
         err.ShouldContain("bws not found");
@@ -101,7 +100,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
 
-        var (exit, stdout, err, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"));
+        var (exit, stdout, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
         exit.ShouldBe(0);
         stdout.ShouldContain("encryption source set to bitwarden");
@@ -129,7 +128,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
 
-        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("p-111\ns-222\n"));
+        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("p-111\ns-222\n"));
 
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe("p-111");
@@ -147,7 +146,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, _, _) = await Run(["encryption", "bitwarden", "-t", "tok-123"], store, runner,
-            stdin: new StringReader("\n\n"));
+            new StringReader("\n\n"));
 
         exit.ShouldBe(0);
         runner.Calls[0].Token.ShouldBeNull(); // the presence check never takes the token
@@ -162,7 +161,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(1, "", "secret not found (code: 404)"));
 
-        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"));
+        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
         exit.ShouldBe(1);
         err.ShouldContain("bws failed (exit 1)");
@@ -178,7 +177,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, "not an openssh key", ""));
 
-        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"));
+        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
         exit.ShouldBe(1);
         err.ShouldContain("malformed OpenSSH private key");
@@ -199,8 +198,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"),
-            envPassphrase: "env-pass");
+        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"),
+            "env-pass");
 
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
@@ -230,8 +229,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n"),
-            envPassphrase: "env-pass");
+        var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"),
+            "env-pass");
 
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
@@ -255,7 +254,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner,
-            stdin: new StringReader("\n\n"), envPassphrase: "env-pass");
+            new StringReader("\n\n"), "env-pass");
 
         exit.ShouldBe(0);
         err.ShouldContain("bank is env-keyed");
@@ -280,7 +279,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
 
         var (exit, _, err, _) = await WithEnvPassphrase(null, () =>
-            Run(["encryption", "bitwarden"], store, runner, stdin: new StringReader("\n\n")));
+            Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
 
         exit.ShouldBe(1);
         err.ShouldContain("encryption mismatch");
@@ -445,107 +444,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         wrongKey.SqliteErrorCode.ShouldBe(26);
     }
 
-    private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
-    {
-        public string? GetPassphrase() => passphrase;
-    }
-
-    private sealed class FakeBwsRunner : IBwsProcessRunner
-    {
-        private readonly BwsResult? _result;
-        private readonly BwsInvocationException? _exception;
-
-        public FakeBwsRunner(BwsResult result) => _result = result;
-        public FakeBwsRunner(BwsInvocationException exception) => _exception = exception;
-
-        public List<(IReadOnlyList<string> Args, string? Token)> Calls { get; } = [];
-
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
-        {
-            Calls.Add((args.ToList(), token));
-            if (_exception is not null)
-            {
-                throw _exception;
-            }
-
-            return _result!;
-        }
-    }
-
-    /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
-    private sealed class OpenSshKeyBuilder
-    {
-        private static readonly byte[] Seed00To1F = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly byte[] PublicKey01To20 = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
-
-        private string _magic = "openssh-key-v1\0";
-        private string _cipherName = "none";
-        private string _kdfName = "none";
-        private string _keyType = "ssh-ed25519";
-        private uint _checkint1 = 0x01234567;
-        private uint _checkint2 = 0x01234567;
-
-        public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
-        {
-            _cipherName = cipherName;
-            _kdfName = kdfName;
-            return this;
-        }
-
-        public OpenSshKeyBuilder WithKeyType(string keyType)
-        {
-            _keyType = keyType;
-            return this;
-        }
-
-        public string Build()
-        {
-            using var body = new MemoryStream();
-            body.Write(Encoding.ASCII.GetBytes(_magic));
-            WriteString(body, _cipherName);
-            WriteString(body, _kdfName);
-            WriteString(body, Array.Empty<byte>());
-            WriteUInt32(body, 1);
-            WriteString(body, BuildPublicKeyBlob());
-            WriteString(body, BuildPrivateSection());
-
-            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-                + "\n-----END OPENSSH PRIVATE KEY-----\n";
-        }
-
-        private byte[] BuildPublicKeyBlob()
-        {
-            using var blob = new MemoryStream();
-            WriteString(blob, _keyType);
-            WriteString(blob, PublicKey01To20);
-            return blob.ToArray();
-        }
-
-        private byte[] BuildPrivateSection()
-        {
-            using var section = new MemoryStream();
-            WriteUInt32(section, _checkint1);
-            WriteUInt32(section, _checkint2);
-            WriteString(section, _keyType);
-            WriteString(section, PublicKey01To20);
-            WriteString(section, Seed00To1F.Concat(PublicKey01To20).ToArray());
-            WriteString(section, Array.Empty<byte>());
-            section.Write(new byte[8 - ((int)section.Length % 8)]);
-            return section.ToArray();
-        }
-
-        private static void WriteUInt32(Stream stream, uint value) =>
-            stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
-
-        private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
-
-        private static void WriteString(Stream stream, byte[] value)
-        {
-            WriteUInt32(stream, (uint)value.Length);
-            stream.Write(value);
-        }
-    }
-[Fact]
+    [Fact]
     public async Task Unset_RealBank_RekeysBackFromResolverCreatedBank()
     {
         var store = new FakeConfigStore
@@ -573,4 +472,110 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
+    private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
+    {
+        public string? GetPassphrase() => passphrase;
+    }
+
+    private sealed class FakeBwsRunner : IBwsProcessRunner
+    {
+        private readonly BwsInvocationException? _exception;
+        private readonly BwsResult? _result;
+
+        public FakeBwsRunner(BwsResult result)
+        {
+            _result = result;
+        }
+
+        public FakeBwsRunner(BwsInvocationException exception)
+        {
+            _exception = exception;
+        }
+
+        public List<(IReadOnlyList<string> Args, string? Token)> Calls { get; } = [];
+
+        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
+        {
+            Calls.Add(([.. args], token));
+            if (_exception is not null)
+            {
+                throw _exception;
+            }
+
+            return _result!;
+        }
+    }
+
+    /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
+    private sealed class OpenSshKeyBuilder
+    {
+        private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+        private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
+        private uint _checkint1 = 0x01234567;
+        private uint _checkint2 = 0x01234567;
+        private string _cipherName = "none";
+        private string _kdfName = "none";
+        private string _keyType = "ssh-ed25519";
+
+        private string _magic = "openssh-key-v1\0";
+
+        public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
+        {
+            _cipherName = cipherName;
+            _kdfName = kdfName;
+            return this;
+        }
+
+        public OpenSshKeyBuilder WithKeyType(string keyType)
+        {
+            _keyType = keyType;
+            return this;
+        }
+
+        public string Build()
+        {
+            using var body = new MemoryStream();
+            body.Write(Encoding.ASCII.GetBytes(_magic));
+            WriteString(body, _cipherName);
+            WriteString(body, _kdfName);
+            WriteString(body, []);
+            WriteUInt32(body, 1);
+            WriteString(body, BuildPublicKeyBlob());
+            WriteString(body, BuildPrivateSection());
+
+            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
+                                                           + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        }
+
+        private byte[] BuildPublicKeyBlob()
+        {
+            using var blob = new MemoryStream();
+            WriteString(blob, _keyType);
+            WriteString(blob, PublicKey01To20);
+            return blob.ToArray();
+        }
+
+        private byte[] BuildPrivateSection()
+        {
+            using var section = new MemoryStream();
+            WriteUInt32(section, _checkint1);
+            WriteUInt32(section, _checkint2);
+            WriteString(section, _keyType);
+            WriteString(section, PublicKey01To20);
+            WriteString(section, [.. Seed00To1F, .. PublicKey01To20]);
+            WriteString(section, []);
+            section.Write(new byte[8 - (int)section.Length % 8]);
+            return section.ToArray();
+        }
+
+        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+
+        private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
+
+        private static void WriteString(Stream stream, byte[] value)
+        {
+            WriteUInt32(stream, (uint)value.Length);
+            stream.Write(value);
+        }
+    }
 }

@@ -1,13 +1,11 @@
-using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Sync;
-using Amazon;
-using Amazon.Runtime;
-using Amazon.S3;
-using Amazon.S3.Model;
-using Microsoft.Extensions.Logging.Abstractions;
-using Shouldly;
 using System.Net;
 using System.Reflection;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sync;
+using Amazon.Runtime;
+using Amazon.S3;
+using Microsoft.Extensions.Logging.Abstractions;
+using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.sync;
@@ -66,8 +64,7 @@ public class S3CloudStoreTests
     {
         var store = Store(ThrowingS3(new AmazonClientException("Failed to resolve AWS credentials")));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -78,8 +75,7 @@ public class S3CloudStoreTests
             StatusCode = HttpStatusCode.Forbidden
         }));
 
-        await Should.ThrowAsync<SyncAuthFailedException>(
-            () => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -87,9 +83,8 @@ public class S3CloudStoreTests
     {
         var store = Store(ThrowingS3(new HttpRequestException("connection reset")));
 
-        await Should.ThrowAsync<SyncNetworkException>(
-            () => store.PushAsync("bank.db", "snapshot"u8.ToArray(), null,
-                TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
     }
 
     private static S3CloudStore Store(IAmazonS3 s3) => new(s3, "memories", NullLogger<S3CloudStore>.Instance);
@@ -105,7 +100,6 @@ public class S3CloudStoreTests
     {
         public Exception? Exception { get; set; }
 
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            throw Exception ?? new InvalidOperationException("no exception configured");
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => throw Exception ?? new InvalidOperationException("no exception configured");
     }
 }

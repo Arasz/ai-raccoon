@@ -51,8 +51,8 @@ public sealed class BaselineMetricsTests : IDisposable
     };
 
     private readonly string _dataRoot;
-    private readonly SqliteMemoryStore _store;
     private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public BaselineMetricsTests(ITestOutputHelper output)
     {
@@ -165,7 +165,7 @@ public sealed class BaselineMetricsTests : IDisposable
             queries.Length,
             evaluated.Count,
             DeterminismHash(metrics),
-            metrics.OrderBy(m => m.Id, StringComparer.Ordinal).ToList(),
+            [.. metrics.OrderBy(m => m.Id, StringComparer.Ordinal)],
             categories);
 
         var reportPath = Path.Combine(AppContext.BaseDirectory, ReportFileName);
@@ -407,45 +407,6 @@ public sealed class BaselineMetricsTests : IDisposable
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))).ToLowerInvariant();
     }
 
-    /// <summary>
-    ///     Inverted chunk-hash-map.json: structured path -&gt; hash becomes hash -&gt; path, and
-    ///     per-query relevance sets are derived from expectedSource: exact-chunk = the hash of
-    ///     the expectedSource key itself; file-level = every hash whose structured path starts
-    ///     with the file part before '#' (all chunks of the expected file).
-    /// </summary>
-    private sealed class RelevanceSets
-    {
-        private readonly Dictionary<string, string> _hashByPath;
-        private readonly Dictionary<string, IReadOnlySet<string>> _cache = new(StringComparer.Ordinal);
-
-        public RelevanceSets(Dictionary<string, string> hashByPath) => _hashByPath = hashByPath;
-
-        public IReadOnlySet<string> FileLevel(string? expectedSource)
-        {
-            if (expectedSource is null)
-            {
-                return Empty;
-            }
-
-            if (_cache.TryGetValue(expectedSource, out var cached))
-            {
-                return cached;
-            }
-
-            var filePart = expectedSource.Contains('#')
-                ? expectedSource[..expectedSource.IndexOf('#')]
-                : expectedSource;
-            var hashes = _hashByPath
-                .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-                .Select(pair => pair.Value)
-                .ToHashSet(StringComparer.Ordinal);
-            _cache[expectedSource] = hashes;
-            return hashes;
-        }
-
-        public static IReadOnlySet<string> Empty { get; } = new HashSet<string>(StringComparer.Ordinal);
-    }
-
     private static RelevanceSets BuildRelevanceSets()
     {
         var projectRoot = FindProjectRoot();
@@ -457,8 +418,8 @@ public sealed class BaselineMetricsTests : IDisposable
         }
 
         var map = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            File.ReadAllText(mapPath), JsonOptions)
-            ?? throw new InvalidOperationException($"Unreadable {mapPath}");
+                      File.ReadAllText(mapPath), JsonOptions)
+                  ?? throw new InvalidOperationException($"Unreadable {mapPath}");
         return new RelevanceSets(map);
     }
 
@@ -472,8 +433,7 @@ public sealed class BaselineMetricsTests : IDisposable
 
     // --------------------------------------------------------------- fixtures / loading
 
-    private static BaselineQuery QueryById(IReadOnlyList<BaselineQuery> queries, string id) =>
-        queries.First(q => q.Id == id);
+    private static BaselineQuery QueryById(IReadOnlyList<BaselineQuery> queries, string id) => queries.First(q => q.Id == id);
 
     private static string ResolveBundledDbPath()
     {
@@ -519,6 +479,48 @@ public sealed class BaselineMetricsTests : IDisposable
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-baseline-metrics");
+
+    /// <summary>
+    ///     Inverted chunk-hash-map.json: structured path -&gt; hash becomes hash -&gt; path, and
+    ///     per-query relevance sets are derived from expectedSource: exact-chunk = the hash of
+    ///     the expectedSource key itself; file-level = every hash whose structured path starts
+    ///     with the file part before '#' (all chunks of the expected file).
+    /// </summary>
+    private sealed class RelevanceSets
+    {
+        private readonly Dictionary<string, IReadOnlySet<string>> _cache = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _hashByPath;
+
+        public RelevanceSets(Dictionary<string, string> hashByPath)
+        {
+            _hashByPath = hashByPath;
+        }
+
+        public static IReadOnlySet<string> Empty { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        public IReadOnlySet<string> FileLevel(string? expectedSource)
+        {
+            if (expectedSource is null)
+            {
+                return Empty;
+            }
+
+            if (_cache.TryGetValue(expectedSource, out var cached))
+            {
+                return cached;
+            }
+
+            var filePart = expectedSource.Contains('#')
+                ? expectedSource[..expectedSource.IndexOf('#')]
+                : expectedSource;
+            var hashes = _hashByPath
+                .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
+                .Select(pair => pair.Value)
+                .ToHashSet(StringComparer.Ordinal);
+            _cache[expectedSource] = hashes;
+            return hashes;
+        }
+    }
 
     // ------------------------------------------------------------------ report records
 

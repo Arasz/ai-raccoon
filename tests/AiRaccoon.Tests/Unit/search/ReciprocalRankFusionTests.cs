@@ -68,7 +68,7 @@ public sealed class ReciprocalRankFusionTests
         // (empty vec list) must not drop the keyword hits.
         var fts = new[] { Hit("a"), Hit("b") };
 
-        var fused = ReciprocalRankFusion.Fuse([(fts, 1), (Array.Empty<MemorySearchResult>(), 1)],
+        var fused = ReciprocalRankFusion.Fuse([(fts, 1), ([], 1)],
             60, 0, 10);
 
         fused.Select(r => r.Hash).ShouldBe(["a", "b"]);

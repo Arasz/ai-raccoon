@@ -21,13 +21,12 @@ public sealed partial class WatchPipeline(
     TimeProvider timeProvider,
     ILogger<WatchPipeline> logger)
 {
-    public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
-
     private readonly Channel<WatchEvent> _events = Channel.CreateUnbounded<WatchEvent>();
     private readonly object _gate = new();
     private readonly Dictionary<(string ProjectId, string Path), WatchEvent> _pending = new(WatchKeyComparer.Instance);
     private readonly Dictionary<(string ProjectId, string Path), WatchRuntimeState> _runtime = new(WatchKeyComparer.Instance);
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
+    public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
     /// <summary>Thread-safe entry point for the event source (S5): writes into the single channel.</summary>
     public void Enqueue(WatchEvent evt)
@@ -99,12 +98,14 @@ public sealed partial class WatchPipeline(
     {
         lock (_gate)
         {
-            return _runtime
-                .Where(kv => kv.Key.ProjectId == projectId)
-                .Select(kv => new WatchStatus(projectId, kv.Key.Path, kv.Value.State, kv.Value.LastError,
-                    kv.Value.LastSync))
-                .OrderBy(s => s.Path, WatchPath.PathComparer)
-                .ToArray();
+            return
+            [
+                .. _runtime
+                    .Where(kv => kv.Key.ProjectId == projectId)
+                    .Select(kv => new WatchStatus(projectId, kv.Key.Path, kv.Value.State, kv.Value.LastError,
+                        kv.Value.LastSync))
+                    .OrderBy(s => s.Path, WatchPath.PathComparer)
+            ];
         }
     }
 

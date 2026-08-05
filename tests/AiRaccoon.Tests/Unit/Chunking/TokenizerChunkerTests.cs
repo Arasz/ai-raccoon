@@ -22,7 +22,7 @@ public class TokenizerChunkerTests
 
         var chunks = chunker.Chunk("# Hello\n\nShort note.\n", 512);
 
-        chunks.ShouldBe(new[] { "# Hello\n\nShort note.\n" });
+        chunks.ShouldBe(["# Hello\n\nShort note.\n"]);
     }
 
     [Fact]

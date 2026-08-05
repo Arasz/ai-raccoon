@@ -4,7 +4,6 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -27,12 +26,39 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     private const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string SecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
     private const string WrongKeySecretId = "wrong-key-secret-id"; // fake serves key2.pem → a different derived key
-    private const string GarbageSecretId = "garbage-secret-id";    // fake prints non-key stdout
-    private const string SleepSecretId = "sleep-secret-id";        // fake sleeps (timeout leg)
-    private const string UnknownSecretId = "unknown-secret-id";    // fake exits 1 "secret not found"
+    private const string GarbageSecretId = "garbage-secret-id"; // fake prints non-key stdout
+    private const string SleepSecretId = "sleep-secret-id"; // fake sleeps (timeout leg)
+    private const string UnknownSecretId = "unknown-secret-id"; // fake exits 1 "secret not found"
 
     // Obviously fake; the fake bws accepts exactly this token, from BWS_ACCESS_TOKEN or argv -t.
     private const string KnownToken = "test-bws-token-0123";
+
+    // fake bws: emulates `bws secret get <id>` (plan §5.3). A token may arrive via argv `-t <token>`
+    // or the inherited BWS_ACCESS_TOKEN; when one is present it must equal the known test token,
+    // else bws-style stderr + exit 1. No token → serve the key (the plan's fixture recipe).
+    private const string FakeBwsScript = """
+                                         #!/bin/sh
+                                         DIR="$(dirname "$0")"
+                                         TOKEN=""
+                                         ID=""
+                                         while [ "$#" -gt 0 ]; do
+                                           case "$1" in
+                                             -t) TOKEN="$2"; shift 2 ;;
+                                             get) ID="$2"; shift 2 ;;
+                                             *) shift ;;
+                                           esac
+                                         done
+                                         if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
+                                         if [ -z "$TOKEN" ]; then TOKEN="$BWS_ACCESS_TOKEN"; fi
+                                         if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
+                                         case "$ID" in
+                                           f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
+                                           wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
+                                           garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
+                                           sleep-secret-id) sleep 30; exit 0 ;;
+                                           *) echo "bws: secret not found: $ID" >&2; exit 1 ;;
+                                         esac
+                                         """;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-bws-tests");
     private readonly string _fakeBws;
@@ -46,8 +72,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private InfrastructureOptions Options() =>
-        new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+    private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
@@ -57,52 +82,24 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         File.WriteAllText(SidecarPath(),
             $$"""{"source":"bitwarden","projectId":"{{ProjectId}}","secretId":"{{secretId}}"}""");
 
-    private EncryptionKeyResolver Resolver() =>
-        new(Options(), new StubEnvProvider("env-passphrase"), new BwsProcessRunner(_fakeBws));
+    private EncryptionKeyResolver Resolver() => new(Options(), new StubEnvProvider("env-passphrase"), new BwsProcessRunner(_fakeBws));
 
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
     {
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(_fakeBws)!, "key.pem"),
-            BuildPem(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray(),
-                Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+            BuildPem([.. Enumerable.Range(0, 32).Select(i => (byte)i)],
+                [.. Enumerable.Range(1, 32).Select(i => (byte)i)]));
         // A second, different synthetic key (seed 0x20..0x3f) for the wrong-key leg.
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(_fakeBws)!, "key2.pem"),
-            BuildPem(Enumerable.Range(0x20, 32).Select(i => (byte)i).ToArray(),
-                Enumerable.Range(0x21, 32).Select(i => (byte)i).ToArray()));
+            BuildPem([.. Enumerable.Range(0x20, 32).Select(i => (byte)i)],
+                [.. Enumerable.Range(0x21, 32).Select(i => (byte)i)]));
         File.WriteAllText(_fakeBws, FakeBwsScript);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(_fakeBws, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
     }
-
-    // fake bws: emulates `bws secret get <id>` (plan §5.3). A token may arrive via argv `-t <token>`
-    // or the inherited BWS_ACCESS_TOKEN; when one is present it must equal the known test token,
-    // else bws-style stderr + exit 1. No token → serve the key (the plan's fixture recipe).
-    private const string FakeBwsScript = """
-#!/bin/sh
-DIR="$(dirname "$0")"
-TOKEN=""
-ID=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -t) TOKEN="$2"; shift 2 ;;
-    get) ID="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
-if [ -z "$TOKEN" ]; then TOKEN="$BWS_ACCESS_TOKEN"; fi
-if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
-case "$ID" in
-  f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
-  wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
-  garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
-  sleep-secret-id) sleep 30; exit 0 ;;
-  *) echo "bws: secret not found: $ID" >&2; exit 1 ;;
-esac
-""";
 
     /// <summary>Runs body with BWS_ACCESS_TOKEN set to token (null = removed); restores the previous value.</summary>
     private static async Task WithBwsAccessToken(string? token, Func<Task> body)
@@ -219,8 +216,7 @@ esac
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
         {
-            var ex = Should.Throw<BwsInvocationException>(
-                () => new BwsProcessRunner(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
+            var ex = Should.Throw<BwsInvocationException>(() => new BwsProcessRunner(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
 
             ex.Message.ShouldBe("bws timed out after 2s");
             await Task.CompletedTask;
@@ -253,8 +249,8 @@ esac
 
         result.ExitCode.ShouldBe(0);
         result.Stdout.ShouldBe(BuildPem(
-            Enumerable.Range(0, 32).Select(i => (byte)i).ToArray(),
-            Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+            [.. Enumerable.Range(0, 32).Select(i => (byte)i)],
+            [.. Enumerable.Range(1, 32).Select(i => (byte)i)]));
     }
 
     [Fact]
@@ -311,7 +307,7 @@ esac
         body.Write(Encoding.ASCII.GetBytes("openssh-key-v1\0"));
         WriteString(body, "none");
         WriteString(body, "none");
-        WriteString(body, Array.Empty<byte>());
+        WriteString(body, []);
         WriteUInt32(body, 1);
         using (var pubBlob = new MemoryStream())
         {
@@ -325,9 +321,9 @@ esac
         WriteUInt32(priv, 0x01234567);
         WriteString(priv, "ssh-ed25519");
         WriteString(priv, pub);
-        WriteString(priv, seed.Concat(pub).ToArray());
-        WriteString(priv, Array.Empty<byte>());
-        priv.Write(new byte[8 - ((int)priv.Length % 8)]);
+        WriteString(priv, [.. seed, .. pub]);
+        WriteString(priv, []);
+        priv.Write(new byte[8 - (int)priv.Length % 8]);
         WriteString(body, priv.ToArray());
 
         var base64 = Convert.ToBase64String(body.ToArray());
@@ -336,8 +332,7 @@ esac
         return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + wrapped + "\n-----END OPENSSH PRIVATE KEY-----\n";
     }
 
-    private static void WriteUInt32(Stream stream, uint value) =>
-        stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+    private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
     private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 

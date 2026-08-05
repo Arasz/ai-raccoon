@@ -62,14 +62,11 @@ public sealed class ReferenceAssets
     public static IReadOnlyList<PinnedAsset> PinnedAssets { get; } = LoadManifest(ManifestPath);
 
     /// <summary>The assets that apply to the current platform: modules for CurrentPlatform + the model.</summary>
-    public static IReadOnlyList<PinnedAsset> ActiveAssets =>
-        PinnedAssets.Where(a => a.Platform is null || a.Platform == CurrentPlatform).ToList();
+    public static IReadOnlyList<PinnedAsset> ActiveAssets => [.. PinnedAssets.Where(a => a.Platform is null || a.Platform == CurrentPlatform)];
 
-    private static PinnedAsset MemoryModuleAsset =>
-        ActiveAssets.Single(a => a.Repo == "sqlite-memory");
+    private static PinnedAsset MemoryModuleAsset => ActiveAssets.Single(a => a.Repo == "sqlite-memory");
 
-    private static PinnedAsset VectorModuleAsset =>
-        ActiveAssets.Single(a => a.Repo == "sqlite-vector");
+    private static PinnedAsset VectorModuleAsset => ActiveAssets.Single(a => a.Repo == "sqlite-vector");
 
     /// <summary>Copies or downloads every active pinned asset; never throws — collects errors for the gate test.</summary>
     public static async Task<EnsureResult> EnsureAsync(CancellationToken cancellationToken = default)

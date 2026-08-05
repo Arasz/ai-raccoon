@@ -214,6 +214,23 @@ required for openai. `ai-raccoon model reset` returns to FTS5-only search.
 One dotnet tool package bundles the ONNX model. A no-embed flavor
 (`ai-raccoon.NoEmbed`) is deferred to when a size-sensitive deployment needs it (D5).
 
+## Install
+
+```bash
+dotnet tool install -g ai-raccoon
+```
+
+The global-tool install directory is `~/.dotnet/tools` on macOS/Linux (`%USERPROFILE%\.dotnet\tools` on Windows). If
+`ai-raccoon` is not found after install, add it to `PATH`:
+
+```bash
+# zsh / bash (macOS, Linux)
+export PATH="$PATH:$HOME/.dotnet/tools"
+```
+
+The tool bundles the ONNX embedding model, so no model download is needed for local embedding (see `--embedding-model`
+for an override).
+
 ## Develop
 
 - `dotnet build` / `dotnet test` from the repo root.
