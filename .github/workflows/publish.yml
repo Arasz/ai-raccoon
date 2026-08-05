@@ -9,9 +9,11 @@ name: publish
 # Before dispatching: bump PackageVersion in src/AiRaccoon/AiRaccoon.csproj and
 # merge it — the pack step publishes whatever version the csproj carries, so a
 # second dispatch without a bump is a no-op (--skip-duplicate).
+#
+# Note: workflow_dispatch runs from the default branch by definition (no
+# branches key is valid on it); the trusted-publishing policy is repo-scoped.
 on:
   workflow_dispatch:
-    branches: [main]
 
 permissions:
   contents: read
