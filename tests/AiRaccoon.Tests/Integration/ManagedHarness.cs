@@ -70,9 +70,11 @@ public sealed class ManagedHarness
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var harness = new ManagedHarness(dataRoot, store);
-        harness.DocumentCount = (await store.ListContextAsync(ProjectId, ContextNaming.ProjectContext(ProjectId),
-            cancellationToken).ConfigureAwait(false)).Count;
+        var harness = new ManagedHarness(dataRoot, store)
+        {
+            DocumentCount = (await store.ListContextAsync(ProjectId, ContextNaming.ProjectContext(ProjectId),
+                cancellationToken).ConfigureAwait(false)).Count
+        };
         return harness;
     }
 

@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Setup;
 using Shouldly;
@@ -76,8 +75,13 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessDefaultShow_WithRow_PrintsRowValue()
     {
-        var store = new FakeConfigStore();
-        store.Settings["access.mode.global"] = "ro";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["access.mode.global"] = "ro"
+            }
+        };
 
         var (_, stdout, _) = await Run(["access", "default", "show"], store);
 
@@ -114,8 +118,13 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessUnset_RemovesPerProjectRow()
     {
-        var store = new FakeConfigStore();
-        store.Settings["access.mode.project:acme"] = "full";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["access.mode.project:acme"] = "full"
+            }
+        };
 
         var (exit, _, _) = await Run(["access", "unset", "acme"], store);
 
@@ -126,8 +135,13 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessUnsetStar_RemovesGlobalRow()
     {
-        var store = new FakeConfigStore();
-        store.Settings["access.mode.global"] = "full";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["access.mode.global"] = "full"
+            }
+        };
 
         await Run(["access", "unset", "*"], store);
 
@@ -137,10 +151,15 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessList_PrintsDefaultAndOverrides()
     {
-        var store = new FakeConfigStore();
-        store.Settings["access.mode.global"] = "rw";
-        store.Settings["access.mode.project:acme"] = "full";
-        store.Settings["access.mode.project:zeta"] = "ro";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["access.mode.global"] = "rw",
+                ["access.mode.project:acme"] = "full",
+                ["access.mode.project:zeta"] = "ro"
+            }
+        };
 
         var (exit, stdout, _) = await Run(["access", "list"], store);
 
@@ -188,12 +207,17 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task ModelSetLocal_SwitchingFromOpenAi_ClearsStaleBaseUrlAndApiKeyRows()
     {
-        var store = new FakeConfigStore();
-        store.Settings["embedding.provider"] = "openai";
-        store.Settings["embedding.model"] = "text-embedding-3-small";
-        store.Settings["embedding.baseUrl"] = "https://api.openai.com/v1";
-        store.Settings["embedding.apiKey"] = "secret";
-        store.Settings["embedding.engine"] = "openai:text-embedding-3-small@https://api.openai.com/v1";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "openai",
+                ["embedding.model"] = "text-embedding-3-small",
+                ["embedding.baseUrl"] = "https://api.openai.com/v1",
+                ["embedding.apiKey"] = "secret",
+                ["embedding.engine"] = "openai:text-embedding-3-small@https://api.openai.com/v1"
+            }
+        };
 
         await Run(["model", "set", "local"], store);
 
@@ -225,9 +249,14 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task ModelSetOpenAi_WithoutBaseUrl_ClearsBaseUrlRow()
     {
-        var store = new FakeConfigStore();
-        store.Settings["embedding.baseUrl"] = "https://old.example.com";
-        store.Settings["embedding.apiKey"] = "k";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.baseUrl"] = "https://old.example.com",
+                ["embedding.apiKey"] = "k"
+            }
+        };
 
         await Run(["model", "set", "openai", "m", "--api-key", "k"], store);
 
@@ -251,10 +280,15 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task ModelReset_DeletesAllEmbeddingRows()
     {
-        var store = new FakeConfigStore();
-        store.Settings["embedding.provider"] = "local";
-        store.Settings["embedding.engine"] = "local:bundled";
-        store.Settings["embedding.apiKey"] = "secret";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "local",
+                ["embedding.engine"] = "local:bundled",
+                ["embedding.apiKey"] = "secret"
+            }
+        };
 
         var (exit, stdout, _) = await Run(["model", "reset"], store);
 
@@ -275,11 +309,16 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task ModelShow_WithEngine_PrintsProviderAndRedactedApiKey()
     {
-        var store = new FakeConfigStore();
-        store.Settings["embedding.provider"] = "openai";
-        store.Settings["embedding.model"] = "text-embedding-3-small";
-        store.Settings["embedding.engine"] = "openai:text-embedding-3-small@https://api.openai.com/v1";
-        store.Settings["embedding.apiKey"] = "sk-secret";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "openai",
+                ["embedding.model"] = "text-embedding-3-small",
+                ["embedding.engine"] = "openai:text-embedding-3-small@https://api.openai.com/v1",
+                ["embedding.apiKey"] = "sk-secret"
+            }
+        };
 
         var (_, stdout, _) = await Run(["model", "show"], store);
 

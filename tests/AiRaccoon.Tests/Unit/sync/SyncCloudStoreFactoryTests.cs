@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,8 +15,7 @@ namespace AiRaccoon.Tests.Unit.sync;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SyncCloudStoreFactoryTests
 {
-    private static SyncCloudStoreFactory Factory(FakeConfigStore store) =>
-        new(store, NullLoggerFactory.Instance);
+    private static SyncCloudStoreFactory Factory(FakeConfigStore store) => new(store, NullLoggerFactory.Instance);
 
     private static void SeedFull(FakeConfigStore store)
     {
@@ -50,9 +47,14 @@ public class SyncCloudStoreFactoryTests
     [Fact]
     public async Task Create_WithEndpointBucketButNoSecrets_ReturnsNullCloudStore()
     {
-        var store = new FakeConfigStore();
-        store.Settings[SyncSettingsKeys.Endpoint] = "http://s3.example.com";
-        store.Settings[SyncSettingsKeys.Bucket] = "memories";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [SyncSettingsKeys.Endpoint] = "http://s3.example.com",
+                [SyncSettingsKeys.Bucket] = "memories"
+            }
+        };
 
         var cloud = await Factory(store).CreateAsync(TestContext.Current.CancellationToken);
 

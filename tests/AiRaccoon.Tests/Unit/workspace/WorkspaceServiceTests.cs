@@ -52,9 +52,13 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task GetStatusAsync_ListsEntriesInTheWorkspaceContext()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-            [new MemoryEntry("h1", "note.md", "workspace:ws-1", "draft", 1)];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "draft", 1)]
+            }
+        };
         var service = Service(store, out _);
 
         var entries = await service.GetStatusAsync("acme", "ws-1", TestContext.Current.CancellationToken);
@@ -66,12 +70,17 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task ConsolidateAsync_PromotesKeptHashes_ThenDeletesTheWorkspaceContext()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-        [
-            new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1),
-            new MemoryEntry("h2", "todo.md", "workspace:ws-1", "noise", 2)
-        ];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] =
+                [
+                    new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1),
+                    new MemoryEntry("h2", "todo.md", "workspace:ws-1", "noise", 2)
+                ]
+            }
+        };
         var service = Service(store, out var workspaceStore);
 
         var result = await service.ConsolidateAsync("acme", "ws-1", ["h1"], TestContext.Current.CancellationToken);
@@ -88,9 +97,13 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task ConsolidateAsync_ClosesTheWorkspaceRecord()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-            [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)]
+            }
+        };
         var service = Service(store, out var workspaceStore);
 
         await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
@@ -104,12 +117,17 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task ConsolidateAsync_WithAll_PromotesEveryEntry()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-        [
-            new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
-            new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2)
-        ];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] =
+                [
+                    new MemoryEntry("h1", "a.md", "workspace:ws-1", "one", 1),
+                    new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2)
+                ]
+            }
+        };
         var service = Service(store, out _);
 
         var result = await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
@@ -121,9 +139,13 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task DiscardAsync_DeletesTheWorkspaceContext()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-            [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)]
+            }
+        };
         var service = Service(store, out _);
 
         var deleted = await service.DiscardAsync("acme", "ws-1", TestContext.Current.CancellationToken);
@@ -135,9 +157,13 @@ public class WorkspaceServiceTests
     [Fact]
     public async Task DiscardAsync_ClosesTheWorkspaceRecord()
     {
-        var store = new FakeStore();
-        store.EntriesByContext["workspace:ws-1"] =
-            [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)];
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)]
+            }
+        };
         var service = Service(store, out var workspaceStore);
 
         await service.DiscardAsync("acme", "ws-1", TestContext.Current.CancellationToken);
@@ -233,6 +259,7 @@ public class WorkspaceServiceTests
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

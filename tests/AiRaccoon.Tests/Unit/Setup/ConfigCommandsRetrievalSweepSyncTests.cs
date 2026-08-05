@@ -74,8 +74,13 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task RetrievalAlphaShow_WithRow_PrintsRowValue()
     {
-        var store = new FakeConfigStore();
-        store.Settings["retrieval.structureAlpha"] = "0.8";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["retrieval.structureAlpha"] = "0.8"
+            }
+        };
 
         var (_, stdout, _) = await Run(["retrieval", "alpha", "show"], store);
 
@@ -116,8 +121,13 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SweepShow_WithRow_PrintsRowValue()
     {
-        var store = new FakeConfigStore();
-        store.Settings["sweep.threshold"] = "0.1";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sweep.threshold"] = "0.1"
+            }
+        };
 
         var (_, stdout, _) = await Run(["sweep", "show"], store);
 
@@ -168,9 +178,14 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SyncAddS3_WithoutRegionOrObjectKey_ClearsStaleRows()
     {
-        var store = new FakeConfigStore();
-        store.Settings["sync.region"] = "eu-west-1";
-        store.Settings["sync.objectKey"] = "old.db";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.region"] = "eu-west-1",
+                ["sync.objectKey"] = "old.db"
+            }
+        };
 
         await Run(["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store);
 
@@ -182,11 +197,16 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SyncRemove_DeletesAllSyncRows()
     {
-        var store = new FakeConfigStore();
-        store.Settings["sync.endpoint"] = "http://s3.example.com";
-        store.Settings["sync.bucket"] = "memories";
-        store.Settings["sync.accessKey"] = "ak1";
-        store.Settings["sync.secretKey"] = "sk1";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
 
         var (exit, stdout, _) = await Run(["sync", "remove"], store);
 
@@ -207,13 +227,18 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SyncShow_Configured_PrintsRedactedSecrets()
     {
-        var store = new FakeConfigStore();
-        store.Settings["sync.endpoint"] = "http://s3.example.com";
-        store.Settings["sync.bucket"] = "memories";
-        store.Settings["sync.region"] = "us-east-1";
-        store.Settings["sync.objectKey"] = "bank.db";
-        store.Settings["sync.accessKey"] = "ak1";
-        store.Settings["sync.secretKey"] = "sk1";
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["sync.endpoint"] = "http://s3.example.com",
+                ["sync.bucket"] = "memories",
+                ["sync.region"] = "us-east-1",
+                ["sync.objectKey"] = "bank.db",
+                ["sync.accessKey"] = "ak1",
+                ["sync.secretKey"] = "sk1"
+            }
+        };
 
         var (exit, stdout, _) = await Run(["sync", "show"], store);
 
