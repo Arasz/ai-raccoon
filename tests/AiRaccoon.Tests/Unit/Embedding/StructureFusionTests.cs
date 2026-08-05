@@ -5,7 +5,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Embedding;
 
 /// <summary>
-///     Fixed-alpha fusion of content and structure similarities (plan C Wave 6):
+///     Fixed-alpha fusion of content and structure similarities (see
+///     docs/adr/0004-dual-vector-structure-signal.md):
 ///     score = alpha * sim(query, content) + (1 - alpha) * sim(query, structure).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

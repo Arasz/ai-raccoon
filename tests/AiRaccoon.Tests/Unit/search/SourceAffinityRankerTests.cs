@@ -6,8 +6,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Search;
 
 /// <summary>
-///     Plan C Wave 3 source-affinity scoring: adjacent-chunk boost, source consolidation and
-///     document-first tie-breaking over the fused candidate list (docs/plans/retrieval-improvement-c.md §3).
+///     Source-affinity scoring (see docs/plans/retrieval-improvement-c.md §3 Wave 3):
+///     adjacent-chunk boost, source consolidation and document-first tie-breaking over the
+///     fused candidate list.
 /// </summary>
 public sealed class SourceAffinityRankerTests
 {

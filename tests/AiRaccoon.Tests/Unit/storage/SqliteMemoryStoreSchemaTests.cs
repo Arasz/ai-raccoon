@@ -12,7 +12,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     Wave 2 schema migration: opening a pre-Wave-2 bank (no source_file column,
+///     Schema migration: opening a legacy bank (no source_file column,
 ///     single-column entries_fts) upgrades it to the weighted two-column index, and fresh
 ///     banks are created in the new shape directly.
 /// </summary>
@@ -34,7 +34,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    // The Wave 0 schema shape: entries without source_file and a single-column entries_fts.
+    // The legacy schema shape: entries without source_file and a single-column entries_fts.
     private const string LegacyDdl = """
                                      CREATE TABLE IF NOT EXISTS entries (
                                          id INTEGER PRIMARY KEY,

@@ -27,7 +27,8 @@ public static class SweepMatrix
     public static IReadOnlyList<SweepPoint> Points { get; } = Build();
 
     /// <summary>
-    ///     Plan C Wave 4 RRF parameter grid: k in {10, 30, 60, 120} x weights {(1,1), (1,2),
+    ///     Wave 4 RRF parameter grid (see docs/plans/retrieval-improvement-c.md §3 Wave 4): k in
+    ///     {10, 30, 60, 120} x weights {(1,1), (1,2),
     ///     (2,1)} x minScore {0.0, 0.3, 0.5, 0.7} x candidate window {Max3x100, Max5x50}.
     ///     Deterministic order — k, weight pair, minScore, window — each ascending.
     /// </summary>

@@ -109,7 +109,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         hit.Hash.ShouldBe(entry.Hash);
         hit.Path.ShouldBe(entry.Path);
         hit.Snippet.ShouldNotBeNullOrWhiteSpace();
-        // P6 contract: ranking is normalized into 0..1 with the top result at 1.0.
+        // Hybrid-search contract: ranking is normalized into 0..1 with the top result at 1.0.
         hit.Ranking.ShouldBeInRange(0.0, 1.0);
         hit.Ranking.ShouldBe(1.0);
     }
@@ -521,7 +521,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "the context label filter augments the project scope, it does not replace it");
     }
 
-    // The RRF rework (P6) fuses per-context batches by rank position, not best ranking.
+    // The RRF fusion fuses per-context batches by rank position, not best ranking.
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
