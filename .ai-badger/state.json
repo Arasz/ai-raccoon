@@ -1,8 +1,13 @@
 {
-  "lastUpdated": "2026-08-05T08:45:11Z",
+  "lastUpdated": "2026-08-05T08:58:10Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "sync-auth-docs",
+      "summary": "Docs-only follow-up (PR #9): the sync mode table became a full 'Sync authentication methods' reference in README.md, docs/reference/agent-memory-server.md and src/AiRaccoon/README.md — all four methods (S3 access/secret keys, S3 AWS chain --cli, Azure connection string, Azure az CLI --cli --account) with configure-with command, what is stored in the settings table, how auth resolves at sync time (credential chains, lazy AWS resolution, endpoint construction) and each failure mode (sync-auth-failed hints, sync-not-configured, sync-network). 'Which method when' guidance (--cli for developer machines, prompted secrets for headless/CI + non-AWS S3-compatible endpoints), tie-break and sync show/remove semantics. memory_sync MCP description mentions --cli. Copy-only code change; build 0 warnings, MemoryTools tests 37/37.",
+      "hasNotes": false
+    },
     {
       "id": "sync-cloud-identity-creds",
       "summary": "Sync credential modes using the machine's cloud identity, bws-style (owner f: 2026-08-05): `sync add azure <container> --cli --account <name>` uses DefaultAzureCredential (az login / env / managed identity) and `sync add s3 <url> --bucket <name> --cli` uses the AWS default credential chain — no token options, no secret prompts for these modes, nothing long-lived stored in the settings table (only the account name / chain marker). Auth failures map to typed SyncAuthFailedException with loud 'run az login' / 'run aws configure | aws sso login' hints; probe-verified SDK facts pinned in tests: no-login throws CredentialUnavailableException (not AuthenticationFailedException), AWS v4 chain resolves lazily (AmazonClientException on first call), AmazonS3Exception/AmazonClientException are siblings, raw HttpRequestException now maps to SyncNetworkException (pre-existing gap). Back-compat: connection-string/key modes unchanged (tie-break conn-string-wins-azure / keys-win-s3); ReadOptionsAsync maps the new rows (a silent-dead NullCloudStore bug caught in plan review). Docs: container-must-exist note, az role assignment + IAM least-privilege instructions, mode table. Plan review + code-reviewer gate APPROVE; review fix: account-mode client construction wrapped (malformed account -> SyncNotConfiguredException, TDD). Full suite 930/0/43 (44 initial failures were the gitignored ONNX model missing from the fresh worktree at build time — environmental). Squash-merged via PR #8.",
