@@ -96,7 +96,9 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
 - **File watching:** watching is enabled per project (or `*`) with
   `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
   allowlist (`watch scope add|remove|list`) and a concurrency cap (`watch concurrency
-  {project-id|*} {1..16}`, default 4) — all CLI-only. `memory_watch_add` registers a
+  {project-id|*} {1..16}`, default 4) — all CLI-only. Quote the `*` wildcard in the
+  shell (`'*'`); an unquoted `*` expands into the current directory's files and the CLI
+  reports each as an unrecognized argument. `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
   lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
