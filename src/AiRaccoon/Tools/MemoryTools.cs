@@ -565,8 +565,9 @@ public sealed class MemoryTools(
     [McpServerTool(Name = TN_MEMORY_SYNC)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
-        "Configure the endpoint/bucket/keys with `ai-raccoon sync add s3 <url> --bucket <name>` " +
-        "or `ai-raccoon sync add azure <container>` (settings table).")]
+        "Configure with `ai-raccoon sync add s3 <url> --bucket <name>` or `ai-raccoon sync add azure " +
+        "<container>` (settings table); add `--cli` to use the machine's az/aws CLI login instead of " +
+        "stored secrets.")]
     public async Task<SyncToolResult> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)

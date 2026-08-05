@@ -212,12 +212,33 @@ aws configure   # or: aws sso login (short-lived SSO tokens)
 
 Prefer SSO/short-lived credentials over static keys in `~/.aws/credentials`.
 
-| Mode | Command | Stored in the settings table | Credential source |
-|---|---|---|---|
-| Azure connection string | `sync add azure <container>` | `connectionString`, `container`, `objectKey` | settings table (prompted) |
-| Azure az CLI | `sync add azure <container> --cli --account <name>` | `azureAccount`, `container`, `objectKey` | DefaultAzureCredential (az login / env / managed identity) |
-| S3 keys | `sync add s3 <url> --bucket <name>` | `endpoint`, `bucket`, `region`, `accessKey`, `secretKey`, `objectKey` | settings table (prompted) |
-| S3 AWS chain | `sync add s3 <url> --bucket <name> --cli` | `endpoint`, `bucket`, `region`, `s3Chain`, `objectKey` | AWS default credential chain (env / `~/.aws` / SSO / IMDS) |
+**Sync authentication methods** — four ways to authenticate, two per backend. Secrets are
+never accepted on the command line; the prompt-based methods read from stdin (an empty
+answer aborts with exit 1 and persists nothing). Only one provider is active at a time
+(`sync add` clears the other provider's rows), and switching modes clears the other
+mode's rows — a stale secret row must never survive to spread via the settings merge.
+
+| Method | Configure with | Stored in the settings table | Auth at sync time | On failure |
+|---|---|---|---|---|
+| S3 access/secret keys | `sync add s3 {url} --bucket {name}` (keys prompted) | `endpoint`, `bucket`, `region`, `accessKey`, `secretKey`, `objectKey` | `BasicAWSCredentials` from the stored keys (long-lived; encrypted at rest when a passphrase is set) | 403 → `sync-auth-failed:` ("verify the keys with `sync show`"); network → `sync-network:` |
+| S3 AWS chain | `sync add s3 {url} --bucket {name} --cli` | `endpoint`, `bucket`, `region`, `s3Chain`, `objectKey` (no secrets) | AWS default credential chain — env vars, `~/.aws/credentials`, SSO (`aws sso login`), container/IMDS — resolved lazily on the first call | no credentials → `sync-auth-failed:` ("run `aws configure` \| `aws sso login`"); 403 → `sync-auth-failed:`; network → `sync-network:` |
+| Azure connection string | `sync add azure {container}` (string prompted) | `connectionString`, `container`, `objectKey` | `BlobServiceClient(connection string)` — account name + key in one string (long-lived; encrypted at rest when a passphrase is set) | malformed string → `sync-not-configured:`; 401/403 → `sync-auth-failed:`; missing container (404) → `sync-network:` — create the container first |
+| Azure az CLI | `sync add azure {container} --cli --account {name}` | `azureAccount`, `container`, `objectKey` (no secrets) | `DefaultAzureCredential` chain — env (`AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`), workload identity, managed identity, VS/VS Code, az CLI login — endpoint built as `https://{account}.blob.core.windows.net` | no login → `sync-auth-failed:` ("run `az login`"); 401/403 → `sync-auth-failed:`; network → `sync-network:` |
+
+**Which method when:**
+
+- **`--cli` methods** suit developer machines that already log into az/aws — nothing
+  long-lived is stored in the settings table, the tokens are short-lived and revocable,
+  and auth failures are loud and fixable. Prefer SSO over static keys in
+  `~/.aws/credentials`.
+- **Prompted-secret methods** suit headless/CI environments (env-var credentials work
+  through the same `--cli` chains) and non-AWS S3-compatible endpoints (MinIO, R2, …)
+  where no CLI login exists. The secrets live in the settings table, encrypted at rest
+  when a passphrase is set.
+- If both modes' rows exist (manual settings edits), the stored secret wins the
+  tie-break: connection string over az CLI, keys over chain.
+- `sync show` prints the provider first, then the mode's fields, with secrets redacted
+  (`set`/`unset`); `sync remove` deletes every `sync.*` row.
 
 **File watching** — mirror a path into memory (opt-in, project-scoped).
 

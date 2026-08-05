@@ -76,16 +76,30 @@ ai-raccoon watch list
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table, which
 is encrypted at rest when a passphrase is configured.
 
-### Cloud sync credential modes
+### Cloud sync authentication methods
 
-`sync add azure <container> --cli --account <name>` stores only the non-secret account
-name and uses `DefaultAzureCredential` (az CLI login state, or
+Four ways to authenticate, two per backend. Only one provider is active at a time
+(`sync add` clears the other provider's rows); switching modes clears the other mode's
+rows. If both modes' rows exist (manual edits), the stored secret wins the tie-break:
+connection string over az CLI, keys over chain.
+
+| Method | Configure with | Stored | Auth at sync time |
+|---|---|---|---|
+| S3 keys | `sync add s3 {url} --bucket {name}` (prompted) | `endpoint`, `bucket`, `region`, `accessKey`, `secretKey`, `objectKey` | `BasicAWSCredentials` from the stored keys |
+| S3 AWS chain | `sync add s3 {url} --bucket {name} --cli` | `endpoint`, `bucket`, `region`, `s3Chain`, `objectKey` (no secrets) | AWS default credential chain (env, `~/.aws`, SSO, IMDS) |
+| Azure connection string | `sync add azure {container}` (prompted) | `connectionString`, `container`, `objectKey` | `BlobServiceClient(connection string)` |
+| Azure az CLI | `sync add azure {container} --cli --account {name}` | `azureAccount`, `container`, `objectKey` (no secrets) | `DefaultAzureCredential` (az login / env / managed identity) |
+
+`--cli` methods store nothing long-lived — the machine's CLI login state is the
+credential (tokens short-lived and revocable); `sync add azure <container> --cli
+--account <name>` uses `DefaultAzureCredential` (az CLI login state, or
 `AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET` env vars for headless);
-`sync add s3 <url> --bucket <name> --cli` stores only the `s3Chain` marker and uses the
-AWS default credential chain (`aws configure`, or `aws sso login`). Nothing long-lived
-is persisted for either `--cli` mode; tokens are short-lived and revocable. Auth
-failures report `sync-auth-failed:` with a "run `az login`" / "run `aws configure` |
-`aws sso login`" hint.
+`sync add s3 <url> --bucket <name> --cli` uses the AWS default credential chain
+(`aws configure`, or `aws sso login`). Prompted-secret methods suit headless/CI and
+non-AWS S3-compatible endpoints (MinIO, R2) — the secrets live in the settings table,
+encrypted at rest when a passphrase is set. Auth failures report `sync-auth-failed:`
+with a "run `az login`" / "run `aws configure` | `aws sso login`" hint; `sync show`
+redacts secrets; `sync remove` deletes every `sync.*` row.
 
 > `sync add azure` does **not** create the container — create it first (`az storage
 > container create --account-name <account> --name <container>`), or the first sync
