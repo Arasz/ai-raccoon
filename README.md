@@ -126,7 +126,9 @@ hidden and ignored.
 
 Every verb runs as a one-shot process against the install's bank (the running server
 hot-reloads the rows). Targets take `{project-id|*}`: `*` matches all projects and a
-project-specific row overrides the wildcard (more specific wins). Run any command with
+project-specific row overrides the wildcard (more specific wins). **Quote the wildcard**
+(`'*'`) — shells expand a bare `*` into the files of the current directory, and the CLI
+then reports each file as an unrecognized argument. Run any command with
 `--help` for its exact argument list.
 
 **Access modes** — who may do what in a project's memory.
@@ -266,7 +268,7 @@ ai-raccoon watch list
 ```
 
 Watching is **disabled until enabled**; `memory_watch_add` only accepts paths inside an
-allowed scope. `watch enable * true` with an empty allowlist prints a hint to add at
+allowed scope. `watch enable '*' true` with an empty allowlist prints a hint to add at
 least one scope. Watch configuration persists across restarts (the watcher re-registers
 and catches up on restart).
 
