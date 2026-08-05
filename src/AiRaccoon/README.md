@@ -64,8 +64,8 @@ ai-raccoon model set local [path]             ai-raccoon model set openai {model
 ai-raccoon model reset                        ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
 ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}]   # S3 credentials are prompted interactively
-ai-raccoon sync add azure {container} [--object-key {key}]                            # Azure connection string is prompted interactively
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]   # key prompts, or --cli = AWS credential chain
+ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]            # connection-string prompt, or --cli = az login
 ai-raccoon sync remove                        ai-raccoon sync show
 ai-raccoon watch enable|disable {project-id|*} {true|false}
 ai-raccoon watch scope add|remove|list {project-id|*} {path}
@@ -75,6 +75,28 @@ ai-raccoon watch list
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table, which
 is encrypted at rest when a passphrase is configured.
+
+### Cloud sync credential modes
+
+`sync add azure <container> --cli --account <name>` stores only the non-secret account
+name and uses `DefaultAzureCredential` (az CLI login state, or
+`AZURE_TENANT_ID`/`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET` env vars for headless);
+`sync add s3 <url> --bucket <name> --cli` stores only the `s3Chain` marker and uses the
+AWS default credential chain (`aws configure`, or `aws sso login`). Nothing long-lived
+is persisted for either `--cli` mode; tokens are short-lived and revocable. Auth
+failures report `sync-auth-failed:` with a "run `az login`" / "run `aws configure` |
+`aws sso login`" hint.
+
+> `sync add azure` does **not** create the container — create it first (`az storage
+> container create --account-name <account> --name <container>`), or the first sync
+> fails with `sync-network:`.
+
+Azure least privilege: `az login`, then
+`az role assignment create --assignee "you@domain.com" --role "Storage Blob Data
+Contributor" --scope "<storage-account-resource-id>"` (find the id with
+`az storage account show -g <rg> -n <account> --query id`). AWS least privilege: IAM
+policy allowing only `s3:GetObject` + `s3:PutObject` on
+`arn:aws:s3:::<bucket>/<object-key-prefix>*` — the sync only GETs and PUTs one object.
 
 ## Environment variables
 
