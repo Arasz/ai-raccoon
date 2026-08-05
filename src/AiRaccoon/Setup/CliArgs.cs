@@ -228,18 +228,21 @@ internal static class CliArgs
     {
         var sync = new Command("sync", "Cloud sync configuration");
         var add = new Command("add", "Adds cloud sync");
-        var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table)")
+        var s3 = new Command("s3", "S3-compatible endpoint (credentials are persisted in the settings table, or use --cli for the AWS credential chain)")
         {
             new Argument<string>("url") { HelpName = "url" },
             new Option<string>("--bucket") { Description = "S3 bucket name", HelpName = "name", Required = true },
             new Option<string>("--region") { Description = "S3 region", HelpName = "name" },
-            new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" }
+            new Option<string>("--object-key") { Description = "S3 object key (default memory-<projectId>.db)", HelpName = "key" },
+            new Option<bool>("--cli") { Description = "Use the AWS default credential chain (aws configure / aws sso login); no key prompts" }
         };
         add.Add(s3);
-        var azure = new Command("azure", "Azure Blob container (connection string is prompted and persisted in the settings table)")
+        var azure = new Command("azure", "Azure Blob container (connection string prompted, or --cli with DefaultAzureCredential)")
         {
             new Argument<string>("container") { HelpName = "name" },
-            new Option<string>("--object-key") { Description = "Azure blob name (default memory-<projectId>.db)", HelpName = "key" }
+            new Option<string>("--object-key") { Description = "Azure blob name (default memory-<projectId>.db)", HelpName = "key" },
+            new Option<bool>("--cli") { Description = "Use DefaultAzureCredential (az login); no connection-string prompt" },
+            new Option<string>("--account") { Description = "Azure storage account name (required with --cli)", HelpName = "name" }
         };
         add.Add(azure);
         sync.Add(add);
