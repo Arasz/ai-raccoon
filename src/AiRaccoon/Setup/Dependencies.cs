@@ -34,6 +34,7 @@ public static partial class Dependencies
                 sp.GetRequiredService<InfrastructureOptions>(),
                 sp.GetRequiredService<IEncryptionKeyResolver>()));
             services.AddSingleton<SyncCloudStoreFactory>();
+            services.AddHttpClient();
             services.AddSingleton<IBundledModel, BundledModel>();
             services.AddSingleton<EmbeddingAvailability>();
             services.AddSingleton<EmbeddingService>();

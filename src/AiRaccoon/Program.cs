@@ -22,7 +22,7 @@ var app = McpServerSetup.CreateServerHost(serverConfig);
 var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailability>();
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
 var resolver = app.Services.GetRequiredService<IEncryptionKeyResolver>();
-var logger = app.Services.GetRequiredService<ILogger>();
+var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Program");
 
 if (!TryResolveEncryptionKey(logger, resolver, out var encryptionKey))
 {

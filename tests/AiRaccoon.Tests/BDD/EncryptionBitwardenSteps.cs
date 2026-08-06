@@ -61,7 +61,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     }
 
     [Given("^the encryption source is bitwarden$")]
-    public Task GivenEncryptionSourceBitwarden() => Ctx.ConfigureBitwardenSourceAsync();
+    public Task GivenEncryptionSourceIsBitwarden() => Ctx.ConfigureBitwardenSourceAsync();
 
     [Given("^bws is installed$")]
     public void GivenBwsInstalled() => Ctx.InstallFakeBws();

@@ -34,6 +34,9 @@ public sealed class DependenciesEncryptionSmokeTests
             provider.GetServices<IEncryptionKeyProvider>().Count().ShouldBe(3);
             provider.GetRequiredService<ICliSecretManager>().ShouldNotBeNull();
             provider.GetRequiredService<SqliteConnectionFactory>().ShouldNotBeNull();
+            // BundledModel resolves an IHttpClientFactory — without the registration the
+            // server boot fails with "Unable to resolve service for IHttpClientFactory".
+            provider.GetRequiredService<IHttpClientFactory>().ShouldNotBeNull();
         }
         finally
         {
