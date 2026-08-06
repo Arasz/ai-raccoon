@@ -11,6 +11,15 @@
       "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
     },
     {
+      "category": "software-development",
+      "name": "observability-contract-review",
+      "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
+      "sourcePath": "software-development/observability-contract-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:55:27Z",
+      "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
+    },
+    {
       "category": "uncategorized",
       "name": "ai-badger-project-ops",
       "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
@@ -108,6 +117,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T11:51:21Z",
       "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "observability-contract-review",
+      "sourceHash": "311b8933439db4bb976ecd627310fd7c0680a1cdc53ff5c69e1346bf79b1d0f3",
+      "sourcePath": "software-development/observability-contract-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:55:42Z",
+      "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
     },
     {
       "category": "uncategorized",
