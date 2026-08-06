@@ -820,10 +820,42 @@
       "branch": "task/continue-improv",
       "risk": false,
       "startedAt": "2026-08-06T14:55:26.227702+00:00",
+      "finishedAt": "2026-08-06T15:57:32.656406+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_163711_726807",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "hermes-provider-setup-script",
+      "title": "Auto first-setup script for the Hermes ai-raccoon provider",
+      "sessionId": "20260806_171739_6038fc",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/hermes-provider-setup",
+      "risk": false,
+      "startedAt": "2026-08-06T15:48:34.396851+00:00",
+      "finishedAt": "2026-08-06T15:57:05.903317+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_171739_6038fc",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "hermes-provider-status-words",
+      "title": "Status-words mode: quiet server logs, one-word stderr cues per tool call",
+      "sessionId": "20260806_171739_6038fc",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/hermes-provider-status-words",
+      "risk": false,
+      "startedAt": "2026-08-06T15:57:06.687873+00:00",
       "finishedAt": null,
       "state": "STARTED",
       "trackingSource": "hermes",
-      "resumeCommand": "hermes --resume 20260806_163711_726807",
+      "resumeCommand": "hermes --resume 20260806_171739_6038fc",
       "resumeAttempts": []
     }
   ]

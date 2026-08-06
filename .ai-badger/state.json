@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-06T17:40:00Z",
+  "lastUpdated": "2026-08-06T17:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "continue-improv",
+      "title": "Extraction follow-ups: S4 propose candidate logs, S5 OCE filter, S10 shared limit constant, F3 unique-bucket indexes (PR #64)",
+      "summary": "Four tracked follow-ups from the integration review, executed owner-style: 4 parallel planning lanes (one per point) -> integrated plan (docs/work/2026-08-06-extraction-followups-plan.md) -> 4-lane MoE plan review (2 MUST-FIXes folded in: cross-project shared re-read for the global index, F3 block before MigrateAsync early-return; 7 SHOULD-FIXes: scope in index key, production-shape seed spec, FakeLogger<T>, rank pin, int? limit=null, sync OR IGNORE note, dedupe SQL exactness) -> TDD implementation in worktree continue-improv -> Phase-3 code-reviewer gate APPROVE (6 NITs: amended plan committed, sync comment, rebase onto main). F3 (priority): uq_entries_shared_bucket (path,hash) global + uq_entries_committed_bucket (path,hash,project_id,scope,COALESCE(label)) partial UNIQUE indexes, on-open dedupe-then-create migration (MIN(id) survivor, BEGIN IMMEDIATE, degraded-but-open), ON CONFLICT DO NOTHING + convergent re-reads at all 3 insert sites — closes the audited 14.2% multi-process dup race. S5: guarded OCE rethrow in per-project catch. S4: EventId 507 per-candidate propose logs (rank/path/reasons/preview). S10: SharedExtractionService.DefaultCandidateLimit=20 single-sourced by hosted loop + MCP tool (int? limit=null); CLI help drift 60->30 fixed. Gates: build 0 warnings; full suite 1253/0/4 (+18 tests, one pre-existing WatchPipeline timing flake on first run, green rerun); concurrency gates 3x stable; corpus unaffected (0 dup bucket keys). PR #64.",
+      "pr": 64,
+      "date": "2026-08-06"
+    },
     {
       "id": "hermes-provider-setup-script",
       "title": "Auto first-setup script for the Hermes ai-raccoon provider",
