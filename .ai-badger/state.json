@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-08-06T13:25:00Z",
+  "lastUpdated": "2026-08-06T15:10:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "integration-review-1-0-9",
+      "title": "Integration review after parallel session: 1.0.9 package-id migration + baseline re-pin + hosted-service PR #55 + 1.0.10 release PR #59",
+      "summary": "MoE integration review (4 expert lanes in parallel: architect, code-reviewer, test-engineer, dotnet-engineer) of everything the parallel session merged: package-id migration to ai-raccoon 1.0.9 (#53), observability/parity fixes (#51), baseline re-pin (#54, cleared the 5 corpus failures from the last review: main HEAD now 1211/0/4 vs 1206/5/4), hosted extraction service (#55, merged by owner mid-review as f9e1eea — verified the merged squash, which contains the PeriodicTimer rework the test-engineer lane wrongly claimed was absent). Gates (orchestrator-run): build 0 warnings both states; full suite main 1211/0/4, merged 1225/0/4; fresh local server + extract verbs + memory_share_extract round trips work (empty candidates on a fresh low-score row is correct scoring, floor 1.0); manual fresh-install protocol vs published ai-raccoon 1.0.9 ALL GREEN; global-tool migration (owner e:) arasz.ai-raccoon 1.0.8 -> ai-raccoon 1.0.9 with the ~/.ai-raccoon bank preserved (23MB intact, 20 tools over the wire); NuGet 6/6 matrix RIDs registered. Verdict: APPROVE, no MUST-FIX, no regressions; 10 SHOULD-FIXes reconciled against merged source (two lane claims corrected: the port test uses a fake, not real sqlite; cross-project duplicate shared rows IS real — SelectSharedIndex has no dedup and AddContentAsync dedup is per-project). Owner gate (owner-gate-review form, 8/8 APPROVE): D1 ratify hosted-service shape (memory validation), D2 accept warning-only promote posture, D3 add extract interval verb, D4-D7 fix (dedup, host-kill, test honesty, docs drift), D8 1.0.10 bump. Executed as release PR #59: 1.0.10 (TDD VersionContractTests RED first), S1 host-kill shield (interval reads safe-fallback, EventId 506), S2 interval verb (validates positive int), S3 per-project shared-index refresh, S6/S7 honest fakes + call counters (fake now mirrors production: ShareAsync updates the index with shared/ path prefix), S8 real-SQL port test, S9 DI smoke, D7 docs drift (19->20 tools across README/reference/ADR-0002; extract family in packaged README). Gates: build 0 warnings; full suite 1232/0/4 (+7 tests); local dress rehearsal of the packed 1.0.10 nupkg ALL GREEN. Follow-ups tracked (not in scope): S4 propose logs candidate details, S5 OCE filter in per-project catch, S10 CandidateLimit shared constant, F3 multi-process UNIQUE index. Review record: docs/reviews/2026-08-06-integration-review-1-0-9.md (PR #57).",
+      "pr": [
+        57,
+        59
+      ],
+      "date": "2026-08-06"
+    },
     {
       "id": "2026-08-06-memory-usage-audit",
       "title": "post-fix-analyze: v3 memory-usage audit \u2014 fixes held live, shared tier seeded, extract armed, dup/self-correction risks",

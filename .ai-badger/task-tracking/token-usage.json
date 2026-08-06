@@ -3641,40 +3641,64 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-06T12:28:38.077399+00:00",
+          "timestamp": "2026-08-06T14:35:13.163638+00:00",
           "contextTokens": 0,
-          "assistantMessages": 7,
+          "assistantMessages": 251,
           "byModel": {
             "deepseek-v4-flash": {
-              "inputTokens": 59703,
-              "outputTokens": 8486,
-              "cacheReadTokens": 325376,
+              "inputTokens": 249714,
+              "outputTokens": 166305,
+              "cacheReadTokens": 58978304,
               "cacheCreationTokens": 0,
-              "assistantMessages": 6
+              "assistantMessages": 263
             }
           },
           "cumulative": {
-            "inputTokens": 59703,
-            "outputTokens": 8486,
-            "cacheReadTokens": 325376,
+            "inputTokens": 483182,
+            "outputTokens": 291542,
+            "cacheReadTokens": 64737536,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T14:35:13.163638+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 251,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 249714,
+              "outputTokens": 166305,
+              "cacheReadTokens": 58978304,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 263
+            }
+          },
+          "cumulative": {
+            "inputTokens": 483182,
+            "outputTokens": 291542,
+            "cacheReadTokens": 64737536,
             "cacheCreationTokens": 0
           }
         }
       },
       "usage": {
-        "outputByModel": {},
-        "modelMix": {},
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "cacheReadTokens": 0,
+        "outputByModel": {
+          "deepseek-v4-flash": 157819
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 423479,
+        "outputTokens": 283056,
+        "cacheReadTokens": 64412160,
         "cacheCreationTokens": 0,
-        "cacheEfficiency": null,
+        "cacheEfficiency": 1.0,
         "subagentTokens": 6127499,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,
-        "mainSessionTotal": 0,
-        "grandTotal": 0
+        "mainSessionTotal": 65118695,
+        "grandTotal": 65118695
       }
     },
     {
