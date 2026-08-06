@@ -647,6 +647,124 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
     }
 
+    [Fact]
+    public async Task AddContentAsync_ConcurrentSameBucket_SingleRowNoThrow()
+    {
+        var barrier = new Barrier(2);
+        var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            return await _store.AddContentAsync("acme", "p.md", "identical fact",
+                null, TestContext.Current.CancellationToken);
+        })).ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        results.Select(r => r.Hash).Distinct().ShouldHaveSingleItem();
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE path = 'p.md' AND scope = 'project'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ShareAsync_ConcurrentSameHash_SingleSharedRow()
+    {
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "shared fact"),
+            TestContext.Current.CancellationToken);
+        var barrier = new Barrier(2);
+        var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            return await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        })).ToArray();
+        await Task.WhenAll(tasks);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE scope = 'shared'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ShareAsync_ConcurrentSameHash_DifferentProjects_SingleSharedRow()
+    {
+        // The global shared index closes the cross-project promote race: project B's loser
+        // must converge on project A's row (project-agnostic re-read), not throw (F3).
+        var entryA = await _store.WriteAsync(new MemoryWriteRequest("acme", "cross-project fact"),
+            TestContext.Current.CancellationToken);
+        var entryB = await _store.WriteAsync(new MemoryWriteRequest("beta", "cross-project fact"),
+            TestContext.Current.CancellationToken);
+        var barrier = new Barrier(2);
+        var tasks = new[]
+        {
+            Task.Run(async () =>
+            {
+                barrier.SignalAndWait();
+                return await _store.ShareAsync("acme", entryA.Hash, TestContext.Current.CancellationToken);
+            }),
+            Task.Run(async () =>
+            {
+                barrier.SignalAndWait();
+                return await _store.ShareAsync("beta", entryB.Hash, TestContext.Current.CancellationToken);
+            })
+        };
+        await Task.WhenAll(tasks);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE scope = 'shared'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ConcurrentSameContent_SingleRowNoThrow()
+    {
+        var barrier = new Barrier(2);
+        var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            return await _store.WriteAsync(new MemoryWriteRequest("acme", "identical write content"),
+                TestContext.Current.CancellationToken);
+        })).ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        results.Select(r => r.Hash).Distinct().ShouldHaveSingleItem();
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE scope = 'project'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task IngestFileAsync_ConcurrentSameFile_SingleChunkSet()
+    {
+        var file = Path.Combine(_dataRoot, "multi.md");
+        await File.WriteAllTextAsync(file, "chunk one\n\nchunk two\n\nchunk three",
+            TestContext.Current.CancellationToken);
+        var barrier = new Barrier(2);
+        var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            return await _store.IngestFileAsync("acme", file, null,
+                TestContext.Current.CancellationToken);
+        })).ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        // Convergence, not both-return-1: one of the two racers may hit the exists-skip
+        // fast path (0) while the other inserts the full chunk set — the invariant is the
+        // single chunk set on disk, not the return codes.
+        results.ShouldContain(1);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE path = @file",
+            new { file });
+        count.ShouldBe(3, "one ingest's chunk set, not two");
+    }
+
     private sealed class EntryRow
     {
         public string Hash { get; set; } = "";

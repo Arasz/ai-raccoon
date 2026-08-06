@@ -17,7 +17,6 @@ public sealed partial class ExtractionHostedService : BackgroundService
     private readonly SharedExtractionService _extraction;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExtractionHostedService> _logger;
-    private const int CandidateLimit = 20;
 
     public ExtractionHostedService(IMemoryStore store, SharedExtractionService extraction,
         TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
@@ -101,7 +100,8 @@ public sealed partial class ExtractionHostedService : BackgroundService
                 var rows = await _store.ExtractCandidatesAsync(projectId, includeTtlRows: false, cancellationToken)
                     .ConfigureAwait(false);
                 var result = _extraction.Run(mode, projectId, projects, rows,
-                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false, CandidateLimit,
+                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false,
+                    SharedExtractionService.DefaultCandidateLimit,
                     _timeProvider.GetUtcNow());
                 foreach (var hash in result.PromotedHashes)
                 {
@@ -117,6 +117,20 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
                 promotedTotal += result.PromotedHashes.Count;
                 Log.Pass(_logger, projectId, mode, result.Candidates.Count, result.PromotedHashes.Count);
+                if (mode == ExtractMode.Propose)
+                {
+                    // The loop's review surface: ranked candidates, one log line each (S4).
+                    for (var i = 0; i < result.Candidates.Count; i++)
+                    {
+                        var candidate = result.Candidates[i];
+                        Log.Candidate(_logger, i + 1, projectId, candidate.Path,
+                            string.Join(", ", candidate.Reasons), candidate.ValuePreview);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw; // shutdown: no per-project failure noise, no doomed round-trips (S5)
             }
             catch (Exception ex)
             {
@@ -151,6 +165,11 @@ public sealed partial class ExtractionHostedService : BackgroundService
         [LoggerMessage(EventId = 503, Level = LogLevel.Warning,
             Message = "Extraction pass failed for {ProjectId}")]
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
+
+        [LoggerMessage(EventId = 507, Level = LogLevel.Information,
+            Message = "Extraction candidate #{Rank} for {ProjectId}: {Path} ({Reasons}) — {Preview}")]
+        public static partial void Candidate(ILogger logger, int rank, string projectId,
+            string path, string reasons, string preview);
 
         [LoggerMessage(EventId = 504, Level = LogLevel.Information,
             Message = "Extraction pass complete: {Projects} projects, {Promoted} promoted")]
