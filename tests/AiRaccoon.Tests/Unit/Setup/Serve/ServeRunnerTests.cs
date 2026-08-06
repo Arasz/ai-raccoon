@@ -111,11 +111,12 @@ public sealed class ServeRunnerTests : IDisposable
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-attach");
         try
         {
-            var second = StartServe(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
+            // Attach + --mcp-entry: the entry for the OWNER's bound port is printed (F7).
+            var second = StartServe(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
             var secondExit = await second.Exit;
 
             secondExit.ShouldBe(ExitCode.Success);
-            second.Stdout.ToString().ShouldBe($"{firstUrl}{Environment.NewLine}");
+            second.Stdout.ToString().ShouldBe($"{{\"ai-raccoon\":{{\"url\":\"{firstUrl}\"}}}}{Environment.NewLine}");
             second.Stderr.ToString().ShouldContain("attached");
             second.Stderr.ToString().ShouldNotContain("   at ");
 
@@ -267,19 +268,23 @@ public sealed class ServeRunnerTests : IDisposable
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         var port = FreePort();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "2s"]);
+        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "5s"]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
             TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
-        // A6 real-time half: the watchdog owns the shutdown (tick = 2s/4 = 0.5s).
+        // A6 real-time half: the watchdog owns the shutdown (tick = 5s/4 = 1.25s).
+        // 5s (not 2s) leaves the pre-URL bootstrap — bank create + bundled-model
+        // SHA-256 + Kestrel start — clear of the deadline that starts at host
+        // construction (reviewer F1: a loaded CI box could otherwise kill the host
+        // before the URL prints).
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var exit = await run.Exit;
         stopwatch.Stop();
 
         exit.ShouldBe(ExitCode.Success);
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10));
+        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15));
     }
 
     [Fact]

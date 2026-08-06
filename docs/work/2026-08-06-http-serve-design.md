@@ -304,8 +304,8 @@ component `Setup/Serve/McpEntryRenderer.cs`:
 - Watchdog registered iff `config.IdleTimeout > TimeSpan.Zero` **and** HTTP host
   (`CreateWebHost` only). Stdio-only hosts never register it (extraction precedent).
 - stdout carries only serve's URI/JSON line (http-only transport ⇒ protocol-free);
-  everything else stays on stderr; new LoggerMessage classes use EventIds 600–612
-  (601–604 `ServeRunner.Log`, 610–612 `IdleWatchdog.Log`; grep before landing).
+  everything else stays on stderr; new LoggerMessage classes use EventIds 601–603, 605
+  (`ServeRunner.Log`) and 610–612 (`IdleWatchdog.Log`); grep before landing.
 - MCP layer untouched; watchdog + middleware + renderer live in `Setup/Serve/`
   (hosting/CLI layer), never `Tools/` or `Core/`.
 - No production code without a failing behavior test (per work package below).
@@ -378,9 +378,10 @@ transport; attach + url-config covers the need — see the plan doc §1 R15).
 
 ## 6. Open questions — ruled by the MoE review (2026-08-06)
 
-1. **Q1 — watchdog scope.** RULED (R3): default applies to `serve` only; Program.cs
-   zeroes `IdleTimeout` on the bare `--transport http` path (no behavior change, no
-   silent supervisor death).
+1. **Q1 — watchdog scope.** RULED (R3): default applies to `serve` only, by
+   construction — `ServerConfig.IdleTimeout` defaults to Zero, so the bare
+   `--transport http` path never arms the watchdog (no behavior change, no silent
+   supervisor death).
 2. **Q2 — activity = any `/mcp` request.** RULED (R4): middleware, path-branched to
    `/mcp`. Guarantee restated honestly as "zero HTTP traffic for 4h" — a ping-keepalive
    client keeps the server alive by definition; with `Stateless=true` there are no
