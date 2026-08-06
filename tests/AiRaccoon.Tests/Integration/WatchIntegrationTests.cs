@@ -511,7 +511,7 @@ public sealed class WatchIntegrationTests
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);
             Pipeline = new WatchPipeline(new WatchScheduler(),
-                new WatchDigestExecutor(host, WatchStore, host, Time), new WatchRetryPolicy(), Memory, Time,
+                new WatchDigestExecutor(host, WatchStore, host, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Memory, Time,
                 NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);

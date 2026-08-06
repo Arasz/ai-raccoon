@@ -29,6 +29,8 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested.ShouldHaveSingleItem();
         stack.Memory.Ingested[0].Path.ShouldBe(file);
         stack.Memory.Ingested[0].Content.ShouldBe("hello");
+        // Best-effort embed retry net fires after a successful ingest (issue #44 / audit F6).
+        stack.Memory.EmbedCalls.ShouldContain(Project);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "hello"));
         stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(
@@ -54,8 +56,31 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.Ingested.ShouldHaveSingleItem();
         stack.Extension.SourceChanges.ShouldHaveSingleItem();
+        // The embed fired on the first (ingesting) digest; the hash-skip must not embed again.
+        stack.Memory.EmbedCalls.ShouldHaveSingleItem();
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "same"));
+    }
+
+    [Fact]
+    public async Task Digest_EmbedFailure_IsTolerated_DigestStillCompletes()
+    {
+        using var dir = TempDir.New("digest-embed-fail");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack
+        {
+            Memory = { EmbedError = new InvalidOperationException("embed boom") }
+        };
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Should.NotThrowAsync(() => Executor(stack).DigestAsync(Project, dir.Path, file,
+            WatchEventKind.Created, null, TestContext.Current.CancellationToken));
+
+        stack.Memory.Ingested.ShouldHaveSingleItem();
+        stack.Memory.EmbedCalls.ShouldContain(Project);
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
+            WatchDigestExecutor.ComputeHash(file, "hello"));
     }
 
     [Fact]
@@ -102,6 +127,8 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested.ShouldHaveSingleItem();
         stack.Extension.SourceChanges.Count.ShouldBe(2);
         stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
+        // The embed fired on the create-digest only; the delete-digest must not embed.
+        stack.Memory.EmbedCalls.ShouldHaveSingleItem();
     }
 
     [Fact]
