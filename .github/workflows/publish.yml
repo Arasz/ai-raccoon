@@ -26,6 +26,8 @@ permissions:
 jobs:
   pack:
     runs-on: ubuntu-slim
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
     strategy:
       matrix:
         # One job per RID: PackAsTool emits a tool shell plus a per-RID payload
@@ -73,7 +75,7 @@ jobs:
 
   publish:
     needs: pack
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     environment: production
     permissions:
       contents: read
