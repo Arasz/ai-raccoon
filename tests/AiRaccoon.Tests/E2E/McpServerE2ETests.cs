@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -32,7 +33,7 @@ public class McpServerE2ETests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
+        await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         _factory = new McpServerFactory();
         _client = await _factory.CreateClientAsync();
@@ -251,14 +252,15 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         // Runs the real config-command pipeline against the factory's bank — the same
         // composition Program.cs uses for `ai-raccoon <verb>`.
-        var parsed = CliArgs.TryParse(args);
+        CliArgs.TryParse(args, out var parsed);
         parsed.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();
+        var options = new InfrastructureOptions { DataRoot = _factory.DataRoot, Scope = InstallScope.User };
         var store = new SqliteMemoryStore(
-            new SqliteConnectionFactory(
-                new InfrastructureOptions { DataRoot = _factory.DataRoot },
-                new EnvEncryptionKeyProvider()),
+            new SqliteConnectionFactory(options,
+                new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+                    [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
             CancellationToken.None);

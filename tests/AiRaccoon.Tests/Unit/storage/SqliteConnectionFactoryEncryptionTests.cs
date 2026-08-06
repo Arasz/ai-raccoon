@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text;
+using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -23,10 +24,13 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
+    private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+
+    private static IEncryptionKeyResolver Resolver(InfrastructureOptions options, IEncryptionKeyProvider provider) =>
+        new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)), [provider]);
+
     private SqliteConnectionFactory Factory(string? passphrase = null) =>
-        new(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            new StubEncryptionKeyProvider(passphrase));
+        new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
 
     [Fact]
     public async Task OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase()
@@ -92,9 +96,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var wrongFactory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            new StubEncryptionKeyProvider("wrong-passphrase"));
+        var options = Options();
+        var wrongFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("wrong-passphrase")));
 
         var ex = await Should.ThrowAsync<SqliteException>(async () =>
         {
@@ -128,9 +131,9 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
         // The bank now opens with the derived raw key…
-        var derivedFactory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            new StubEncryptionKeyProvider(DerivedRawKey));
+        var derivedOptions = Options();
+        var derivedFactory = new SqliteConnectionFactory(derivedOptions,
+            Resolver(derivedOptions, new StubEncryptionKeyProvider(DerivedRawKey)));
         await using (var reopen = await derivedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await using var check = reopen.CreateCommand();
@@ -159,9 +162,9 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
-        var derivedFactory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            new StubEncryptionKeyProvider(DerivedRawKey));
+        var derivedOptions = Options();
+        var derivedFactory = new SqliteConnectionFactory(derivedOptions,
+            Resolver(derivedOptions, new StubEncryptionKeyProvider(DerivedRawKey)));
         await using var reopen = await derivedFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         reopen.State.ShouldBe(ConnectionState.Open);
 
@@ -192,7 +195,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     public async Task OpenBankAsync_ResolverReturnsDifferentKey_ThrowsSqliteException26()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
-        var bankFactory = new SqliteConnectionFactory(options, new StubEncryptionKeyProvider("bank-key-A"));
+        var bankFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-A")));
         await using (var connection = await bankFactory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await using var cmd = connection.CreateCommand();
@@ -202,7 +205,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // Sidecar points at bitwarden; the fake bws secret derives a key that is NOT bank-key-A.
         File.WriteAllText(bankFactory.BankPath + ".source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var resolver = new EncryptionKeyResolver(new StubEncryptionKeyProvider(null), new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")));
+        var resolver = new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+            [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")))]);
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
 
         var ex = await Should.ThrowAsync<SqliteException>(async () =>
@@ -290,6 +294,10 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     private sealed class StubEncryptionKeyProvider(string? passphrase) : IEncryptionKeyProvider
     {
-        public string? GetPassphrase() => passphrase;
+        public string Source => "env";
+
+        public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
+
+        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
     }
 }

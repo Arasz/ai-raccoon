@@ -45,7 +45,7 @@ public sealed class ManagedHarness
 
     public static async Task<ManagedHarness> BuildAsync(CancellationToken cancellationToken = default)
     {
-        var ensured = await BundledModel.EnsureAsync(cancellationToken).ConfigureAwait(false);
+        var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken).ConfigureAwait(false);
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -54,8 +54,8 @@ public sealed class ManagedHarness
 
         var dataRoot = TestData.CreateTempRoot("ai-raccoon-parity");
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         var store = new SqliteMemoryStore(factory,
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)),
             new TokenizerChunker(), new EmbeddingService());

@@ -61,7 +61,7 @@ public sealed class RrfParameterSweepTests : IDisposable
     public RrfParameterSweepTests(ITestOutputHelper output)
     {
         _output = output;
-        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        var ensured = TestData.CreateBundledModel().EnsureAsync().GetAwaiter().GetResult();
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -73,8 +73,8 @@ public sealed class RrfParameterSweepTests : IDisposable
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
             new TokenizerChunker(), new EmbeddingService());
 

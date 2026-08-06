@@ -16,8 +16,8 @@ public class MemoryFeatureContext : IDisposable
     {
         DataRoot = CreateTempRoot();
         Factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         Store = new SqliteMemoryStore(Factory, TimeProvider, new StubChunker(),
             new EmbeddingService());
     }

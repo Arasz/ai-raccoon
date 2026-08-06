@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     End-to-end through the real stack: a fake `bws` shell script at an absolute path (no PATH
-///     mutation) → BwsProcessRunner → BitwardenEncryptionKeyProvider → EncryptionKeyResolver →
+///     mutation) → BitwardenCliSecretManager → BitwardenEncryptionKeyProvider → EncryptionKeyResolver →
 ///     SqliteConnectionFactory against real temp SQLCipher banks (plan §S4).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -84,7 +84,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         File.WriteAllText(SidecarPath(),
             $$"""{"source":"bitwarden","projectId":"{{ProjectId}}","secretId":"{{secretId}}"}""");
 
-    private EncryptionKeyResolver Resolver() => new(new StubEnvProvider("env-passphrase"), new BitwardenCliSecretManager(_fakeBws));
+    private EncryptionKeyResolver Resolver() => new(new EncryptionState(BankPath()),
+        [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
 
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
@@ -125,7 +126,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // 1. Create the bank keyed with the env passphrase (no sidecar → env is the source).
-            var envFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider("env-passphrase"));
+            var envFactory = new SqliteConnectionFactory(Options(), Resolver());
             await using (var connection = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 await using var cmd = connection.CreateCommand();
@@ -164,7 +165,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // Bank keyed with the synthetic key (the §5.1 vector).
-            var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
+            var createFactory = new SqliteConnectionFactory(Options(), Resolver());
             await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 await using var cmd = connection.CreateCommand();
@@ -191,7 +192,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         // No InstallFakeBws: the runner points at an absolute path that does not exist.
         WriteSidecar();
 
-        var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
 
         ex.Message.ShouldBe(
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)");
@@ -205,7 +206,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar(UnknownSecretId);
 
-            var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
+            var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
 
             ex.Message.ShouldBe($"bws failed (exit 1): bws: secret not found: {UnknownSecretId}");
             await Task.CompletedTask;
@@ -263,7 +264,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar();
 
-            var ex = Should.Throw<BwsInvocationException>(() => Resolver().GetPassphrase());
+            var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
 
             ex.Message.ShouldBe("bws failed (exit 1): bws: invalid access token");
             await Task.CompletedTask;
@@ -277,7 +278,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // Bank keyed with the derived key (as if the config command had completed).
-            var createFactory = new SqliteConnectionFactory(Options(), new StubEnvProvider(DerivedRawKey));
+            var createFactory = new SqliteConnectionFactory(Options(), Resolver());
             await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 await using var cmd = connection.CreateCommand();
@@ -296,8 +297,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
             ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
 
-            // The bank is untouched: it still opens with the derived key.
-            await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            // The bank is untouched: it still opens with the derived key (explicit key — the
+            // sidecar now points at bws, so a resolver open would go through the fake).
+            await using var untouched = await createFactory.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken);
             untouched.State.ShouldBe(ConnectionState.Open);
         });
     }
@@ -346,6 +348,10 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {
-        public string? GetPassphrase() => passphrase;
+        public string Source => "env";
+
+        public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
+
+        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
     }
 }

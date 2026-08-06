@@ -1,4 +1,8 @@
+using AiRaccoon.Core.Encryption;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Infrastructure.Options;
 
 namespace AiRaccoon.Tests;
 
@@ -23,5 +27,12 @@ public static class TestCategories
 /// <summary>Returns null — no encryption. Use for existing unencrypted-DB tests.</summary>
 public sealed class NullKeyProvider : IEncryptionKeyProvider
 {
-    public string? GetPassphrase() => null;
+    public string Source => EncryptionData.NoneEncryptedSource;
+
+    public bool IsForSource(string source) => string.IsNullOrWhiteSpace(source) || Source.Equals(source, StringComparison.Ordinal);
+
+    public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source);
+
+    public static IEncryptionKeyResolver Resolver(InfrastructureOptions options) =>
+        new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)), [new NoneEncryptionKeyProvider()]);
 }

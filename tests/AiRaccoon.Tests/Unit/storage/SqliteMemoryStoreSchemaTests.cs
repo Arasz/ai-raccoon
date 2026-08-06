@@ -28,8 +28,8 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     public SqliteMemoryStoreSchemaTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

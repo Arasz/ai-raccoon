@@ -1,4 +1,6 @@
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests;
 
@@ -14,7 +16,16 @@ public static class TestData
         return root;
     }
 
-    public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") => new() { DataRoot = dataRoot, Rid = rid };
+    public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") =>
+        new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.User };
+
+    /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
+    public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());
+
+    private sealed class NoopHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
 
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)
