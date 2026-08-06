@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-06T16:48:25Z",
+  "lastUpdated": "2026-08-06T18:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "hermes-provider-status-words",
+      "title": "Status-words + memory operation log (provider-side, per owner f:) + server --quiet",
+      "summary": "Owner-corrected design (f: 2026-08-06): the MCP server cannot attribute calls to a client, so status words AND the memory operation log live in the Hermes PROVIDER. hermes-provider/ai-raccoon/status.py (status_word map 20 tools + prefix fallback + drift-guard test; MemoryOperationLog locked JSONL appender); provider emits one-word stderr cues per call as it starts (prefetch->searching, sync_turn/on_memory_write->remembering, dispatch->tool word; status_words default true) and appends AIRACCOON_MEMORY_LOG JSONL rows {ts, tool, project_id, status, error_type?, duration_ms, agent_id, session_id} — caller attribution the server cannot know (blank env = unset). Server: --quiet flag (both hosts, info->Warning+), URL line promoted to Warning so --port 0 discovery survives quiet; dead duplicate logger removed. Gates: full dotnet suite 1241 passed/0 failed/4 spec skips; pytest 50/50 (unit + slow, integration pins quiet:false until the flag ships); full-stack E2E measured (provider words remembering/searching/counting + 3 JSONL rows with agent_id/session_id; server stderr clean); review round 2 APPROVE (no MUST-FIX; 2 SHOULD-FIX + NITs folded: QuietLoggingTests pin the suppression, URL line Warning). PR #65 CLOSED by owner without merge (reopen blocked by GitHub API error; branch task/hermes-provider-status-words @ bfdb971 intact; comment posted) — owner decision pending: merge vs changes. Deploy sequencing documented: merge -> release (has --quiet) -> reinstall plugin.",
+      "pr": 65,
+      "date": "2026-08-06"
+    },
     {
       "id": "scripts-refactor",
       "title": "Scripts refactor: python-only scripts/ with src+tests layout, dead scripts removed (PR #66)",
