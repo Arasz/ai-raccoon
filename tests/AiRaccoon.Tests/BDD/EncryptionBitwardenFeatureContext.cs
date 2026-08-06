@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -82,7 +83,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         FakeBwsDir = Path.Combine(DataRoot, "fake-bws");
         BwsExecutable = Path.Combine(FakeBwsDir, "bws");
         var runner = new PathSwitchingRunner(() => BwsExecutable);
-        Resolver = new EncryptionKeyResolver(new StubEnvProvider(EnvPassphrase), runner);
+        Resolver = new EncryptionKeyResolver(new EncryptionState(BankPath),
+            [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
     }
@@ -146,8 +148,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     /// <summary>Writes the sidecar as the bitwarden source pointing at the given secret id.</summary>
     public void WriteSidecar(string secretId, string projectId = ProjectId) =>
-        new EncryptionState(BankPath).Write(new EncryptionData(
-            EncryptionSettingsKeys.SourceBitwarden, projectId, secretId));
+        new EncryptionState(BankPath).Write(new EncryptionData("bitwarden") { ProjectId = projectId, SecretId = secretId });
 
     /// <summary>
     ///     The feature's "the encryption source is bitwarden" baseline: fake installed, sidecar
@@ -162,7 +163,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         {
         }
 
-        await ConfigStore.SetSettingAsync(EncryptionSettingsKeys.Source, EncryptionSettingsKeys.SourceBitwarden, cancellationToken);
+        await ConfigStore.SetSettingAsync(EncryptionSettingsKeys.Source, "bitwarden", cancellationToken);
         await ConfigStore.SetSettingAsync(EncryptionSettingsKeys.ProjectId, ProjectId, cancellationToken);
         await ConfigStore.SetSettingAsync(EncryptionSettingsKeys.SecretId, SecretId, cancellationToken);
     }
@@ -181,7 +182,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// </summary>
     public async Task<CliRun> RunCliAsync(string stdin, params string[] args)
     {
-        var parsed = CliArgs.TryParse(args);
+        CliArgs.TryParse(args, out var parsed);
         if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)
         {
             throw new InvalidOperationException(
@@ -191,8 +192,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
-            new StringReader(stdin), CancellationToken.None, Bank, NewRunner(),
-            new StubEnvProvider(EnvPassphrase));
+            new StringReader(stdin), CancellationToken.None, Bank, NewRunner(), new StubEnvProvider(EnvPassphrase),
+            watchStore: null, encryptionState: new EncryptionState(BankPath), logger: new FakeLogger());
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -204,14 +205,14 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// </summary>
     public async Task<string?> StartServerErrorAsync(CancellationToken cancellationToken = default)
     {
-        EncryptionKeyResolver.ResolvedKey resolved;
+        ResolvedKey resolved;
         try
         {
             resolved = Resolver.Resolve();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return ex.Message;
+            return "Failed to resolve encryption key";
         }
 
         try
@@ -219,21 +220,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
             await using var probe = await Bank.OpenBankWithKeyAsync(resolved.Passphrase, cancellationToken);
             return null;
         }
-        catch (SqliteException) when (resolved.SourceName == EncryptionSettingsKeys.SourceBitwarden)
+        catch (Exception)
         {
-            return "ai-raccoon: encryption mismatch: the bank cannot be opened with the bitwarden key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption bitwarden')";
-        }
-        catch (SqliteException ex) when (resolved.Passphrase is null && ex.SqliteErrorCode == 26)
-        {
-            return "ai-raccoon: bank is encrypted but no encryption source is configured (set AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden')";
-        }
-        catch (SqliteException ex) when (resolved.Passphrase is not null && ex.SqliteErrorCode == 26)
-        {
-            return "ai-raccoon: encryption mismatch: the bank cannot be opened with the configured passphrase — set the correct AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden'";
-        }
-        catch (Exception ex)
-        {
-            return ex.Message;
+            return $"Failed to open encrypted bank with {resolved.SourceName} encryption source key";
         }
     }
 
@@ -252,7 +241,11 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {
-        public string? GetPassphrase() => passphrase;
+        public string Source => "env";
+
+        public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
+
+        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
     }
 
     private sealed class StubChunker : IChunker

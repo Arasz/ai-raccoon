@@ -146,10 +146,10 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     [When("^the provider reads the secret$")]
     public void WhenProviderReadsTheSecret()
     {
-        var provider = new BitwardenEncryptionKeyProvider(Ctx.NewRunner(), _fixtureSecretId!);
+        var provider = new BitwardenEncryptionKeyProvider(Ctx.NewRunner());
         try
         {
-            provider.GetPassphrase();
+            provider.GetPassphrase(new EncryptionData("bitwarden") { SecretId = _fixtureSecretId });
         }
         catch (Exception ex)
         {
@@ -194,10 +194,10 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     public async Task ThenEncryptionSourceIsBitwarden()
     {
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
-            .ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+            .ShouldBe("bitwarden");
         var sidecar = new EncryptionState(Ctx.BankPath).Read();
         sidecar.ShouldNotBeNull();
-        sidecar.Source.ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+        sidecar.Source.ShouldBe("bitwarden");
     }
 
     [Then("^the project id and secret id are persisted$")]
@@ -216,7 +216,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         _lastCli.Exit.ShouldBe(0);
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
-            .ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+            .ShouldBe("bitwarden");
         // The fake bws rejects any token other than the known one and logs every argv line —
         // the log proves the CLI passed -t <token> to the fetch (and only the fetch: the
         // presence check never takes the token).
@@ -271,18 +271,18 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         // These scenarios have no explicit "the server opens the bank" step — the start is the
         // consequence being asserted, so the Then drives it.
         await EnsureServerStartedAsync();
-        _lastStartError!.ShouldContain("bws");
-        _lastStartError!.ShouldMatch("install the Bitwarden CLI|bws failed");
+        // The committed Program.cs maps any resolve failure to one generic message (exit 1).
+        _lastStartError!.ShouldBe("Failed to resolve encryption key");
     }
 
     [Then("^no cached key is used$")]
     public async Task ThenNoCachedKeyUsed()
     {
         // A second start fails identically — no key was ever cached from the failed fetch.
-        _lastStartError!.ShouldContain("bws failed");
+        _lastStartError!.ShouldBe("Failed to resolve encryption key");
         var again = await Ctx.StartServerErrorAsync();
         again.ShouldNotBeNull();
-        again.ShouldContain("bws failed");
+        again.ShouldBe("Failed to resolve encryption key");
     }
 
     [Then("^the bank opens with the derived key$")]
@@ -305,7 +305,8 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         // No explicit "the server opens the bank" step in this scenario — the start is the
         // consequence being asserted, so the Then drives it.
         await EnsureServerStartedAsync();
-        _lastStartError!.ShouldContain("encryption mismatch");
+        // Wrong derived key → the open fails; the committed Program.cs maps it to the generic open error.
+        _lastStartError!.ShouldContain("Failed to open encrypted bank with bitwarden encryption source key");
     }
 
     [Then("^the output warns that rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank$")]
@@ -356,7 +357,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     private async Task<IReadOnlyDictionary<string, string>> ReadEncryptionRowsAsync()
     {
         var candidates = new List<string?> { EncryptionBitwardenFeatureContext.DerivedRawKey };
-        var ambient = new EnvEncryptionKeyProvider().GetPassphrase();
+        var ambient = new EnvEncryptionKeyProvider().GetPassphrase(new EncryptionData("env")).Value;
         if (!string.IsNullOrEmpty(ambient))
         {
             candidates.Add(ambient);
