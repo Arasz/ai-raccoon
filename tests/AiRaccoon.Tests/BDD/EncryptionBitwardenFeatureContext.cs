@@ -191,9 +191,12 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
+        var envProvider = new StubEnvProvider(EnvPassphrase);
+        var encryptionState = new EncryptionState(BankPath);
+        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
-            new StringReader(stdin), CancellationToken.None, Bank, NewRunner(), new StubEnvProvider(EnvPassphrase),
-            watchStore: null, encryptionState: new EncryptionState(BankPath), logger: new FakeLogger());
+            new StringReader(stdin), CancellationToken.None,
+            encryptionCommands: encryptionCommands);
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 

@@ -38,8 +38,9 @@ internal static class ConfigVerbRunner
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
 
+        var encryptionCommands = new EncryptionCommands(bank, bws, env, encryptionState, logger);
+
         return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin,
-            cancellationToken, bank: bank, bws: bws, env: env, watchStore: new WatchStore(bank),
-            encryptionState: encryptionState, logger: logger);
+            cancellationToken, encryptionCommands: encryptionCommands, watchStore: new WatchStore(bank));
     }
 }
