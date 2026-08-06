@@ -5,13 +5,15 @@ Provides feature-parity with Claude Code hooks:
 - pre_llm_call: inject framework version context, usage hints, and MCP tool index recommendations
 - post_tool_call: log tool usage, index hit/miss metrics, and learned-skill sync
 
-Installation: `welcome-ai-badger` copies this file and learned_skills_sync.py into
-~/.hermes/plugins/ (features/hermes/adjustments/adjust_hooks.py); Hermes discovers
-plugins there via the register() entry point.
+Installation (0.80.0+): `welcome-ai-badger` ships these hooks as a Hermes
+DIRECTORY plugin at ~/.hermes/plugins/ai-badger/ (plugin.yaml declaring the hooks,
+__init__.py re-exporting register, and every sibling module beside this file);
+Hermes discovers and loads it via register(ctx) — flat .py drops in ~/.hermes/plugins/
+are invisible to Hermes' loader. The plugin is opt-in: `hermes plugins enable ai-badger`.
 
 The plugin self-locates the framework root with the shared `_bootstrap_lib()` shim. In
-~/.hermes/plugins/ there is no framework above these two loose files, so the root recorded
-in the project's .ai-badger/manifest.json is what answers (ADR-0007).
+~/.hermes/plugins/ai-badger/ there is no framework above these files, so the root recorded
+in the plugin dir's own .ai-badger/manifest.json is what answers (ADR-0007 shape D).
 """
 
 from __future__ import annotations
@@ -795,12 +797,13 @@ def _load_memory_grade() -> Optional[Any]:
 
 
 def _maybe_log_memory_grade(tool_name: str, args: Dict[str, Any], result: str,
-                            cwd: str) -> None:
+                            cwd: str, session_id: Optional[str] = None) -> None:
     """After a memory_search call, log the line and stash the grade ask; silent otherwise."""
     memory_grade = _load_memory_grade()
     if memory_grade is None or not memory_grade.is_memory_search(tool_name):
         return
-    memory_grade.log_search(args or {}, result, cwd)
+    memory_grade.log_search(args or {}, result, cwd, host="hermes",
+                            session_id=session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -813,7 +816,24 @@ def post_tool_observer(tool_name: str = "", result: str = "",
 
     Fires after every tool execution. Logs at DEBUG level so it doesn't flood
     the console. Enable by setting LOG_LEVEL=DEBUG on the ai_badger_hooks logger.
+
+    Hermes' plugin emitter sends the post_tool_call payload as
+    ``function_name``/``function_args``/``session_id`` (model_tools
+    _emit_post_tool_call_hook), not the shell-hook ``tool_name``/``args``/``cwd``
+    spelling — normalize both so the observer works under either transport. No
+    payload carries ``cwd``; fall back to the session process cwd, which is what
+    pre_llm_inject_context resolves on the pop side.
     """
+    tool_name = tool_name or kwargs.get("function_name") or ""
+    args = kwargs.get("args") or kwargs.get("function_args") or {}
+    if isinstance(args, str):  # a transport may serialize function_args as JSON text
+        try:
+            args = json.loads(args)
+        except ValueError:
+            args = {}
+    cwd = cwd or kwargs.get("cwd") or os.getcwd()
+    session_id = kwargs.get("session_id")
+
     logger.debug(
         "tool=%s duration_ms=%d result_len=%d",
         tool_name, duration_ms, len(result) if result else 0,
@@ -821,7 +841,7 @@ def post_tool_observer(tool_name: str = "", result: str = "",
 
     if tool_name == SKILL_MANAGE_TOOL:
         try:
-            _sync_learned_skill(kwargs.get("args") or {}, kwargs.get("status", "ok"), cwd)
+            _sync_learned_skill(args, kwargs.get("status", "ok"), cwd)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("learned-skill sync failed", exc_info=True)
 
@@ -831,7 +851,7 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         logger.warning("commit reminder check failed", exc_info=True)
 
     try:
-        _maybe_log_memory_grade(tool_name, kwargs.get("args") or {}, result, cwd)
+        _maybe_log_memory_grade(tool_name, args, result, cwd, session_id)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("memory grade logging failed", exc_info=True)
 

@@ -34,6 +34,8 @@ def main() -> int:
         "" if tool_response is None else tool_response,
         payload.get("cwd") or "",
         stash=False,
+        host="claude",
+        session_id=payload.get("session_id") or payload.get("sessionId"),
     )
     if ask is None:
         return 0
