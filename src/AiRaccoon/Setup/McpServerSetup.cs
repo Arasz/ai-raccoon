@@ -45,7 +45,7 @@ internal static partial class McpServerSetup
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        builder.Services.RegisterMemoryServices(config.Options);
+        builder.Services.RegisterMemoryServices(config.Options, registerExtractionHostedService: false);
         builder.Services
             .AddMcpServer()
             .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging)

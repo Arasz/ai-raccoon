@@ -9,7 +9,7 @@ public static class ExtractionConfigKeys
 
     public const string IntervalMinutesGlobal = "extract.interval-minutes.global";
 
-    public const int DefaultIntervalMinutes = 60;
+    public const int DefaultIntervalMinutes = 30;
 
     public static bool ParseEnabled(string? value) => value == "true";
 

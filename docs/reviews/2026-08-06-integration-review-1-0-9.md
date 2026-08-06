@@ -146,21 +146,20 @@ gated below.
 All 8 decisions **APPROVED** by the owner on 2026-08-06 (feedback:
 `docs/work/2026-08-06-integration-review-1-0-9-feedback.md`):
 
-| # | Decision | Ruling |
-|---|---|---|
-| D1 | Ratify hosted-service shape vs plan deferral | APPROVE — "mostly used as a part of memory validation"; plan to be amended |
-| D2 | Unattended promote posture (warning-only) | APPROVE — "stronger confirmation, but it is a part of my memory testing suite" |
-| D3 | Interval knob gets a setter | APPROVE — add `extract interval <minutes>` verb |
-| D4 | Fix in-pass dedup (S3) | APPROVE — fix |
-| D5 | Fix host-kill robustness (S1) | APPROVE — fix |
-| D6 | Test-honesty fixes (S6-S9) | APPROVE — include |
-| D7 | Docs drift fix (19→20 tools, extract family) | APPROVE — fix |
-| D8 | 1.0.10 bump carrying approved fixes | APPROVE |
+| #  | Decision                                     | Ruling                                                                         |
+|----|----------------------------------------------|--------------------------------------------------------------------------------|
+| D1 | Ratify hosted-service shape vs plan deferral | APPROVE — "mostly used as a part of memory validation"; plan to be amended     |
+| D2 | Unattended promote posture (warning-only)    | APPROVE — "stronger confirmation, but it is a part of my memory testing suite" |
+| D3 | Interval knob gets a setter                  | APPROVE — add `extract interval <minutes>` verb                                |
+| D4 | Fix in-pass dedup (S3)                       | APPROVE — fix                                                                  |
+| D5 | Fix host-kill robustness (S1)                | APPROVE — fix                                                                  |
+| D6 | Test-honesty fixes (S6-S9)                   | APPROVE — include                                                              |
+| D7 | Docs drift fix (19→20 tools, extract family) | APPROVE — fix                                                                  |
+| D8 | 1.0.10 bump carrying approved fixes          | APPROVE                                                                        |
 
-Executed in the release PR: 1.0.10 bump + S1 (host-kill shield), S2 (interval verb),
-S3 (per-project shared-index refresh), S6-S9 (test honesty), D7 docs drift.
-Not in scope (follow-ups): S4 (propose logs candidate details), S5 (OCE swallow in
-per-project catch), S10 (CandidateLimit shared constant), F3 (multi-process UNIQUE index).
+Executed in the release PR: 1.0.10 bump + S1 (host-kill shield), S2 (interval verb), S3 (per-project shared-index
+refresh), S6-S9 (test honesty), D7 docs drift. Not in scope (follow-ups): S4 (propose logs candidate details), S5 (OCE
+swallow in per-project catch), S10 (CandidateLimit shared constant), F3 (multi-process UNIQUE index).
 
 ## Post-merge checklist (owner)
 

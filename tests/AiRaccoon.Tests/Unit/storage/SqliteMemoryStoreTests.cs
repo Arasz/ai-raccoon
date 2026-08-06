@@ -40,6 +40,38 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetProjectIdsAsync_ReturnsDistinctOrderedProjectScopeIdsOnly()
+    {
+        // Committed project-scope rows for three projects.
+        await _store.WriteAsync(
+            new MemoryWriteRequest("beta", "beta committed fact"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "acme committed fact"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(
+            new MemoryWriteRequest("gamma", "gamma committed fact"),
+            TestContext.Current.CancellationToken);
+        // A second row in an existing project (distinct must collapse it).
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "another acme fact"),
+            TestContext.Current.CancellationToken);
+
+        // A shared-scope row (promoted) must NOT surface as a project id.
+        var sharedEntry = await _store.ShareAsync("beta", (await _store.WriteAsync(
+            new MemoryWriteRequest("beta", "promoted to shared"),
+            TestContext.Current.CancellationToken)).Hash, TestContext.Current.CancellationToken);
+        sharedEntry.Context.ShouldBe(ContextNaming.SharedContext);
+
+        // A workspace-scope row must NOT surface either.
+        await EnsureWorkspaceAsync("ws-1", "acme");
+
+        var projects = await _store.GetProjectIdsAsync(TestContext.Current.CancellationToken);
+
+        projects.ShouldBe(["acme", "beta", "gamma"]);
+    }
+
+    [Fact]
     public async Task Write_CreatesRowInProjectScope_WithPendingEmbedState_AndOnRowDefaults()
     {
         var entry = await _store.WriteAsync(

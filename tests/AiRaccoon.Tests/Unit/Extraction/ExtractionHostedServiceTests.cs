@@ -28,12 +28,17 @@ public sealed class ExtractionHostedServiceTests
 
         public Exception? ExtractionError { get; set; }
 
+        public int ExtractionCalls { get; private set; }
+
+        public Exception? IntervalReadError { get; set; }
+
         public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(Projects);
 
         public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
             bool includeTtlRows, CancellationToken cancellationToken = default)
         {
+            ExtractionCalls++;
             if (ExtractionError is not null && projectId == "acme")
             {
                 throw ExtractionError;
@@ -54,11 +59,22 @@ public sealed class ExtractionHostedServiceTests
             CancellationToken cancellationToken = default)
         {
             Shared.Add((projectId, hash));
-            return Task.FromResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
+            var row = Candidates.Values.SelectMany(x => x).First(r => r.Hash == hash);
+            Index = new SharedIndex(
+                Index.Values.Append(row.Value).ToArray(),
+                Index.Paths.Append($"shared/{row.Path}").ToArray());
+            return Task.FromResult(new MemoryEntry(hash, row.Path, ContextNaming.SharedContext, row.Value, 1));
         }
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Settings.GetValueOrDefault(key));
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            if (IntervalReadError is not null && key == ExtractionConfigKeys.IntervalMinutesGlobal)
+            {
+                throw IntervalReadError;
+            }
+
+            return Task.FromResult(Settings.GetValueOrDefault(key));
+        }
 
         public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
         {
@@ -149,6 +165,7 @@ public sealed class ExtractionHostedServiceTests
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
         store.Shared.ShouldBeEmpty();
+        store.ExtractionCalls.ShouldBe(0);
     }
 
     [Fact]
@@ -161,6 +178,7 @@ public sealed class ExtractionHostedServiceTests
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
         store.Shared.ShouldBeEmpty();
+        store.ExtractionCalls.ShouldBe(2); // both projects were scanned; nothing shared
     }
 
     [Fact]
@@ -176,6 +194,22 @@ public sealed class ExtractionHostedServiceTests
             Row("h3", sourceFile: "docs/x.md")
         ];
         store.Index = new SharedIndex(["alreadysharedfact"], []);
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Shared.ShouldBe([("acme", "h1")]);
+    }
+
+    [Fact]
+    public async Task RunOnce_PromoteMode_DedupsIdenticalContentAcrossProjectsInOnePass()
+    {
+        var (store, _, service) = NewStack();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        // Both projects hold the identical fact; the first promote must make the
+        // second dedup against the refreshed shared index within the same pass.
+        store.Candidates["acme"] = [Row("h1", sourceFile: null, value: "identical cross-project fact")];
+        store.Candidates["beta"] = [Row("h1", sourceFile: null, value: "identical cross-project fact")];
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
@@ -207,6 +241,32 @@ public sealed class ExtractionHostedServiceTests
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
         store.Shared.ShouldBeEmpty();
+        store.ExtractionCalls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IntervalReadFailure_DoesNotKillTheLoop()
+    {
+        var (store, time, service) = NewStack();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", sourceFile: null, value: "organic fact about beta")];
+        store.IntervalReadError = new InvalidOperationException("db busy");
+
+        using var cts = new CancellationTokenSource();
+        var run = service.StartAsync(cts.Token);
+
+        // ExecuteAsync must fall back to the default interval and keep looping,
+        // not fault (BackgroundService StopHost would kill the whole server).
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        time.Advance(TimeSpan.FromMinutes(60));
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        run.IsFaulted.ShouldBeFalse();
+        store.ExtractionCalls.ShouldBeGreaterThan(0);
+
+        await cts.CancelAsync();
+        await run;
     }
 
     [Fact]
@@ -223,13 +283,16 @@ public sealed class ExtractionHostedServiceTests
         // Let ExecuteAsync create the PeriodicTimer before advancing the fake clock.
         await Task.Delay(50, TestContext.Current.CancellationToken);
 
-        time.Advance(TimeSpan.FromMinutes(60)); // default interval
+        time.Advance(TimeSpan.FromMinutes(30)); // default interval
         await Task.Delay(100, TestContext.Current.CancellationToken);
         store.Shared.Count.ShouldBe(1);
 
-        time.Advance(TimeSpan.FromMinutes(60));
+        time.Advance(TimeSpan.FromMinutes(30));
         await Task.Delay(100, TestContext.Current.CancellationToken);
-        store.Shared.Count.ShouldBe(2);
+        // Second pass re-reads the shared index and dedups, so the share count stays 1;
+        // the loop's iteration is proven by the extraction call count (2 passes x 2 projects).
+        store.Shared.Count.ShouldBe(1);
+        store.ExtractionCalls.ShouldBe(4);
 
         await cts.CancelAsync();
         await run;
