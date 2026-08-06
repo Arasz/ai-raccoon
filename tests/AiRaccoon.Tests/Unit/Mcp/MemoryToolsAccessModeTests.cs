@@ -97,6 +97,11 @@ public sealed class MemoryToolsAccessModeTests
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.ShareExtract(["acme-web"], mode: "promote", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("access-denied");
+
+        var autoEx = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract(["acme-web"], autoPromote: true, confirm: true,
+                cancellationToken: TestContext.Current.CancellationToken));
+        autoEx.Message.ShouldContain("access-denied");
     }
 
     // Scenario 3: full allows removal.

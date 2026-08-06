@@ -127,6 +127,43 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task ShareExtract_AutoPromote_WithoutConfirm_IsGated()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract(["acme"], autoPromote: true, cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("confirm-required");
+        ex.Message.ShouldContain("ALL projects");
+        _store.Shared.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ShareExtract_AutoPromote_WithConfirm_PromotesInCall()
+    {
+        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
+            "organic fact about job-search-ai-assistant", null, 0.5, 0,
+            DateTimeOffset.UtcNow.AddDays(-5), null));
+
+        var result = await _tools.ShareExtract(["acme"], autoPromote: true, confirm: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.PromotedHashes.ShouldBe(["h1"]);
+        _store.Shared.ShouldBe(("acme", "h1"));
+    }
+
+    [Fact]
+    public async Task ShareExtract_AutoPromote_IsDisabledByDefault()
+    {
+        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
+            "organic fact about job-search-ai-assistant", null, 0.5, 0,
+            DateTimeOffset.UtcNow.AddDays(-5), null));
+
+        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+
+        result.PromotedHashes.ShouldBeEmpty();
+        _store.Shared.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Write_DelegatesToStore_AndMapsResult()
     {
         _store.Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5);

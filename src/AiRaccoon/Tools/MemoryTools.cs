@@ -236,7 +236,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryShareExtract)]
     [Description(
-        "Checks committed project memories and extracts the ones worth sharing. propose (default) returns ranked candidates with the reasons they scored; promote shares the top candidates into the curated, sweep-exempt shared tier. Sharing stays explicit: propose first, review, then promote.")]
+        "Checks committed project memories and extracts the ones worth sharing. propose (default) returns ranked candidates with the reasons they scored; promote shares the top candidates into the curated, sweep-exempt shared tier. autoPromote (disabled by default) promotes the top candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
     public async Task<ShareExtractResult> ShareExtract(
         [Description("Project ids to scan (1..8).")]
         string[] projectIds,
@@ -246,6 +246,10 @@ public sealed class MemoryTools(
         int? limit = 20,
         [Description("Include rows with a TTL (ephemeral by design; promoting makes them sweep-exempt forever).")]
         bool includeTtlRows = false,
+        [Description("Promote the top candidates in this call. Disabled by default: it shares data between projects.")]
+        bool autoPromote = false,
+        [Description("Explicit enable gate for autoPromote — acknowledges that candidates become visible to every project.")]
+        bool confirm = false,
         CancellationToken cancellationToken = default)
     {
         using var activity = new ToolExecutionActivity(observability, TnMemoryShareExtract,
@@ -269,11 +273,18 @@ public sealed class MemoryTools(
                 throw new McpException("invalid-params: limit must be between 1 and 50");
             }
 
+            if (autoPromote && !confirm)
+            {
+                throw new McpException(
+                    "confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable");
+            }
+
+            var promotes = extractMode == ExtractMode.Promote || autoPromote;
             foreach (var projectId in projectIds)
             {
                 RequireProjectId(projectId);
                 await RequireAsync(projectId,
-                        extractMode == ExtractMode.Promote ? AccessRequirement.Write : AccessRequirement.Read,
+                        promotes ? AccessRequirement.Write : AccessRequirement.Read,
                         TnMemoryShareExtract, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -285,7 +296,8 @@ public sealed class MemoryTools(
             {
                 var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
                     .ConfigureAwait(false);
-                var result = extraction.Run(extractMode, projectId, projectIds, rows,
+                var result = extraction.Run(promotes ? ExtractMode.Promote : ExtractMode.Propose,
+                    projectId, projectIds, rows,
                     sharedIndex.Values, sharedIndex.Paths, includeTtlRows, resolvedLimit,
                     DateTimeOffset.UtcNow);
                 candidates.AddRange(result.Candidates);
