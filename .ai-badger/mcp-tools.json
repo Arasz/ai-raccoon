@@ -1,10 +1,10 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-06T08:53:01Z",
+  "generated_at": "2026-08-06T10:28:20Z",
   "sources": [
     {
       "name": "dotnet-sdk",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "dotnet_solution": {
           "tags": [
@@ -1401,6 +1401,16 @@
           "origin": "catalog"
         }
       }
+    },
+    {
+      "name": "llmstudio",
+      "status": "disabled",
+      "tools": {}
+    },
+    {
+      "name": "superpowers",
+      "status": "disabled",
+      "tools": {}
     }
   ]
 }

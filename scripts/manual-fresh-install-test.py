@@ -26,7 +26,15 @@ Protocol (revised per architect plan review deleg_98028a5e):
  14. cleanup
 Exit 0 = all green on first install attempt, zero manual repair.
 """
-import json, os, re, shutil, subprocess, sys, tempfile, time, uuid
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
 
 VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.8")
 # NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
@@ -65,6 +73,11 @@ check("aspnet runtime present", "Microsoft.AspNetCore.App 10.0" in rts)
 check("host is arm64", subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip() == "arm64")
 had_passphrase = os.environ.pop("AIRACCOON_DB_PASSPHRASE", None)
 os.environ["NUGET_PACKAGES"] = NUGET_PKGS
+# Fresh publish: the user-level NuGet http-cache can hold stale registration data
+# (dotnet resolves via registration, which lags the blob) — clear it so a brand-new
+# version is never false-FAILed by yesterday's cache.
+http_cache = os.path.expanduser("~/.local/share/NuGet/http-cache")
+shutil.rmtree(http_cache, ignore_errors=True)
 env = dict(os.environ)
 check("no inherited AIRACCOON_DB_PASSPHRASE", had_passphrase is None, f"inherited={had_passphrase!r}")
 

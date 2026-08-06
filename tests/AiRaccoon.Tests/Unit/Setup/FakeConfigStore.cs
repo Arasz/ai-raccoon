@@ -25,6 +25,13 @@ internal sealed class FakeConfigStore : IMemoryStore
     public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
+
+    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        bool includeTtlRows, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
     public Task<MemoryEntry> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

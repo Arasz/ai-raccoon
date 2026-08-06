@@ -1,7 +1,15 @@
+using AiRaccoon.Core.Common;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Rating;
+using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Reqnroll;
 using Shouldly;
 
@@ -12,12 +20,85 @@ namespace AiRaccoon.Tests.BDD;
 [Binding]
 public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 {
+    private const string CloudStoreKey = "CloudStore";
+
     private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
     private readonly IMemoryStore _store = scenarioContext.ScenarioContainer.Resolve<IMemoryStore>();
     private Exception? _lastError;
     private IReadOnlyList<MemorySearchResult>? _lastSearch;
+    private string? _customModelPath;
 
     private MemoryEntry? _lastWrite;
+
+    private string ObjectKeyFor(string projectId) => $"memory-{projectId}.db";
+
+    private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
+
+    /// <summary>A real copy of the bundled ONNX model under a distinct path (engine fingerprint change).</summary>
+    private string EnsureCustomModelCopy()
+    {
+        if (_customModelPath is null)
+        {
+            var source = BundledModel.ResolveModelPath();
+            _customModelPath = Path.Combine(_ctx.DataRoot, "custom-model.onnx");
+            File.Copy(source, _customModelPath);
+        }
+
+        return _customModelPath;
+    }
+
+    private async Task RunSyncAsync(ICloudStore cloud, CancellationToken cancellationToken)
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var sync = new SyncService(cloud, _ctx.Factory.OpenBankAsync, OpenReadOnlyAsync,
+            _ctx.TimeProvider, NullLogger<SyncService>.Instance);
+        await sync.MemorySyncAsync(projectId, ObjectKeyFor(projectId), cancellationToken);
+    }
+
+    private static async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection($"Data Source={path};Mode=ReadOnly");
+        await connection.OpenAsync(cancellationToken);
+        connection.EnableExtensions();
+        connection.LoadVector();
+        return connection;
+    }
+
+    private static async Task<string> WriteTempAsync(byte[] data)
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllBytesAsync(path, data);
+        return path;
+    }
+
+    /// <summary>Builds a VACUUM INTO snapshot of a scratch bank containing the given committed rows.</summary>
+    private static async Task<byte[]> BuildRemoteSnapshotAsync(string projectId,
+        IReadOnlyList<(string Content, string Path)> rows)
+    {
+        using var scratch = new MemoryFeatureContext();
+        foreach (var (content, path) in rows)
+        {
+            await scratch.Store.AddContentAsync(projectId, path, content,
+                ContextNaming.ProjectContext(projectId), CancellationToken.None);
+        }
+
+        var snapshotPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await scratch.Factory.OpenBankAsync(CancellationToken.None))
+            {
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"VACUUM INTO '{snapshotPath}'";
+                await cmd.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+
+            return await File.ReadAllBytesAsync(snapshotPath, CancellationToken.None);
+        }
+        finally
+        {
+            File.Delete(snapshotPath);
+        }
+    }
 
     // ── Background ──
     [Given("the ai-raccoon MCP server is running")]
@@ -61,7 +142,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     [Given("an entry exists in project \"(.*)\"")]
     public async Task GivenEntryExistsInProject(string projectId) =>
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "test content"),
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "test content"),
             CancellationToken.None);
 
     [When("I query the entries table")]
@@ -96,10 +177,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [When(@"I call memory_workspace_begin for project ""(.*)"" with agent ""(.*)""")]
     public async Task WhenIWorkspaceBeginWithAgent(string projectId, string agent)
     {
-        var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, "ws-agent", MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
-        scenarioContext["WorkspaceId"] = "ws-agent";
+        // The agent label is part of the tool contract; begin itself returns a generated id.
+        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory), _ctx.TimeProvider)
+            .BeginAsync(projectId, CancellationToken.None);
+        scenarioContext["WorkspaceId"] = workspace.Id;
     }
 
     [Then(@"a workspaces row with status ""(.*)"" exists in memory.db")]
@@ -112,6 +193,137 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     // ── FR-NM-2: Access modes ──
+
+    // ── FR-NM-3: Pluggable embeddings ──
+    [Given("the small model ships inside the tool package")]
+    public void GivenSmallModelShips() => File.Exists(BundledModel.ResolveModelPath()).ShouldBeTrue();
+
+    [Given("a custom model file exists")]
+    public void GivenCustomModelFileExists() => File.Exists(EnsureCustomModelCopy()).ShouldBeTrue();
+
+    [When(@"^I call memory_configure with provider ""([^""]*)""$")]
+    public async Task WhenIConfigureProvider(string provider) =>
+        await _store.ConfigureEmbeddingAsync(provider, null, null, CancellationToken.None);
+
+    [When(@"^I call memory_configure with provider ""([^""]*)"" and a model path$")]
+    public async Task WhenIConfigureProviderWithModelPath(string provider) =>
+        await _store.ConfigureEmbeddingAsync(provider, EnsureCustomModelCopy(), null, CancellationToken.None);
+
+    [When("I call memory_configure with a different engine")]
+    public async Task WhenIConfigureDifferentEngine() =>
+        await _store.ConfigureEmbeddingAsync("local", EnsureCustomModelCopy(), null, CancellationToken.None);
+
+    [When(@"^I call memory_configure with provider ""([^""]*)"", baseUrl ""([^""]*)"" and model ""([^""]*)""$")]
+    public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) =>
+        await _store.ConfigureEmbeddingAsync(provider, model, baseUrl, CancellationToken.None);
+
+    [Given(@"project ""(.*)"" has no embedding model configured")]
+    public void GivenNoEmbeddingModelConfigured(string projectId) { }
+
+    [Given(@"project ""(.*)"" has one pending entry")]
+    public async Task GivenProjectHasOnePendingEntry(string projectId) =>
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "deferred note"),
+            CancellationToken.None);
+
+    [Given(@"project ""(.*)"" has embedded entries")]
+    public async Task GivenProjectHasEmbeddedEntries(string projectId)
+    {
+        await _store.ConfigureEmbeddingAsync("local", null, null, CancellationToken.None);
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "re-embed me"),
+            CancellationToken.None);
+    }
+
+    [When("I call memory_embed_pending")]
+    public async Task WhenIEmbedPending() =>
+        await _store.EmbedPendingAsync((string)scenarioContext["ProjectId"], null, CancellationToken.None);
+
+    [Then("the write is embedded with the local engine")]
+    public async Task ThenWriteEmbeddedWithLocalEngine()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        state.ShouldBe("embedded");
+    }
+
+    [Then("no external server process or download is required")]
+    public async Task ThenNoExternalServerRequired()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        engine.ShouldBe("local:bundled");
+    }
+
+    [Then("the custom model is used")]
+    public async Task ThenCustomModelUsed()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var model = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.model'");
+        model.ShouldBe(EnsureCustomModelCopy());
+    }
+
+    [Then("writes are embedded through that endpoint")]
+    public async Task ThenWritesEmbeddedThroughEndpoint()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var baseUrl = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.baseUrl'");
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        baseUrl.ShouldBe("http://localhost:11434");
+        engine.ShouldBe("openai:nomic-embed-text@http://localhost:11434");
+    }
+
+    [Then("the entry is stored but not indexed")]
+    public async Task ThenEntryStoredButNotIndexed()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        state.ShouldBe("pending");
+    }
+
+    [Then("memory_stats reports one pending entry")]
+    public async Task ThenStatsReportsOnePendingEntry()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
+        stats.PendingCount.ShouldBe(1);
+    }
+
+    [Then("memory_stats reports zero pending entries")]
+    public async Task ThenStatsReportsZeroPendingEntries()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
+        stats.PendingCount.ShouldBe(0);
+    }
+
+    [Then("the entry is searchable")]
+    public async Task ThenEntrySearchable()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var results = await _store.SearchAsync(
+            new SearchQuery(projectId, "deferred note", SearchScope.All), CancellationToken.None);
+        results.Count.ShouldBeGreaterThan(0);
+    }
+
+    [Then("every embedded entry is re-embedded with the new engine")]
+    public async Task ThenEveryEmbeddedReembedded()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var embedded = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE embed_state = 'embedded'");
+        var total = await conn.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM entries");
+        embedded.ShouldBe(total);
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        engine.ShouldBe($"local:{EnsureCustomModelCopy()}");
+    }
 
     // ── FR-NM-4: Hybrid search ──
     [When(@"I search for ""(.*)"" in project ""([^""]*)""(?! with)")]
@@ -148,7 +360,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         _lastSearch!.Count.ShouldBeGreaterThan(0);
         var r = _lastSearch[0];
         r.Hash.ShouldNotBeNullOrWhiteSpace();
-        // ranking in 0..1
+        r.Seq.ShouldBeGreaterThanOrEqualTo(0);
+        r.Path.ShouldNotBeNullOrWhiteSpace();
+        r.Snippet.ShouldNotBeNullOrWhiteSpace();
         r.Ranking.ShouldBeInRange(0.0, 1.0);
     }
 
@@ -201,15 +415,19 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
             CancellationToken.None);
 
-        // Write entries into the workspace context
-        await _store.WriteAsync(
+        // Write entries into the workspace context; the feature's "h1"/"h2" labels are the
+        // scenario keys the consolidate step resolves to the real hashes.
+        var e1 = await _store.WriteAsync(
             new MemoryWriteRequest(projectId, "entry-1", $"workspace:{wsId}", WorkspaceId: wsId),
             CancellationToken.None);
-        await _store.WriteAsync(
+        var e2 = await _store.WriteAsync(
             new MemoryWriteRequest(projectId, "entry-2", $"workspace:{wsId}", WorkspaceId: wsId),
             CancellationToken.None);
 
         scenarioContext["WorkspaceId"] = wsId;
+        scenarioContext[h1] = e1.Hash;
+        scenarioContext[h2] = e2.Hash;
+        scenarioContext[$"{h1}Content"] = "entry-1";
     }
 
     [Then(@"the entry row has workspace_id ""(.*)""")]
@@ -219,7 +437,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var wsId = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT workspace_id FROM entries WHERE hash = @hash",
-            new { _lastWrite!.Hash });
+            new { hash = _lastWrite!.Hash });
         wsId.ShouldBe(expectedWsId);
     }
 
@@ -231,7 +449,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var sql = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries'");
         sql.ShouldNotBeNull();
-        sql.ShouldContain("workspace_id IS NULL OR scope = 'workspace'");
+        sql.ShouldContain("(workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL)");
     }
 
     [When(@"I call memory_workspace_consolidate with keep=\[""([^""]*)""\]")]
@@ -240,31 +458,44 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var wsId = (string)scenarioContext["WorkspaceId"];
         var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory), _ctx.TimeProvider);
-        var result = await ws.ConsolidateAsync(projectId, wsId,
-            keep == "all" ? ["all"] : keep.Split(',', StringSplitOptions.TrimEntries),
-            CancellationToken.None);
+        var keepHashes = keep == "all"
+            ? (IReadOnlyList<string>)["all"]
+            : keep.Split(',', StringSplitOptions.TrimEntries).Select(k => (string)scenarioContext[k]).ToList();
+        var result = await ws.ConsolidateAsync(projectId, wsId, keepHashes, CancellationToken.None);
         scenarioContext["ConsolidateResult"] = result;
     }
 
     [Then(@"""(.*)"" is committed to project ""(.*)""")]
-    public void ThenEntryCommittedToProject(string hash, string projectId)
+    public async Task ThenEntryCommittedToProject(string hashKey, string projectId)
     {
-        // The consolidator already verified; no extra assertion needed
+        var hash = (string)scenarioContext[hashKey];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var scope = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT scope FROM entries WHERE hash = @hash", new { hash });
+        scope.ShouldBe("project");
+        var wsId = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT workspace_id FROM entries WHERE hash = @hash", new { hash });
+        wsId.ShouldBeNull();
     }
 
     [Then(@"""(.*)"" is deleted")]
-    public void ThenEntryDeleted(string hash)
+    public async Task ThenEntryDeleted(string hashKey)
     {
-        // Workspace entries are cleaned up by consolidation
+        var hash = (string)scenarioContext[hashKey];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash", new { hash });
+        count.ShouldBe(0);
     }
 
     [Then(@"the workspace row has status ""(.*)""")]
+    [Then(@"its workspaces row has status ""(.*)""")]
     public async Task ThenWorkspaceRowHasStatus(string status)
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var wsStatus = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT status FROM workspaces WHERE id = @id",
-            new { id = scenarioContext["WorkspaceId"] });
+            new { id = (string)scenarioContext["WorkspaceId"] });
         wsStatus.ShouldBe(status);
     }
 
@@ -280,9 +511,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenWorkspaceRemoved()
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        var count = await conn.QueryFirstOrDefaultAsync<int>(
-            "SELECT COUNT(*) FROM workspaces WHERE id = 'ws-1'");
-        count.ShouldBe(0);
+        var status = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT status FROM workspaces WHERE id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
+        status.ShouldBe("Closed");
+        var entries = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE workspace_id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
+        entries.ShouldBe(0);
     }
 
     // ── FR-NM-7: Content identity ──
@@ -335,19 +569,23 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenRowWithPathInSharedScope(string expectedPath)
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        var scope = await conn.QueryFirstOrDefaultAsync<string>(
-            "SELECT scope FROM entries WHERE path = @path",
-            new { path = expectedPath });
-        scope.ShouldBe("shared");
+        var paths = (await conn.QueryAsync<string>(
+            "SELECT path FROM entries WHERE scope = 'shared'")).ToList();
+        // The feature's "shared/<path>" is a template: the shared row lives under shared/.
+        paths.ShouldContain(p => p.StartsWith("shared/", StringComparison.Ordinal));
     }
 
     [Then(@"its hash differs from ""(.*)""")]
     public async Task ThenHashDiffers(string originalHash)
     {
+        var sourceHash = scenarioContext.ContainsKey("ShareHash")
+            ? (string)scenarioContext["ShareHash"]
+            : originalHash;
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var sharedHash = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT hash FROM entries WHERE scope = 'shared'");
-        sharedHash.ShouldNotBe(originalHash);
+        sharedHash.ShouldNotBeNull();
+        sharedHash.ShouldNotBe(sourceHash);
     }
 
     [Given(@"workspace ""(.*)"" contains an entry with path ""(.*)""")]
@@ -357,9 +595,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
             CancellationToken.None);
-        await _store.WriteAsync(
-            new MemoryWriteRequest(projectId, "workspace content", $"workspace:{wsId}", WorkspaceId: wsId),
+        await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}",
             CancellationToken.None);
+        scenarioContext["WorkspaceId"] = wsId;
     }
 
     [Then(@"the committed entry keeps path ""(.*)""")]
@@ -376,37 +614,179 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── FR-NM-8: Sync ──
     [When("I call memory_sync without sync credentials")]
-    public void WhenISyncWithoutCredentials()
+    public async Task WhenISyncWithoutCredentials()
     {
-        // These scenarios are verified at the integration/E2E level
-        // This step is a no-op; only verifies error handling in real tools
+        try
+        {
+            var factory = new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance);
+            await RunSyncAsync(await factory.CreateAsync(CancellationToken.None), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _lastError = ex;
+        }
     }
 
     [Then("the tool errors with sync-not-configured")]
-    public void ThenSyncNotConfigured()
-    {
-        /* bound for @ignore scenarios */
-    }
+    public void ThenSyncNotConfigured() => _lastError.ShouldBeOfType<SyncNotConfiguredException>();
 
     [Given("sync credentials are configured")]
-    public void GivenSyncCredentialsConfigured()
-    {
-        /* bound for @ignore scenarios */
-    }
+    public void GivenSyncCredentialsConfigured() => scenarioContext[CloudStoreKey] = new FakeCloudStore();
 
     [When(@"I call memory_sync for project ""(.*)""")]
-    public async Task WhenISyncForProject(string projectId) => await Task.CompletedTask /* bound for @ignore scenarios */;
+    public async Task WhenISyncForProject(string projectId) => await RunSyncAsync(CloudStore, CancellationToken.None);
+
+    [When("I call memory_sync")]
+    public async Task WhenICallMemorySync()
+    {
+        if (!scenarioContext.ContainsKey(CloudStoreKey))
+        {
+            scenarioContext[CloudStoreKey] = new FakeCloudStore();
+        }
+
+        await RunSyncAsync(CloudStore, CancellationToken.None);
+    }
+
+    [Given("the remote snapshot changed since the last pull")]
+    public async Task GivenRemoteSnapshotChanged()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        // A local write that must survive the merge.
+        await _store.WriteAsync(new MemoryWriteRequest(projectId, "local kept fact"), CancellationToken.None);
+        fake.Set(ObjectKeyFor(projectId),
+            await BuildRemoteSnapshotAsync(projectId, [("remote merged fact", "remote.md")]));
+    }
+
+    [Given("an entry was deleted locally since the last sync")]
+    public async Task GivenEntryDeletedLocallySinceLastSync()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "doomed entry"),
+            CancellationToken.None);
+        scenarioContext["DoomedHash"] = entry.Hash;
+        // Baseline: the remote has the entry before the local delete.
+        await RunSyncAsync(fake, CancellationToken.None);
+        await _store.DeleteAsync(projectId, entry.Hash, CancellationToken.None);
+    }
+
+    [Given("the remote contributed new rows")]
+    public async Task GivenRemoteContributedNewRows()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        // Local engine configured so the pipeline seam can embed merged rows.
+        await _store.ConfigureEmbeddingAsync("local", null, null, CancellationToken.None);
+        fake.Set(ObjectKeyFor(projectId),
+            await BuildRemoteSnapshotAsync(projectId, [("merged fresh fact", "fresh.md")]));
+    }
 
     [Then("a snapshot object is uploaded with If-Match")]
-    public void ThenSnapshotUploaded()
+    public async Task ThenSnapshotUploaded()
     {
-        /* bound for @ignore scenarios */
+        var obj = await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"]));
+        obj.ShouldNotBeNull();
+        obj!.ETag.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Then("the snapshot passed integrity check before upload")]
-    public void ThenSnapshotIntegrityCheck()
+    public async Task ThenSnapshotIntegrityCheck()
     {
-        /* bound for @ignore scenarios */
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var result = (string)(await conn.ExecuteScalarAsync("PRAGMA quick_check"))!;
+            result.ShouldBe("ok");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the remote rows are merged row-wise")]
+    public async Task ThenRemoteRowsMerged()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE value = 'remote merged fact'");
+        count.ShouldBe(1);
+    }
+
+    [Then("no local write since the last sync is lost")]
+    public async Task ThenNoLocalWriteLost()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE value = 'local kept fact'");
+        count.ShouldBe(1);
+    }
+
+    [Then("the deletion reaches the remote")]
+    public async Task ThenDeletionReachesRemote()
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var count = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE hash = @hash",
+                new { hash = (string)scenarioContext["DoomedHash"] });
+            count.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the entry is not resurrected by the merge")]
+    public async Task ThenEntryNotResurrected()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash",
+            new { hash = (string)scenarioContext["DoomedHash"] });
+        count.ShouldBe(0);
+    }
+
+    [Then(@"""(.*)"" is not part of any synced payload")]
+    public async Task ThenNotPartOfSyncedPayload(string content)
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var count = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE value = @value", new { value = content });
+            count.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the new rows are embedded and searchable")]
+    public async Task ThenNewRowsEmbeddedAndSearchable()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        await _store.EmbedPendingAsync(projectId, null, CancellationToken.None);
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE value = 'merged fresh fact'");
+        state.ShouldBe("embedded");
+        var results = await _store.SearchAsync(
+            new SearchQuery(projectId, "merged fresh fact", SearchScope.All), CancellationToken.None);
+        results.Count.ShouldBeGreaterThan(0);
     }
 
     // ── FR-NM-9: MCP surface ──
@@ -530,10 +910,22 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenWorkspaceIdReturned() => scenarioContext["WorkspaceId"].ShouldNotBeNull();
 
     [Then(@"its context is ""(.*)""")]
-    public void ThenItsContextIs(string expectedContext)
+    public async Task ThenItsContextIs(string expectedContext)
     {
         var wsId = (string)scenarioContext["WorkspaceId"];
-        expectedContext.ShouldBe($"workspace:{wsId}");
+        // "<workspace-id>" is the placeholder for the id returned by begin: an entry
+        // written into the workspace must land in its bucket and be addressable under
+        // "workspace:<id>".
+        var expected = expectedContext.Replace("<workspace-id>", wsId);
+        var projectId = (string)scenarioContext["ProjectId"];
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest(projectId, "context probe", WorkspaceId: wsId), CancellationToken.None);
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var storedWsId = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT workspace_id FROM entries WHERE hash = @hash", new { hash = entry.Hash });
+        storedWsId.ShouldBe(wsId);
+        var listed = await _store.ListContextAsync(projectId, expected, CancellationToken.None);
+        listed.ShouldContain(e => e.Hash == entry.Hash);
     }
 
     [Then(@"memory_stats for project ""(.*)"" without workspace shows zero draft entries")]
@@ -628,7 +1020,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "shared-aged"), CancellationToken.None);
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("UPDATE entries SET scope='shared', rating=0.1, ttl_days=10, created_at=1 WHERE hash=@hash", new { entry.Hash });
+        await conn.ExecuteAsync("UPDATE entries SET scope='shared', rating=0.1, ttl_days=10, created_at=1 WHERE hash=@hash", new { hash = entry.Hash });
+        scenarioContext["SharedHash"] = entry.Hash;
     }
 
     [Given(@"content that only matches the keyword query exists in project ""(.*)""")]
@@ -656,13 +1049,28 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenChunksRespectTokens() { }
 
     [Then("it was never a sweep candidate")]
-    public void ThenNeverSweepCandidate() { }
+    public async Task ThenNeverSweepCandidate()
+    {
+        var candidates = ((SweepOutcome)scenarioContext["SweepOutcome"]).Candidates
+            .Select(c => c.Hash).ToHashSet(StringComparer.Ordinal);
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var wsHash = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT hash FROM entries WHERE workspace_id = @id",
+            new { id = (string)scenarioContext["WorkspaceId"] });
+        wsHash.ShouldNotBeNull();
+        candidates.ShouldNotContain(wsHash);
+    }
 
     [Then("keyword results are returned above the minimum score")]
     public void ThenKeywordResultsAboveMinScore() { }
 
     [Then("memory_stats for project \"acme-web\" is unchanged")]
-    public async Task ThenStatsUnchanged() => await Task.CompletedTask;
+    public async Task ThenStatsUnchanged()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
+        stats.EntryCount.ShouldBe(0);
+    }
 
     [Then("no chunk boundary falls inside the fence")]
     public void ThenNoChunkBoundaryInFence() { }
@@ -681,7 +1089,14 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("the entry is deleted")]
-    public void ThenEntryDeleted2() { }
+    public async Task ThenEntryDeleted2()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        count.ShouldBe(0);
+    }
 
     [Then("the forgetting policy is unchanged")]
     public void ThenForgettingPolicyUnchanged() { }
@@ -705,16 +1120,32 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [Then("the shared entry is not deleted")]
     public async Task ThenSharedEntryNotDeleted()
     {
-        var projectId = (string)scenarioContext["ProjectId"];
-        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
-        stats.EntryCount.ShouldBeGreaterThan(0);
+        var hash = (string)scenarioContext["SharedHash"];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        (await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash", new { hash })).ShouldBe(1);
     }
 
     [Then("the tool errors with access-denied")]
     public void ThenAccessDenied() { }
 
     [Then("the workspace entry was never part of a sync payload")]
-    public void ThenWorkspaceNotInSync() { }
+    public async Task ThenWorkspaceNotInSync()
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var wsRows = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL");
+            wsRows.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 
     [When("I adjust the sweep threshold or an entry's ttl_days")]
     public void WhenIAdjustSweepThreshold() { }
@@ -743,12 +1174,11 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISweepDryRunFalse()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("DELETE FROM entries WHERE rating < 0.3 AND project_id = @pid", new { pid = projectId });
+        var sweeper = new SweepService(_store, _ctx.TimeProvider);
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: true,
+            CancellationToken.None);
+        await sweeper.SweepAsync(projectId, 0.3, dryRun: false, CancellationToken.None);
     }
-
-    [When("I call memory_sync")]
-    public async Task WhenICallMemorySync() => await Task.CompletedTask;
 
     [When("I scan the bank and extension directories")]
     public void WhenIScanBankDirectories() { }
@@ -774,9 +1204,11 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "e1", WorkspaceId: wsId), CancellationToken.None);
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "e2", WorkspaceId: wsId), CancellationToken.None);
+        var e1 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e1", WorkspaceId: wsId), CancellationToken.None);
+        var e2 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e2", WorkspaceId: wsId), CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
+        scenarioContext["h1"] = e1.Hash;
+        scenarioContext["h2"] = e2.Hash;
     }
 
     [Then(@"workspace ""(.*)"" no longer lists ""(.*)"" or ""(.*)""")]
@@ -788,7 +1220,16 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then(@"""(.*)"" is searchable in the project context")]
-    public void ThenSearchableInProject(string hash) { }
+    public async Task ThenSearchableInProject(string hashKey)
+    {
+        var content = (string)scenarioContext[$"{hashKey}Content"];
+        var projectId = (string)scenarioContext["ProjectId"];
+        // Consolidation promotes via add_content: the kept content lands as a fresh
+        // project-scoped row (the workspace hash itself is deleted).
+        var results = await _store.SearchAsync(
+            new SearchQuery(projectId, content, Scope: SearchScope.Project), CancellationToken.None);
+        results.Count.ShouldBe(1);
+    }
 
     [Then("memory_stats for project \"acme-web\" without workspace reports exactly one new entry")]
     public async Task ThenStatsOneNewEntry()
@@ -830,8 +1271,14 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, query, SearchScope.All, context), CancellationToken.None);
+            new SearchQuery(projectId, query, Scope: SearchScope.All, ContextLabel: context),
+            CancellationToken.None);
     }
+
+    // "And when I search ..." parses as a Then step; StepDefinition matches any keyword.
+    [StepDefinition(@"when I search for ""(.*)"" restricted to context ""(.*)""")]
+    public async Task WhenISearchRestrictedToContextAnd(string query, string context) =>
+        await WhenISearchRestrictedToContext(query, context);
 
     [Given("an entry rated below threshold and older than the TTL exists")]
     public async Task GivenLowRatedAgedEntryExists()
@@ -839,7 +1286,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "aged content"), CancellationToken.None);
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("UPDATE entries SET rating=0.1, ttl_days=10, created_at=1 WHERE hash=@hash", new { entry.Hash });
+        await conn.ExecuteAsync("UPDATE entries SET rating=0.1, ttl_days=10, created_at=1 WHERE hash=@hash", new { hash = entry.Hash });
         scenarioContext["AgedHash"] = entry.Hash;
     }
 
@@ -849,7 +1296,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "good content"), CancellationToken.None);
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("UPDATE entries SET rating=0.9, ttl_days=30 WHERE hash=@hash", new { entry.Hash });
+        await conn.ExecuteAsync("UPDATE entries SET rating=0.9, ttl_days=30 WHERE hash=@hash", new { hash = entry.Hash });
         scenarioContext["HighRatedHash"] = entry.Hash;
     }
 
@@ -857,14 +1304,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISweepDryRun()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        var candidates = (await conn.QueryAsync<string>(
-            "SELECT hash FROM entries WHERE rating<0.3 AND project_id=@pid", new { pid = projectId })).ToList();
-        scenarioContext["Candidates"] = candidates;
+        var sweeper = new SweepService(_store, _ctx.TimeProvider);
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: true,
+            CancellationToken.None);
     }
 
     [Then("the entry is listed as a candidate")]
-    public void ThenEntryListedAsCandidate() => ((List<string>)scenarioContext["Candidates"]).Count.ShouldBeGreaterThan(0);
+    public void ThenEntryListedAsCandidate()
+    {
+        var outcome = (SweepOutcome)scenarioContext["SweepOutcome"];
+        outcome.Candidates.ShouldContain(c => c.Hash == (string)scenarioContext["AgedHash"]);
+    }
 
     [Then("memory_stats still reports the entry")]
     public async Task ThenStatsStillReportsEntry()
@@ -877,8 +1327,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISweepDryRunFalse2()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("DELETE FROM entries WHERE rating<0.3 AND project_id=@pid", new { pid = projectId });
+        var sweeper = new SweepService(_store, _ctx.TimeProvider);
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: false,
+            CancellationToken.None);
     }
 
     [Then("the low-rated aged entry is deleted")]
@@ -914,11 +1365,170 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await _store.WriteAsync(new MemoryWriteRequest(projectId, "entry-content", WorkspaceId: wsId), CancellationToken.None);
     }
 
+    [Given(@"^workspace ""([^""]*)"" contains an entry$")]
+    public async Task GivenWorkspaceContainsAnEntry(string wsId)
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var ws = new SqliteWorkspaceStore(_ctx.Factory);
+        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await _store.WriteAsync(new MemoryWriteRequest(projectId, "workspace entry", WorkspaceId: wsId),
+            CancellationToken.None);
+        scenarioContext["WorkspaceId"] = wsId;
+    }
+
     [Given(@"a workspace ""(.*)"" exists for project ""(.*)""")]
     public async Task GivenAWorkspaceExistsForProject(string wsId, string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
+    }
+
+    // ── FR-MEM-1.13/1.14: Extension hook pipeline ──
+    [Given("two extensions are registered")]
+    public void GivenTwoExtensionsRegistered()
+    {
+        var log = new List<string>();
+        scenarioContext["HookLog"] = log;
+        scenarioContext["HookedStore"] = new MemoryExtensionHost(_store,
+            [new RecordingExtension("first", log), new RecordingExtension("second", log)]);
+    }
+
+    [When("I write an entry")]
+    public async Task WhenIWriteAnEntry()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var store = scenarioContext.ContainsKey("HookedStore")
+            ? (IMemoryStore)scenarioContext["HookedStore"]
+            : _store;
+        _lastWrite = await store.WriteAsync(new MemoryWriteRequest(projectId, "hook entry"),
+            CancellationToken.None);
+    }
+
+    [Then("the first extension's OnWrite ran before the second's")]
+    public void ThenFirstOnWriteBeforeSecond()
+    {
+        var log = (List<string>)scenarioContext["HookLog"];
+        log.ShouldBe(["first", "second"]);
+    }
+
+    [Given("an entry that has been searched twice")]
+    public async Task GivenEntrySearchedTwice()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var hot = await _store.WriteAsync(new MemoryWriteRequest(projectId, "blorptastic"),
+            CancellationToken.None);
+        var cold = await _store.WriteAsync(new MemoryWriteRequest(projectId, "quiet-topic"),
+            CancellationToken.None);
+        scenarioContext["HotHash"] = hot.Hash;
+        scenarioContext["ColdHash"] = cold.Hash;
+        for (var i = 0; i < 2; i++)
+        {
+            await _store.SearchAsync(new SearchQuery(projectId, "blorptastic", Scope: SearchScope.All),
+                CancellationToken.None);
+        }
+    }
+
+    [Then("its access count in the meta store is two")]
+    public async Task ThenAccessCountIsTwo()
+    {
+        var hash = (string)scenarioContext["HotHash"];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT access_count FROM entries WHERE hash = @hash", new { hash });
+        count.ShouldBe(2);
+    }
+
+    [Then("its rating is higher than an entry never searched")]
+    public async Task ThenRatingHigherThanNeverSearched()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var hot = await conn.QueryFirstOrDefaultAsync<double>(
+            "SELECT rating FROM entries WHERE hash = @hash", new { hash = (string)scenarioContext["HotHash"] });
+        var cold = await conn.QueryFirstOrDefaultAsync<double>(
+            "SELECT rating FROM entries WHERE hash = @hash", new { hash = (string)scenarioContext["ColdHash"] });
+        hot.ShouldBeGreaterThan(cold);
+    }
+
+    // ── FR-MEM-1.16/1.22: A local-only install syncs committed contexts to the cloud ──
+    [Given("the tool is installed in project scope with no user-scope instance")]
+    public void GivenProjectScopeOnlyInstall()
+    {
+        // The project-scope install carries its own cloud credentials for the sync.
+        scenarioContext[CloudStoreKey] = new FakeCloudStore();
+    }
+
+    [Given("a shared entry exists in the local bank")]
+    public async Task GivenSharedEntryExistsInLocalBank()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "shared payload fact"),
+            CancellationToken.None);
+        await _store.ShareAsync(projectId, entry.Hash, CancellationToken.None);
+    }
+
+    [Then("the local bank is synced to the configured cloud database")]
+    public async Task ThenLocalBankSyncedToCloud()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor(projectId)))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var committed = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE scope = 'project'");
+            committed.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the shared entry is included in the synced payload")]
+    public async Task ThenSharedEntryInSyncedPayload()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor(projectId)))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var shared = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE scope = 'shared'");
+            shared.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("any user-scope instance correlates with it only through that cloud database")]
+    public void ThenCorrelationThroughCloudOnly()
+    {
+        // Deployment-level statement: the cloud snapshot is the correlation point between
+        // install scopes; the payload assertions above verify the mechanism.
+    }
+
+    private sealed class RecordingExtension(string name, List<string> log) : IMemoryExtension
+    {
+        public string Name => name;
+
+        public Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken)
+        {
+            log.Add(name);
+            return Task.CompletedTask;
+        }
+
+        public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
+            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
+
+        public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

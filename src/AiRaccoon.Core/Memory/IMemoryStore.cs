@@ -17,6 +17,13 @@ public interface IMemoryStore
     /// <summary>Promotes the content behind hash into the flat shared context; the source project row may stay (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.21).</summary>
     Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
+    /// <summary>Committed project-scoped rows eligible for shared-extraction (scope='project', embedded; TTL rows only when opted in).</summary>
+    Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId, bool includeTtlRows,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Existing shared tier contents — values and materialized paths — as the extraction dedup index.</summary>
+    Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The bank's file tree as returned by memory_list_files (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_list).</summary>
     Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 

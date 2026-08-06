@@ -109,6 +109,33 @@ public class MemoryStorePortTests
         store.DeletedSourcePath.ShouldBe(("acme", "/repo/docs/api.md"));
     }
 
+    [Fact]
+    public async Task ExtractCandidatesAsync_IsPartOfThePort_AndCarriesProjectAndTtlFlag()
+    {
+        var store = new RecordingStore();
+        store.Candidates.Add(new ExtractionCandidateRow("h", "h.md", "v", null, 0.5, 0,
+            DateTimeOffset.UnixEpoch, null));
+
+        var rows = await store.ExtractCandidatesAsync("acme", true, TestContext.Current.CancellationToken);
+
+        store.Extracted.ShouldBe(("acme", true));
+        rows.ShouldHaveSingleItem();
+        rows[0].Hash.ShouldBe("h");
+    }
+
+    [Fact]
+    public async Task GetSharedIndexAsync_IsPartOfThePort_AndReturnsValuesAndPaths()
+    {
+        var store = new RecordingStore();
+        store.Index = new SharedIndex(["v1"], ["shared/a.md"]);
+
+        var index = await store.GetSharedIndexAsync(TestContext.Current.CancellationToken);
+
+        store.SharedIndexCalls.ShouldBe(1);
+        index.Values.ShouldBe(["v1"]);
+        index.Paths.ShouldBe(["shared/a.md"]);
+    }
+
     private sealed class RecordingStore : IMemoryStore
     {
         public (string ProjectId, string Hash)? Shared { get; private set; }
@@ -146,6 +173,27 @@ public class MemoryStorePortTests
         {
             Shared = (projectId, hash);
             return Task.FromResult(new MemoryEntry(hash, "notes.md", ContextNaming.SharedContext, "value", 1));
+        }
+
+        public (string ProjectId, bool IncludeTtlRows)? Extracted { get; private set; }
+
+        public List<ExtractionCandidateRow> Candidates { get; } = [];
+
+        public SharedIndex Index { get; set; } = new([], []);
+
+        public int SharedIndexCalls { get; private set; }
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default)
+        {
+            Extracted = (projectId, includeTtlRows);
+            return Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>(Candidates);
+        }
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default)
+        {
+            SharedIndexCalls++;
+            return Task.FromResult(Index);
         }
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)

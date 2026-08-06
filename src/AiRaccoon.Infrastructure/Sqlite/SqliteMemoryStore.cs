@@ -228,6 +228,30 @@ public sealed class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        bool includeTtlRows, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<ExtractionRow>(
+                Def(MemorySql.SelectExtractionCandidates,
+                    new { projectId, includeTtlRows = includeTtlRows ? 1 : 0 }, cancellationToken))
+            .ConfigureAwait(false);
+        return rows.Select(r => r.ToCandidate()).ToList();
+    }
+
+    public async Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<SharedRow>(
+                Def(MemorySql.SelectSharedIndex, cancellationToken))
+            .ConfigureAwait(false);
+        return new SharedIndex(
+            rows.Select(r => r.Value).ToList(),
+            rows.Select(r => r.Path).ToList());
+    }
+
     public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -235,9 +259,25 @@ public sealed class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // Record a tombstone for committed rows so sync propagates the deletion; workspace
+        // rows never leave the bank and need none (FR-NM-8 s4).
+        var scope = await connection.QueryFirstOrDefaultAsync<string?>(
+                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+
         var deleted = await connection.ExecuteAsync(
                 Def(MemorySql.DeleteByHashAndProject, new { hash, projectId }, cancellationToken))
             .ConfigureAwait(false);
+
+        if (deleted > 0 && scope is not null)
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertTombstone,
+                        new { hash, scope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                        cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         return deleted > 0;
     }
 
@@ -1085,6 +1125,17 @@ public sealed class SqliteMemoryStore(
     }
 
     private sealed record SourceRow(string Path, string Value);
+
+    private sealed record SharedRow(string Path, string Value);
+
+    private sealed record ExtractionRow(
+        string Hash, string Path, string Value, string? SourceFile, double Rating, int AccessCount,
+        long CreatedAt, int? TtlDays)
+    {
+        public ExtractionCandidateRow ToCandidate() =>
+            new(Hash, Path, Value, SourceFile, Rating, AccessCount,
+                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), TtlDays);
+    }
 
     private sealed record SettingRow(string Key, string Value);
 

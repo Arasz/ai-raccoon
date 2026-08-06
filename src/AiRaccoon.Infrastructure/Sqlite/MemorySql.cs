@@ -19,12 +19,27 @@ internal static class MemorySql
                                           WHERE id = @id
                                           """;
 
-    public const string SelectSourceByHashAndProject = """
+    public const string SelectSourceByHashAndProject = """"
                                                         SELECT path AS Path, value AS Value
                                                        FROM entries
                                                        WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
                                                        LIMIT 1
-                                                       """;
+                                                       """";
+
+    public const string SelectExtractionCandidates = """"
+                                                      SELECT hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile,
+                                                             rating AS Rating, access_count AS AccessCount, created_at AS CreatedAt,
+                                                             ttl_days AS TtlDays
+                                                      FROM entries
+                                                      WHERE scope = 'project' AND project_id = @projectId AND embed_state = 'embedded'
+                                                        AND (@includeTtlRows = 1 OR ttl_days IS NULL)
+                                                      """";
+
+    public const string SelectSharedIndex = """"
+                                             SELECT path AS Path, value AS Value
+                                             FROM entries
+                                             WHERE scope = 'shared'
+                                             """";
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
@@ -123,6 +138,15 @@ internal static class MemorySql
 
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
+
+    // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
+    // recorded before the delete so sync can suppress resurrection and ship the tombstone.
+    public const string SelectScopeByHashAndProject =
+        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
+
+    public const string UpsertTombstone =
+        "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
+        "ON CONFLICT(hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
     // Mirror delete/rename: committed chunks of the source path AND everything under it
     // (a deleted directory cascades to its subtree; workspace scratch is transient and

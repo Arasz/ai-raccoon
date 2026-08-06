@@ -54,12 +54,15 @@ public static partial class Dependencies
                 {
                     var conn = new SqliteConnection($"Data Source={path}");
                     await conn.OpenAsync(ct);
+                    conn.EnableExtensions();
+                    conn.LoadVector();
                     return conn;
                 },
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
+            services.AddSingleton<SharedExtractionService>();
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
                 sp.GetRequiredService<IMemoryStore>()));

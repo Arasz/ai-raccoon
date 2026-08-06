@@ -22,20 +22,83 @@
     {
       "category": "uncategorized",
       "name": "documentation-drift-audit",
-      "sourceHash": "5d9069dd73ebb278f18838201fe5fd654e8dbd8c7d4be755503c42f98a24b14c",
+      "sourceHash": "e5a66f2e9f6979b7e4d2764a751f54273616cef15215f9cb23c1a62384cbdd0d",
       "sourcePath": "documentation/documentation-drift-audit",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:24:47Z",
+      "syncedAt": "2026-08-06T10:50:32Z",
       "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
     },
     {
       "category": "uncategorized",
+      "name": "dotnet-bdd-testing",
+      "sourceHash": "6310a1e0f100fc5eac1894f9beda4906f29f895473b2dc5cc55b05c3b8c1a786",
+      "sourcePath": "software-development/dotnet-bdd-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:45Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-bdd-testing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-domain-modeling",
+      "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
+      "sourcePath": "software-development/dotnet-domain-modeling",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:17:27Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-domain-modeling"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-flaky-test-diagnosis",
+      "sourceHash": "3c34c7baf7868b445edc490b5a6d07e1bb77e67877020c2a4149f946b36f182a",
+      "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:17:37Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-nuget-publish",
+      "sourceHash": "6066fa09ab6c12d28e8207371f540ae598f02aabc6a535a89aa9de57d288df27",
+      "sourcePath": "software-development/dotnet-nuget-publish",
+      "status": "synced",
+      "syncedAt": "2026-08-06T10:51:03Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-tool-publishing",
+      "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
+      "sourcePath": "software-development/dotnet-tool-publishing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:12:36Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "git-worktree-isolation",
+      "sourceHash": "22478618d371437213b272e5fb35699f08a2389ebbae72b0bf0a0d75c26d2656",
+      "sourcePath": "git-worktree-isolation",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:02Z",
+      "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
+    },
+    {
+      "category": "uncategorized",
       "name": "mcp-tool-surface-testing",
-      "sourceHash": "4b8e0484a2de0bc6a2be40c44e285c7587df6be20a5dc3a11e8aad0cea5752f1",
+      "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
       "sourcePath": "mcp/mcp-tool-surface-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:38:44Z",
+      "syncedAt": "2026-08-06T11:20:46Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "memory-quality-logging",
+      "sourceHash": "6e0769a964865462c2a771e2818d50ca630079e17e68db584ce9f89175a51a42",
+      "sourcePath": "ai-raccoon-integration/memory-quality-logging",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:21:35Z",
+      "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
     }
   ],
   "version": 1

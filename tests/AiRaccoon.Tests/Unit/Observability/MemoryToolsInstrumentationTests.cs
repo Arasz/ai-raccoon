@@ -144,7 +144,7 @@ public class MemoryToolsInstrumentationTests
             new MemoryAccessGuard(store),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(store, new MemoryAccessGuard(store)),
-            metrics);
+            metrics, new SharedExtractionService());
     }
 
     // ── Minimal fake implementations ──
@@ -170,6 +170,13 @@ public class MemoryToolsInstrumentationTests
 
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
+
+    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        bool includeTtlRows, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
         public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "content", 1));
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);

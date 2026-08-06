@@ -3198,6 +3198,22 @@
           "delegationId": "deleg_3a5c2235",
           "model": "deepseek-v4-flash",
           "apiCalls": 38
+        },
+        {
+          "description": "BDD @ignore scenarios implementation + tombstone/vec0 fixes",
+          "at": "2026-08-06T11:19:36.381201+00:00",
+          "totalTokens": 26089412,
+          "delegationId": "deleg_ddf575ff",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 118
+        },
+        {
+          "description": "agent-memory BDD @ignore scenarios implementation",
+          "at": "2026-08-06T11:48:28.032080+00:00",
+          "totalTokens": 10271669,
+          "delegationId": "deleg_0d4aa33a",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 68
         }
       ],
       "grade": null,
@@ -3237,7 +3253,7 @@
         "cacheReadTokens": 0,
         "cacheCreationTokens": 0,
         "cacheEfficiency": null,
-        "subagentTokens": 6748581,
+        "subagentTokens": 43109662,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,
@@ -3401,6 +3417,120 @@
         "contextGrowth": 0,
         "mainSessionTotal": 0,
         "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "integration-review-1-0-8",
+      "subagents": [
+        {
+          "description": "architect: plan + decisions (D1-D3)",
+          "at": "2026-08-06T11:44:48.575905+00:00",
+          "totalTokens": 1502854,
+          "delegationId": "deleg_3789feac",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 25
+        },
+        {
+          "description": "dotnet-engineer: WP-1 observability contract + WP-3 E2E parity (TDD)",
+          "at": "2026-08-06T11:44:48.643067+00:00",
+          "totalTokens": 4555314,
+          "delegationId": "deleg_b79e3436",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 69
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_122858_7a3ede",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T10:31:29.054919+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T10:31:29.054919+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 6058168,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "ai-raccoon-package-id",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_125148_ca8d27",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T10:58:10.307311+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 13,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 76383,
+              "outputTokens": 14670,
+              "cacheReadTokens": 826752,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 14
+            }
+          },
+          "cumulative": {
+            "inputTokens": 76060,
+            "outputTokens": 14609,
+            "cacheReadTokens": 826496,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T10:58:10.307311+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 13,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 76383,
+              "outputTokens": 14670,
+              "cacheReadTokens": 826752,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 14
+            }
+          },
+          "cumulative": {
+            "inputTokens": 76060,
+            "outputTokens": 14609,
+            "cacheReadTokens": 826496,
+            "cacheCreationTokens": 0
+          }
+        }
       }
     }
   ]
