@@ -12,8 +12,7 @@ public sealed class TestOpenSshKeyBuilder
     public static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
     public static readonly byte[] PublicKey21To40 = [.. Enumerable.Range(33, 32).Select(i => (byte)i)];
 
-    private byte[] _publicKey = PublicKey01To20;
-    private byte[] _privatePublicKey = PublicKey01To20;
+    private byte[]? _privatePublicKeyOverride;
     private uint _checkint1 = 0x01234567;
     private uint _checkint2 = 0x01234567;
     private string _cipherName = "none";
@@ -50,7 +49,7 @@ public sealed class TestOpenSshKeyBuilder
 
     public TestOpenSshKeyBuilder WithEmbeddedPublicKeyMismatch()
     {
-        _privatePublicKey = PublicKey21To40;
+        _privatePublicKeyOverride = PublicKey21To40;
         return this;
     }
 
@@ -116,7 +115,7 @@ public sealed class TestOpenSshKeyBuilder
         WriteUInt32(section, _checkint2);
         WriteString(section, _keyType);
         WriteString(section, pub);
-        WriteString(section, [.. seed, .. _privatePublicKey]);
+        WriteString(section, [.. seed, .. (_privatePublicKeyOverride ?? pub)]);
         WriteString(section, []);
         section.Write(new byte[8 - (int)section.Length % 8]);
         return section.ToArray();
