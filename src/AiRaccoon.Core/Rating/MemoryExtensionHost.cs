@@ -88,6 +88,9 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
     public async Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
         await inner.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        await inner.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+
     public async Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => await inner.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false);
 
     public async Task<int> IngestFileAsync(string projectId, string path, string? context,

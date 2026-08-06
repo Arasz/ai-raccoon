@@ -230,6 +230,9 @@ public sealed class MemoryToolsAccessModeTests
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new SharedIndex([], []));
 
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(["acme-web"]);
+
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,

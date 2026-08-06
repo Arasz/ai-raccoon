@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
+using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -63,6 +64,7 @@ public static partial class Dependencies
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
             services.AddSingleton<SharedExtractionService>();
+            services.AddHostedService<ExtractionHostedService>();
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
                 sp.GetRequiredService<IMemoryStore>()));

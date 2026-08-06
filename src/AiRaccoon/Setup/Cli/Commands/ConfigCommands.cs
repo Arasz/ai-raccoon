@@ -29,6 +29,7 @@ internal static class ConfigCommands
         TextWriter stdout, TextWriter stderr, TextReader stdin,
         ISettingsCommands? settings = null, ISyncCommands? sync = null,
         IWatchCommands? watch = null, IEncryptionCommands? encryptionCommands = null,
+        IExtractCommands? extract = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -61,6 +62,9 @@ internal static class ConfigCommands
                 ["watch", "registered"] => await (watch ?? ThrowHelper.ThrowArgumentNullException<IWatchCommands>(nameof(watch))).RegisteredAsync(parseResult, stdout, cancellationToken),
                 ["watch", "remove"] => await (watch ?? ThrowHelper.ThrowArgumentNullException<IWatchCommands>(nameof(watch))).RemoveAsync(parseResult, store, stdout, cancellationToken),
                 ["encryption", "bitwarden"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).BitwardenAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["extract", "enable"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetEnabledAsync(parseResult, store, stdout, cancellationToken),
+                ["extract", "mode"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetModeAsync(parseResult, store, stdout, stderr, cancellationToken),
+                ["extract", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ListAsync(store, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")

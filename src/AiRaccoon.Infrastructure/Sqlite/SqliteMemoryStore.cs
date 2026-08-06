@@ -252,6 +252,15 @@ public sealed class SqliteMemoryStore(
             rows.Select(r => r.Path).ToList());
     }
 
+    public async Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<string>(
+                Def(MemorySql.SelectProjectIds, cancellationToken))
+            .ConfigureAwait(false);
+        return rows.ToList();
+    }
+
     public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);

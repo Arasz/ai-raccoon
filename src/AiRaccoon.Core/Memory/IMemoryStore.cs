@@ -24,6 +24,9 @@ public interface IMemoryStore
     /// <summary>Existing shared tier contents — values and materialized paths — as the extraction dedup index.</summary>
     Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Every project id with committed project-scoped rows (the extraction sweep's universe).</summary>
+    Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The bank's file tree as returned by memory_list_files (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_list).</summary>
     Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 

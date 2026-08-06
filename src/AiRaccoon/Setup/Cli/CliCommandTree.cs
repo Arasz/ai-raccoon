@@ -12,7 +12,7 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"];
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
@@ -26,6 +26,7 @@ internal static class CliCommandTree
         root.Add(SyncCommand());
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
+        root.Add(ExtractCommand());
         return root;
     }
 
@@ -176,5 +177,19 @@ internal static class CliCommandTree
             { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } });
         watch.Add(new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } });
         return watch;
+    }
+
+    private static Command ExtractCommand()
+    {
+        var extract = new Command("extract",
+            "Background shared-extraction configuration (CLI-only channel): enables or disables the hosted service that periodically checks each project's committed memories and extracts the shared-worthy ones, and sets its mode (propose logs candidates; promote shares them).")
+        {
+            new Command("enable", "Enables or disables the background shared-extraction service (disabled by default; promote mode shares data between projects)")
+                { new Argument<bool>("enabled") { HelpName = "true|false" } },
+            new Command("mode", "Sets the extraction mode: propose (default, logs ranked candidates) or promote (shares the top candidates into the shared tier)")
+                { new Argument<string>("mode") { HelpName = "propose|promote" } },
+            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
+        };
+        return extract;
     }
 }
