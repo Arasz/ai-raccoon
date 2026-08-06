@@ -48,7 +48,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         _output = output;
 
         // The committed corpus carries provider='local', so search embeds at query time.
-        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        var ensured = TestData.CreateBundledModel().EnsureAsync().GetAwaiter().GetResult();
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -60,8 +60,8 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
             new TokenizerChunker(), new EmbeddingService());
         _hashMap = LoadChunkHashMap();

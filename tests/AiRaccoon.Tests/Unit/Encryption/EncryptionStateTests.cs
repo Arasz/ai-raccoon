@@ -25,7 +25,7 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Read().ShouldBeNull();
+        sidecar.Read().ShouldBe(EncryptionData.None);
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionData("bitwarden", "project-1", "secret-1"));
+        sidecar.Write(new EncryptionData("bitwarden") { ProjectId = "project-1", SecretId = "secret-1" });
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -47,7 +47,7 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionData("env", null, null));
+        sidecar.Write(new EncryptionData("env"));
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -61,8 +61,8 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionData("env", null, null));
-        sidecar.Write(new EncryptionData("bitwarden", "p2", "s2"));
+        sidecar.Write(new EncryptionData("env"));
+        sidecar.Write(new EncryptionData("bitwarden") { ProjectId = "p2", SecretId = "s2" });
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -76,7 +76,7 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionData("bitwarden", "p1", "s1"));
+        sidecar.Write(new EncryptionData("bitwarden") { ProjectId = "p1", SecretId = "s1" });
 
         Directory.GetFiles(_dataRoot).ShouldHaveSingleItem();
         File.ReadAllText(SidecarPath()).ShouldContain("\"source\":\"bitwarden\"");
@@ -92,7 +92,7 @@ public sealed class EncryptionStateTests : IDisposable
 
         var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionData("env", null, null));
+        sidecar.Write(new EncryptionData("env"));
 
         File.GetUnixFileMode(SidecarPath()).ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
@@ -101,12 +101,12 @@ public sealed class EncryptionStateTests : IDisposable
     public void Delete_RemovesTheSidecar()
     {
         var sidecar = new EncryptionState(BankPath());
-        sidecar.Write(new EncryptionData("bitwarden", "p1", "s1"));
+        sidecar.Write(new EncryptionData("bitwarden") { ProjectId = "p1", SecretId = "s1" });
 
         sidecar.Delete();
 
         File.Exists(SidecarPath()).ShouldBeFalse();
-        sidecar.Read().ShouldBeNull();
+        sidecar.Read().ShouldBe(EncryptionData.None);
     }
 
     [Fact]
@@ -166,6 +166,6 @@ public sealed class EncryptionStateTests : IDisposable
     {
         var sidecar = new EncryptionState(BankPath());
 
-        Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionData("ssh-key", null, null)));
+        Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionData("ssh-key")));
     }
 }

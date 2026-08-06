@@ -42,7 +42,7 @@ public sealed class SourceIdentityTests : IDisposable
 
         // The regenerated DB carries embedding.provider='local', so SearchAsync embeds the
         // query at query time; provision the bundled ONNX model before any search.
-        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        var ensured = TestData.CreateBundledModel().EnsureAsync().GetAwaiter().GetResult();
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -53,8 +53,8 @@ public sealed class SourceIdentityTests : IDisposable
         File.Copy(ResolveBundledDbPath(), Path.Combine(_dataRoot, "memory.db"));
 
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
             new TokenizerChunker(), new EmbeddingService());
     }

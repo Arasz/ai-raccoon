@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiRaccoon.Core.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -41,13 +42,15 @@ public sealed class EncryptionState : IEncryptionState
             throw Corrupt(ex.Message);
         }
 
-        return config.Source is not ("env" or "bitwarden") ? throw Corrupt($"unknown source '{config.Source}'") : config;
+        return config.Source is not (EnvEncryptionKeyProvider.EncryptionSource or BitwardenEncryptionKeyProvider.EncryptionSource)
+            ? throw Corrupt($"unknown source '{config.Source}'")
+            : config;
     }
 
     public void Write(EncryptionData config)
     {
         Guard.IsNotNull(config);
-        if (config.Source is not ("env" or "bitwarden"))
+        if (config.Source is not (EnvEncryptionKeyProvider.EncryptionSource or BitwardenEncryptionKeyProvider.EncryptionSource))
         {
             throw new ArgumentException($"source must be \"env\" or \"bitwarden\", was \"{config.Source}\"", nameof(config));
         }

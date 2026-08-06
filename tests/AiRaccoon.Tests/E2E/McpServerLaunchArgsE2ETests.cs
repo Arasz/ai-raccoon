@@ -22,7 +22,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
+        await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         _factory = new McpServerFactory(InstallScope.Project);
         _client = await _factory.CreateClientAsync();
     }

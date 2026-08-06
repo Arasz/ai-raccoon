@@ -31,8 +31,8 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     public SqliteMemoryStoreIntegrationTests()
     {
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new EmbeddingService());
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));

@@ -11,7 +11,9 @@ public sealed class EnvEncryptionKeyProvider : IEncryptionKeyProvider
     public const string EnvVarName = "AIRACCOON_DB_PASSPHRASE";
 
 
-    public string Source => "env";
+    public const string EncryptionSource = "env";
+
+    public string Source => EncryptionSource;
 
     public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 

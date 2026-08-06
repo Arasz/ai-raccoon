@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -51,10 +52,11 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
     private async Task SeedGlobalAccessModeAsync()
     {
+        var options = new InfrastructureOptions { DataRoot = DataRoot, Scope = _scope };
         var store = new SqliteMemoryStore(
-            new SqliteConnectionFactory(
-                new InfrastructureOptions { DataRoot = DataRoot, Scope = _scope },
-                new EnvEncryptionKeyProvider()),
+            new SqliteConnectionFactory(options,
+                new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+                    [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
     }

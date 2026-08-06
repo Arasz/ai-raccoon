@@ -41,7 +41,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         // The regenerated DB carries embedding.provider='local', so SearchAsync embeds the query at
         // query time and CreateGenerator throws if the bundled ONNX model is missing (ManagedHarness
         // contract). Provision it before any search.
-        var ensured = BundledModel.EnsureAsync().GetAwaiter().GetResult();
+        var ensured = TestData.CreateBundledModel().EnsureAsync().GetAwaiter().GetResult();
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -56,8 +56,8 @@ public sealed class RetrievalBaselineTests : IDisposable
         File.Copy(bundledDb, dbPath);
 
         _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
             new TokenizerChunker(), new EmbeddingService());
     }

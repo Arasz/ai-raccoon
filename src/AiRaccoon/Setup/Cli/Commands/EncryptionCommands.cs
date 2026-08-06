@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -31,10 +32,14 @@ internal static partial class ConfigCommands
 
     private static async Task<int> EncryptionBitwardenAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, SqliteConnectionFactory? bank,
-        ICliSecretManager? bws, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
+        ICliSecretManager? bws, IEncryptionKeyProvider? env, IEncryptionState? encryptionState, ILogger? logger,
+        CancellationToken cancellationToken)
     {
         Guard.IsNotNull(bank);
-        bws ??= new BitwardenCliSecretManager();
+        Guard.IsNotNull(bws);
+        Guard.IsNotNull(env);
+        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(logger);
 
         try
         {
@@ -42,6 +47,7 @@ internal static partial class ConfigCommands
         }
         catch (BwsInvocationException ex)
         {
+            Log.BwsInvocationFailed(logger, ex);
             await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
@@ -60,13 +66,16 @@ internal static partial class ConfigCommands
         }
         catch (BwsInvocationException ex)
         {
+            Log.BwsInvocationFailed(logger, ex);
             await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
         if (fetched.ExitCode != 0)
         {
-            await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {FirstStderrLine(fetched.Stderr)}");
+            var errorLine = FirstStderrLine(fetched.Stderr);
+            Log.BwsCommandFailed(logger, fetched.ExitCode, errorLine);
+            await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
             return 1;
         }
 
@@ -106,7 +115,9 @@ internal static partial class ConfigCommands
             if (openError is null)
             {
                 // Current-source open succeeded → rekey to the derived key (verify-reopen inside).
+                Log.RekeyingBank(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
                 await bank.RekeyBankAsync(derived, cancellationToken);
+                Log.BankRekeyed(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
             }
             else if (await TryOpenAsync(bank, derived, cancellationToken))
             {
@@ -117,12 +128,11 @@ internal static partial class ConfigCommands
             {
                 // Amendment 1 (unset crash window): rekey-back landed but the sidecar was never
                 // deleted. The env key opens the bank → report and leave the sidecar consistent.
-                var sidecar = new EncryptionState(bankPath);
-                var envPassphrase = (env ?? new EnvEncryptionKeyProvider()).GetPassphrase();
+                var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
                 if (File.Exists(EncryptionState.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(bank, envPassphrase, cancellationToken))
                 {
-                    sidecar.Delete();
+                    encryptionState.Delete();
                     await stderr.WriteLineAsync("ai-raccoon: bank is env-keyed; source was not switched");
                     return 0;
                 }
@@ -134,9 +144,8 @@ internal static partial class ConfigCommands
 
         // (f) Persist: sidecar FIRST (the resolver reads it pre-open), then the settings
         // mirror — the store's opens now resolve the bitwarden key because the sidecar is set.
-        new EncryptionState(bankPath).Write(new EncryptionData(
-            EncryptionSettingsKeys.SourceBitwarden, projectId, secretId));
-        await store.SetSettingAsync(EncryptionSettingsKeys.Source, EncryptionSettingsKeys.SourceBitwarden, cancellationToken);
+        encryptionState.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
+        await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
 
@@ -145,8 +154,12 @@ internal static partial class ConfigCommands
     }
 
     private static async Task<int> EncryptionShowAsync(IMemoryStore store, TextWriter stdout,
-        SqliteConnectionFactory? bank, CancellationToken cancellationToken)
+        SqliteConnectionFactory? bank, IEncryptionState? encryptionState, ILogger? logger,
+        CancellationToken cancellationToken)
     {
+        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(logger);
+
         if (bank is not null)
         {
             // Validate the bank opens with the configured source (loud on corrupt sidecar).
@@ -154,8 +167,8 @@ internal static partial class ConfigCommands
         }
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        var sidecar = bank is not null ? new EncryptionState(bank.BankPath).Read() : null;
-        if (sourceRow == EncryptionSettingsKeys.SourceBitwarden || sidecar?.Source == EncryptionSettingsKeys.SourceBitwarden)
+        var sidecar = bank is not null ? encryptionState.Read() : null;
+        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || sidecar?.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
             // Settings first, sidecar fallback (crash-window self-description, plan §4).
             var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
@@ -173,11 +186,14 @@ internal static partial class ConfigCommands
     }
 
     private static async Task<int> EncryptionUnsetAsync(IMemoryStore store, TextWriter stdout, TextWriter stderr,
-        SqliteConnectionFactory? bank, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
+        SqliteConnectionFactory? bank, IEncryptionKeyProvider? env, IEncryptionState? encryptionState, ILogger? logger,
+        CancellationToken cancellationToken)
     {
         Guard.IsNotNull(bank);
+        Guard.IsNotNull(env);
+        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(logger);
         var bankPath = bank.BankPath;
-        var sidecar = new EncryptionState(bankPath);
         var bankExists = File.Exists(bankPath);
 
         if (bankExists)
@@ -187,7 +203,7 @@ internal static partial class ConfigCommands
             {
             }
 
-            var envPassphrase = (env ?? new EnvEncryptionKeyProvider()).GetPassphrase();
+            var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
             if (!string.IsNullOrEmpty(envPassphrase))
             {
                 // Rows first — the store still opens with the bitwarden key at this point.
@@ -196,8 +212,10 @@ internal static partial class ConfigCommands
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
 
                 // Rekey back to the env passphrase (current key resolves from the sidecar).
+                Log.RekeyingBank(logger, EnvEncryptionKeyProvider.EncryptionSource);
                 await bank.RekeyBankAsync(envPassphrase, cancellationToken);
-                sidecar.Delete();
+                Log.BankRekeyed(logger, EnvEncryptionKeyProvider.EncryptionSource);
+                encryptionState.Delete();
             }
             else
             {
@@ -205,6 +223,7 @@ internal static partial class ConfigCommands
                 // warn loudly and LEAVE the sidecar + rows in place (source stays bitwarden) so
                 // the documented retry actually works: setting AIRACCOON_DB_PASSPHRASE and
                 // re-running unset reopens with the bitwarden key and rekeys back.
+                Log.UnsetSkippedRekey(logger);
                 await stderr.WriteLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
                 return 1;
@@ -216,7 +235,7 @@ internal static partial class ConfigCommands
             await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
-            sidecar.Delete();
+            encryptionState.Delete();
         }
 
         await stdout.WriteLineAsync("encryption source reset to env");
@@ -249,5 +268,23 @@ internal static partial class ConfigCommands
     {
         var line = stderr.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
         return line ?? "(no stderr)";
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Rekeying the bank to the {Source} encryption key")]
+        public static partial void RekeyingBank(ILogger logger, string source);
+
+        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Bank rekeyed to the {Source} encryption key")]
+        public static partial void BankRekeyed(ILogger logger, string source);
+
+        [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "bws invocation failed")]
+        public static partial void BwsInvocationFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
+        public static partial void UnsetSkippedRekey(ILogger logger);
+
+        [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
+        public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
     }
 }

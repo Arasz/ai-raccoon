@@ -21,7 +21,7 @@ public class ConfigCommandsWatchTests
 {
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store, FakeWatchStore? watchStore = null)
     {
-        var parsed = CliArgs.TryParse(args);
+        CliArgs.TryParse(args, out var parsed);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 

@@ -17,7 +17,7 @@ public class ConfigCommandsAccessModelTests
 {
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
-        var parsed = CliArgs.TryParse(args);
+        CliArgs.TryParse(args, out var parsed);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 

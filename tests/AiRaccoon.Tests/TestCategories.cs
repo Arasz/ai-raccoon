@@ -1,4 +1,8 @@
+using AiRaccoon.Core.Encryption;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Infrastructure.Options;
 
 namespace AiRaccoon.Tests;
 
@@ -20,8 +24,10 @@ public static class TestCategories
     public const string Slow = "Slow";
 }
 
-/// <summary>Returns null — no encryption. Use for existing unencrypted-DB tests.</summary>
-public sealed class NullKeyProvider : IEncryptionKeyProvider
+/// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>
+public sealed class NullKeyProvider : IEncryptionKeyResolver
 {
-    public string? GetPassphrase() => null;
+    public ResolvedKey Resolve() => ResolvedKey.None;
+
+    public static IEncryptionKeyResolver Resolver(InfrastructureOptions options) => new NullKeyProvider();
 }

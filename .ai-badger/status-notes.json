@@ -26,5 +26,13 @@
     "Raw HttpRequestException escaped both SDKs' typed exceptions (connection-refused case) and surfaced as untyped MCP 500 — now mapped to SyncNetworkException in both stores.",
     "Malformed azure account name in --cli mode: Uri/BlobServiceClient ctor ArgumentException/FormatException -> SyncNotConfiguredException (same wrap as the connection-string path).",
     "Worktree gotcha: the bundled ONNX model (src/AiRaccoon/Models/*.onnx) is GITIGNORED; a fresh worktree lacks it until copied, and the csproj wildcard copy evaluates at build time — build BEFORE the file exists silently skips the copy and all embedding/retrieval tests fail with 'model not found next to the tool'. Copy the model into the worktree before the full-suite gate (main checkout has it; mtime trick: build after the file is present)."
+  ],
+  "encryption-commands-rework": [
+    "Absent-sidecar resolves via the ENV provider (contract: absence=env, plan §5.2); EncryptionData.None is only the absent sentinel. NoneEncryptionKeyProvider is now unreachable in production (sidecar validates env/bitwarden; resolver maps none->env) — kept as catch-all, flagged for a future prune.",
+    "Two hidden server-boot bugs in 7b468ff: (1) BundledModel needs IHttpClientFactory — services.AddHttpClient() was never called; (2) GetRequiredService<ILogger>() always fails — default hosts do not register the non-generic ILogger; Program.cs resolves ILoggerFactory.CreateLogger. Both only surfaced via the E2E factory / live boot, not unit tests.",
+    "Program.cs startup failure surface: resolve failure -> 'Failed to resolve encryption key' (log EventId 1) exit 1; open failure -> 'Failed to open encrypted bank with {Source} encryption source key: {Error}' (EventId 2) exit 2. Process-level tests in EncryptionBitwardenIntegrationTests pin this (hermetic PATH = fake dir + /usr/bin + /bin; dotnet resolved by absolute path — prepending an empty dir does NOT hide a real bws later on PATH).",
+    "ConfigVerbRunner is the one-shot verb composition root (no DI container): encryption state/bws/providers/bank/store/watch-store, stderr console logger, CreateLogger(\"ConfigCommands\") (CreateLogger<T> illegal for a static class).",
+    "Pre-existing load flake (not from this PR): WatchIntegrationTests.DeletedDirectory_Cascades... times out under full-suite parallel load (15s StepUntil), passes solo in ~250ms; timing structure identical to pre-refactor baseline.",
+    "Old names fully gone from src+tests: IBwsProcessRunner, BwsProcessRunner, EncryptionSourceSidecar, EncryptionSourceConfig, SourceEnv/SourceBitwarden constants, EmbeddingBootstrap, ConfigVerbRunner's botched rename RunWithBitwardenSecretsManagerEncryptionKey."
   ]
 }

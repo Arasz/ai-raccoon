@@ -67,8 +67,8 @@ public sealed class BaselineMetricsTests : IDisposable
         File.Copy(bundledDb, dbPath);
 
         var factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64" },
-            new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
             new TokenizerChunker(), new EmbeddingService());
     }
@@ -82,7 +82,7 @@ public sealed class BaselineMetricsTests : IDisposable
     /// </summary>
     private async Task EnsureModelAsync()
     {
-        var ensured = await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
+        var ensured = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         ensured.AllPresent.ShouldBeTrue(
             "bundled embedding model must be provisioned before vector/hybrid searches: "
             + string.Join("; ", ensured.Errors));

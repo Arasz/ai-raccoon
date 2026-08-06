@@ -1,5 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Setup;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -11,38 +13,63 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 public sealed class EmbeddingAvailabilityTests
 {
     [Fact]
-    public async Task EmbeddingBootstrap_OnMissingAssets_WritesActionableWarning()
+    public async Task EmbeddingAvailability_OnMissingAssets_LogsActionableWarning()
     {
-        var stderr = new StringWriter();
+        var logger = new FakeLogger<EmbeddingAvailability>();
+        var availability = new EmbeddingAvailability(logger, new StubBundledModel(new BundledModelResult(false, ["e1"])));
 
-        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => Task.FromResult(new BundledModelResult(false, ["e1"])),
-            TestContext.Current.CancellationToken);
+        await availability.EnsureEmbeddingAvailabilityAsync(TestContext.Current.CancellationToken);
 
-        stderr.ToString().ShouldContain("model set local");
-        stderr.ToString().ShouldContain("e1");
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Id.Id.ShouldBe(1);
+        record.Message.ShouldContain("model set local");
+        record.Message.ShouldContain("e1");
     }
 
     [Fact]
-    public async Task EmbeddingBootstrap_OnAllPresent_WritesNoWarning()
+    public async Task EmbeddingAvailability_OnAllPresent_LogsNothing()
     {
-        var stderr = new StringWriter();
+        var logger = new FakeLogger<EmbeddingAvailability>();
+        var availability = new EmbeddingAvailability(logger, new StubBundledModel(new BundledModelResult(true, [])));
 
-        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => Task.FromResult(new BundledModelResult(true, [])),
-            TestContext.Current.CancellationToken);
+        await availability.EnsureEmbeddingAvailabilityAsync(TestContext.Current.CancellationToken);
 
-        stderr.ToString().ShouldBeEmpty();
+        logger.Collector.Count.ShouldBe(0);
     }
 
     [Fact]
-    public async Task EmbeddingBootstrap_WhenEnsureThrows_WritesWarning()
+    public async Task EmbeddingAvailability_WhenEnsureThrows_LogsWarning()
     {
         // Pins the bare-catch path (e.g. the 30 s timeout surfacing as OperationCanceledException):
         // the boot must continue with a warning, never a throw.
-        var stderr = new StringWriter();
+        var logger = new FakeLogger<EmbeddingAvailability>();
+        var availability = new EmbeddingAvailability(logger, new ThrowingBundledModel());
 
-        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => throw new InvalidOperationException("boom"),
-            TestContext.Current.CancellationToken);
+        await availability.EnsureEmbeddingAvailabilityAsync(TestContext.Current.CancellationToken);
 
-        stderr.ToString().ShouldContain("model set local");
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Level.ShouldBe(LogLevel.Error);
+        record.Id.Id.ShouldBe(2);
+        record.Message.ShouldContain("model set local");
+    }
+
+    private sealed class StubBundledModel(BundledModelResult result) : IBundledModel
+    {
+        public Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default) => Task.FromResult(result);
+
+        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class ThrowingBundledModel : IBundledModel
+    {
+        public Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("boom");
+
+        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("boom");
     }
 }

@@ -504,7 +504,8 @@ public sealed class WatchIntegrationTests
             WatchDir = Path.Combine(DataRoot, "repo");
             Directory.CreateDirectory(WatchDir);
             _factory = new SqliteConnectionFactory(
-                new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64" }, new NullKeyProvider());
+            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService());
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);

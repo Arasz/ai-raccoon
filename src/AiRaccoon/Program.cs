@@ -12,11 +12,17 @@ if (!CliArgs.TryParse(args, out var cliParseResult))
 var cancellationTokenSource = new CancellationTokenSource();
 
 var serverConfig = cliParseResult.Options.ToServerConfig();
+if (cliParseResult.CommandPath.Length > 0)
+{
+    return await ConfigVerbRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, Console.In,
+        cancellationTokenSource.Token);
+}
+
 var app = McpServerSetup.CreateServerHost(serverConfig);
 var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailability>();
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
 var resolver = app.Services.GetRequiredService<IEncryptionKeyResolver>();
-var logger = app.Services.GetRequiredService<ILogger>();
+var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Program");
 
 if (!TryResolveEncryptionKey(logger, resolver, out var encryptionKey))
 {
@@ -56,7 +62,7 @@ static async Task<bool> TryProbeBankDecryption(ILogger logger, SqliteConnectionF
     }
     catch (Exception ex)
     {
-        Log.FailedToOpenEncryptedBank(logger, resolvedKey.SourceName, ex);
+        Log.FailedToOpenEncryptedBank(logger, resolvedKey.SourceName, ex.Message, ex);
         return false;
     }
 }
@@ -65,10 +71,10 @@ namespace AiRaccoon
 {
     public static partial class Log
     {
-        [LoggerMessage(EventId = ExitCode.FailedToResolveEncryptionKey, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
+        [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
         public static partial void FailedToResolveEncryptionKey(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = ExitCode.FailedToOpenEncryptedBank, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key")]
-        public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, Exception exception);
+        [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key: {Error}")]
+        public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, string error, Exception exception);
     }
 }

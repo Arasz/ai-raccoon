@@ -12,7 +12,7 @@ public sealed record BundledModelResult(bool AllPresent, IReadOnlyList<string> E
 ///     pinned SHA-256, resolved from AppContext.BaseDirectory/Models (or the repo source dir during tests).
 ///     A custom model path comes from the embedding.model settings row via 'ai-raccoon model set local'.
 /// </summary>
-public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactory httpClientFactory) : IBundledModel
+public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClientFactory httpClientFactory) : IBundledModel
 {
     public const string ModelFileName = "model_qint8_arm64.onnx";
     private const string VocabFileName = "vocab.txt";
@@ -40,6 +40,7 @@ public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactor
         var vocab = LocateVerified(VocabFileName, VocabSha256);
         if (model is not null && vocab is not null)
         {
+            Log.BundledModelAssetsVerified(logger);
             return new BundledModelResult(true, []);
         }
 
@@ -91,7 +92,7 @@ public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactor
         ?? throw new InvalidOperationException(
             $"Bundled BERT vocab '{VocabFileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.");
 
-    private static async Task<List<string>> DownloadResources(HttpClient httpClient, BundledResource resource, CancellationToken cancellationToken)
+    private async Task<List<string>> DownloadResources(HttpClient httpClient, BundledResource resource, CancellationToken cancellationToken)
     {
         List<string> errors = [];
         if (resource.IsVerified())
@@ -99,9 +100,11 @@ public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactor
             return errors;
         }
 
+        Log.DownloadingBundledModelAsset(logger, resource.Name, resource.ResourcePath);
         var error = await DownloadAsync(httpClient, resource.Url, resource.ResourcePath, resource.Sha256, cancellationToken).ConfigureAwait(false);
         if (error is not null)
         {
+            Log.FailedToDownloadBundledModelAsset(logger, resource.Name, error);
             errors.Add(error);
         }
 
@@ -165,6 +168,18 @@ public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactor
         {
             return $"{Path.GetFileName(target)}: download failed ({ex.GetType().Name}: {ex.Message})";
         }
+    }
+
+    public static partial class Log
+    {
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Downloading bundled model asset {Name} to {Path}")]
+        public static partial void DownloadingBundledModelAsset(ILogger logger, string name, string path);
+
+        [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to download bundled model asset {Name}: {Error}")]
+        public static partial void FailedToDownloadBundledModelAsset(ILogger logger, string name, string error);
+
+        [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Bundled model assets verified")]
+        public static partial void BundledModelAssetsVerified(ILogger logger);
     }
 }
 

@@ -22,11 +22,11 @@ public sealed class BitwardenEncryptionKeyProviderTests
     public void GetPassphrase_ValidPem_ReturnsDerivedRawKeyAndRunsSecretGetWithoutToken()
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
-        var provider = new BitwardenEncryptionKeyProvider(runner, "secret-1");
+        var provider = new BitwardenEncryptionKeyProvider(runner);
 
-        var passphrase = provider.GetPassphrase();
+        var passphrase = provider.GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" });
 
-        passphrase.ShouldBe(DerivedRawKey);
+        passphrase.Value.ShouldBe(DerivedRawKey);
         runner.Args.ShouldBe(["secret", "get", "secret-1"]);
         runner.Token.ShouldBeNull();
         runner.Timeout.ShouldBe(TimeSpan.FromSeconds(15));
@@ -37,7 +37,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build() + "\n", ""));
 
-        new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase().ShouldBe(DerivedRawKey);
+        new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }).Value.ShouldBe(DerivedRawKey);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().WithKeyType("ssh-rsa").Build(), ""));
 
-        var ex = Should.Throw<UnsupportedKeyTypeException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<UnsupportedKeyTypeException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("only ed25519 keys are supported");
     }
@@ -55,7 +55,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().WithEncrypted().Build(), ""));
 
-        var ex = Should.Throw<PassphraseProtectedKeyException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<PassphraseProtectedKeyException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("passphrase-protected keys are not supported");
     }
@@ -65,7 +65,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(0, "not a key at all", ""));
 
-        var ex = Should.Throw<MalformedPrivateKeyException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<MalformedPrivateKeyException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
     }
@@ -75,7 +75,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(7, "", "network error\nmore detail"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws failed (exit 7): network error");
     }
@@ -85,7 +85,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsResult(3, "", ""));
 
-        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws failed (exit 3): (no stderr)");
     }
@@ -96,7 +96,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
         var runner = new FakeBwsRunner(new BwsInvocationException(
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldContain("bws not found — install the Bitwarden CLI (bws)");
     }
@@ -106,7 +106,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     {
         var runner = new FakeBwsRunner(new BwsInvocationException("bws timed out after 15s"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner, "secret-1").GetPassphrase());
+        var ex = Should.Throw<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws timed out after 15s");
     }
