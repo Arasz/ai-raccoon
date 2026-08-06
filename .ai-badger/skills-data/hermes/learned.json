@@ -92,6 +92,15 @@
       "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
     },
     {
+      "category": "software-development",
+      "name": "scripts-tooling-refactor",
+      "sourceHash": "52def0f92cf4b7552c7414823739e7b5c8399de9751f7a11344fa92b3647c7c8",
+      "sourcePath": "software-development/scripts-tooling-refactor",
+      "status": "synced",
+      "syncedAt": "2026-08-06T16:07:01Z",
+      "target": ".ai-badger/skills/learned/software-development/scripts-tooling-refactor"
+    },
+    {
       "category": "uncategorized",
       "name": "ai-badger-project-ops",
       "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
@@ -193,10 +202,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-testing",
-      "sourceHash": "20aa7dface8129202704f13824dc4820fd98a877948e7f4d9f94e44713cc5dcd",
+      "sourceHash": "c8d0f8b25baf2c455da3e87c464264597a91ee6d704b9928d898dd974a84dd17",
       "sourcePath": "software-development/dotnet-hosted-service-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T15:42:15Z",
+      "syncedAt": "2026-08-06T16:07:02Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
     },
     {
