@@ -3598,7 +3598,24 @@
     },
     {
       "taskId": "integration-review-1-0-9",
-      "subagents": [],
+      "subagents": [
+        {
+          "description": "MoE lanes 1-3 (architect, code-reviewer, test-engineer)",
+          "at": "2026-08-06T12:56:06.076646+00:00",
+          "totalTokens": 5343593,
+          "delegationId": "deleg_a552dd10",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 82
+        },
+        {
+          "description": "MoE lane 4 (dotnet-engineer)",
+          "at": "2026-08-06T12:56:06.117742+00:00",
+          "totalTokens": 783906,
+          "delegationId": "deleg_4da1c884",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 16
+        }
+      ],
       "grade": null,
       "sessionId": "20260806_142455_7cb872",
       "trackingSource": "hermes",
@@ -3643,11 +3660,35 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 6127499,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     },
     {
       "taskId": "2026-08-06-memory-usage-audit",
-      "subagents": [],
+      "subagents": [
+        {
+          "description": "MoE v3 audit: 3 lanes (usage/adoption, reliability/fix-verification, data-quality/growth-model)",
+          "at": "2026-08-06T13:16:10.144056+00:00",
+          "totalTokens": 3008935,
+          "delegationId": "deleg_9787c2d3",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 37
+        }
+      ],
       "grade": null,
       "sessionId": "20260806_144456_10ee8d",
       "trackingSource": "hermes",
@@ -3665,7 +3706,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-06T12:45:58.644594+00:00",
+          "timestamp": "2026-08-06T13:23:19.247605+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T13:23:19.247605+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
@@ -3676,6 +3729,21 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 3008935,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
       }
     }
   ]

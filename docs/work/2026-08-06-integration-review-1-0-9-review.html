@@ -1,0 +1,960 @@
+<meta charset="utf-8">
+<title>REVIEW TITLE — review</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+    var CONFIG = {
+        // Shown in the header.
+        title: "Integration review 1.0.9 + hosted-service #55 — 8 owner decisions",
+        subtitle: "Post-merge review · 2026-08-06 · ai-raccoon parallel session",
+        source: "docs/reviews/2026-08-06-integration-review-1-0-9.md",
+
+        // Filename suggested in the save dialog AND the name the agent watches for.
+        outName: "2026-08-06-integration-review-1-0-9-feedback.md",
+
+        // Absolute directory the agent is watching. Printed for the reviewer, because the File
+        // System Access picker CANNOT be pointed at a folder programmatically (startIn only accepts
+        // the WellKnownDirectory enum — a path throws TypeError). Set to "" for the Artifact variant.
+        expectedDir: "/Users/arasz/RiderProjects/ai-raccoon/docs/work",
+
+        // MUST be unique per review. Every file:// page shares one localStorage origin, so a generic
+        // key would load another document's answers into this form. Verified, not theoretical.
+        storageKey: "refinement:2026-08-06-integration-review-1-0-9:v1"
+    };
+
+    // One object per decision. `detail` and `why` accept inline HTML (<code>, <strong>, <em>).
+    // group starts a new section heading; omit it to stay in the current section.
+    var DECISIONS = [
+        {
+            group: "Scope ratification",
+            id: "D1",
+            claim: "The hosted-service shape (#55) is ratified despite the adoption plan deferring it",
+            detail: [
+                "The adoption plan (<code>docs/plans/adoption-improvement-plan.md:68</code>) defers operator batch extraction as a <strong>stretch item, only if WP1 usage shows need</strong> — but #55 shipped the <em>larger</em> hosted shape: BackgroundService + 3 settings keys + 3 CLI verbs + a new store port method. The plan's scheduled review surface is WP8's weekly report, which is explicitly never auto-promoted.",
+                "Counter-arguments: off by default, additive, WatchHostedService precedent, owner f: 2026-08-06 asked for the server-side integration task."
+            ],
+            why: "<b>If unratified:</b> the plan and the code disagree, and every future review re-files the same finding. Ratifying means amending the plan to record the decision.",
+            placeholder: "Ratify + amend plan, or revert/scope down?"
+        },
+        {
+            id: "D2",
+            claim: "Unattended promote mode (warning-only, no confirm gate) is the accepted posture",
+            detail: [
+                "The MCP tool <code>memory_share_extract</code> requires <strong>Write access per project</strong> for promote; the hosted service calls <code>ShareAsync</code> ungated by the access guard. The guard is replaced by operator warnings printed at <code>extract enable true</code> and <code>extract mode promote</code>.",
+                "The plan's risk register says: 'bad seeds poison all projects (owner-confirmed only)' and 'owner gates: extract promote runs'."
+            ],
+            why: "<b>If unratified:</b> an unattended loop could share low-quality rows across ALL projects with only a CLI warning as the gate — the feature's whole point, but a posture change vs the plan.",
+            placeholder: "Accept warning-only gate, or require a stronger confirmation?"
+        },
+        {
+            group: "Follow-up fixes (all SHOULD-FIX from the review)",
+            id: "D3",
+            claim: "The interval knob gets a setter: add `extract interval <minutes>`",
+            detail: [
+                "<code>extract.interval-minutes.global</code> is read by the service and displayed by <code>extract list</code>, but <strong>no code path writes it</strong> (grep-verified, 3 lanes flagged). The settings table is CLI-only by design, so users cannot change the 60-minute default through any supported channel.",
+                "Alternative: drop the key + the interval display until it is settable."
+            ],
+            why: "<b>If neither:</b> the CLI advertises a value no one can set — a dead knob that fails the 'plain names / no dead config' invariants.",
+            placeholder: "Add the verb, or drop the key?"
+        },
+        {
+            id: "D4",
+            claim: "In-pass dedup is fixed: shared index refreshed per project (S3)",
+            detail: [
+                "The hosted service loads <code>sharedIndex</code> once per pass; two projects holding identical content can both promote the same row in one pass because <code>AddContentAsync</code>'s dedup is project-scoped and the snapshot is stale. Verified against merged code: <code>SelectSharedIndex</code> has no dedup.",
+                "Fix: re-read <code>GetSharedIndexAsync</code> per project (cheap at 60-min cadence) or accumulate promoted values/paths in memory within the pass. The same flaw pre-exists in the MCP tool."
+            ],
+            why: "<b>If unfixed:</b> the shared tier can get duplicate rows for one fact — the exact thing the feature's dedup contract promises not to happen.",
+            placeholder: "Fix in the 1.0.10 bump PR, or track as a follow-up issue?"
+        },
+        {
+            id: "D5",
+            claim: "Host-kill robustness: interval reads move inside the exception shield (S1)",
+            detail: [
+                "Both <code>ReadIntervalAsync</code> calls (initial timer setup at <code>ExtractionHostedService.cs:33</code> and the per-tick re-read at <code>:51</code>) sit outside the try/catch. A transient store failure (SQLITE_BUSY, disk I/O, missing passphrase) faults <code>ExecuteAsync</code> → the default <code>BackgroundServiceExceptionBehavior.StopHost</code> takes down the <strong>entire MCP server</strong>, both transports.",
+                "Contradicts the class's own 'best-effort' contract; 3 lanes flagged it independently. WatchHostedService already does this right."
+            ],
+            why: "<b>If unfixed:</b> one flaky settings read while extraction is enabled kills every client session, not just the loop.",
+            placeholder: "Fix now (small, TDD), or accept the risk?"
+        },
+        {
+            id: "D6",
+            claim: "Test-honesty fixes land: call-counter fakes + real-SQL port test + DI smoke (S6-S9)",
+            detail: [
+                "Four gaps: (1) the poll-loop test's <code>count==2</code> encodes the fake's stale-index behavior, impossible in production; (2) three tests assert only negative outcomes — a fully no-op service passes; (3) <code>GetProjectIdsAsync</code> real SQL has zero coverage (the port test uses a fake); (4) no DI smoke asserts <code>ExtractionHostedService</code> is registered (WatchDependenciesSmokeTests precedent exists).",
+                "All four are small, follow existing patterns, and make the 6 hosted-service tests honest."
+            ],
+            why: "<b>If skipped:</b> the safety property 'idempotent loop' gets false confidence, and a dropped DI registration would fail silently in production.",
+            placeholder: "Include in the 1.0.10 bump PR, or separate follow-up PR?"
+        },
+        {
+            group: "Docs + release",
+            id: "D7",
+            claim: "Docs drift is fixed in the bump PR: tool count 19→20 + extract family in READMEs",
+            detail: [
+                "Pre-existing drift (since #50): README.md:64 and reference doc:25 say '19 tools: 16 memory + 3 file-watcher' — the live surface is <strong>20 (17 memory + 3 watch)</strong>, <code>memory_share_extract</code> missing from the counts. The root README and packaged README have <strong>zero mentions</strong> of the <code>extract</code> verb family (reference doc got it in #55).",
+                "Fix: counts + prose in README.md, reference doc, packaged README; add the extract verb block where the other families are listed."
+            ],
+            why: "<b>If unfixed:</b> the docs contract keeps lying about the tool surface — the exact drift class this review exists to catch.",
+            placeholder: "Fix in the bump PR?"
+        },
+        {
+            id: "D8",
+            claim: "Version bumps to 1.0.10 in this cycle (owner f:), carrying the selected fixes",
+            detail: [
+                "Owner f: 2026-08-06: bump to 1.0.10 when the review finishes. Current: <code>PackageId ai-raccoon</code>, 1.0.9 everywhere (csproj PackageVersion/InformationalVersion/AssemblyVersion, .mcp/server.json, VersionContractTests pin).",
+                "The bump PR will carry whichever D3-D6 fixes are approved, following the TDD convention (VersionContractTests RED first). Fresh-install script pin moves with it."
+            ],
+            why: "<b>Without it:</b> the hosted service ships only as a source feature; the published tool stays at 1.0.9.",
+            placeholder: "Confirm scope of the 1.0.10 PR"
+        }
+    ];
+</script>
+
+<style>
+    :root {
+        --ink: #141a21;
+        --paper: #eef2f5;
+        --surface: #f8fafb;
+        --sunk: #e4eaef;
+        --line: #cbd5dd;
+        --grey: #56626e;
+        --dim: #7d8894;
+        --warn: #a8503a;
+        --live: #12707c;
+        --flag: #8a6a1f;
+        --ok: #2f6d4f;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --ink: #e6ecf2;
+            --paper: #0f141a;
+            --surface: #161d25;
+            --sunk: #10161c;
+            --line: #2b3742;
+            --grey: #9aa7b4;
+            --dim: #6f7c89;
+            --warn: #d98467;
+            --live: #4fc3cf;
+            --flag: #d7b45a;
+            --ok: #6fbf95;
+        }
+    }
+
+    :root[data-theme="dark"] {
+        --ink: #e6ecf2;
+        --paper: #0f141a;
+        --surface: #161d25;
+        --sunk: #10161c;
+        --line: #2b3742;
+        --grey: #9aa7b4;
+        --dim: #6f7c89;
+        --warn: #d98467;
+        --live: #4fc3cf;
+        --flag: #d7b45a;
+        --ok: #6fbf95;
+    }
+
+    :root[data-theme="light"] {
+        --ink: #141a21;
+        --paper: #eef2f5;
+        --surface: #f8fafb;
+        --sunk: #e4eaef;
+        --line: #cbd5dd;
+        --grey: #56626e;
+        --dim: #7d8894;
+        --warn: #a8503a;
+        --live: #12707c;
+        --flag: #8a6a1f;
+        --ok: #2f6d4f;
+    }
+
+    body {
+        margin: 0;
+        padding: clamp(1.5rem, 4vw, 3rem) 1.1rem 11rem;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+        max-width: 54rem;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+    }
+
+    .mono, h1, h2, .tag, .verdict-opt, .btn, .did {
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    header {
+        display: flex;
+        flex-direction: column;
+        gap: .8rem;
+    }
+
+    .tag {
+        font-size: .72rem;
+        letter-spacing: .15em;
+        text-transform: uppercase;
+        color: var(--dim);
+    }
+
+    h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 4vw, 2.2rem);
+        line-height: 1.15;
+        letter-spacing: -.03em;
+        font-weight: 600;
+        text-wrap: balance;
+    }
+
+    .lede {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--grey);
+    }
+
+    h2 {
+        margin: 0 0 -.6rem;
+        font-size: .76rem;
+        letter-spacing: .15em;
+        text-transform: uppercase;
+        color: var(--dim);
+        font-weight: 600;
+        padding-bottom: .5rem;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .d {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1.1rem 1.2rem;
+        display: flex;
+        flex-direction: column;
+        gap: .85rem;
+    }
+
+    .d.answered {
+        border-left: 3px solid var(--ok);
+    }
+
+    .d-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem .75rem;
+        align-items: baseline;
+    }
+
+    .did {
+        font-size: .74rem;
+        letter-spacing: .1em;
+        font-weight: 600;
+        color: var(--live);
+        white-space: nowrap;
+    }
+
+    .d-claim {
+        font-weight: 600;
+        font-size: 1.02rem;
+        flex: 1 1 18rem;
+    }
+
+    .d-body {
+        margin: 0;
+        color: var(--grey);
+        font-size: .94rem;
+    }
+
+    .d-body + .d-body {
+        margin-top: -.35rem;
+    }
+
+    .d-body strong {
+        color: var(--ink);
+        font-weight: 600;
+    }
+
+    code {
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: .87em;
+        background: var(--sunk);
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        padding: .06em .32em;
+    }
+
+    .why {
+        border-left: 3px solid var(--flag);
+        background: var(--sunk);
+        padding: .6rem .85rem;
+        border-radius: 0 4px 4px 0;
+        font-size: .9rem;
+        color: var(--grey);
+    }
+
+    .why b {
+        color: var(--ink);
+    }
+
+    fieldset {
+        border: 0;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .55rem;
+    }
+
+    legend {
+        padding: 0;
+        font-size: .74rem;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--dim);
+        font-family: ui-monospace, Menlo, monospace;
+    }
+
+    .verdicts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+
+    .verdict-opt {
+        position: relative;
+    }
+
+    .verdict-opt input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .verdict-opt span {
+        display: inline-block;
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: 3px;
+        padding: .32rem .7rem;
+        font-size: .74rem;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--grey);
+    }
+
+    .verdict-opt input:focus-visible + span {
+        outline: 2px solid var(--live);
+        outline-offset: 2px;
+    }
+
+    .verdict-opt input:checked + span[data-v="approve"] {
+        background: var(--ok);
+        border-color: var(--ok);
+        color: var(--paper);
+    }
+
+    .verdict-opt input:checked + span[data-v="change"] {
+        background: var(--flag);
+        border-color: var(--flag);
+        color: var(--paper);
+    }
+
+    .verdict-opt input:checked + span[data-v="reject"] {
+        background: var(--warn);
+        border-color: var(--warn);
+        color: var(--paper);
+    }
+
+    .verdict-opt input:checked + span[data-v="defer"] {
+        background: var(--grey);
+        border-color: var(--grey);
+        color: var(--paper);
+    }
+
+    textarea {
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+        min-height: 3.2rem;
+        background: var(--paper);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: .55rem .7rem;
+        font: inherit;
+        font-size: .93rem;
+        line-height: 1.5;
+    }
+
+    textarea:focus-visible {
+        outline: 2px solid var(--live);
+        outline-offset: 1px;
+        border-color: var(--live);
+    }
+
+    textarea::placeholder {
+        color: var(--dim);
+    }
+
+    .bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        background: var(--surface);
+        border-top: 1px solid var(--line);
+        padding: .7rem 1.1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem .9rem;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .count {
+        font-size: .85rem;
+        color: var(--grey);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .btn {
+        cursor: pointer;
+        border: 1px solid var(--live);
+        background: var(--live);
+        color: var(--paper);
+        border-radius: 3px;
+        padding: .45rem 1rem;
+        font-size: .76rem;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-weight: 600;
+    }
+
+    .btn.secondary {
+        background: transparent;
+        color: var(--live);
+    }
+
+    .btn:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+    }
+
+    .btn:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+
+    /* The status line is the whole point of the fallback chain: it names the mechanism used and
+       where the bytes went. Never let a save be silent. */
+    #status {
+        flex-basis: 100%;
+        text-align: center;
+        font-size: .86rem;
+        color: var(--grey);
+        margin: 0;
+    }
+
+    #status.ok {
+        color: var(--ok);
+    }
+
+    #status.warn {
+        color: var(--flag);
+    }
+
+    #status.bad {
+        color: var(--warn);
+    }
+
+    #status code {
+        font-size: .85em;
+    }
+
+    .out {
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+    }
+
+    .out textarea {
+        min-height: 14rem;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: .84rem;
+    }
+
+    .hint {
+        font-size: .85rem;
+        color: var(--dim);
+        margin: 0;
+    }
+
+    .path {
+        word-break: break-all;
+    }
+</style>
+
+<div class="wrap">
+    <header>
+        <div class="tag" id="hdr-sub"></div>
+        <h1 id="hdr-title"></h1>
+        <p class="lede">
+            Rule on each item and add a note where it matters. Answers save in this browser as you type,
+            so you can leave and come back.
+        </p>
+        <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+            Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+            looks like a fresh one is the failure mode this form exists to prevent.</p>
+        <p class="lede" id="hdr-src"></p>
+    </header>
+
+    <div id="cards"></div>
+
+    <div class="out" hidden id="out">
+        <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+        <textarea aria-label="Generated feedback" id="outText" readonly></textarea>
+    </div>
+</div>
+
+<div class="bar">
+    <span class="count" id="count"></span>
+    <button class="btn" id="save" type="button">Save feedback</button>
+    <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+    <button class="btn secondary" id="show" type="button">Show as text</button>
+    <button class="btn secondary" id="clear" type="button">Clear all</button>
+    <p aria-live="polite" id="status" role="status"></p>
+</div>
+
+<script>
+    var VERDICTS = ["approve", "change", "reject", "defer"];
+
+    document.getElementById("hdr-title").textContent = CONFIG.title;
+    document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+    document.title = CONFIG.title;
+    if (CONFIG.source) {
+        document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+    }
+
+    function esc(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    /* ---- render ---- */
+    var host = document.getElementById("cards");
+    var currentGroup = null;
+    DECISIONS.forEach(function (d) {
+        if (d.group && d.group !== currentGroup) {
+            currentGroup = d.group;
+            var h = document.createElement("h2");
+            h.textContent = d.group;
+            host.appendChild(h);
+        }
+        var card = document.createElement("div");
+        card.className = "d";
+        card.dataset.id = d.id;
+
+        var head = document.createElement("div");
+        head.className = "d-head";
+        var idSpan = document.createElement("span");
+        idSpan.className = "did";
+        idSpan.textContent = d.id;
+        var claimSpan = document.createElement("span");
+        claimSpan.className = "d-claim";
+        claimSpan.textContent = d.claim || "";
+        head.appendChild(idSpan);
+        head.appendChild(claimSpan);
+        card.appendChild(head);
+
+        (d.detail || []).forEach(function (p) {
+            var el = document.createElement("p");
+            el.className = "d-body";
+            el.innerHTML = p;
+            card.appendChild(el);
+        });
+
+        if (d.why) {
+            var why = document.createElement("div");
+            why.className = "why";
+            why.innerHTML = d.why;
+            card.appendChild(why);
+        }
+
+        var fs = document.createElement("fieldset");
+        var lg = document.createElement("legend");
+        lg.textContent = "Verdict";
+        fs.appendChild(lg);
+        var holder = document.createElement("div");
+        holder.className = "verdicts";
+        VERDICTS.forEach(function (v) {
+            var label = document.createElement("label");
+            label.className = "verdict-opt";
+            var input = document.createElement("input");
+            input.type = "radio";
+            input.name = "v-" + d.id;
+            input.value = v;
+            var span = document.createElement("span");
+            span.dataset.v = v;
+            span.textContent = v;
+            label.appendChild(input);
+            label.appendChild(span);
+            holder.appendChild(label);
+        });
+        fs.appendChild(holder);
+        card.appendChild(fs);
+
+        var ta = document.createElement("textarea");
+        ta.placeholder = d.placeholder || "Notes";
+        ta.setAttribute("aria-label", d.id + " notes");
+        card.appendChild(ta);
+
+        host.appendChild(card);
+    });
+
+    var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+    /* ---- state ---- */
+    function state() {
+        var out = {};
+        cards.forEach(function (card) {
+            var id = card.dataset.id;
+            var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+            var note = card.querySelector("textarea").value.trim();
+            if (picked || note) {
+                out[id] = {verdict: picked ? picked.value : "", note: note};
+            }
+        });
+        return out;
+    }
+
+    function paint() {
+        var s = state();
+        cards.forEach(function (c) {
+            c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict));
+        });
+        var n = Object.keys(s).filter(function (k) {
+            return s[k].verdict;
+        }).length;
+        document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+    }
+
+    function save() {
+        try {
+            localStorage.setItem(CONFIG.storageKey, JSON.stringify(state()));
+        } catch (e) { /* private mode */
+        }
+        paint();
+    }
+
+    function load() {
+        var raw;
+        try {
+            raw = localStorage.getItem(CONFIG.storageKey);
+        } catch (e) {
+            return;
+        }
+        if (!raw) {
+            return;
+        }
+        var s;
+        try {
+            s = JSON.parse(raw);
+        } catch (e) {
+            return;
+        }
+        cards.forEach(function (card) {
+            var e = s[card.dataset.id];
+            if (!e) {
+                return;
+            }
+            if (e.verdict) {
+                var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+                if (input) {
+                    input.checked = true;
+                }
+            }
+            if (e.note) {
+                card.querySelector("textarea").value = e.note;
+            }
+        });
+    }
+
+    /* ---- markdown (see references/result-template.md) ---- */
+    function markdownNote(note) {
+        return note.split("\n").map(function (line) {
+            return "> " + line;
+        }).join("\n");
+    }
+
+    function markdown() {
+        var s = state();
+        var lines = [];
+        var answered = cards.filter(function (c) {
+            return s[c.dataset.id] && s[c.dataset.id].verdict;
+        });
+        lines.push("# Refinement feedback — " + CONFIG.title);
+        lines.push("");
+        lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+            " · saved " + new Date().toISOString() +
+            " · answered " + answered.length + "/" + cards.length + " -->");
+        if (CONFIG.source) {
+            lines.push("");
+            lines.push("Source document: `" + CONFIG.source + "`");
+        }
+        lines.push("");
+
+        cards.forEach(function (card) {
+            var id = card.dataset.id;
+            var e = s[id];
+            if (!e || !e.verdict) {
+                return;
+            }
+            lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+            lines.push("");
+            lines.push("**Verdict:** " + e.verdict.toUpperCase());
+            lines.push("");
+            lines.push("**Notes:**");
+            lines.push("");
+            lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+            lines.push("");
+            lines.push("---");
+            lines.push("");
+        });
+
+        var missing = cards.filter(function (c) {
+            return !(s[c.dataset.id] && s[c.dataset.id].verdict);
+        });
+        lines.push("## Not answered");
+        lines.push("");
+        if (missing.length) {
+            missing.forEach(function (c) {
+                var e = s[c.dataset.id];
+                lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                    (e && e.note ? " (note only, no verdict)" : ""));
+                if (e && e.note) {
+                    lines.push("");
+                    lines.push(e.note.split("\n").map(function (line) {
+                        return "  > " + line;
+                    }).join("\n"));
+                    lines.push("");
+                }
+            });
+        } else {
+            lines.push("_(none — every item has a verdict)_");
+        }
+        lines.push("");
+        lines.push("<!-- end refinement feedback -->");
+        return lines.join("\n");
+    }
+
+    /* ---- status ---- */
+    var statusEl = document.getElementById("status");
+
+    function report(kind, html) {
+        statusEl.className = kind;
+        statusEl.innerHTML = html;
+    }
+
+    function revealText(hint) {
+        var out = document.getElementById("out");
+        document.getElementById("outText").value = markdown();
+        document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+        out.hidden = false;
+        out.scrollIntoView({block: "nearest"});
+    }
+
+    /* ---- remembered output directory -------------------------------------------------
+       A file:// page cannot discover its own folder, and startIn takes only the
+       WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+       What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+       IndexedDB (which works on file://), and write silently on every later save. Handles
+       survive reload; the permission does not, so it is re-requested inside the click
+       handler, where a user gesture is available. Net effect: one dialog ever, not one per
+       save. Choose the folder holding this HTML file and the picker never returns. */
+    var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+    function idb(mode, fn) {
+        return new Promise(function (resolve, reject) {
+            var open = indexedDB.open(DB, 1);
+            open.onupgradeneeded = function () {
+                open.result.createObjectStore(STORE);
+            };
+            open.onerror = function () {
+                reject(open.error);
+            };
+            open.onsuccess = function () {
+                var tx = open.result.transaction(STORE, mode);
+                var rq = fn(tx.objectStore(STORE));
+                rq.onsuccess = function () {
+                    resolve(rq.result);
+                };
+                rq.onerror = function () {
+                    reject(rq.error);
+                };
+            };
+        });
+    }
+
+    var loadDir = function () {
+        return idb("readonly", function (s) {
+            return s.get(KEY);
+        }).catch(function () {
+            return null;
+        });
+    };
+    var saveDir = function (h) {
+        return idb("readwrite", function (s) {
+            return s.put(h, KEY);
+        }).catch(function () {
+            return null;
+        });
+    };
+
+    /// Writes into a granted directory. Returns false if permission is refused or gone.
+    async function writeInto(dir, text) {
+        var opts = {mode: "readwrite"};
+        if ((await dir.queryPermission(opts)) !== "granted"
+            && (await dir.requestPermission(opts)) !== "granted") {
+            return false;
+        }
+        var fh = await dir.getFileHandle(CONFIG.outName, {create: true});
+        var w = await fh.createWritable();
+        await w.write(text);
+        await w.close();
+        return true;
+    }
+
+    /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+       Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+       context, but throws SecurityError unless called inside the click handler. Firefox and
+       WebKit do not expose it at all and fall straight through to the download. */
+    document.getElementById("save").addEventListener("click", async function () {
+        var text = markdown();
+
+        if (typeof window.showDirectoryPicker === "function") {
+            try {
+                // 1a) Already granted a folder in a previous session — write with no dialog at all.
+                var dir = await loadDir();
+                if (dir && await writeInto(dir, text)) {
+                    report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+                    return;
+                }
+
+                // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+                dir = await window.showDirectoryPicker({id: "refinement-out", mode: "readwrite"});
+                if (await writeInto(dir, text)) {
+                    await saveDir(dir);
+                    report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+                        "</code>. That folder is remembered — later saves write straight there.");
+                    return;
+                }
+                report("warn", "Write permission was refused — nothing was written.");
+                return;
+            } catch (err) {
+                if (err && err.name === "AbortError") {
+                    // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+                    report("warn", "Save cancelled — nothing was written.");
+                    return;
+                }
+                report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+            }
+        }
+
+        // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+        try {
+            var blob = new Blob([text], {type: "text/markdown;charset=utf-8"});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = CONFIG.outName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () {
+                URL.revokeObjectURL(url);
+            }, 4000);
+            report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+                "this is <b>not</b> next to this page." +
+                (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+            revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+            return;
+        } catch (err2) {
+            report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+        }
+
+        // 3) clipboard
+        try {
+            await navigator.clipboard.writeText(text);
+            report("ok", "Copied to the clipboard — paste it back into the conversation.");
+            revealText("Also shown below, in case the paste goes wrong.");
+            return;
+        } catch (err3) {
+            // 4) always-visible textarea — the guaranteed way out
+            revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+            report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+        }
+    });
+
+    document.getElementById("copy").addEventListener("click", async function (ev) {
+        var btn = ev.currentTarget;
+        try {
+            await navigator.clipboard.writeText(markdown());
+            btn.textContent = "Copied";
+            report("ok", "Copied to the clipboard — paste it back into the conversation.");
+        } catch (e) {
+            revealText("Clipboard access was refused. Select all of this and copy it manually.");
+            report("warn", "Clipboard refused — the text is in the box above.");
+        }
+        setTimeout(function () {
+            btn.textContent = "Copy feedback";
+        }, 2200);
+    });
+
+    document.getElementById("show").addEventListener("click", function () {
+        revealText();
+        document.getElementById("outText").focus();
+        document.getElementById("outText").select();
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+        cards.forEach(function (card) {
+            var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+            if (picked) {
+                picked.checked = false;
+            }
+            card.querySelector("textarea").value = "";
+        });
+        document.getElementById("out").hidden = true;
+        report("", "Cleared. Nothing saved in this browser for this review.");
+        save();
+    });
+
+    document.addEventListener("input", save);
+    document.addEventListener("change", save);
+
+    load();
+    paint();
+</script>

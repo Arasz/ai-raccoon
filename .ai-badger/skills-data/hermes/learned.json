@@ -2,6 +2,24 @@
   "$schema": "../../../schemas/learned-skills.schema.json",
   "skills": [
     {
+      "category": "data-analysis",
+      "name": "memory-bank-audit",
+      "sourceHash": "1ff33ae80f24c74dce34f4cc4e2a7dc082ca48085d1dbaca31be3709e89732f1",
+      "sourcePath": "data-analysis/memory-bank-audit",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:12:46Z",
+      "target": ".ai-badger/skills/learned/data-analysis/memory-bank-audit"
+    },
+    {
+      "category": "mcp",
+      "name": "mcp-tool-indexing",
+      "sourceHash": "4b9c2a6e38f8a2dfb1abfe2d1c42084ac8b90bb069b2249d3a53246f11fbca4f",
+      "sourcePath": "mcp/mcp-tool-indexing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:47:31Z",
+      "target": ".ai-badger/skills/learned/mcp/mcp-tool-indexing"
+    },
+    {
       "category": "mcp",
       "name": "mcp-tool-surface-testing",
       "sourceHash": "308dac2737285c1454f5c7bc585c535d2a5b52eca6138a3ab28302a93d2e1e78",
@@ -9,6 +27,24 @@
       "status": "synced",
       "syncedAt": "2026-08-06T09:22:50Z",
       "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
+    },
+    {
+      "category": "software-development",
+      "name": "dotnet-hosted-service-review",
+      "sourceHash": "fd32d7a17e99fead5e13028a6854b43b3b814cc764e3fa369a0d04461dcd4b59",
+      "sourcePath": "software-development/dotnet-hosted-service-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:50:01Z",
+      "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-review"
+    },
+    {
+      "category": "software-development",
+      "name": "dotnet-hosted-service-testing",
+      "sourceHash": "8836391dfb47e4a597a730217eea39babc2614368468d5e444cc72c51e251f3a",
+      "sourcePath": "software-development/dotnet-hosted-service-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:55:58Z",
+      "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-testing"
     },
     {
       "category": "software-development",
@@ -27,6 +63,24 @@
       "status": "synced",
       "syncedAt": "2026-08-06T09:16:04Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
+    },
+    {
+      "category": "uncategorized",
+      "name": "artifact-verification",
+      "sourceHash": "c7278df53e31be91dd487c2a5378aae34b3fa1ddb9397b06d4a234fd83bd109d",
+      "sourcePath": "artifact-verification",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:32:01Z",
+      "target": ".ai-badger/skills/learned/uncategorized/artifact-verification"
+    },
+    {
+      "category": "uncategorized",
+      "name": "code-review-evidence",
+      "sourceHash": "31f650d5cc4e0c86f5d221fdc2082db042b915edb4c13c7463a1cb296869d2a8",
+      "sourcePath": "software-development/code-review-evidence",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:51:04Z",
+      "target": ".ai-badger/skills/learned/uncategorized/code-review-evidence"
     },
     {
       "category": "uncategorized",
@@ -66,6 +120,24 @@
     },
     {
       "category": "uncategorized",
+      "name": "dotnet-hosted-service-review",
+      "sourceHash": "15575364ca1f8f65240411dee543f6e498ccf24f500ca55b85a05f8486f19b70",
+      "sourcePath": "software-development/dotnet-hosted-service-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:50:12Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-review"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-hosted-service-testing",
+      "sourceHash": "f658a9ab2568bc46dd4df277b56e2b622122dc475b00547adac30f5b739aa4c5",
+      "sourcePath": "software-development/dotnet-hosted-service-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:56:17Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
+    },
+    {
+      "category": "uncategorized",
       "name": "dotnet-nuget-publish",
       "sourceHash": "2e772cb076e6f1f3d461194bc485f48629e391160ada9002527a5ae6904499f1",
       "sourcePath": "software-development/dotnet-nuget-publish",
@@ -93,6 +165,15 @@
     },
     {
       "category": "uncategorized",
+      "name": "mcp-tool-indexing",
+      "sourceHash": "26fb00beb67b41bb8c50dfd80eca48b332d2ab86c267c275952f6951831b1a51",
+      "sourcePath": "mcp/mcp-tool-indexing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T12:47:43Z",
+      "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-indexing"
+    },
+    {
+      "category": "uncategorized",
       "name": "mcp-tool-surface-testing",
       "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
       "sourcePath": "mcp/mcp-tool-surface-testing",
@@ -102,12 +183,30 @@
     },
     {
       "category": "uncategorized",
+      "name": "memory-bank-audit",
+      "sourceHash": "6902b96c8208818e85bac639a451c78345a78f10f44ab6ad78c610b497592b5d",
+      "sourcePath": "data-analysis/memory-bank-audit",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:13:01Z",
+      "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
+    },
+    {
+      "category": "uncategorized",
       "name": "memory-quality-logging",
       "sourceHash": "6e0769a964865462c2a771e2818d50ca630079e17e68db584ce9f89175a51a42",
       "sourcePath": "ai-raccoon-integration/memory-quality-logging",
       "status": "synced",
       "syncedAt": "2026-08-06T11:21:35Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
+    },
+    {
+      "category": "uncategorized",
+      "name": "multi-lane-report-assembly",
+      "sourceHash": "d5f30f4c8e6b9fdf94fe93319929b4e0c098dd3d147b63c952accff73ff336fd",
+      "sourcePath": "software-development/multi-lane-report-assembly",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:31:19Z",
+      "target": ".ai-badger/skills/learned/uncategorized/multi-lane-report-assembly"
     },
     {
       "category": "uncategorized",
@@ -129,12 +228,30 @@
     },
     {
       "category": "uncategorized",
+      "name": "parallel-expert-review",
+      "sourceHash": "5048d202d559000ce9f7088668a22a810be52a3ced90ebf16a83450966d267ec",
+      "sourcePath": "parallel-expert-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:05:01Z",
+      "target": ".ai-badger/skills/learned/uncategorized/parallel-expert-review"
+    },
+    {
+      "category": "uncategorized",
       "name": "spec-driven-refactoring",
       "sourceHash": "e556d062554ceca48de4e0e622f631cfa0cd33e6120ef4e8771338c51bf87f9f",
       "sourcePath": "software-development/spec-driven-refactoring",
       "status": "synced",
       "syncedAt": "2026-08-06T11:52:07Z",
       "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
+    },
+    {
+      "category": "uncategorized",
+      "name": "worktree-agent-isolation",
+      "sourceHash": "b1d1ec19104da3443097ce7d611b792608e646004d34b581a332282d7a6dc207",
+      "sourcePath": "software-development/worktree-agent-isolation",
+      "status": "synced",
+      "syncedAt": "2026-08-06T13:31:09Z",
+      "target": ".ai-badger/skills/learned/uncategorized/worktree-agent-isolation"
     }
   ],
   "version": 1
