@@ -129,13 +129,22 @@ promotionsWaitTimeSeconds, waitingByProject? } }`; meta reflects a seeded queue 
 wait); zero queue ⇒ `0` / `null`, still present (0 is informative, never absent).
 
 ### Task 3.2: Envelope implementation
-- `AiRaccoon.Core/ApiEnvelope.cs`: `ApiEnvelope<TData>(TData Data, ResponseMeta Meta)` +
+- `AiRaccoon.Core/ApiEnvelope.cs`: `ApiEnvelope<TData>(TData? Data, ResponseMeta Meta,
+  OperationStatus Result)` — record (the MCP output schema derives from it).
   `ResponseMeta(int WaitingPromotionsCount, double? PromotionsWaitTimeSeconds,
-  IReadOnlyDictionary<string, int>? WaitingByProject)`.
+  `IReadOnlyDictionary<string, int>? WaitingByProject)`; `OperationStatus(int Code)` — HTTP
+  status code — with optional `Message` as an init property and
+  `public static readonly OperationStatus Ok = new(200) { Message = "ok" }` (success
+  sentinel — every success response carries it; the envelope never omits Result).
+  Domain-outcome mapping: 200 ok, 404 not-found, 409 already-shared/duplicate, 422
+  cap-reached/eviction side-effect, 400 bad request shape. Convention: required members
+  positional, optional members properties.
+- **Two-tier errors (owner pin):** `Result` carries domain outcomes in-band (not-found,
+  already-shared, cap-reached, eviction side-effects) — `OperationStatus.Ok` = success.
+  Protocol errors (invalid params, access denied, confirm-gates) stay `McpException` — the
+  SDK's JSON-RPC channel, already consumed as tool errors.
 - Every tool in `MemoryTools.cs` + `WatchTools.cs` returns `ApiEnvelope<...>`; meta computed
   from `GetQueueStatsAsync` (one cheap indexed query per call).
-- MCP output schema flows from the record type (the SDK derives it) — this is the "schema
-  return option" the idea asked for.
 - **Breaking change** for clients: version bump 1.0.11 → 1.1.0 + changelog entry (releases are
   traceable); the manual fresh-install gate is the finish test.
 
@@ -188,3 +197,93 @@ Run → GREEN. Commit: `feat(api): envelope all responses with waiting-promotion
 6. **Extraction hosted service with promote mode** — promote-from-queue changes the background
    pass from "share top fresh candidates" to "share top queued candidates"; autoPromote/confirm
    semantics unchanged.
+
+---
+
+## Architecture (software MoE, 2026-08-06 — architect + engineer reports, read-only)
+
+Two experts verified the design against the code. Their findings correct the draft in four places:
+
+1. **The queue gets its own port** `IPromotionQueueStore`/`SqlitePromotionQueueStore` (Infrastructure), NOT 5 new `IMemoryStore` methods: `IMemoryStore` has two implementations (`SqliteMemoryStore` + `MemoryExtensionHost` decorator in Core) and 15 test fakes — growing it breaks 16 types at compile time. `IWorkspaceStore` is the exact precedent.
+2. **`PromotionQueueService` lives in Infrastructure** (not Core): Core has no `ILogger` dependency (csproj = FluentValidation/JetBrains.Annotations/CommunityToolkit.Diagnostics) and the service must log evictions. Core keeps only the `IPromotionQueue` port. `SweepService` is the established shape.
+3. **`EvictVictimAsync(projectId)`** — the policy picks the victim project, the store executes "lowest score, oldest created_at" within it.
+4. **Metrics need a Core port** `IPromotionQueueMetrics`: the metrics classes live in the server project (`Observability/`), which Core/Infrastructure cannot reference; the port keeps the service testable with a recording fake.
+
+### Components
+
+| Component | Layer | Deps | Role |
+|---|---|---|---|
+| `IPromotionQueue` | Core port | — | Propose/Promote/Discard/List/GetMeta |
+| `IPromotionQueueStore` | Core port | — | Upsert/List/Discard/GetStats/EvictVictim(projectId) |
+| `IEvictionPolicy` | Core port | — | `EvictionTarget(perProjectCounts)` |
+| `UniformCountEvictionPolicy` | Core pure | none | greatest-count project; tie → ordinal-smallest id |
+| `PromotionCapacityPolicy` | Core static pure | none | ReservationFor/NeedsEviction/CapacityInfo |
+| `IPromotionQueueMetrics` | Core port | — | RecordQueued/RecordEviction/RecordPromoted/RecordDiscarded/RecordUtilization |
+| Queue records | Core | — | PromotionQueueRow, QueueCandidate, PromotionQueueStats, ProposeOutcome, PromoteOutcome, QueueMeta, EvictedRow, PromotionCapacityInfo |
+| `ApiEnvelope<TData>`/`ResponseMeta`/`OperationStatus` | Core records | — | SDK schema source |
+| `SqlitePromotionQueueStore` | Infrastructure/Sqlite | SqliteConnectionFactory, TimeProvider | repository; SQL in new internal `PromotionQueueSql` |
+| `PromotionQueueService` | Infrastructure/Promotion | IPromotionQueueStore, IMemoryStore (ShareAsync+dedup), IEvictionPolicy, IPromotionQueueMetrics, ILogger, TimeProvider | orchestrator; nested static partial `Log` (EventIds 600+) |
+| `PromotionQueueMetrics` | Server/Observability | Meter "AiRaccoon.PromotionQueue" | UpDownCounter queue_queued; Counter evictions_total/promoted_total/discarded_total; Histogram evicted_score/wait_seconds; Gauge capacity_utilization |
+
+### Refactor (before/with the feature)
+
+- **MemoryTools.cs (715 lines) → six domain files** (WatchTools precedent — one domain per file, own Tn* consts, own result records): `MemoryTools` (9 core tools), `ShareTools` (share/share_extract), `WorkspaceTools` (4), `SweepTools`, `SyncTools`, new `PromotionTools` (list/discard). Each < 400 lines. `ToolInventoryTests` becomes an assembly-wide scan over the Tools namespace asserting the full 22-tool set (the split's safety net). Two `WithTools<...>` sites in `McpServerSetup.cs`.
+- **SqliteMemoryStore (1214 lines) stays bounded** — the queue's methods go in the new store component, never `IMemoryStore`.
+
+### Envelope
+
+Aggregation at the tool boundary (decorator rejected — the MCP SDK discovers `[McpServerTool]` reflectively on concrete types; a decorator would redeclare all 22 signatures): each tool does `var meta = await queue.GetMetaAsync(ct); return new ApiEnvelope<WriteResult>(result, meta, OperationStatus.Ok);`.
+
+### Explicitly NOT over-engineered
+
+No event bus (metrics port + Log suffice); no TTL/stale-queue sweep (the cap bounds growth); no per-project capacity config; no transaction abstraction around upsert+evict (a crash may leave the queue one over cap — the next propose loop self-heals; documented); no Envelope helper class.
+
+### Implementation map (TDD, each step green before the next)
+
+1. **Tools split** (mechanical refactor commit — green suite, inventory test updated)
+2. **Queue persistence**: schema tests (fresh + migrated bank; UNIQUE(project_id, hash); not in search/stats) → DDL → store + records + SQL
+3. **Pure policies**: capacity + eviction unit tests (deterministic tie)
+4. **Queue service**: integration tests (real store, recording fake metrics, fake TimeProvider) — upsert-no-duplicate/first-created_at survives; evict-after-upsert loop; borrower-loses-first; promote top-N with shared dedup skip + drain; discard; sweep regression (queue untouched)
+5. **Wiring**: config key + parse; ShareTools.ShareExtract rewired; ExtractionHostedService proposes persist; PromotionTools with access-gating tests; DI
+6. **Envelope**: record tests; per-tool shape assertions in `McpServerToolSurfaceE2ETests` (catches closed-generic `ApiEnvelope<T>` schema-derivation risk immediately; fallback = concrete envelope records per tool file); version bump 1.1.0 + changelog
+
+### Interface signatures (from the architect report)
+
+```csharp
+public interface IPromotionQueue
+{
+    Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
+        CancellationToken cancellationToken = default);
+    Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
+        CancellationToken cancellationToken = default);
+    Task<int> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,
+        CancellationToken cancellationToken = default);
+    Task<QueueMeta> GetMetaAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IPromotionQueueStore
+{
+    Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default);
+    Task<int> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default);
+    Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default);
+    Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default);
+}
+
+public interface IEvictionPolicy
+{
+    string? EvictionTarget(IReadOnlyDictionary<string, int> perProjectCounts);
+}
+
+public interface IPromotionQueueMetrics
+{
+    void RecordQueued(string projectId, int delta);
+    void RecordEviction(string projectId, double victimScore, string reason);
+    void RecordPromoted(string projectId, double waitSeconds);
+    void RecordDiscarded(string projectId, double waitSeconds);
+    void RecordUtilization(double ratio);
+}
+```
+
+(Records: QueueCandidate, PromotionQueueRow, PromotionQueueStats, EvictedRow, ProposeOutcome, PromoteOutcome, QueueMeta, PromotionCapacityInfo — shapes per the architect report; envelope per Task 3.2 pins: `ApiEnvelope<TData>(TData? Data, ResponseMeta Meta, OperationStatus Result)` with `OperationStatus(int Code)` + optional `Message` property + `OperationStatus.Ok = new(200) { Message = "ok" }`.)
