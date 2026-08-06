@@ -30,7 +30,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 def _bootstrap_lib() -> Path:
     """Put the framework's engine/ and tooling/ on sys.path and return its root.
@@ -229,6 +229,7 @@ from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
 from skill_delivery import SkillDelivery, relink_hermes_skills  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
+from local_invariants import append_rendered  # noqa: E402
 
 
 def _ctx_property(name: str) -> property:
@@ -443,11 +444,15 @@ class Scaffolder:
     def collect_invariants(self) -> List[str]:
         """Copy invariant snippets and return their rendered markdown for CLAUDE.md."""
         rendered: List[str] = []
+        delivered: Set[str] = set()
         for stack in self.stacks:
             for item in self.items(stack, "invariants"):
                 dest = self.copy_file("invariants", stack, item, self.aib / "invariants")
                 text = dest.read_text(encoding="utf-8").strip()
                 rendered.append(demote_headings(text))
+                delivered.add(item["name"])
+        append_rendered(rendered, self.aib / "invariants" / "local",
+                        delivered, demote_headings, self.notes)
         return rendered
 
     def scaffold_agent_instructions(self) -> None:

@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp
-> Scaffolded by ai-badger 0.80.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.81.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Non-negotiable invariants
 
@@ -83,21 +83,6 @@ Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed
 
 An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own. Frontend and MCP are both clients of the same API — never let either write to the datastore directly, and never let the MCP layer branch on business rules the API doesn't already enforce.
 
-<!-- ai-badger:keep-start -->
-### Static classes: extensions, constants, and pure functions only
-
-Static classes are allowed for extensions, constants, and pure functions — no state,
-no I/O, no injectable dependencies. Anything with state, I/O, or dependencies is an
-injectable component (constructor injection; see `Setup/Cli/Commands/` for the pattern
-— `IEncryptionCommands`/`EncryptionCommands`, Part 1).
-
-The one sanctioned exception is the `ConfigCommands` static dispatcher (optional
-interface params + `?? ThrowHelper.ThrowArgumentNullException<T>()`), which exists to
-cap test churn across the family test files; it is a dispatcher, not a logic holder.
-
-Rationale and the full classification table: `docs/work/2026-08-06-static-class-classification.md`.
-<!-- ai-badger:keep-end -->
-
 ## Commands
 
 - `build`: `dotnet build`
@@ -175,3 +160,18 @@ The common declaration is conditional: ai-badger emits it only when `ai-raccoon`
 Skills, personas, and instructions here are managed by ai-badger. Run `welcome-ai-badger`
 to re-scaffold after changing `.ai-badger/config.json`, and `feed-badger` to contribute
 project-agnostic improvements back to the framework. Provenance: `.ai-badger/manifest.json`.
+
+<!-- ai-badger:keep-start -->
+### Static classes: extensions, constants, and pure functions only
+
+Static classes are allowed for extensions, constants, and pure functions — no state,
+no I/O, no injectable dependencies. Anything with state, I/O, or dependencies is an
+injectable component (constructor injection; see `Setup/Cli/Commands/` for the pattern
+— `IEncryptionCommands`/`EncryptionCommands`, Part 1).
+
+The one sanctioned exception is the `ConfigCommands` static dispatcher (optional
+interface params + `?? ThrowHelper.ThrowArgumentNullException<T>()`), which exists to
+cap test churn across the family test files; it is a dispatcher, not a logic holder.
+
+Rationale and the full classification table: `docs/work/2026-08-06-static-class-classification.md`.
+<!-- ai-badger:keep-end -->
