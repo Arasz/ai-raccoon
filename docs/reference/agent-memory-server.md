@@ -154,9 +154,9 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 
 Only one environment variable is read:
 
-| Variable | Purpose |
-|---|---|
-| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC page-level via e_sqlite3mc; unset = plaintext) |
+| Variable                  | Purpose                                                                                                         |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC page-level via SQLite3MC, SQLite3MC.PCLRaw bundle; unset = plaintext) |
 
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
@@ -431,8 +431,7 @@ safe to run on every bank open. No download-on-first-run provisioning, no per-RI
 extension binaries, no external SQLite modules.
 
 **Encryption at rest.** When `AIRACCOON_DB_PASSPHRASE` is set, the connection opens
-with `Password` in the connection string, enabling transparent AES-256-CBC per-page
-encryption via the bundled e_sqlite3mc engine. FTS5, vec0, and all SQL operations
+with `Password` in the connection string, enabling transparent AES-256-CBC per-page encryption via the bundled SQLite3MC engine. FTS5, vec0, and all SQL operations
 work unchanged — encryption is at the page level, invisible to queries. Without
 the passphrase the bank is plaintext (backward compatible).
 

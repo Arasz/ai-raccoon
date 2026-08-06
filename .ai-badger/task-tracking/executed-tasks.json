@@ -885,10 +885,26 @@
           "branch": "task/release-1-0-11",
           "risk": false,
           "startedAt": "2026-08-06T17:32:38.595351+00:00",
-          "finishedAt": null,
-          "state": "IN_PROGRESS",
+          "finishedAt": "2026-08-06T18:27:17.581332+00:00",
+          "state": "FINISHED",
           "trackingSource": "hermes",
           "resumeCommand": "hermes --resume 20260806_193156_17bbc1",
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
+      },
+      {
+          "taskId": "fix-unit-test",
+          "title": "Fix duplicate root --port registration breaking ~125 tests (112 Setup + 13 E2E) since PR #70",
+          "sessionId": "20260806_200618_3e0adc",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/fix-unit-test",
+          "risk": false,
+          "startedAt": "2026-08-06T18:27:23.683803+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
+          "trackingSource": "hermes",
+          "resumeCommand": "hermes --resume 20260806_200618_3e0adc",
           "resumeAttempts": []
     }
   ]

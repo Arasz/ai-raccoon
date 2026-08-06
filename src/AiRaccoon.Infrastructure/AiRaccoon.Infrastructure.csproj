@@ -2,9 +2,6 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <!-- encryption-at-rest: 2.1.11 train has SQLite < 3.50.2 (CVE-2025-6965 / GHSA-2m69-gcr7-jv3q).
-             Suppress until we can switch to Microsoft.Data.Sqlite 11.0+ (which bundles e_sqlite3mc natively). -->
-        <NoWarn>$(NoWarn);NU1903</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -12,7 +9,7 @@
         <PackageReference Include="HiraokaHyperTools.sqlite-vec"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
         <PackageReference Include="Microsoft.Bcl.Memory"/>
-        <PackageReference Include="Microsoft.Data.Sqlite"/>
+        <PackageReference Include="Microsoft.Data.Sqlite.Core"/>
         <PackageReference Include="Microsoft.Extensions.AI.Abstractions"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI"/>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions"/>
@@ -21,9 +18,8 @@
         <PackageReference Include="Microsoft.ML.Tokenizers"/>
         <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
         <PackageReference Include="OpenAI"/>
+        <PackageReference Include="SQLite3MC.PCLRaw.bundle"/>
         <PackageReference Include="SQLitePCLRaw.core"/>
-        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3mc"/>
-        <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3mc"/>
         <PackageReference Include="AWSSDK.S3"/>
         <PackageReference Include="Azure.Identity"/>
         <PackageReference Include="Azure.Storage.Blobs"/>

@@ -1,18 +1,18 @@
 using System.Reflection;
+using SQLitePCL;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Sets up the e_sqlite3mc provider before any SQLite operations.
+///     Sets up the sqlite3mc provider (SQLite3MC.PCLRaw bundle) before any SQLite operations.
 ///     Must be called from an entry-point ModuleInitializer — library-level
 ///     [ModuleInitializer] does not fire in referenced assemblies.
-///     TODO: remove when Microsoft.Data.Sqlite 11.0+ bundles e_sqlite3mc natively.
 /// </summary>
 public static class SqliteEncryptionInit
 {
     private static bool _initialized;
 
-    /// <summary>Idempotent: sets and freezes the e_sqlite3mc provider.</summary>
+    /// <summary>Idempotent: sets and freezes the sqlite3mc provider.</summary>
     public static void EnsureInitialized()
     {
         if (_initialized)
@@ -22,9 +22,9 @@ public static class SqliteEncryptionInit
 
         _initialized = true;
 
-        var raw = typeof(SQLitePCL.raw);
+        var raw = typeof(raw);
         raw.GetMethod("SetProvider", BindingFlags.Static | BindingFlags.Public)!
-            .Invoke(null, [Activator.CreateInstance(typeof(SQLitePCL.SQLite3Provider_e_sqlite3mc))]);
+            .Invoke(null, [Activator.CreateInstance(typeof(SQLite3Provider_sqlite3mc))]);
         raw.GetMethod("FreezeProvider", BindingFlags.Static | BindingFlags.Public)!
             .Invoke(null, [true]);
     }

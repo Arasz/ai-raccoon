@@ -4452,22 +4452,106 @@
                   }
               },
               "latest": {
-                  "timestamp": "2026-08-06T17:32:38.594981+00:00",
+                  "timestamp": "2026-08-06T18:27:17.581322+00:00",
                   "contextTokens": 0,
-                  "assistantMessages": 299,
+                  "assistantMessages": 41,
                   "byModel": {
                       "deepseek-v4-flash": {
-                          "inputTokens": 808564,
-                          "outputTokens": 277551,
-                          "cacheReadTokens": 92942720,
+                          "inputTokens": 97976,
+                          "outputTokens": 55662,
+                          "cacheReadTokens": 3900672,
                           "cacheCreationTokens": 0,
-                          "assistantMessages": 324
+                          "assistantMessages": 51
                       }
                   },
                   "cumulative": {
-                      "inputTokens": 1097024,
-                      "outputTokens": 384871,
-                      "cacheReadTokens": 101431936,
+                      "inputTokens": 95241,
+                      "outputTokens": 54745,
+                      "cacheReadTokens": 3897984,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "finish": {
+                  "timestamp": "2026-08-06T18:27:17.581322+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 41,
+                  "byModel": {
+                      "deepseek-v4-flash": {
+                          "inputTokens": 97976,
+                          "outputTokens": 55662,
+                          "cacheReadTokens": 3900672,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 51
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 95241,
+                      "outputTokens": 54745,
+                      "cacheReadTokens": 3897984,
+                      "cacheCreationTokens": 0
+                  }
+              }
+          },
+          "usage": {
+              "outputByModel": {},
+              "modelMix": {},
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "cacheReadTokens": 0,
+              "cacheCreationTokens": 0,
+              "cacheEfficiency": null,
+              "subagentTokens": 0,
+              "contextTokensAtStart": 0,
+              "contextTokensAtFinish": 0,
+              "contextGrowth": 0,
+              "mainSessionTotal": 0,
+              "grandTotal": 0
+          }
+      },
+      {
+          "taskId": "fix-unit-test",
+          "subagents": [],
+          "grade": null,
+          "sessionId": "20260806_200618_3e0adc",
+          "trackingSource": "hermes",
+          "checkpoints": {
+              "start": {
+                  "timestamp": "2026-08-06T18:27:23.683338+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 45,
+                  "byModel": {
+                      "deepseek-v4-flash": {
+                          "inputTokens": 95783,
+                          "outputTokens": 38377,
+                          "cacheReadTokens": 4103552,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 44
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 95783,
+                      "outputTokens": 38377,
+                      "cacheReadTokens": 4103552,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "latest": {
+                  "timestamp": "2026-08-06T18:27:23.683338+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 45,
+                  "byModel": {
+                      "deepseek-v4-flash": {
+                          "inputTokens": 95783,
+                          "outputTokens": 38377,
+                          "cacheReadTokens": 4103552,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 44
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 95783,
+                      "outputTokens": 38377,
+                      "cacheReadTokens": 4103552,
                       "cacheCreationTokens": 0
                   }
               }
