@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-06T09:30:00Z",
+  "lastUpdated": "2026-08-06T11:25:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "rr",
+      "title": "README cleanup: fix MD constructs, compact + redirect to docs, humanize",
+      "summary": "Root README 561 -> 158 lines (quick start first, feature table, redirects to docs/reference/agent-memory-server.md, docs/explanation/architecture.md, docs/reference/embedding-benchmark.md, docs/adr/, docs/README.md). Fixed the two-commands-per-line CLI verb blocks in all three files (root README, reference doc, packaged README) to one command per line grouped by family, and added the missing encryption verbs to the packaged README. Corrected stale facts: MCP SDK 2.0.0 -> 2.1.0 (Directory.Packages.props pin; found by reviewer), ADRs 'none recorded yet' -> 6 exist, suite 185+ -> 1100+ tests, bundled ONNX ~21 -> ~23 MB (23,026,053 bytes). Humanize pass per humanizer skill: em-dash tics, 'by design', bold-inline-header lists removed. Content-restoration: --no-launch-profile client wiring + encrypted-bank .mcp.json example moved into the reference doc (the redirect target). PR #37 squash-merged by owner mid-review (2b1eb78) at head 1f0ab5a; the final review-findings commit 7d2cf44 landed after the merge and was re-opened as follow-up PR #38 (cherry-picked onto main). Gates: build 0 warnings; full suite 1113 passed/0 failed/43 skipped. Reviewer gate (code-reviewer, opus): APPROVE-WITH-CHANGES, 2 SHOULD-FIX (SDK version + encrypted .mcp.json) + 4 NIT all folded in; no MUST-FIX.",
+      "pr": 37,
+      "date": "2026-08-06"
+    },
     {
       "id": "full-test-all-tools-in-ai-raccoon",
       "title": "Full test of all tools exported by AiRaccoon (21 MCP tools: 19 memory + 2 prompts)",
