@@ -223,11 +223,11 @@ public sealed class ExtractionHostedServiceTests
         // Let ExecuteAsync create the PeriodicTimer before advancing the fake clock.
         await Task.Delay(50, TestContext.Current.CancellationToken);
 
-        time.Advance(TimeSpan.FromMinutes(60)); // default interval
+        time.Advance(TimeSpan.FromMinutes(30)); // default interval
         await Task.Delay(100, TestContext.Current.CancellationToken);
         store.Shared.Count.ShouldBe(1);
 
-        time.Advance(TimeSpan.FromMinutes(60));
+        time.Advance(TimeSpan.FromMinutes(30));
         await Task.Delay(100, TestContext.Current.CancellationToken);
         store.Shared.Count.ShouldBe(2);
 
