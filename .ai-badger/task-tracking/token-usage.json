@@ -4724,6 +4724,106 @@
               "mainSessionTotal": 0,
               "grandTotal": 0
           }
+      },
+      {
+          "taskId": "fix-missing-data-in-promotion",
+          "subagents": [
+              {
+                  "description": "implementation: WP1+WP2 TDD (deleg_d476072c)",
+                  "at": "2026-08-06T21:26:02.864852+00:00",
+                  "totalTokens": 6077601
+              },
+              {
+                  "description": "code review APPROVE-WITH-NITS (deleg_929fe6f8)",
+                  "at": "2026-08-06T21:26:02.912893+00:00",
+                  "totalTokens": 1628389
+              },
+              {
+                  "description": "architect plan (deleg_36e766f5)",
+                  "at": "2026-08-06T21:26:02.962461+00:00",
+                  "totalTokens": 1406761
+              }
+          ],
+          "grade": null,
+          "sessionId": "dae28877-76ec-40db-9601-8d57486c8ca0",
+          "trackingSource": "claude",
+          "checkpoints": {
+              "start": {
+                  "timestamp": "2026-08-06T21:22:35.383328+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 1,
+                  "byModel": {
+                      "<synthetic>": {
+                          "inputTokens": 0,
+                          "outputTokens": 0,
+                          "cacheReadTokens": 0,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 1
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "latest": {
+                  "timestamp": "2026-08-06T21:22:50.814816+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 1,
+                  "byModel": {
+                      "<synthetic>": {
+                          "inputTokens": 0,
+                          "outputTokens": 0,
+                          "cacheReadTokens": 0,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 1
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "finish": {
+                  "timestamp": "2026-08-06T21:22:50.814816+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 1,
+                  "byModel": {
+                      "<synthetic>": {
+                          "inputTokens": 0,
+                          "outputTokens": 0,
+                          "cacheReadTokens": 0,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 1
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              }
+          },
+          "usage": {
+              "outputByModel": {},
+              "modelMix": {},
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "cacheReadTokens": 0,
+              "cacheCreationTokens": 0,
+              "cacheEfficiency": null,
+              "subagentTokens": 9112751,
+              "contextTokensAtStart": 0,
+              "contextTokensAtFinish": 0,
+              "contextGrowth": 0,
+              "mainSessionTotal": 0,
+              "grandTotal": 0
+          }
     }
   ]
 }

@@ -939,6 +939,22 @@
           "resumeCommand": "hermes --resume 20260806_220110_ee48a1",
           "resumeAttempts": [],
           "stateJsonUpdated": true
+      },
+      {
+          "taskId": "fix-missing-data-in-promotion",
+          "title": "fix-missing-data-in-promotion (record recovery after tracker clobber)",
+          "sessionId": "20260806_215718_fd7f66",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/fix-missing-data-in-promotion",
+          "risk": false,
+          "startedAt": "2026-08-06T21:22:35.383809+00:00",
+          "finishedAt": "2026-08-06T21:22:50.814822+00:00",
+          "state": "FINISHED",
+          "trackingSource": "hermes",
+          "resumeCommand": "hermes --resume 20260806_215718_fd7f66",
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
     }
   ]
 }
