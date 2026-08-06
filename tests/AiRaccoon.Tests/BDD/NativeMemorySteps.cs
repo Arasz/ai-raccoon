@@ -1322,7 +1322,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await _store.WriteAsync(new MemoryWriteRequest(projectId, "entry-content", WorkspaceId: wsId), CancellationToken.None);
     }
 
-    [Given(@"workspace ""(.*)"" contains an entry")]
+    [Given(@"^workspace ""([^""]*)"" contains an entry$")]
     public async Task GivenWorkspaceContainsAnEntry(string wsId)
     {
         var projectId = (string)scenarioContext["ProjectId"];
