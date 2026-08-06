@@ -30,7 +30,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(await ReadIntervalAsync(stoppingToken).ConfigureAwait(false),
+        using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
             _timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -48,7 +48,25 @@ public sealed partial class ExtractionHostedService : BackgroundService
             }
 
             // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadIntervalAsync(stoppingToken).ConfigureAwait(false);
+            timer.Period = await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Interval from settings with a default fallback: a store failure must not kill the loop.</summary>
+    private async Task<TimeSpan> ReadIntervalSafeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ReadIntervalAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.IntervalReadFailed(_logger, ex);
+            return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
         }
     }
 
@@ -140,5 +158,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
         [LoggerMessage(EventId = 505, Level = LogLevel.Error, Message = "Extraction run failed")]
         public static partial void RunFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 506, Level = LogLevel.Warning,
+            Message = "Extraction interval read failed; falling back to the default")]
+        public static partial void IntervalReadFailed(ILogger logger, Exception exception);
     }
 }

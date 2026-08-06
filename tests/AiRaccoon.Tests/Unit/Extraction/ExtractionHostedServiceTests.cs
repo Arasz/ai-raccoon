@@ -30,6 +30,8 @@ public sealed class ExtractionHostedServiceTests
 
         public int ExtractionCalls { get; private set; }
 
+        public Exception? IntervalReadError { get; set; }
+
         public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(Projects);
 
@@ -64,8 +66,15 @@ public sealed class ExtractionHostedServiceTests
             return Task.FromResult(new MemoryEntry(hash, row.Path, ContextNaming.SharedContext, row.Value, 1));
         }
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Settings.GetValueOrDefault(key));
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            if (IntervalReadError is not null && key == ExtractionConfigKeys.IntervalMinutesGlobal)
+            {
+                throw IntervalReadError;
+            }
+
+            return Task.FromResult(Settings.GetValueOrDefault(key));
+        }
 
         public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
         {
@@ -233,6 +242,31 @@ public sealed class ExtractionHostedServiceTests
 
         store.Shared.ShouldBeEmpty();
         store.ExtractionCalls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IntervalReadFailure_DoesNotKillTheLoop()
+    {
+        var (store, time, service) = NewStack();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", sourceFile: null, value: "organic fact about beta")];
+        store.IntervalReadError = new InvalidOperationException("db busy");
+
+        using var cts = new CancellationTokenSource();
+        var run = service.StartAsync(cts.Token);
+
+        // ExecuteAsync must fall back to the default interval and keep looping,
+        // not fault (BackgroundService StopHost would kill the whole server).
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        time.Advance(TimeSpan.FromMinutes(60));
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        run.IsFaulted.ShouldBeFalse();
+        store.ExtractionCalls.ShouldBeGreaterThan(0);
+
+        await cts.CancelAsync();
+        await run;
     }
 
     [Fact]
