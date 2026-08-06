@@ -1,10 +1,10 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-06T10:28:20Z",
+  "generated_at": "2026-08-06T12:44:27Z",
   "sources": [
     {
       "name": "dotnet-sdk",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "dotnet_solution": {
           "tags": [
@@ -103,6 +103,34 @@
           ],
           "intent": "Manage .NET tools (global, local, and tool manifests). Provides a unified interface for all .NET tool operations including installation, updates, searching, running, and manifest management.",
           "origin": "manual"
+        },
+        "get_prompt": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
+          "origin": "manual"
+        },
+        "list_prompts": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
+          "origin": "manual"
+        },
+        "list_resources": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
+          "origin": "manual"
+        },
+        "read_resource": {
+          "tags": [
+            "read"
+          ],
+          "intent": "TODO: describe what read_resource does",
+          "origin": "heuristic"
         }
       }
     },
@@ -489,6 +517,20 @@
           ],
           "intent": "Primary type hierarchy tool. Gets base types, interfaces, and derived types for a type in one call, with separate paging for derived types. Use get_derived_types only when you want the derived list al",
           "origin": "manual"
+        },
+        "list_resources": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
+          "origin": "manual"
+        },
+        "read_resource": {
+          "tags": [
+            "read"
+          ],
+          "intent": "TODO: describe what read_resource does",
+          "origin": "heuristic"
         }
       }
     },
@@ -680,6 +722,36 @@
           ],
           "intent": "Runs a command under the workspace, captures stdout/stderr evidence, and stores a GliderTrace runtime session.",
           "origin": "heuristic"
+        },
+        "list_resources": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
+          "origin": "manual"
+        },
+        "read_resource": {
+          "tags": [
+            "read"
+          ],
+          "intent": "TODO: describe what read_resource does",
+          "origin": "heuristic"
+        },
+        "trace_build": {
+          "tags": [
+            "build"
+          ],
+          "intent": "TODO: describe what trace_build does",
+          "origin": "heuristic"
+        },
+        "trace_restore": {
+          "tags": [
+            "opentelemetry",
+            "run",
+            "tracing"
+          ],
+          "intent": "Restore a saved trace session from an artifact back into an active session for analysis",
+          "origin": "manual"
         }
       }
     },
@@ -864,7 +936,7 @@
     },
     {
       "name": "code-review-graph",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "build_or_update_graph_tool": {
           "tags": [
@@ -1097,6 +1169,34 @@
           ],
           "intent": "Search for code entities across all registered repositories.\n\nRuns hybrid search on each registered repo's graph database and merges\nthe results by score. Register repos first with the CLI 'register' ",
           "origin": "heuristic"
+        },
+        "get_prompt": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
+          "origin": "manual"
+        },
+        "list_prompts": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
+          "origin": "manual"
+        },
+        "list_resources": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
+          "origin": "manual"
+        },
+        "read_resource": {
+          "tags": [
+            "read"
+          ],
+          "intent": "TODO: describe what read_resource does",
+          "origin": "heuristic"
         }
       }
     },
@@ -1204,6 +1304,34 @@
           ],
           "intent": "Fetch and convert a Microsoft Learn documentation webpage to markdown format. This tool retrieves the latest complete content of Microsoft documentation webpages including Azure, .NET, Microsoft 365, ",
           "origin": "manual"
+        },
+        "get_prompt": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
+          "origin": "manual"
+        },
+        "list_prompts": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
+          "origin": "manual"
+        },
+        "list_resources": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
+          "origin": "manual"
+        },
+        "read_resource": {
+          "tags": [
+            "read"
+          ],
+          "intent": "TODO: describe what read_resource does",
+          "origin": "heuristic"
         }
       }
     },
@@ -1252,7 +1380,7 @@
     },
     {
       "name": "ai-raccoon",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "memory_write": {
           "tags": [
@@ -1399,6 +1527,27 @@
           ],
           "intent": "Stop mirroring a watched path; a no-op when the path is not watched.",
           "origin": "catalog"
+        },
+        "get_prompt": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
+          "origin": "manual"
+        },
+        "list_prompts": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
+          "origin": "manual"
+        },
+        "memory_share_extract": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Extract entries from the shared promotion tier of project memory for cross-project reuse",
+          "origin": "manual"
         }
       }
     },
