@@ -27,27 +27,27 @@ workspace's isolated context.
 no longer an MCP tool — the CLI verbs are the single config channel (see
 [Command-line options](#command-line-options)).
 
-| Tool | Parameters | Returns |
-|---|---|---|
-| `memory_write` | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?` | `{hash, path, context, createdAt}` |
-| `memory_search` | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
-| `memory_list` | `projectId` | `{files: <json tree>}` |
-| `memory_stats` | `projectId` | `{entries, pending, contexts}` |
-| `memory_share` | `projectId`, `hash` | `{shared: true, context: "shared"}` |
-| `memory_delete` | `projectId`, `hash` | `{deleted: 0\|1}` |
-| `memory_delete_context` | `projectId`, `context` | `{deleted: n}` |
-| `memory_ingest_file` | `projectId`, `path`, `context?` | `{indexed: 0\|1}` |
-| `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned: n}` |
-| `memory_embed_pending` | `projectId`, `limit?` | `{processed, pending}` |
-| `memory_watch_add` | `projectId`, `path` | `{projectId, path}` |
-| `memory_watch_status` | `projectId` | `{watches: [{projectId, path, state, lastError?, lastSync?}]}` |
-| `memory_watch_remove` | `projectId`, `path` | `{projectId, path}` |
-| `memory_workspace_begin` | `projectId`, `agentId?`, `name?` | `{workspaceId, context}` |
-| `memory_workspace_status` | `projectId`, `workspaceId` | `{entries, count}` |
-| `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep` | `{promoted, discarded}` |
-| `memory_workspace_discard` | `projectId`, `workspaceId` | `{discarded}` |
-| `memory_sweep` | `projectId`, `dryRun=true` | `{candidates, deleted}` |
-| `memory_sync` | `projectId` | `{sent, received, reindexed}` |
+| Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
+|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
+| `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
+| `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
+| `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
+| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
+| `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
+| `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
+| `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
+| `memory_embed_pending`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
+| `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
+| `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
+| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count}`                                                                                 |
+| `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
+| `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
+| `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
+| `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
 
 ### Notes on the less obvious tools
 
@@ -182,34 +182,34 @@ Config verbs (each writes settings rows in the bank's settings table; the runnin
 server hot-reloads them):
 
 ```bash
-# access — who may do what per project
+# access: who may do what per project
 ai-raccoon access default set {ro|rw|full}
 ai-raccoon access default show
 ai-raccoon access set {project-id|*} {ro|rw|full}
 ai-raccoon access unset {project-id|*}
 ai-raccoon access list
 
-# model — embedding engine
+# model: embedding engine
 ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon model reset
 ai-raccoon model show
 
-# retrieval — hybrid-search blend weight
+# retrieval: hybrid-search blend weight
 ai-raccoon retrieval alpha set {0..1}
 ai-raccoon retrieval alpha show
 
-# sweep — degradation cutoff
+# sweep: degradation cutoff
 ai-raccoon sweep threshold set {0..1}
 ai-raccoon sweep show
 
-# sync — cloud snapshot sync
+# sync: cloud snapshot sync
 ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]
 ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]
 ai-raccoon sync remove
 ai-raccoon sync show
 
-# watch — file-watcher configuration (registers happen via memory_watch_add)
+# watch: file-watcher configuration (registers happen via memory_watch_add)
 ai-raccoon watch enable {project-id|*} {true|false}
 ai-raccoon watch disable {project-id|*} {true|false}
 ai-raccoon watch scope add {project-id|*} {path}
@@ -220,7 +220,7 @@ ai-raccoon watch list
 ai-raccoon watch registered [{project-id}]
 ai-raccoon watch remove {project-id|*}
 
-# encryption — bank key source
+# encryption: bank key source
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
@@ -337,6 +337,22 @@ When a client points `command` at the repo instead of the installed tool (e.g. V
 `--no-launch-profile` matters: without it `dotnet run` prints its launch-settings
 notice to stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP
 clients expect on stdio.
+
+Encrypted-bank setups set `AIRACCOON_DB_PASSPHRASE` in the client's user-scoped
+config, never in a shared or tracked file:
+
+```json
+{
+  "mcpServers": {
+    "ai-raccoon": {
+      "command": "ai-raccoon",
+      "env": {
+        "AIRACCOON_DB_PASSPHRASE": "change-me"
+      }
+    }
+  }
+}
+```
 
 ## Local embedding model
 

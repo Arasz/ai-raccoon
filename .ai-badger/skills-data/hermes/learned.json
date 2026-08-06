@@ -31,10 +31,10 @@
     {
       "category": "uncategorized",
       "name": "mcp-tool-surface-testing",
-      "sourceHash": "784f392cf2b8b1cbb1efc0efc38dbdc41ef7f20dbfe65b497ac5f403d8030476",
+      "sourceHash": "4b8e0484a2de0bc6a2be40c44e285c7587df6be20a5dc3a11e8aad0cea5752f1",
       "sourcePath": "mcp/mcp-tool-surface-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:22:57Z",
+      "syncedAt": "2026-08-06T09:38:44Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
     }
   ],

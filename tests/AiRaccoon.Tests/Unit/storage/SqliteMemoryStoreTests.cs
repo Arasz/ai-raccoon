@@ -169,7 +169,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var metadata = await _store.GetMetadataAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
         metadata.ShouldNotBeNull();
-        metadata!.Rating.ShouldBe(row.Rating);
+        metadata.Rating.ShouldBe(row.Rating);
     }
 
     [Fact]

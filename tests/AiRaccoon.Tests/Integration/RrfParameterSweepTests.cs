@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
@@ -32,31 +33,34 @@ public sealed class RrfParameterSweepTests : IDisposable
     ///     harness convention 0.0, equal to the tool default 0.7 at the chosen point).
     /// </summary>
     private const int ChosenK = 60;
+
     private const int ChosenFtsWeight = 1;
     private const int ChosenVectorWeight = 1;
     private const double ChosenMinScore = 0.0;
-    private const CandidateWindowMode ChosenWindow = CandidateWindowMode.Max3x100;
-
-    /// <summary>The pre-sweep default point (measured baseline: ADR nDCG@5 0.722).</summary>
-    private static readonly SweepPoint CurrentDefaults =
-        new(60, 1, 1, 0.0, CandidateWindowMode.Max3x100);
+    private const CandidateWindowMode ChosenWindow = CandidateWindowMode.Max3X100;
 
     /// <summary>Source-affinity parameters, fixed during this sweep.</summary>
     private const double FixedSourceLambda = 0.1;
+
     private const double FixedConsolidationThreshold = 0.1;
+
+    /// <summary>The pre-sweep default point (measured baseline: ADR nDCG@5 0.722).</summary>
+    private static readonly SweepPoint CurrentDefaults =
+        new(60, 1, 1, 0.0, CandidateWindowMode.Max3X100);
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The 11 expected-source queries the Wave 4 gates were measured over (see docs/adr/0006-rrf-parameter-optimization.md).</summary>
     private static readonly string[] RrfGateQueryIds =
         ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly string _dataRoot;
-    private readonly SqliteMemoryStore _store;
-    private readonly ITestOutputHelper _output;
-    private readonly Dictionary<string, string> _hashMap;
     private readonly Dictionary<string, HashSet<string>> _fileHashes;
+    private readonly Dictionary<string, string> _hashMap;
+    private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public RrfParameterSweepTests(ITestOutputHelper output)
     {
@@ -109,10 +113,10 @@ public sealed class RrfParameterSweepTests : IDisposable
         }
 
         var chosen = rows.Single(row => row.Point.K == ChosenK
-            && row.Point.FtsWeight == ChosenFtsWeight
-            && row.Point.VectorWeight == ChosenVectorWeight
-            && row.Point.MinScore == ChosenMinScore
-            && row.Point.Window == ChosenWindow);
+                                        && row.Point.FtsWeight == ChosenFtsWeight
+                                        && row.Point.VectorWeight == ChosenVectorWeight
+                                        && row.Point.MinScore == ChosenMinScore
+                                        && row.Point.Window == ChosenWindow);
         var current = rows.Single(row => row.Point == CurrentDefaults);
         var fusion = await MeasureFusionAsync(queries, TestContext.Current.CancellationToken);
 
@@ -323,7 +327,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         int? exactRank = null;
         int? fileRank = null;
         var expectedHash = query.ExpectedSource is not null
-            && _hashMap.TryGetValue(query.ExpectedSource, out var hash)
+                           && _hashMap.TryGetValue(query.ExpectedSource, out var hash)
             ? hash
             : null;
         var fileSet = query.ExpectedSource is not null && _fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var set)
@@ -423,7 +427,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         IReadOnlyList<SweepRow> rows, SweepRow chosen, SweepRow current,
         IReadOnlyList<BaselineQuery> queries, IReadOnlyList<FusionRow> fusion)
     {
-        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var invariant = CultureInfo.InvariantCulture;
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 4 RRF Parameter Optimization — Parameter Sweep");
         builder.AppendLine();

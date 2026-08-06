@@ -12,7 +12,7 @@ public sealed record SweepPoint(
     int FtsWeight,
     int VectorWeight,
     double MinScore = 0.0,
-    CandidateWindowMode Window = CandidateWindowMode.Max3x100)
+    CandidateWindowMode Window = CandidateWindowMode.Max3X100)
 {
     public string Id => $"k{K}-w{FtsWeight}{VectorWeight}";
 }
@@ -57,7 +57,7 @@ public static class SweepMatrix
             {
                 foreach (var minScore in new[] { 0.0, 0.3, 0.5, 0.7 })
                 {
-                    foreach (var window in new[] { CandidateWindowMode.Max3x100, CandidateWindowMode.Max5x50 })
+                    foreach (var window in new[] { CandidateWindowMode.Max3X100, CandidateWindowMode.Max5X50 })
                     {
                         points.Add(new SweepPoint(k, fts, vector, minScore, window));
                     }

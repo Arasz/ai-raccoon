@@ -24,7 +24,7 @@ public class ConfigCommandsAccessModelTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            cancellationToken: TestContext.Current.CancellationToken);
+            settings: new SettingsCommands(), cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -327,5 +327,31 @@ public class ConfigCommandsAccessModelTests
         stdout.ShouldContain("text-embedding-3-small");
         stdout.ShouldContain("Key: set");
         stdout.ShouldNotContain("sk-secret");
+    }
+
+    [Fact]
+    public async Task ModelSetLocal_TildePath_ExpandsToHome()
+    {
+        var store = new FakeConfigStore();
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        await Run(["model", "set", "local", "~/models/custom.onnx"], store);
+
+        store.Settings["embedding.model"].ShouldBe(Path.Combine(home, "models/custom.onnx"));
+    }
+
+    [Fact]
+    public async Task UnhandledCommandPath_FallsThroughToError()
+    {
+        var store = new FakeConfigStore();
+        CliArgs.TryParse(["access", "default", "show"], out var parsed);
+
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = await ConfigCommands.RunAsync(["bogus", "verb"], parsed.ParseResult, store, stdout, stderr,
+            TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(1);
+        stderr.ToString().ShouldContain("unhandled command");
     }
 }

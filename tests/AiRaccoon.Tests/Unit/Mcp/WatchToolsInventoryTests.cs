@@ -44,7 +44,7 @@ public sealed class WatchToolsInventoryTests : IDisposable
     {
         var constFields = typeof(WatchTools)
             .GetFields(BindingFlags.NonPublic | BindingFlags.Static)
-            .Where(f => f.IsLiteral && f.Name.StartsWith("TN_"))
+            .Where(f => f.IsLiteral && f.Name.StartsWith("Tn"))
             .ToList();
 
         var constValues = new Dictionary<string, string>();
@@ -74,7 +74,7 @@ public sealed class WatchToolsInventoryTests : IDisposable
             var toolName = tm.Attr!.Name!;
             constValues.ShouldContainKey(toolName,
                 $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
-            constValues[toolName].ShouldStartWith("TN_");
+            constValues[toolName].ShouldStartWith("Tn");
         }
     }
 

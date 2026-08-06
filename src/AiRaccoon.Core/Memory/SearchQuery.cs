@@ -16,7 +16,7 @@ public sealed record SearchQuery(
     double SourceLambda = 0.1,
     double ConsolidationThreshold = 0.1,
     DocScoreFormula DocScoreFormula = DocScoreFormula.Max,
-    CandidateWindowMode CandidateWindow = CandidateWindowMode.Max3x100)
+    CandidateWindowMode CandidateWindow = CandidateWindowMode.Max3X100)
 {
     public const int DefaultRrfK = 60;
 

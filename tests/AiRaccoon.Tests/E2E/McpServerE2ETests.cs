@@ -263,7 +263,7 @@ public class McpServerE2ETests : IAsyncLifetime
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            cancellationToken: CancellationToken.None);
+            settings: new SettingsCommands(), cancellationToken: CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

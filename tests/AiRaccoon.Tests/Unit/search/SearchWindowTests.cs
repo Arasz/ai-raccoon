@@ -24,6 +24,5 @@ public sealed class SearchWindowTests
     [InlineData(10, 50)]
     [InlineData(20, 100)]
     [InlineData(40, 200)]
-    public void CandidateWindowFor_Max5x50Window_IsMaxOfFiveTimesLimitAndFifty(int limit, int expected)
-        => SqliteMemoryStore.CandidateWindowFor(limit, CandidateWindowMode.Max5x50).ShouldBe(expected);
+    public void CandidateWindowFor_Max5x50Window_IsMaxOfFiveTimesLimitAndFifty(int limit, int expected) => SqliteMemoryStore.CandidateWindowFor(limit, CandidateWindowMode.Max5X50).ShouldBe(expected);
 }

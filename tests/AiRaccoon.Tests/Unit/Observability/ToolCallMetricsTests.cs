@@ -4,6 +4,8 @@ using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
 using Xunit;
 
+// ReSharper disable ExplicitCallerInfoArgument
+
 namespace AiRaccoon.Tests.Unit.Observability;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -59,7 +61,7 @@ public class ToolCallMetricsTests
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
-        measurements[0].Value.ShouldBe(250.0, tolerance: 1.0);
+        measurements[0].Value.ShouldBe(250.0, 1.0);
         measurements[0].Tags["tool"].ShouldBe("memory_search");
         measurements[0].Tags["result"].ShouldBe("success");
     }
@@ -74,7 +76,7 @@ public class ToolCallMetricsTests
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
-        measurements[0].Value.ShouldBe(1500.0, tolerance: 1.0);
+        measurements[0].Value.ShouldBe(1500.0, 1.0);
         measurements[0].Tags["tool"].ShouldBe("memory_sync");
         measurements[0].Tags["result"].ShouldBe("error");
         measurements[0].Tags["error_type"].ShouldBe("SyncConflictException");
@@ -86,18 +88,16 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         var started = new List<Activity>();
 
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ActivityStarted = activity => started.Add(activity),
-            ActivityStopped = _ => { }
-        };
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = started.Add;
+        listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
         using var activity = metrics.ActivitySource.StartActivity("memory_write");
         activity.ShouldNotBeNull();
-        activity!.OperationName.ShouldBe("memory_write");
+        activity.OperationName.ShouldBe("memory_write");
 
         activity.SetTag("tool", "memory_write");
         activity.SetTag("project_id", "test-project");
@@ -113,18 +113,16 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         Activity? stoppedActivity = null;
 
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ActivityStarted = _ => { },
-            ActivityStopped = activity => stoppedActivity = activity
-        };
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = _ => { };
+        listener.ActivityStopped = activity => stoppedActivity = activity;
         ActivitySource.AddActivityListener(listener);
 
         var activity = metrics.ActivitySource.StartActivity("memory_sync");
         activity.ShouldNotBeNull();
-        activity!.SetStatus(ActivityStatusCode.Error, "sync conflict");
+        activity.SetStatus(ActivityStatusCode.Error, "sync conflict");
         activity.SetTag("error_type", "SyncConflictException");
         activity.Stop();
 

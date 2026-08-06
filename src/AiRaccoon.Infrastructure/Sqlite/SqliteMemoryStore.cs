@@ -590,8 +590,8 @@ public sealed class SqliteMemoryStore(
     ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
     ///     starved by a per-modality LIMIT.
     /// </summary>
-    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3x100) =>
-        mode == CandidateWindowMode.Max5x50
+    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3X100) =>
+        mode == CandidateWindowMode.Max5X50
             ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 

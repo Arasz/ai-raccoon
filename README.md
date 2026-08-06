@@ -105,7 +105,7 @@ dotnet-trace collect -p <server-pid> --providers AiRaccoon.MemoryTools
 
 ## Architecture
 
-```
+```text
 src/AiRaccoon/                 # MCP server: thin tools, 1:1 to the API
 src/AiRaccoon.Core/            # pure domain: memory, rating, degradation, workspace
 src/AiRaccoon.Infrastructure/  # SQLite adapter, embeddings, sync
@@ -122,10 +122,10 @@ provisioning, no download-on-first-run. Deep dive:
 
 The docs tree ([docs/README.md](docs/README.md)) is the canonical reference:
 
-- [docs/reference/agent-memory-server.md](docs/reference/agent-memory-server.md) — tool contract, CLI verbs, error shapes
-- [docs/explanation/architecture.md](docs/explanation/architecture.md) — system architecture
-- [docs/reference/embedding-benchmark.md](docs/reference/embedding-benchmark.md) — embedding model benchmark
-- [docs/adr/README.md](docs/adr/README.md) — architecture decision records
+- [docs/reference/agent-memory-server.md](docs/reference/agent-memory-server.md): tool contract, CLI verbs, error shapes
+- [docs/explanation/architecture.md](docs/explanation/architecture.md): system architecture
+- [docs/reference/embedding-benchmark.md](docs/reference/embedding-benchmark.md): embedding model benchmark
+- [docs/adr/README.md](docs/adr/README.md): architecture decision records
 
 ## Development
 
@@ -138,6 +138,11 @@ dotnet test
 
 The suite (xunit.v3 + Shouldly) covers the domain, the store, the tools, the
 prompts, and an E2E layer: 1100+ tests.
+
+To pack the tool and deploy to the local NuGet feed (`.nupkg-local/`), set
+`DOTNET_ENV=local` for the directory (MSBuild env lookup is case-sensitive on
+macOS, so `dotnet_env` will not match) and run `dotnet pack -c Release`. The
+package embeds `.mcp/server.json`, so MCP clients can discover its inputs.
 
 ## Contributing
 
