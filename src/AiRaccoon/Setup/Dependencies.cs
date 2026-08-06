@@ -53,7 +53,16 @@ public static partial class Dependencies
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
                 async (path, ct) =>
                 {
-                    var conn = new SqliteConnection($"Data Source={path}");
+                    // Snapshot files of an encrypted bank are encrypted copies — open them
+                    // with the bank key (null = unencrypted bank, plain open).
+                    var key = sp.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase;
+                    var csb = new SqliteConnectionStringBuilder { DataSource = path };
+                    if (key is not null)
+                    {
+                        csb.Password = key;
+                    }
+
+                    var conn = new SqliteConnection(csb.ToString());
                     await conn.OpenAsync(ct);
                     conn.EnableExtensions();
                     conn.LoadVector();
