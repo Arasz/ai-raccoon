@@ -23,7 +23,7 @@ TMP="$(mktemp -d "$TMP_BASE/ai-raccoon-verify-pkg.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 dotnet pack "$REPO_ROOT/src/AiRaccoon/AiRaccoon.csproj" -c Release -p:RuntimeIdentifiers="$RID" -o "$TMP" --nologo
-NUPKG="$TMP/arasz.ai-raccoon.$VER.nupkg"
+NUPKG="$TMP/ai-raccoon.$VER.nupkg"
 [ -f "$NUPKG" ] || { echo "FAIL: $NUPKG was not produced" >&2; exit 1; }
 
 # unzip -Z1 lists exact stored paths (unzip -l wraps long filenames, breaking grep).
@@ -46,4 +46,4 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
   exit 1
 fi
 echo "model sha256 verified: $ACTUAL"
-echo "OK: arasz.ai-raccoon.$VER.nupkg ships the verified bundled model"
+echo "OK: ai-raccoon.$VER.nupkg ships the verified bundled model"

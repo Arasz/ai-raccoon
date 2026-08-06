@@ -54,6 +54,8 @@ public static partial class Dependencies
                 {
                     var conn = new SqliteConnection($"Data Source={path}");
                     await conn.OpenAsync(ct);
+                    conn.EnableExtensions();
+                    conn.LoadVector();
                     return conn;
                 },
                 sp.GetRequiredService<TimeProvider>(),

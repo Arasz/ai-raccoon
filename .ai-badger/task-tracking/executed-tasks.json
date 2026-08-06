@@ -661,11 +661,12 @@
       "branch": "task/refactor-part-2",
       "risk": false,
       "startedAt": "2026-08-06T08:04:33.564546+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-06T12:02:33.972536+00:00",
+      "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_100353_81f79b",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "rr",

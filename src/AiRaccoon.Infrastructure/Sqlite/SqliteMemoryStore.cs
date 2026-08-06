@@ -259,9 +259,25 @@ public sealed class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // Record a tombstone for committed rows so sync propagates the deletion; workspace
+        // rows never leave the bank and need none (FR-NM-8 s4).
+        var scope = await connection.QueryFirstOrDefaultAsync<string?>(
+                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+
         var deleted = await connection.ExecuteAsync(
                 Def(MemorySql.DeleteByHashAndProject, new { hash, projectId }, cancellationToken))
             .ConfigureAwait(false);
+
+        if (deleted > 0 && scope is not null)
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertTombstone,
+                        new { hash, scope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                        cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         return deleted > 0;
     }
 

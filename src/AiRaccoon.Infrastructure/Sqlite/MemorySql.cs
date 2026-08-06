@@ -139,6 +139,15 @@ internal static class MemorySql
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
 
+    // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
+    // recorded before the delete so sync can suppress resurrection and ship the tombstone.
+    public const string SelectScopeByHashAndProject =
+        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
+
+    public const string UpsertTombstone =
+        "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
+        "ON CONFLICT(hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
+
     // Mirror delete/rename: committed chunks of the source path AND everything under it
     // (a deleted directory cascades to its subtree; workspace scratch is transient and
     // stays), plus the per-path watch fingerprints so a delete-then-recreate cycle cannot

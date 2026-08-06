@@ -61,6 +61,10 @@ public partial class SyncService(
             await using (var snap = new SqliteConnection($"Data Source={localSnapshot}"))
             {
                 await snap.OpenAsync(cancellationToken).ConfigureAwait(false);
+                // The bank's vec0 tables + entry triggers need the module on snapshot
+                // connections too, or the strip DELETE fails with "no such module: vec0".
+                snap.EnableExtensions();
+                snap.LoadVector();
                 await using var del = snap.CreateCommand();
                 del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
                 await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

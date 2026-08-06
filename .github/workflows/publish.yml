@@ -65,7 +65,7 @@ jobs:
         # in sync with the matrix above.
         run: |
           VER=$(python3 -c 'import re;m=re.search(r"<PackageVersion>([^<]+)</PackageVersion>",open("src/AiRaccoon/AiRaccoon.csproj").read());print(m.group(1))')
-          python3 scripts/patch-tool-shell.py artifacts/arasz.ai-raccoon.$VER.nupkg win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
+          python3 scripts/patch-tool-shell.py artifacts/ai-raccoon.$VER.nupkg win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
       - uses: actions/upload-artifact@v7
         with:
           name: nupkg-${{ matrix.rid }}
@@ -90,12 +90,12 @@ jobs:
       - name: Push payloads to nuget.org
         # Payloads first, then the shells: a shell live before its payloads makes
         # `dotnet tool install` fail in the window until the payloads land.
-        # Shells match arasz.ai-raccoon.<version>.nupkg (a digit right after the
-        # package prefix); payloads are arasz.ai-raccoon.<rid>.<version>.nupkg.
+        # Shells match ai-raccoon.<version>.nupkg (a digit right after the
+        # package prefix); payloads are ai-raccoon.<rid>.<version>.nupkg.
         run: |
-          find artifacts -type f -name '*.nupkg' ! -name 'arasz.ai-raccoon.[0-9]*.nupkg' -print0 \
+          find artifacts -type f -name '*.nupkg' ! -name 'ai-raccoon.[0-9]*.nupkg' -print0 \
             | xargs -0 -n1 dotnet nuget push --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
       - name: Push shells to nuget.org
         run: |
-          find artifacts -type f -name 'arasz.ai-raccoon.[0-9]*.nupkg' -print0 \
+          find artifacts -type f -name 'ai-raccoon.[0-9]*.nupkg' -print0 \
             | xargs -0 -n1 dotnet nuget push --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

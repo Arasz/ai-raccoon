@@ -11,6 +11,15 @@
       "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
     },
     {
+      "category": "software-development",
+      "name": "observability-contract-review",
+      "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
+      "sourcePath": "software-development/observability-contract-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:55:27Z",
+      "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
+    },
+    {
       "category": "uncategorized",
       "name": "ai-badger-project-ops",
       "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
@@ -30,6 +39,15 @@
     },
     {
       "category": "uncategorized",
+      "name": "dotnet-bdd-testing",
+      "sourceHash": "6310a1e0f100fc5eac1894f9beda4906f29f895473b2dc5cc55b05c3b8c1a786",
+      "sourcePath": "software-development/dotnet-bdd-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:45Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-bdd-testing"
+    },
+    {
+      "category": "uncategorized",
       "name": "dotnet-domain-modeling",
       "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
       "sourcePath": "software-development/dotnet-domain-modeling",
@@ -40,19 +58,19 @@
     {
       "category": "uncategorized",
       "name": "dotnet-flaky-test-diagnosis",
-      "sourceHash": "3c34c7baf7868b445edc490b5a6d07e1bb77e67877020c2a4149f946b36f182a",
+      "sourceHash": "17976128ba0795b9e48f5b4ba72cf38a484cb5e9761f9ac4404fa65aa141468e",
       "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:17:37Z",
+      "syncedAt": "2026-08-06T11:52:38Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
     },
     {
       "category": "uncategorized",
       "name": "dotnet-nuget-publish",
-      "sourceHash": "6066fa09ab6c12d28e8207371f540ae598f02aabc6a535a89aa9de57d288df27",
+      "sourceHash": "b66b2ea0c76c5cdb1ce5e90d5c423d7ebce1f74aeb4b2f654d3062915a710691",
       "sourcePath": "software-development/dotnet-nuget-publish",
       "status": "synced",
-      "syncedAt": "2026-08-06T10:51:03Z",
+      "syncedAt": "2026-08-06T12:01:50Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
     },
     {
@@ -66,12 +84,57 @@
     },
     {
       "category": "uncategorized",
+      "name": "git-worktree-isolation",
+      "sourceHash": "22478618d371437213b272e5fb35699f08a2389ebbae72b0bf0a0d75c26d2656",
+      "sourcePath": "git-worktree-isolation",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:02Z",
+      "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
+    },
+    {
+      "category": "uncategorized",
       "name": "mcp-tool-surface-testing",
-      "sourceHash": "4b8e0484a2de0bc6a2be40c44e285c7587df6be20a5dc3a11e8aad0cea5752f1",
+      "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
       "sourcePath": "mcp/mcp-tool-surface-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:38:44Z",
+      "syncedAt": "2026-08-06T11:20:46Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "memory-quality-logging",
+      "sourceHash": "6e0769a964865462c2a771e2818d50ca630079e17e68db584ce9f89175a51a42",
+      "sourcePath": "ai-raccoon-integration/memory-quality-logging",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:21:35Z",
+      "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
+    },
+    {
+      "category": "uncategorized",
+      "name": "nuget-publishing",
+      "sourceHash": "df0463a900024bb1f1527e902891fd24e792da45ff53d0a9cc1622cf6f96466d",
+      "sourcePath": "devops/nuget-publishing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:51:21Z",
+      "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "observability-contract-review",
+      "sourceHash": "311b8933439db4bb976ecd627310fd7c0680a1cdc53ff5c69e1346bf79b1d0f3",
+      "sourcePath": "software-development/observability-contract-review",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:55:42Z",
+      "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
+    },
+    {
+      "category": "uncategorized",
+      "name": "spec-driven-refactoring",
+      "sourceHash": "e556d062554ceca48de4e0e622f631cfa0cd33e6120ef4e8771338c51bf87f9f",
+      "sourcePath": "software-development/spec-driven-refactoring",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:52:07Z",
+      "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
     }
   ],
   "version": 1

@@ -1,8 +1,33 @@
 {
-  "lastUpdated": "2026-08-06T11:25:00Z",
+  "lastUpdated": "2026-08-06T14:30:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "ai-raccoon-package-id",
+      "title": "Migrate NuGet package id arasz.ai-raccoon -> ai-raccoon (raw id assigned by NuGet support), first release 1.0.9",
+      "summary": "NuGet support assigned the raw ai-raccoon id on 2026-08-06, a day after the ownerless-reserved-namespace support email. Research (verified against NuGet docs): the only id rule is uniqueness; prefix reservations block non-owners only; trusted publishing is OWNER-scoped (no policy change needed for CI); deprecation is the retirement signal. Dual-publish ruled out by measurement: dotnet tool install of a second package with the same ToolCommandName fails ('Command ai-raccoon conflicts with an existing command from another tool') — one shim per command name. Migration: PackageId -> ai-raccoon, version 1.0.9 (main's lane shipped arasz.ai-raccoon 1.0.8 the same day, so the raw id starts above it — owner f:); server.json identifier, publish.yml shell/payload patterns, verify-tool-package.sh, manual-fresh-install-test.py pin, READMEs (install + uninstall-first migration note; bank at ~/.ai-raccoon is scope-keyed, survives), ai-raccoon-memory skill instruction (review SHOULD-FIX). TDD: contract facts RED then GREEN (id + version, twice: 1.0.8 -> 1.0.9). Also fixed (owner f:): BothTransports_CreateWebHostWithStdio now binds FreePort() instead of default 7721 — flaked 3x whenever a live server/concurrent suite held the port. Shim migration proven end-to-end (uninstall arasz 1.0.7 -> install ai-raccoon -> --version works). Evidence-first record docs/work/2026-08-06-nuget-package-id-migration.md. Gates: build 0 warnings; full suite 1197 passed/5 failed/4 skipped — the 5 retrieval-gate failures are PRE-EXISTING on main (reproduced on a fresh origin/main worktree with the same model), not a regression of this PR. PR #53 ready for owner merge; article PR arasz-home-page #210 prepared (f: pre-release). Owner actions after merge: verify reservation, dispatch publish (lands ai-raccoon 1.0.9), deprecate arasz.ai-raccoon, fresh-install script, merge article PR.",
+      "pr": 53,
+      "date": "2026-08-06"
+    },
+    {
+      "id": "refactor-part-2",
+      "title": "Part-2 refactor: extract remaining ConfigCommands verb families + static-class audit",
+      "summary": "All four command families extracted to injectable components (SettingsCommands 13, SyncCommands 4, WatchCommands 8 with ctor IWatchStore; EncryptionCommands from PR #32) — ConfigCommands is now a pure static dispatcher (optional interface params + ?? ThrowHelper). Static-class rule codified as an invariant (project-local, survives scaffold) + 28-class classification audit (0 conversions). WatchTools MCP registration regression fixed (1.0.8). 64 @ignore BDD scenarios activated across native-memory + agent-memory features; two real production bugs found+fixed by the scenarios (DeleteAsync never recorded sync tombstones; vec0 not loaded on sync snapshot + DI connections). 4 skips remain by spec (OQ-4 MRTR, OQ-5 RLS, memory_inspect, metrics — V1-deferred). 5 pre-existing retrieval-gate failures on main from the concurrent corpus backfill (de648b4/#50), filed to ai-raccoon memory dba9547c. Manual fresh-install 1.0.8 ALL GREEN.",
+      "pr": [
+        "#34",
+        "#35",
+        "#36",
+        "#39",
+        "#43",
+        "#45",
+        "#46",
+        "#48",
+        "#49",
+        "#52"
+      ],
+      "date": "2026-08-06"
+    },
     {
       "id": "rr",
       "title": "README cleanup: fix MD constructs, compact + redirect to docs, humanize",
