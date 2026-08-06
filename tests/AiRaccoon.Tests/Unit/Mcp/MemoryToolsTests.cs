@@ -430,6 +430,11 @@ public class MemoryToolsTests
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Index);
 
+        public List<string> ProjectIds { get; } = ["acme"];
+
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(ProjectIds);
+
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,

@@ -136,6 +136,16 @@ public class MemoryStorePortTests
         index.Paths.ShouldBe(["shared/a.md"]);
     }
 
+    [Fact]
+    public async Task GetProjectIdsAsync_IsPartOfThePort_AndReturnsTheProjectList()
+    {
+        var store = new RecordingStore();
+
+        var projects = await store.GetProjectIdsAsync(TestContext.Current.CancellationToken);
+
+        projects.ShouldBe(["acme"]);
+    }
+
     private sealed class RecordingStore : IMemoryStore
     {
         public (string ProjectId, string Hash)? Shared { get; private set; }
@@ -195,6 +205,11 @@ public class MemoryStorePortTests
             SharedIndexCalls++;
             return Task.FromResult(Index);
         }
+
+        public List<string> ProjectIds { get; } = ["acme"];
+
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(ProjectIds);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default)
         {

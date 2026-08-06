@@ -1,0 +1,57 @@
+using System.CommandLine;
+using AiRaccoon.Core.Memory;
+
+namespace AiRaccoon.Setup.Cli.Commands;
+
+/// <summary>One-shot extract-config verb handlers: enable, mode, list — the CLI-only channel for the background extraction service.</summary>
+public sealed class ExtractCommands : IExtractCommands
+{
+    public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        var enabled = parseResult.GetValue<bool>("enabled");
+        await store.SetSettingAsync(ExtractionConfigKeys.EnabledGlobal, enabled ? "true" : "false",
+            cancellationToken);
+        await stdout.WriteLineAsync($"shared extraction {(enabled ? "enabled" : "disabled")}");
+        if (enabled)
+        {
+            var mode = ExtractionConfigKeys.ParseMode(
+                await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken));
+            await stdout.WriteLineAsync($"mode: {mode.ToString().ToLowerInvariant()} " +
+                (mode == ExtractMode.Promote
+                    ? "(promote shares candidates with ALL projects — review the mode before relying on it)"
+                    : "(propose only logs candidates; nothing is shared)"));
+        }
+
+        return 0;
+    }
+
+    public async Task<int> SetModeAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var mode = parseResult.GetValue<string>("mode");
+        if (mode is not ("propose" or "promote"))
+        {
+            await stderr.WriteLineAsync("ai-raccoon: mode must be 'propose' or 'promote'");
+            return 1;
+        }
+
+        await store.SetSettingAsync(ExtractionConfigKeys.ModeGlobal, mode, cancellationToken);
+        await stdout.WriteLineAsync(
+            $"extraction mode: {mode} — {(mode == "promote" ? "shares candidates with ALL projects" : "logs candidates only, never shares")}");
+        return 0;
+    }
+
+    public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken)
+    {
+        var enabled = ExtractionConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken));
+        var mode = ExtractionConfigKeys.ParseMode(
+            await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken));
+        var interval = ExtractionConfigKeys.ParseIntervalMinutes(
+            await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken));
+        await stdout.WriteLineAsync(
+            $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min");
+        return 0;
+    }
+}

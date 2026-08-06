@@ -34,6 +34,7 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
+| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...]}`                                                        |
 | `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
@@ -224,6 +225,12 @@ ai-raccoon watch remove {project-id|*}
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
+
+# extract: background shared-extraction (checks each project's memories and
+# extracts the shared-worthy ones; propose logs candidates, promote shares them)
+ai-raccoon extract enable {true|false}
+ai-raccoon extract mode {propose|promote}
+ai-raccoon extract list
 ```
 
 **Encryption key sources.** Default: `AIRACCOON_DB_PASSPHRASE` (env). Alternative:

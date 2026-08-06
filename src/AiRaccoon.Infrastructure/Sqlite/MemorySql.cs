@@ -41,6 +41,13 @@ internal static class MemorySql
                                              WHERE scope = 'shared'
                                              """";
 
+    public const string SelectProjectIds = """"
+                                             SELECT DISTINCT project_id AS ProjectId
+                                             FROM entries
+                                             WHERE scope = 'project'
+                                             ORDER BY project_id
+                                             """";
+
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
     public const string SelectCommittedByValue = """

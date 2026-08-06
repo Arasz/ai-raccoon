@@ -20,8 +20,8 @@ public class CliCommandTreeTests
         var root = CliCommandTree.BuildFullRootCommand();
 
         root.Children.OfType<Command>().Select(c => c.Name)
-            .ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"]);
-        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption"]);
+            .ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"]);
+        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"]);
     }
 
     [Fact]

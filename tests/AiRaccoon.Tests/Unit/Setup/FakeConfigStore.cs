@@ -26,6 +26,9 @@ internal sealed class FakeConfigStore : IMemoryStore
         throw new NotSupportedException();
 
 
+
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
     public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
         bool includeTtlRows, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
