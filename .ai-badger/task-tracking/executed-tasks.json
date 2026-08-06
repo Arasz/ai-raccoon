@@ -709,11 +709,12 @@
       "branch": "task/integration-review-1-0-8",
       "risk": false,
       "startedAt": "2026-08-06T10:31:29.055390+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-06T12:18:49.004288+00:00",
+      "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_122858_7a3ede",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "ai-raccoon-package-id",
@@ -724,11 +725,12 @@
       "branch": "task/ai-raccoon-package-id",
       "risk": false,
       "startedAt": "2026-08-06T10:58:10.308624+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-06T12:07:48.386378+00:00",
+      "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_125148_ca8d27",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

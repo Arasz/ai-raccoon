@@ -1,8 +1,14 @@
 {
-  "lastUpdated": "2026-08-06T14:30:00Z",
+  "lastUpdated": "2026-08-06T12:20:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "integration-review-1-0-8",
+      "title": "Integration review v1.0.7→1.0.9 + observability contract + E2E tool-surface parity (PR #51)",
+      "summary": "Integration review of everything merged since v1.0.7 (released 1.0.8 via #48, then 1.0.9 + NuGet id migration to 'ai-raccoon' via #53). Found and fixed 3 real bugs: (1) memory_share_extract crashed on every call since #50 (ExtractionRow record declared int/int? but Dapper needs long for SQLite INTEGER — tool was dead on arrival, CI blind because build.yml runs only Speed=Fast; the new E2E parity test caught it on first wire-level call); (2) 4 tools (WatchTools x3 + MemoryTools.Sync) exited unrecorded on McpException escape paths (invalid-params/access-denied) — ADR-0002 'every call emits' violated; fixed with idempotent RecordInvocation/RecordError + dropped 'when (ex is not McpException)' filters, 5 new facts pin it; (3) main red since #47: chunk-hash-map regenerated (761 hashes) but corpus DB never re-committed (752 rows) — 5+ retrieval tests fail on main, CI blind; recorded as owner follow-up (#44 P5), not fixed in this PR. Also: success spans now carry Ok status + result tag (ADR promised it, no code version ever set it — pre-existing drift, aligned TDD); ADR-0002 facts refreshed (20 tools, helper pattern, error_type tag); fresh-install script pin → 1.0.9 (id ai-raccoon) + AI_RACCOON_SOURCE=local mode; review record docs/reviews/2026-08-06-integration-review-1-0-8.md. Gates: build 0 warnings; full suite 1206/5/4 (all 5 failures pre-existing #47 corpus, verified identical on base); fresh-install protocol ALL GREEN vs published 1.0.8 and local 1.0.9 pack; focused tests 43/43.",
+      "date": "2026-08-06"
+    },
     {
       "id": "ai-raccoon-package-id",
       "title": "Migrate NuGet package id arasz.ai-raccoon -> ai-raccoon (raw id assigned by NuGet support), first release 1.0.9",
