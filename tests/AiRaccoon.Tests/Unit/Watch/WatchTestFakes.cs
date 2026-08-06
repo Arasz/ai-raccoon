@@ -148,9 +148,12 @@ internal sealed class FakeMemoryStore : IMemoryStore
 {
     public Dictionary<string, string?> Settings { get; } = new(StringComparer.Ordinal);
 
+    // Scheduler jobs run concurrently (Task.Run, concurrency 4) — plain lists would race.
     public List<(string ProjectId, string Path, string Content)> Ingested { get; } = [];
 
     public List<(string ProjectId, string Path)> DeletedPaths { get; } = [];
+
+    private readonly object _sync = new();
 
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
     public Exception? IngestError { get; set; }
@@ -173,7 +176,10 @@ internal sealed class FakeMemoryStore : IMemoryStore
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken);
-        Ingested.Add((projectId, path, content));
+        lock (_sync)
+        {
+            Ingested.Add((projectId, path, content));
+        }
         FirstIngestTcs.TrySetResult();
         if (OnIngest is not null)
         {
@@ -186,7 +192,10 @@ internal sealed class FakeMemoryStore : IMemoryStore
     public Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
     {
-        DeletedPaths.Add((projectId, path));
+        lock (_sync)
+        {
+            DeletedPaths.Add((projectId, path));
+        }
         OnDeletePath?.Invoke(projectId, path);
         return Task.FromResult(0);
     }
