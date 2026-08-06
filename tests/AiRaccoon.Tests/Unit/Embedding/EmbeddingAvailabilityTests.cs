@@ -36,7 +36,7 @@ public sealed class EmbeddingAvailabilityTests
 
         await availability.EnsureEmbeddingAvailabilityAsync(TestContext.Current.CancellationToken);
 
-        logger.Collector.LatestRecord.ShouldBeNull();
+        logger.Collector.Count.ShouldBe(0);
     }
 
     [Fact]

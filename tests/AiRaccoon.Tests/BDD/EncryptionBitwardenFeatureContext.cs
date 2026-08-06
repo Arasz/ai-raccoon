@@ -83,7 +83,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         FakeBwsDir = Path.Combine(DataRoot, "fake-bws");
         BwsExecutable = Path.Combine(FakeBwsDir, "bws");
         var runner = new PathSwitchingRunner(() => BwsExecutable);
-        Resolver = new EncryptionKeyResolver(new EncryptionState(BankPath),
+        Resolver = new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
