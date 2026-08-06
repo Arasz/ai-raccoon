@@ -8,7 +8,7 @@ name: publish
 #
 # The pack job downloads the bundled embedding model before packing: the ONNX is
 # gitignored, so without that step the package would ship without Models/ (FR-NM-3;
-# see docs/work/features-native-memory/native-memory.feature). scripts/verify-tool-package.sh
+# see docs/work/features-native-memory/native-memory.feature). scripts/verify-tool-package.py
 # checks the same contract locally.
 #
 # Before dispatching: bump PackageVersion in src/AiRaccoon/AiRaccoon.csproj and
@@ -46,8 +46,8 @@ jobs:
       - name: Download the bundled embedding model
         # src/AiRaccoon/Models is the pack source; the ONNX is gitignored and must be
         # fetched on the fresh runner or the package ships without it. SHA-pinned,
-        # exits 1 on mismatch (see scripts/download-embedding-model.sh).
-        run: bash scripts/download-embedding-model.sh
+        # exits 1 on mismatch (see scripts/download-embedding-model.py).
+        run: python3 scripts/download-embedding-model.py
       - name: Pack (${{ matrix.rid }})
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.

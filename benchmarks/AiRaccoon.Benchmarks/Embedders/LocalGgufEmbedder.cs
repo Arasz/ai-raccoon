@@ -29,7 +29,7 @@ public sealed class LocalGgufEmbedder : EmbeddingBackend
     private static string ModelPath { get; } =
         Environment.GetEnvironmentVariable("AIRACCOON_TEST_GGUF")
         ?? throw new InvalidOperationException(
-            "AIRACCOON_TEST_GGUF is not set; pass the GGUF path or run scripts/download-embedding-model.sh first.");
+            "AIRACCOON_TEST_GGUF is not set; pass the GGUF path or run scripts/download-embedding-model.py first.");
 
     public override void Dispose()
     {

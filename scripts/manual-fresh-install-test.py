@@ -2,8 +2,9 @@
 """Manual fresh-install test for the ai-raccoon .NET global tool.
 
 Proves a clean install from nuget.org works perfectly first try: all deps present,
-no missing models, no silent repair. Post-publish complement to scripts/verify-tool-package.sh
-(the pre-publish gate). Run from anywhere; everything happens in temp dirs and never touches
+no missing models, no silent repair. Post-publish complement to the pre-publish pack
+gate; model/vocab sha256 pins come from scripts/src/bundle.py — the single source of
+the bundle contract. Run from anywhere; everything happens in temp dirs and never touches
 ~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.10 (pin must be
 bumped after each republish — NuGet versions are immutable). Source override:
 AI_RACCOON_SOURCE=local installs from the repo's .nupkg-local (pre-publish dress
@@ -32,6 +33,7 @@ Exit 0 = all green on first install attempt, zero manual repair.
 """
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -40,14 +42,20 @@ import tempfile
 import time
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+from fresh_install import sha, unwrap
+from bundle import MODEL_SHA256, VOCAB_SHA256
+
+if "--help" in sys.argv or "-h" in sys.argv:
+    print(__doc__)
+    sys.exit(0)
+
 VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.10")
 SOURCE = os.environ.get("AI_RACCOON_SOURCE", "nuget")  # "nuget" | "local" (.nupkg-local)
 LOCAL_SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".nupkg-local"))
-# NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
-# this script, scripts/verify-tool-package.sh, and scripts/download-embedding-model.sh.
-# After every model swap (or republish of a new bundle), re-derive the hashes from
-# verify-tool-package.sh and sync all three files; a forgotten sync fails loudly here
-# (sha mismatch = FAIL), never silently.
+# Model/vocab sha256 pins are imported from scripts/src/bundle.py — the single source
+# of the bundle contract. Update bundle.py once; this script follows. A forgotten
+# update fails loudly here (sha mismatch = FAIL), never silently.
 
 FAIL = []
 def check(name, cond, detail=""):
@@ -112,15 +120,8 @@ for f in ["AiRaccoon.dll", "AiRaccoon.deps.json", "AiRaccoon.runtimeconfig.json"
     check(f"present: {f}", os.path.isfile(os.path.join(tool_dir, f)))
 model = os.path.join(tool_dir, "Models", "model_qint8_arm64.onnx")
 vocab = os.path.join(tool_dir, "Models", "vocab.txt")
-def sha(p):
-    import hashlib
-    h = hashlib.sha256()
-    with open(p, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-check("model sha256 pinned", sha(model) == "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474", sha(model))
-check("vocab sha256 pinned", sha(vocab) == "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3", sha(vocab))
+check("model sha256 pinned", sha(model) == MODEL_SHA256, sha(model))
+check("vocab sha256 pinned", sha(vocab) == VOCAB_SHA256, sha(vocab))
 
 print("== steps 3-4: --version / --help (stderr!) ==")
 r = run([os.path.join(TOOLPATH, "ai-raccoon"), "--version"])
@@ -191,12 +192,6 @@ si = init.get("result", {}).get("serverInfo", {})
 check("serverInfo.name == AiRaccoon", si.get("name") == "AiRaccoon", str(si))
 check(f"serverInfo.version starts {VERSION}", str(si.get("version", "")).startswith(VERSION), str(si))
 
-def unwrap(result):
-    """MCP SDK wraps tool results as content[0].text containing a JSON string."""
-    content = (result or {}).get("content") or []
-    if content and content[0].get("type") == "text":
-        return json.loads(content[0]["text"])
-    return result
 mcp.send("notifications/initialized")
 
 wid = mcp.send("tools/call", {"name": "memory_write", "arguments": {"projectId": PROJECT, "content": CONTENT}})

@@ -373,7 +373,7 @@ process or download. The binary is gitignored and fetched once by the pinned scr
 (SHA-256 verified); the tests FAIL (never skip) when it is missing:
 
 ```bash
-scripts/download-embedding-model.sh          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
+scripts/download-embedding-model.py          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
 ```
 
 A custom ONNX model path overrides the bundled model via
