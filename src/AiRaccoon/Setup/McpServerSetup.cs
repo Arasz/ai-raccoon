@@ -53,7 +53,7 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(config.Options, mcpTransport);
         builder.Services
             .AddMcpServer()
-            .ConfigureMcpTransport(mcpTransport, builder.Logging)
+            .ConfigureMcpTransport(mcpTransport, builder.Logging, config.Options.Quiet)
             .WithTools<MemoryTools>()
             .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
