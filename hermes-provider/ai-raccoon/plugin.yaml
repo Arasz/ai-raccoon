@@ -1,0 +1,5 @@
+name: ai-raccoon
+version: 0.1.0
+description: "AiRaccoon memory server — hybrid semantic search over the project-scoped memory bank, shared promotion tier, and workspace sandboxes."
+hooks:
+  - on_memory_write
