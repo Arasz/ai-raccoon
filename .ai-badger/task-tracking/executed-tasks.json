@@ -763,6 +763,68 @@
       "resumeCommand": "hermes --resume 20260806_144456_10ee8d",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "check-what-is-the-interface-for-hermes-memory",
+      "title": "Research: what interface do Hermes memory plugins use",
+      "sessionId": "20260806_164212_bc0218",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/hermes-memory-interface",
+      "risk": false,
+      "startedAt": "2026-08-06T14:43:17.312815+00:00",
+      "finishedAt": "2026-08-06T14:52:30.931639+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_164212_bc0218",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "switch-from-stdio-to-http",
+      "title": "HTTP serve mode: serve verb + --mcp-entry + 4h idle watchdog",
+      "sessionId": "20260806_164327_13b8a9",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/switch-from-stdio-to-http",
+      "risk": false,
+      "startedAt": "2026-08-06T14:52:30.994140+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_164327_13b8a9",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "hermes-ai-raccoon-memory-provider",
+      "title": "Design + implement Hermes memory provider plugin bridging to AiRaccoon",
+      "sessionId": "20260806_164618_7f88ae",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/hermes-ai-raccoon-provider",
+      "risk": false,
+      "startedAt": "2026-08-06T14:53:23.859170+00:00",
+      "finishedAt": "2026-08-06T15:16:09.666051+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_164618_7f88ae",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "continue-improv",
+      "title": "Extraction follow-ups: S4 propose logs candidate details, S5 OCE filter, S10 CandidateLimit constant, F3 UNIQUE index",
+      "sessionId": "20260806_163711_726807",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/continue-improv",
+      "risk": false,
+      "startedAt": "2026-08-06T14:55:26.227702+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_163711_726807",
+      "resumeAttempts": []
     }
   ]
 }

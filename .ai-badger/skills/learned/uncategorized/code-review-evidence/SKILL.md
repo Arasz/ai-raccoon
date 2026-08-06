@@ -78,9 +78,25 @@ tests are evidence at all**. Two failure modes recur:
    against a dead endpoint (port 9 refuses instantly, no network dependency)
    with and without credentials to learn what surfaces for no-creds vs
    connection-refused vs 401/403. Never trust a plan's "probe-verified" claim —
-   re-verify.
+ re-verify.
 
-3. **Check integration tests assert observable state, not constructed values.**
+ 2d. **Prove test-isolation claims against the production code path.** When a
+ suite claims it never touches the real store because a fixture sets an env
+ var (`monkeypatch.setenv("APP_DATA_ROOT", tmp)`), verify the production code
+ actually reads that var: `grep -rn "<VAR>" src/` — if the only hits are
+ docs/tests/fixtures, the var is a no-op and the tests ran against the real
+ store. Then confirm forensically instead of arguing: open the real store
+ read-only and look for the suite's unique probe markers under a test-only
+ project/key — exact probe strings in the real DB are the smoking gun (one
+ review: all 4 probe writes from a "temp bank" suite found in the user's real
+ `~/.ai-raccoon/memory.db` under a `hermes-itest` project; the CLI resolved
+ its data root only from `--data-root`, defaulting to the user dir). The fix
+ direction is usually passing the CLI arg through the spawn args
+ (`StdioServerParameters(args=[...])`), not an env var the production path
+ never reads. Also note the doc/README claims about the env var are then
+ factually false and must be corrected with the code.
+
+ 3. **Check integration tests assert observable state, not constructed values.**
    For every integration test over a real backend, ask: *could this test pass
    while the feature does nothing?* If the assertion compares a field of the
    record the method returned (e.g. `result.Context == "shared"` where the
@@ -299,7 +315,34 @@ tests are evidence at all**. Two failure modes recur:
   even though the section-absent guard exists. The honest fix guards the bound
   VALUE (`if (string.IsNullOrWhiteSpace(opts.ApiKey)) throw`) and the negative
   test uses a fixture that satisfies every other required section. Probe
-  recipe + worked case (PR #748 OpenRouter swap): `references/vacuous-negative-guard-tests.md`.
+ recipe + worked case (PR #748 OpenRouter swap): `references/vacuous-negative-guard-tests.md`.
+ - **Skip on spawn failure under an explicit slow flag.** An integration fixture
+ that does `pytest.skip("server failed to spawn")` when the spawned child
+ process doesn't come up reports "N passed" while the entire child-process
+ path is dead — the suite goes green with zero coverage of the thing it exists
+ to test. Skipping when the *precondition* is absent (binary not on PATH) is
+ honest; skipping when the *system under test* fails to start is masking.
+ With `--run-slow` explicitly requested, spawn failure should `pytest.fail`,
+ not skip.
+ - **Verify installed-SDK behavior from the installed source, not docs.** For
+ MCP/SDK clients, read the venv's site-packages: `grep -n "yield" .../mcp/client/stdio/__init__.py`
+ (2-tuple `read_stream, write_stream`) vs `streamable_http.py` (3-tuple
+ `read, write, get_session_id`), and read the stdio `__aexit__` finally block
+ to confirm child termination (stdin close → graceful wait → SIGTERM→SIGKILL
+ escalation). One grep beats any doc or memory of the tuple shape.
+ - **Empirically disprove your own suspicion before flagging it.** A code path
+ that "should" fail may not: `importlib.util.spec_from_file_location(name,
+ dir/__init__.py)` sets `__package__` and `__path__` (the file name
+ `__init__.py` makes it a package), so `from .client import X` inside a
+ spec-loaded plugin works fine. Run the 5-line repro; if it works, drop the
+ finding — a false positive costs the review's credibility as much as a
+ missed bug.
+ - **Stale decision record in a design doc.** A protocol/design doc whose status
+ line still says "decisions open" and whose decision table is all dashes —
+ while the implementation under review claims the decisions were approved —
+ is a doc finding (SHOULD-FIX) independent of implementation fidelity: the
+ record is the source of truth, fill it in or the next reviewer cannot tell
+ approved decisions from recommendations.
 
 ## References
 
@@ -337,3 +380,9 @@ tests are evidence at all**. Two failure modes recur:
   idioms + StopHost, dead config-knob proof, DI duplication across transport
   paths, EventId range checks, and re-baselining a review when the PR branch
   ref is pruned mid-review (PR merged).
+- `references/hermes-ai-raccoon-provider-review.md` — worked Python memory-provider
+  plugin review (ai-raccoon PR #61): proving an env-var isolation claim false
+  (AIRACCOON_DATA_ROOT never read by the CLI — probe rows found in the real
+  bank), installed-mcp-SDK tuple/termination verification, plugin.yaml manifest
+  key check (`hooks` vs `provides_hooks`), and the spec-loading relative-import
+  non-bug.
