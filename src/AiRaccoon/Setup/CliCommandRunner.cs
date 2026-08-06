@@ -27,7 +27,7 @@ internal static class CliCommandRunner
         {
             builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
         });
-        var logger = loggerFactory.CreateLogger("ConfigCommands");
+        var logger = loggerFactory.CreateLogger("EncryptionCommands");
 
         var bankPath = SqliteConnectionFactory.BankPathFor(config.Options);
         var sidecar = new EncryptionSourceSidecar(bankPath);
@@ -40,7 +40,7 @@ internal static class CliCommandRunner
         var encryptionCommands = new EncryptionCommands(bank, bws, env, sidecar, logger);
 
         return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin,
-            settings: new SettingsCommands(), encryptionCommands: encryptionCommands,
-            watchStore: new WatchStore(bank), cancellationToken);
+            settings: new SettingsCommands(), sync: new SyncCommands(),
+            encryptionCommands: encryptionCommands, watchStore: new WatchStore(bank), cancellationToken);
     }
 }

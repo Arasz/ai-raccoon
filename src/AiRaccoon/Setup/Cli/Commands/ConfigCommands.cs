@@ -27,8 +27,9 @@ internal static class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin,
-        ISettingsCommands? settings = null, IEncryptionCommands? encryptionCommands = null,
-        IWatchStore? watchStore = null, CancellationToken cancellationToken = default)
+        ISettingsCommands? settings = null, ISyncCommands? sync = null,
+        IEncryptionCommands? encryptionCommands = null, IWatchStore? watchStore = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -47,10 +48,10 @@ internal static class ConfigCommands
                 ["retrieval", "alpha", "show"] => await (settings ?? ThrowHelper.ThrowArgumentNullException<ISettingsCommands>(nameof(settings))).RetrievalAlphaShowAsync(store, stdout, cancellationToken),
                 ["sweep", "threshold", "set"] => await (settings ?? ThrowHelper.ThrowArgumentNullException<ISettingsCommands>(nameof(settings))).SweepThresholdSetAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["sweep", "show"] => await (settings ?? ThrowHelper.ThrowArgumentNullException<ISettingsCommands>(nameof(settings))).SweepShowAsync(store, stdout, cancellationToken),
-                ["sync", "add", "s3"] => await SyncAddS3Async(parseResult, store, stdout, stderr, stdin, cancellationToken),
-                ["sync", "add", "azure"] => await SyncAddAzureAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
-                ["sync", "remove"] => await SyncRemoveAsync(store, stdout, cancellationToken),
-                ["sync", "show"] => await SyncShowAsync(store, stdout, cancellationToken),
+                ["sync", "add", "s3"] => await (sync ?? ThrowHelper.ThrowArgumentNullException<ISyncCommands>(nameof(sync))).AddS3Async(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["sync", "add", "azure"] => await (sync ?? ThrowHelper.ThrowArgumentNullException<ISyncCommands>(nameof(sync))).AddAzureAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["sync", "remove"] => await (sync ?? ThrowHelper.ThrowArgumentNullException<ISyncCommands>(nameof(sync))).RemoveAsync(store, stdout, cancellationToken),
+                ["sync", "show"] => await (sync ?? ThrowHelper.ThrowArgumentNullException<ISyncCommands>(nameof(sync))).ShowAsync(store, stdout, cancellationToken),
                 ["watch", "enable"] or ["watch", "disable"] => await WatchSetEnabledAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["watch", "scope", "add"] => await WatchScopeAddAsync(parseResult, store, stdout, cancellationToken),
                 ["watch", "scope", "remove"] => await WatchScopeRemoveAsync(parseResult, store, stdout, cancellationToken),
@@ -70,206 +71,6 @@ internal static class ConfigCommands
             await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
-    }
-
-    // ── sync ──
-
-    private static async Task<int> SyncAddS3Async(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken)
-    {
-        var url = parseResult.GetValue<string>("url")!;
-        var bucket = parseResult.GetValue<string>("--bucket")!;
-        var region = Optional(parseResult, "--region");
-        var objectKey = Optional(parseResult, "--object-key");
-        var useChain = parseResult.GetValue<bool>("--cli");
-
-        string? accessKey = null;
-        string? secretKey = null;
-        if (!useChain)
-        {
-            // Secrets are entered interactively (single-channel ruling; never on argv).
-            await stderr.WriteAsync("S3 access key (empty aborts): ");
-            accessKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
-            if (string.IsNullOrEmpty(accessKey))
-            {
-                await stderr.WriteLineAsync("ai-raccoon: access key required — sync not configured");
-                return 1;
-            }
-
-            await stderr.WriteAsync("S3 secret key (empty aborts): ");
-            secretKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
-            if (string.IsNullOrEmpty(secretKey))
-            {
-                await stderr.WriteLineAsync("ai-raccoon: secret key required — sync not configured");
-                return 1;
-            }
-        }
-
-        // R1: one active provider — drop the other backend's rows and the stale mode row
-        // first so a crash between delete and write can't leave stale secrets behind.
-        foreach (var key in new[]
-                 {
-                     SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container, SyncSettingsKeys.AzureAccount
-                 })
-        {
-            await store.DeleteSettingAsync(key, cancellationToken);
-        }
-
-        if (useChain)
-        {
-            // Chain mode: stale persisted keys would win the tie-break — clear them.
-            await store.DeleteSettingAsync(SyncSettingsKeys.AccessKey, cancellationToken);
-            await store.DeleteSettingAsync(SyncSettingsKeys.SecretKey, cancellationToken);
-        }
-        else
-        {
-            await store.DeleteSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken);
-        }
-
-        // Writing provider=s3 makes the switch real: without it the factory would read
-        // provider=azure and no azure rows → NullCloudStore → silently dead sync.
-        await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
-        if (useChain)
-        {
-            await store.SetSettingAsync(SyncSettingsKeys.S3Chain, "true", cancellationToken);
-        }
-        else
-        {
-            await store.SetSettingAsync(SyncSettingsKeys.AccessKey, accessKey!, cancellationToken);
-            await store.SetSettingAsync(SyncSettingsKeys.SecretKey, secretKey!, cancellationToken);
-        }
-
-        await stdout.WriteLineAsync(useChain
-            ? $"sync configured: {url} bucket {bucket} (AWS credential chain)"
-            : $"sync configured: {url} bucket {bucket}");
-        return 0;
-    }
-
-    private static async Task<int> SyncAddAzureAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken)
-    {
-        var container = parseResult.GetValue<string>("container")!;
-        var objectKey = Optional(parseResult, "--object-key");
-        var useCli = parseResult.GetValue<bool>("--cli");
-
-        string? connectionString = null;
-        string? account = null;
-        if (useCli)
-        {
-            account = Optional(parseResult, "--account");
-            if (account is null)
-            {
-                await stderr.WriteLineAsync("ai-raccoon: --account is required with --cli");
-                return 1;
-            }
-        }
-        else
-        {
-            // Secrets are entered interactively (single-channel ruling; never on argv).
-            // Prompt + validate BEFORE any settings write: an abort must leave the current
-            // provider untouched (partial writes would spread via the settings merge).
-            await stderr.WriteAsync("Azure Blob connection string (empty aborts): ");
-            connectionString = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                await stderr.WriteLineAsync("ai-raccoon: connection string required — sync not configured");
-                return 1;
-            }
-        }
-
-        // R1: one active provider — drop the other backend's rows and the stale mode row
-        // first so a crash between delete and write can't leave stale secrets behind.
-        foreach (var key in new[]
-                 {
-                     SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
-                     SyncSettingsKeys.AccessKey, SyncSettingsKeys.SecretKey, SyncSettingsKeys.S3Chain
-                 })
-        {
-            await store.DeleteSettingAsync(key, cancellationToken);
-        }
-
-        if (useCli)
-        {
-            // --cli mode: a stale connection string would win the tie-break — clear it.
-            await store.DeleteSettingAsync(SyncSettingsKeys.ConnectionString, cancellationToken);
-        }
-        else
-        {
-            await store.DeleteSettingAsync(SyncSettingsKeys.AzureAccount, cancellationToken);
-        }
-
-        await store.SetSettingAsync(SyncSettingsKeys.Provider, "azure", cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Container, container, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
-        if (useCli)
-        {
-            await store.SetSettingAsync(SyncSettingsKeys.AzureAccount, account!, cancellationToken);
-        }
-        else
-        {
-            await store.SetSettingAsync(SyncSettingsKeys.ConnectionString, connectionString!, cancellationToken);
-        }
-
-        await stdout.WriteLineAsync(useCli
-            ? $"sync configured: azure container {container} (az CLI)"
-            : $"sync configured: azure container {container}");
-        return 0;
-    }
-
-    private static async Task<int> SyncRemoveAsync(IMemoryStore store, TextWriter stdout,
-        CancellationToken cancellationToken)
-    {
-        // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't
-        // drift when rows are added later (single-active-provider ruling R1).
-        var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
-        foreach (var key in rows.Keys)
-        {
-            await store.DeleteSettingAsync(key, cancellationToken);
-        }
-
-        await stdout.WriteLineAsync("sync removed (sync off)");
-        return 0;
-    }
-
-    private static async Task<int> SyncShowAsync(IMemoryStore store, TextWriter stdout,
-        CancellationToken cancellationToken)
-    {
-        var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
-        if (rows.Count == 0)
-        {
-            await stdout.WriteLineAsync("sync not configured");
-            return 0;
-        }
-
-        // R2 — unknown values route as s3; the raw row is printed so a typo is diagnosable.
-        var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
-        await stdout.WriteLineAsync($"provider: {rawProvider}");
-        if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
-        {
-            await stdout.WriteLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
-            await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
-            var connectionState = rows.ContainsKey(SyncSettingsKeys.ConnectionString) ? "set" : "unset";
-            await stdout.WriteLineAsync($"connectionString: {connectionState}");
-            var accountState = rows.ContainsKey(SyncSettingsKeys.AzureAccount) ? "set" : "unset";
-            await stdout.WriteLineAsync($"account: {accountState}");
-            return 0;
-        }
-
-        await stdout.WriteLineAsync($"endpoint: {rows.GetValueOrDefault(SyncSettingsKeys.Endpoint) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"bucket: {rows.GetValueOrDefault(SyncSettingsKeys.Bucket) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"region: {rows.GetValueOrDefault(SyncSettingsKeys.Region) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
-        var accessState = rows.ContainsKey(SyncSettingsKeys.AccessKey) ? "set" : "unset";
-        var secretState = rows.ContainsKey(SyncSettingsKeys.SecretKey) ? "set" : "unset";
-        await stdout.WriteLineAsync($"accessKey: {accessState}");
-        await stdout.WriteLineAsync($"secretKey: {secretState}");
-        var chain = bool.TryParse(rows.GetValueOrDefault(SyncSettingsKeys.S3Chain), out var parsedChain) && parsedChain;
-        await stdout.WriteLineAsync($"chain: {(chain ? "true" : "false")}");
-        return 0;
     }
 
     // ── watch ──
@@ -424,21 +225,6 @@ internal static class ConfigCommands
 
         await stdout.WriteLineAsync($"removed watch config for {target}");
         return 0;
-    }
-
-    private static string? Optional(ParseResult parseResult, string name) => parseResult.GetResult(name) is not null ? parseResult.GetValue<string>(name) : null;
-
-    private static async Task UpsertOrDeleteAsync(IMemoryStore store, string key, string? value,
-        CancellationToken cancellationToken)
-    {
-        if (value is null)
-        {
-            await store.DeleteSettingAsync(key, cancellationToken);
-        }
-        else
-        {
-            await store.SetSettingAsync(key, value, cancellationToken);
-        }
     }
 
 }

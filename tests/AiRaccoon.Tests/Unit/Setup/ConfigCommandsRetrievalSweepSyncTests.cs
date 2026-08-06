@@ -23,7 +23,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, settings: new SettingsCommands(),
+            stdin ?? TextReader.Null, settings: new SettingsCommands(), sync: new SyncCommands(),
             cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
