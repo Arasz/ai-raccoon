@@ -217,6 +217,7 @@ public class McpExceptionPathInstrumentationTests
             new SimpleFakeCloudStore(),
             _ => Task.FromResult<Microsoft.Data.Sqlite.SqliteConnection>(null!),
             (_, _) => Task.FromResult<Microsoft.Data.Sqlite.SqliteConnection>(null!),
+            (_, _) => Task.FromResult<Microsoft.Data.Sqlite.SqliteConnection>(null!),
             TimeProvider.System,
             null!)
         {

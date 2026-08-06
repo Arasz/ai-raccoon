@@ -225,6 +225,7 @@ public class MemoryToolsInstrumentationTests
             new SimpleFakeCloudStore(),
             _ => Task.FromResult<SqliteConnection>(null!),
             (_, _) => Task.FromResult<SqliteConnection>(null!),
+            (_, _) => Task.FromResult<SqliteConnection>(null!),
             TimeProvider.System,
             null!)
         {
