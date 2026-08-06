@@ -10,4 +10,5 @@ public sealed record CliOptions
     public required InstallScope InstallScope { get; init; }
     public required int Port { get; init; }
     public required bool IsPortExplicit { get; init; }
+    public bool Quiet { get; init; }
 }

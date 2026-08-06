@@ -35,6 +35,10 @@ def real_provider(provider_module, tmp_path, request):
     binary = _binary()
     provider = provider_module.AiRaccoonMemoryProvider(
         config={"transport": "stdio", "binary": binary,
+                # quiet: false — the INSTALLED binary predates the --quiet
+                # flag; the provider default turns it on once a released
+                # server supports it.
+                "quiet": False,
                 "binary_args": ["--data-root", str(tmp_path / "bank")]}
     )
     provider.initialize(

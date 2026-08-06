@@ -47,6 +47,8 @@ plugins:
     url: http://127.0.0.1:7721/mcp   # http mode
     binary: ai-raccoon    # stdio mode (resolved on PATH)
     binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
+    quiet: true           # spawn the server with --quiet (no info logs)
+    status_words: true    # one-word stderr cue per call ("searching", "remembering", …)
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
     search_limit: 5
     min_score: 0.5
@@ -65,6 +67,23 @@ plugins:
 
 No secrets: AiRaccoon is local. The bank passphrase stays in the server's own
 environment, never in this plugin.
+
+## Data sources
+
+Caller-side observability: the MCP server cannot attribute calls to a client, so the
+provider emits both signals itself.
+
+- **Status words:** with `status_words: true` (default) the provider prints one word to
+  stderr as each call starts — "searching", "remembering", "counting", … Set
+  `status_words: false` to silence.
+- **Quiet server:** with `quiet: true` (default) the spawned server runs with `--quiet`
+  (info logs off, Warning+ only) — the status words are the only routine stderr output.
+- **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var is set (read by the
+  provider at session start — a change needs a session restart; the spawned server merely
+  inherits it), the provider appends one JSONL row per call:
+  `{"ts", "tool", "project_id", "status", "error_type?", "duration_ms", "agent_id",
+  "session_id"}` — with caller attribution the server cannot know. An analysis data
+  source for memory usage and retrieval behavior.
 
 ## Notes
 

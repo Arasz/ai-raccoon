@@ -20,4 +20,7 @@ public sealed record InfrastructureOptions
     public string Rid { get; init; } = RuntimeInformation.RuntimeIdentifier;
 
     public required InstallScope Scope { get; init; }
+
+    /// <summary>When true, info logs are quieted to Warning+ (the caller emits its own status cues).</summary>
+    public bool Quiet { get; init; }
 }

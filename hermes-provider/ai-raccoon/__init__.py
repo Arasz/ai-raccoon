@@ -26,11 +26,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
+import sys
 import threading
+import time
 from typing import Any, Dict, List, Optional
 
 from agent.memory_provider import MemoryProvider
+
+try:
+    from .status import MemoryOperationLog, status_word
+except ImportError:  # spec-loaded without a package (tests)
+    from status import MemoryOperationLog, status_word  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +157,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         self._agent_context = None
         self._project_id = None
         self._sync_threads: List[threading.Thread] = []
+        self._status_words = bool(self._config.get("status_words", True))
+        self._op_log: Optional[MemoryOperationLog] = None
 
     # -- identity -----------------------------------------------------------
 
@@ -183,6 +193,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         self._agent_context = kwargs.get("agent_context")
         workspace = kwargs.get("agent_workspace") or "hermes"
         self._project_id = self._config.get("project_id") or f"{workspace}-{self._agent_identity}"
+        log_path = os.environ.get("AIRACCOON_MEMORY_LOG") or None  # blank = unset
+        self._op_log = MemoryOperationLog(log_path) if log_path else None
         factory = self._client_factory
         if factory is None:
             from .client import create_client
@@ -204,6 +216,20 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             except Exception as e:
                 logger.debug("ai-raccoon provider shutdown failed: %s", e)
 
+    # -- caller-side observability (the server cannot attribute calls) ------
+
+    def _emit_word(self, tool: str) -> None:
+        if self._status_words:
+            print(status_word(tool), file=sys.stderr, flush=True)
+
+    def _log(self, tool: str, status: str, duration_ms: float,
+             error_type: Optional[str] = None) -> None:
+        log = self._op_log
+        if log is None or self._project_id is None:
+            return
+        log.write(tool, self._project_id, status, duration_ms, error_type=error_type,
+                  agent_id=f"hermes-{self._agent_identity}", session_id=self._session_id)
+
     # -- context ------------------------------------------------------------
 
     def system_prompt_block(self) -> str:
@@ -218,6 +244,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
     def prefetch(self, query: str, *, session_id: str = "") -> str:
         if self._client is None or self._project_id is None or not query:
             return ""
+        start = time.monotonic()
+        self._emit_word("memory_search")
         try:
             payload = self._client.search(
                 self._project_id,
@@ -227,8 +255,11 @@ class AiRaccoonMemoryProvider(MemoryProvider):
                 min_score=float(self._config.get("min_score", 0.5)),
             )
         except Exception as e:
+            self._log("memory_search", "error", (time.monotonic() - start) * 1000,
+                      error_type=type(e).__name__)
             logger.debug("ai-raccoon prefetch failed: %s", e)
             return ""
+        self._log("memory_search", "ok", (time.monotonic() - start) * 1000)
         results = payload.get("results", []) if isinstance(payload, dict) else []
         if not results:
             return ""
@@ -246,6 +277,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         target_session = session_id or self._session_id or "unknown"
 
         def _sync() -> None:
+            start = time.monotonic()
+            self._emit_word("memory_write")
             try:
                 client.write(
                     pid,
@@ -254,7 +287,10 @@ class AiRaccoonMemoryProvider(MemoryProvider):
                     source_file=f"hermes/{target_session}",
                     section="turn",
                 )
+                self._log("memory_write", "ok", (time.monotonic() - start) * 1000)
             except Exception as e:
+                self._log("memory_write", "error", (time.monotonic() - start) * 1000,
+                          error_type=type(e).__name__)
                 logger.warning("ai-raccoon sync_turn failed: %s", e)
 
         thread = threading.Thread(target=_sync, daemon=True)
@@ -282,15 +318,24 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
         method_name, mapping = entry
         method = getattr(self._client, method_name)
+        start = time.monotonic()
+        self._emit_word(tool_name)
         try:
             call_args = {target: args[key] for key, target in mapping.items() if key in args}
             if method_name == "write" and "agent_id" not in call_args:
                 call_args["agent_id"] = f"hermes-{self._agent_identity}"
             result = method(self._project_id, **call_args)
         except KeyError as exc:
+            # Defensive: the arg mapping is `in`-guarded, so this only fires if a
+            # required schema arg is missing from the model's call.
+            self._log(tool_name, "error", (time.monotonic() - start) * 1000,
+                      error_type="KeyError")
             return json.dumps({"error": f"Missing required argument: {exc}"})
         except Exception as exc:
+            self._log(tool_name, "error", (time.monotonic() - start) * 1000,
+                      error_type=type(exc).__name__)
             return json.dumps({"error": str(exc)})
+        self._log(tool_name, "ok", (time.monotonic() - start) * 1000)
         return json.dumps(result)
 
     # -- hooks --------------------------------------------------------------
@@ -301,6 +346,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         pid = self._project_id
         if action != "add" or client is None or pid is None:
             return
+        start = time.monotonic()
+        self._emit_word("memory_write")
         try:
             client.write(
                 pid,
@@ -309,7 +356,10 @@ class AiRaccoonMemoryProvider(MemoryProvider):
                 source_file="hermes-memory",
                 section=target,
             )
+            self._log("memory_write", "ok", (time.monotonic() - start) * 1000)
         except Exception as e:
+            self._log("memory_write", "error", (time.monotonic() - start) * 1000,
+                      error_type=type(e).__name__)
             logger.debug("ai-raccoon on_memory_write mirror failed: %s", e)
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
@@ -323,6 +373,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             {"key": "url", "description": "Streamable HTTP endpoint (http mode)", "default": "http://127.0.0.1:7721/mcp"},
             {"key": "binary", "description": "ai-raccoon binary to spawn (stdio mode)", "default": "ai-raccoon"},
             {"key": "binary_args", "description": "Extra args for the spawned binary, e.g. ['--data-root', '/tmp/bank'] (stdio mode)", "default": ""},
+            {"key": "quiet", "description": "Spawn the server with --quiet (no info logs; the provider emits status cues)", "default": True, "choices": ["true", "false"]},
+            {"key": "status_words", "description": "Print one-word status cues to stderr per call", "default": True, "choices": ["true", "false"]},
             {"key": "project_id", "description": "AiRaccoon project id (empty = derived hermes-<profile>)"},
             {"key": "search_limit", "description": "Prefetch result limit", "default": 5, "type": "integer"},
             {"key": "min_score", "description": "Prefetch minimum ranking threshold 0..1", "default": 0.5, "type": "number"},
