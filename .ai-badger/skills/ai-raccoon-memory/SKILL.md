@@ -26,7 +26,7 @@ a no-op.
 means the one-time per-install setup is missing (quote the `*` so the shell does not expand it):
 `ai-raccoon watch scope add '<project-id|*>' <path>`, then
 `ai-raccoon watch enable '<project-id|*>' true`. If the `memory_watch_*` tools are not listed at
-all (older tool build on another machine), update the tool: `dotnet tool update -g ai-raccoon`.
+all (older tool build on another machine), update the tool: `dotnet tool update -g arasz.ai-raccoon`.
 
 ## 2. Search-first workflow
 

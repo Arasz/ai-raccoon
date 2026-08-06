@@ -3,7 +3,7 @@
 C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
-> Stacks: dotnet, mcp
+> Stacks: dotnet, mcp, python
 > Scaffolded by ai-badger 0.81.0. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Non-negotiable invariants
@@ -108,6 +108,7 @@ Before editing matching files, read the applicable scoped instruction file:
 - `documentation.instructions.md` → `.ai-badger/instructions/documentation.instructions.md`
 - `csharp.instructions.md` → `.ai-badger/instructions/csharp.instructions.md`
 - `mcp.instructions.md` → `.ai-badger/instructions/mcp.instructions.md`
+- `python.instructions.md` → `.ai-badger/instructions/python.instructions.md`
 
 ## Agent delegation
 

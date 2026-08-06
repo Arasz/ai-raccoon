@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "430111f524e91f676406b327e0ead540f3dafedc4ed2a61b70bb856e1b6e627f",
+  "configHash": "f9be434454aea870526b93fdc0e4001343577303aad47321d064daea83ebcdc7",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -102,6 +102,15 @@
       "target": ".ai-badger/instructions/mcp.instructions.md",
       "frameworkVersion": "0.81.0",
       "hash": "433631eb0c4e089ee2f2bab50a685cf06653ebc166cb3a640d9c6a455890bae4"
+    },
+    {
+      "feature": "instructions",
+      "stack": "python",
+      "name": "python.instructions",
+      "source": "features/python/instructions/python.instructions.md",
+      "target": ".ai-badger/instructions/python.instructions.md",
+      "frameworkVersion": "0.81.0",
+      "hash": "54d87946cc16b321829b32962aa2700d67a379803614dfb8a32ca72a156a0e97"
     },
     {
       "feature": "invariants",
@@ -1470,6 +1479,24 @@
       "target": ".ai-badger/skills-data/dotnet/skills.json",
       "frameworkVersion": "0.81.0",
       "hash": "559039c52618dfdfd619e96c150dc67d1acc8e0f3fb54d1b84df1b49a789b7d4"
+    },
+    {
+      "feature": "skills",
+      "stack": "python",
+      "name": "python/skills-source.json",
+      "source": "features/python/skills-source.json",
+      "target": ".ai-badger/skills-data/python/skills-source.json",
+      "frameworkVersion": "0.81.0",
+      "hash": "3329354a78d8a6b61911452d4c5bdce1441306fc2e8db441b3ed26d5cf9d544d"
+    },
+    {
+      "feature": "skills",
+      "stack": "python",
+      "name": "python/skills.json",
+      "source": "features/python/skills.json",
+      "target": ".ai-badger/skills-data/python/skills.json",
+      "frameworkVersion": "0.81.0",
+      "hash": "d9799400de3c342c036bc90548488ec66e0c436c0d8985eac9aa0515588945e2"
     }
   ]
 }

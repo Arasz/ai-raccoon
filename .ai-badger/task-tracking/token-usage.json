@@ -3769,6 +3769,455 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "check-what-is-the-interface-for-hermes-memory",
+      "subagents": [
+        {
+          "description": "code-reviewer gate: record review (APPROVE-WITH-CHANGES, 1 SHOULD-FIX + 4 NIT folded)",
+          "at": "2026-08-06T14:50:26.617433+00:00",
+          "totalTokens": 1398206,
+          "delegationId": "deleg_6c5f9a15",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 18
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_164212_bc0218",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T14:43:17.312234+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 2,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 63013,
+              "outputTokens": 2493,
+              "cacheReadTokens": 44032,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 2
+            }
+          },
+          "cumulative": {
+            "inputTokens": 63013,
+            "outputTokens": 2493,
+            "cacheReadTokens": 44032,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T14:52:30.931628+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 36,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 125374,
+              "outputTokens": 32911,
+              "cacheReadTokens": 4131328,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 38
+            }
+          },
+          "cumulative": {
+            "inputTokens": 208485,
+            "outputTokens": 55765,
+            "cacheReadTokens": 5421952,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T14:52:30.931628+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 36,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 125374,
+              "outputTokens": 32911,
+              "cacheReadTokens": 4131328,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 38
+            }
+          },
+          "cumulative": {
+            "inputTokens": 208485,
+            "outputTokens": 55765,
+            "cacheReadTokens": 5421952,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-flash": 30418
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 145472,
+        "outputTokens": 53272,
+        "cacheReadTokens": 5377920,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 1398206,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 5576664,
+        "grandTotal": 5576664
+      }
+    },
+    {
+      "taskId": "switch-from-stdio-to-http",
+      "subagents": [
+        {
+          "description": "architect: design doc docs/work/2026-08-06-http-serve-design.md",
+          "at": "2026-08-06T15:02:21.389479+00:00",
+          "totalTokens": 2348570,
+          "delegationId": "deleg_a70391c6",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 30
+        },
+        {
+          "description": "MoE lanes x3 (code-reviewer, test-engineer, dotnet-engineer)",
+          "at": "2026-08-06T15:14:32.619285+00:00",
+          "totalTokens": 6765581,
+          "delegationId": "deleg_dc444bba",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 80
+        },
+        {
+          "description": "protocol-switch research lane",
+          "at": "2026-08-06T15:14:32.661694+00:00",
+          "totalTokens": 921358,
+          "delegationId": "deleg_2d440516",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 11
+        },
+        {
+          "description": "WP1: serve verb + parser + config plumbing",
+          "at": "2026-08-06T15:23:14.392295+00:00",
+          "totalTokens": 4015196,
+          "delegationId": "deleg_031be5c1",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 41
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_164327_13b8a9",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T14:52:30.993753+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 9,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 48463,
+              "outputTokens": 12789,
+              "cacheReadTokens": 542208,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 9
+            }
+          },
+          "cumulative": {
+            "inputTokens": 48386,
+            "outputTokens": 12632,
+            "cacheReadTokens": 542080,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T14:52:30.993753+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 9,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 48463,
+              "outputTokens": 12789,
+              "cacheReadTokens": 542208,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 9
+            }
+          },
+          "cumulative": {
+            "inputTokens": 48386,
+            "outputTokens": 12632,
+            "cacheReadTokens": 542080,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 14050705,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "hermes-ai-raccoon-memory-provider",
+      "subagents": [
+        {
+          "description": "code-reviewer gate: APPROVE-WITH-CHANGES (1 MUST-FIX test isolation + 2 SHOULD-FIX + 7 NIT, all folded)",
+          "at": "2026-08-06T15:14:59.459957+00:00",
+          "totalTokens": 4325113,
+          "delegationId": "deleg_e17f4461",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 54
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_164618_7f88ae",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T14:53:23.858802+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T15:16:09.666044+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T15:16:09.666044+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 4325113,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "continue-improv",
+      "subagents": [
+        {
+          "description": "Planning lanes F3/S4/S5",
+          "at": "2026-08-06T15:32:24.781245+00:00",
+          "totalTokens": 2844946,
+          "delegationId": "deleg_35d352fe",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 44
+        },
+        {
+          "description": "Planning lane S10",
+          "at": "2026-08-06T15:32:24.850118+00:00",
+          "totalTokens": 1113196,
+          "delegationId": "deleg_c8d10909",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 17
+        },
+        {
+          "description": "MoE plan review lanes (architect/code-reviewer/test-engineer)",
+          "at": "2026-08-06T15:32:24.891845+00:00",
+          "totalTokens": 4160779,
+          "delegationId": "deleg_02e88539",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 51
+        },
+        {
+          "description": "MoE plan review lane dotnet-engineer",
+          "at": "2026-08-06T15:32:24.933692+00:00",
+          "totalTokens": 1131358,
+          "delegationId": "deleg_40d0e92f",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 15
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_163711_726807",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T14:55:26.227271+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T15:57:32.656386+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T15:57:32.656386+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 9250279,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "hermes-provider-setup-script",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_171739_6038fc",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T15:48:34.395956+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T15:57:05.903279+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T15:57:05.903279+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
+    },
+    {
+      "taskId": "hermes-provider-status-words",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_171739_6038fc",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T15:57:06.686902+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T15:57:06.686902+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
     }
   ]
 }
