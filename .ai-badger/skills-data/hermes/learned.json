@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../schemas/learned-skills.schema.json",
+  "skills": [
+    {
+      "category": "uncategorized",
+      "name": "ai-badger-project-ops",
+      "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
+      "sourcePath": "ai-badger-project-ops",
+      "status": "synced",
+      "syncedAt": "2026-08-06T09:16:04Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
+    }
+  ],
+  "version": 1
+}

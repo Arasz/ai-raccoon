@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-05T20:55:46Z",
+  "generated_at": "2026-08-06T08:53:01Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -325,8 +325,8 @@
           "tags": [
             "search"
           ],
-          "intent": "Find package version drift. Requires a loaded solution.",
-          "origin": "heuristic"
+          "intent": "Find NuGet package version drift across projects to suggest consolidation. Requires a loaded solution.",
+          "origin": "manual"
         },
         "get_project_graph": {
           "tags": [
@@ -691,180 +691,180 @@
           "tags": [
             "browser"
           ],
-          "intent": "Close the page",
-          "origin": "heuristic"
+          "intent": "Close the browser and end the browsing session.",
+          "origin": "manual"
         },
         "browser_resize": {
           "tags": [
             "browser"
           ],
-          "intent": "Resize the browser window",
-          "origin": "heuristic"
+          "intent": "Resize the browser viewport to the specified width and height.",
+          "origin": "manual"
         },
         "browser_console_messages": {
           "tags": [
             "browser"
           ],
-          "intent": "Returns all console messages",
-          "origin": "heuristic"
+          "intent": "Read the page console log and uncaught JS errors; with an expression, evaluate JavaScript in the page and return the result.",
+          "origin": "manual"
         },
         "browser_handle_dialog": {
           "tags": [
             "browser"
           ],
-          "intent": "Handle a dialog",
-          "origin": "heuristic"
+          "intent": "Inspect, accept, or dismiss a JavaScript alert/confirm/prompt dialog on the page.",
+          "origin": "manual"
         },
         "browser_evaluate": {
           "tags": [
             "browser"
           ],
-          "intent": "Evaluate JavaScript expression on page or element",
-          "origin": "heuristic"
+          "intent": "Run arbitrary JavaScript in the page context (full DOM access) and return the serialized result.",
+          "origin": "manual"
         },
         "browser_file_upload": {
           "tags": [
             "browser",
             "files"
           ],
-          "intent": "Upload one or multiple files",
-          "origin": "heuristic"
+          "intent": "Upload one or more files to a file input on the page.",
+          "origin": "manual"
         },
         "browser_drop": {
           "tags": [
             "browser"
           ],
-          "intent": "Drop files or MIME-typed data onto an element, as if dragged from outside the page. At least one of \"paths\" or \"data\" must be provided.",
-          "origin": "heuristic"
+          "intent": "Drop the dragged content onto a target element or position.",
+          "origin": "manual"
         },
         "browser_find": {
           "tags": [
             "browser",
             "search"
           ],
-          "intent": "Search the accessibility snapshot of the current page for text or a regular expression. Returns matching snapshot nodes with a few lines of surrounding context (like search snippets), each shown under",
-          "origin": "heuristic"
+          "intent": "Find and return page elements matching a selector.",
+          "origin": "manual"
         },
         "browser_fill_form": {
           "tags": [
             "browser"
           ],
-          "intent": "Fill multiple form fields",
-          "origin": "heuristic"
+          "intent": "Fill multiple form fields at once with a mapping of selector to value.",
+          "origin": "manual"
         },
         "browser_press_key": {
           "tags": [
             "browser"
           ],
-          "intent": "Press a key on the keyboard",
-          "origin": "heuristic"
+          "intent": "Press a keyboard key or combo (Enter, Tab, Escape) on the focused page.",
+          "origin": "manual"
         },
         "browser_type": {
           "tags": [
             "browser"
           ],
-          "intent": "Type text into editable element",
-          "origin": "heuristic"
+          "intent": "Type text into an input field identified by ref ID; clears the field before typing.",
+          "origin": "manual"
         },
         "browser_navigate": {
           "tags": [
             "browser",
             "navigation"
           ],
-          "intent": "Navigate to a URL",
-          "origin": "heuristic"
+          "intent": "Open a URL in the browser. Must be the first call; initializes the session and returns a compact page snapshot.",
+          "origin": "manual"
         },
         "browser_navigate_back": {
           "tags": [
             "browser",
             "navigation"
           ],
-          "intent": "Go back to the previous page in the history",
-          "origin": "heuristic"
+          "intent": "Go back one page in browser history; requires a prior navigate.",
+          "origin": "manual"
         },
         "browser_network_requests": {
           "tags": [
             "browser"
           ],
-          "intent": "Returns a numbered list of network requests since loading the page. Use browser_network_request with the number to get full details.",
-          "origin": "heuristic"
+          "intent": "List the network requests the page has made so far.",
+          "origin": "manual"
         },
         "browser_network_request": {
           "tags": [
             "browser"
           ],
-          "intent": "Returns full details (headers and body) of a single network request, or a single part if `part` is set. Use the number from browser_network_requests.",
-          "origin": "heuristic"
+          "intent": "Wait for and return a specific network request matching the given URL/method.",
+          "origin": "manual"
         },
         "browser_run_code_unsafe": {
           "tags": [
             "browser",
             "run"
           ],
-          "intent": "Run a Playwright code snippet. Unsafe: executes arbitrary JavaScript in the Playwright server process and is RCE-equivalent.",
-          "origin": "heuristic"
+          "intent": "Run arbitrary Playwright automation code in the browser context; unsafe, no sandbox.",
+          "origin": "manual"
         },
         "browser_take_screenshot": {
           "tags": [
             "browser"
           ],
-          "intent": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
-          "origin": "heuristic"
+          "intent": "Capture a screenshot of the current page for visual inspection.",
+          "origin": "manual"
         },
         "browser_snapshot": {
           "tags": [
             "browser"
           ],
-          "intent": "Capture accessibility snapshot of the current page, this is better than screenshot",
-          "origin": "heuristic"
+          "intent": "Get the page accessibility tree with numbered ref IDs (@eN) used for later clicks; full=true returns complete content.",
+          "origin": "manual"
         },
         "browser_click": {
           "tags": [
             "browser"
           ],
-          "intent": "Perform click on a web page",
-          "origin": "heuristic"
+          "intent": "Click an element identified by its snapshot ref ID (e.g. @e5). Requires a prior navigate or snapshot.",
+          "origin": "manual"
         },
         "browser_drag": {
           "tags": [
             "browser"
           ],
-          "intent": "Perform drag and drop between two elements",
-          "origin": "heuristic"
+          "intent": "Drag an element (by ref ID) to another element or screen position.",
+          "origin": "manual"
         },
         "browser_hover": {
           "tags": [
             "browser"
           ],
-          "intent": "Hover over element on page",
-          "origin": "heuristic"
+          "intent": "Move the pointer over an element (by ref ID) to trigger hover effects.",
+          "origin": "manual"
         },
         "browser_select_option": {
           "tags": [
             "browser"
           ],
-          "intent": "Select an option in a dropdown",
-          "origin": "heuristic"
+          "intent": "Select an option in a dropdown/select element by value or label.",
+          "origin": "manual"
         },
         "browser_tabs": {
           "tags": [
             "browser"
           ],
-          "intent": "List, create, close, or select a browser tab.",
-          "origin": "heuristic"
+          "intent": "Manage browser tabs: list open tabs, create, close, or switch between them.",
+          "origin": "manual"
         },
         "browser_wait_for": {
           "tags": [
             "browser"
           ],
-          "intent": "Wait for text to appear or disappear or a specified time to pass",
-          "origin": "heuristic"
+          "intent": "Wait for an element or condition to appear on the page before continuing.",
+          "origin": "manual"
         }
       }
     },
     {
       "name": "code-review-graph",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "build_or_update_graph_tool": {
           "tags": [
@@ -893,7 +893,7 @@
             "diagnostic",
             "navigation"
           ],
-          "intent": "Blast radius of editing a symbol: everything downstream that a change to it can reach.",
+          "intent": "Blast radius of editing a symbol: how far a change to it reaches.",
           "origin": "catalog"
         },
         "query_graph_tool": {
@@ -901,7 +901,7 @@
             "navigation",
             "search"
           ],
-          "intent": "Trace a known symbol's callers, callees, imports or covering tests — the structural answer a text search cannot give.",
+          "intent": "Trace a known symbol's callers, callees, imports and what covers it — the structural answer a text search cannot give.",
           "origin": "catalog"
         },
         "get_review_context_tool": {
@@ -1102,7 +1102,7 @@
     },
     {
       "name": "hermes",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "conversations_list": {
           "tags": [
@@ -1252,7 +1252,7 @@
     },
     {
       "name": "ai-raccoon",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "memory_write": {
           "tags": [
@@ -1295,8 +1295,8 @@
             "write",
             "unsafe"
           ],
-          "intent": "Delete a specific memory entry by id.",
-          "origin": "catalog"
+          "intent": "Delete a specific memory entry by id. Destructive; denied in rw access mode (needs full).",
+          "origin": "manual"
         },
         "memory_delete_context": {
           "tags": [
