@@ -51,25 +51,47 @@ public static partial class Dependencies
             services.AddSingleton(sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
-                async (path, ct) =>
-                {
-                    // Snapshot files of an encrypted bank are encrypted copies — open them
-                    // with the bank key (null = unencrypted bank, plain open).
-                    var key = sp.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase;
-                    var csb = new SqliteConnectionStringBuilder { DataSource = path };
-                    if (key is not null)
-                    {
-                        csb.Password = key;
-                    }
-
-                    var conn = new SqliteConnection(csb.ToString());
-                    await conn.OpenAsync(ct);
-                    conn.EnableExtensions();
-                    conn.LoadVector();
-                    return conn;
-                },
+                (path, ct) => OpenSnapshotWithKey(sp, path, ct),
+                (path, ct) => OpenSnapshotReadOnly(sp, path, ct),
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
+
+            static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
+            {
+                // Snapshot files of an encrypted bank are encrypted copies — open them
+                // with the bank key (null = unencrypted bank, plain open), read-write
+                // (the strip DELETE + VACUUM) and with vec0 loaded (entry triggers).
+                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, readOnly: false));
+                await conn.OpenAsync(ct);
+                conn.EnableExtensions();
+                conn.LoadVector();
+                return conn;
+            }
+
+            static async Task<SqliteConnection> OpenSnapshotReadOnly(IServiceProvider sp, string path, CancellationToken ct)
+            {
+                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, readOnly: true));
+                await conn.OpenAsync(ct);
+                conn.EnableExtensions();
+                conn.LoadVector();
+                return conn;
+            }
+
+            static string SnapshotConnectionString(IServiceProvider sp, string path, bool readOnly)
+            {
+                var key = sp.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase;
+                var csb = new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                    Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate
+                };
+                if (key is not null)
+                {
+                    csb.Password = key;
+                }
+
+                return csb.ToString();
+            }
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
             services.AddSingleton<SharedExtractionService>();

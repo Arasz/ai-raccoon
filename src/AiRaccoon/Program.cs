@@ -77,7 +77,7 @@ static void LogSqliteEngine(ILogger logger)
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT sqlite3mc_version()";
         var engineVersion = (string)cmd.ExecuteScalar()!;
-        Log.SqliteEngine(logger, raw.sqlite3_libversion().utf8_to_string(), engineVersion);
+        Log.SqliteEngineVersion(logger, raw.sqlite3_libversion().utf8_to_string(), engineVersion);
     }
     catch (SqliteException)
     {
@@ -109,6 +109,6 @@ namespace AiRaccoon
         public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, string error, Exception exception);
 
         [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "ai-raccoon: SQLite engine {LibVersion} ({EngineVersion})")]
-        public static partial void SqliteEngine(ILogger logger, string libVersion, string engineVersion);
+        public static partial void SqliteEngineVersion(ILogger logger, string libVersion, string engineVersion);
     }
 }

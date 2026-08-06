@@ -50,9 +50,19 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     private async Task RunSyncAsync(ICloudStore cloud, CancellationToken cancellationToken)
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        var sync = new SyncService(cloud, _ctx.Factory.OpenBankAsync, OpenReadOnlyAsync,
+        var sync = new SyncService(cloud, _ctx.Factory.OpenBankAsync, OpenSnapshotAsync, OpenReadOnlyAsync,
             _ctx.TimeProvider, NullLogger<SyncService>.Instance);
         await sync.MemorySyncAsync(projectId, ObjectKeyFor(projectId), cancellationToken);
+    }
+
+    /// <summary>Read-write open of the local snapshot: the workspace strip DELETEs + VACUUMs it.</summary>
+    private static async Task<SqliteConnection> OpenSnapshotAsync(string path, CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection($"Data Source={path}");
+        await connection.OpenAsync(cancellationToken);
+        connection.EnableExtensions();
+        connection.LoadVector();
+        return connection;
     }
 
     private static async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken cancellationToken)

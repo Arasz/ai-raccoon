@@ -7,15 +7,17 @@ namespace AiRaccoon.Infrastructure.Sync;
 public partial class SyncService(
     Func<CancellationToken, Task<ICloudStore>> resolveCloud,
     Func<CancellationToken, Task<SqliteConnection>> openBank,
+    Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
     ILogger<SyncService> logger)
 {
     /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
     public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
+        Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
         Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
         TimeProvider timeProvider, ILogger<SyncService> logger)
-        : this(_ => Task.FromResult(cloud), openBank, openReadOnly, timeProvider, logger)
+        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger)
     {
     }
 
@@ -58,9 +60,9 @@ public partial class SyncService(
             }
 
             // Strip workspace rows — they never leave the bank. The snapshot of an encrypted
-            // bank is itself encrypted, so it opens through openReadOnly with the bank key
-            // (and vec0, which the entry triggers need).
-            await using (var snap = await openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
+            // bank is itself encrypted, so the strip opens through openSnapshot with the bank
+            // key, read-write (DELETE + VACUUM) and vec0 loaded (the entry triggers need it).
+            await using (var snap = await openSnapshot(localSnapshot, cancellationToken).ConfigureAwait(false))
             {
                 await using var del = snap.CreateCommand();
                 del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
