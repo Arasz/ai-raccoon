@@ -10,13 +10,8 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
 @FR-MEM-1.1 @AC-1
     Rule: The MCP surface exposes the memory tools and guides on both transports
-        @ignore
-        Scenario: Tools are listed over the stdio transport
-            Given the server runs with the default stdio transport
-            When I list available tools
-            Then memory_write, memory_search, memory_list, memory_stats, memory_share are present
-            And memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard are present
-            And memory_sweep and memory_sync are present
+        # Tool listing is live in native-memory FR-NM-9 ("All 17 tools are still listed") —
+        # the stdio transport does not change the tool surface, so this duplicate is dropped.
         Scenario: The usage prompts are listed
             When I list available prompts
             Then memory-usage-guide is present
@@ -54,7 +49,6 @@ Feature: Agent memory management (ai-raccoon MCP server)
         Scenario: Duplicate content is written once
             When I write the same content twice to project "acme-web"
             Then memory_stats reports one entry
-        @ignore
         Scenario: A context restricts search
             Given content "docs note" is written with context "docs:api"
             When I search for "docs note" restricted to context "docs:api"
@@ -68,7 +62,6 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
     @FR-MEM-1.5 @FR-MEM-1.6 @FR-MEM-1.7 @AC-3
     Rule: A workspace sandbox keeps worktree writes out of committed memory
-        @ignore
         Scenario: A new workspace returns a workspace id
             When I call memory_workspace_begin for project "acme-web" with agent "agent-a"
             Then a workspace id is returned
@@ -78,13 +71,11 @@ Feature: Agent memory management (ai-raccoon MCP server)
             When I write "draft finding" to project "acme-web" with workspace "ws-1"
             Then memory_stats for project "acme-web" without workspace shows zero draft entries
             And the entry is listed by memory_workspace_status for "ws-1"
-        @ignore
         Scenario: Search spans project and workspace when the workspace is named
             Given project "acme-web" contains "committed fact"
             And workspace "ws-1" contains "draft finding"
-            When I search for "finding" in project "acme-web" with workspace "ws-1"
+            When I search for "fact finding" in project "acme-web" with workspace "ws-1"
             Then both the committed fact and the draft finding are returned
-        @ignore
         Scenario: Consolidation promotes the kept hashes and deletes the rest
             Given workspace "ws-1" for project "acme-web" contains entries with hashes "h1" and "h2"
             When I call memory_workspace_consolidate with keep=["h1"]
@@ -97,24 +88,11 @@ Feature: Agent memory management (ai-raccoon MCP server)
             Then memory_workspace_status for "ws-2" returns zero entries
             And memory_stats for project "acme-web" is unchanged
 
-    @FR-MEM-1.11 @FR-MEM-1.12 @AC-5 @ignore
-    Rule: Embedding configuration is per memory bank, local-first, remotely optional
-        Scenario: The local GGUF model is configured once and reused
-            When I call memory_configure with provider "local" and model "/models/nomic.gguf" for project "acme-web"
-            Then writes to project "acme-web" are embedded with the local engine
-        Scenario: Without a model, writes are deferred until embeddings are configured
-            Given project "acme-web" has no embedding model configured
-            When I write "pending note" to project "acme-web"
-            Then the entry is stored but indexed=false
-            And memory_stats reports one pending entry
-        Scenario: Deferred entries are embedded after configuration
-            Given project "acme-web" has one pending entry
-            When I call memory_configure with provider "local" and a model path
-            And I call memory_embed_pending
-            Then memory_stats reports zero pending entries
-            And the entry is searchable
+    # Embedding configuration is live in native-memory FR-NM-3 (pluggable embeddings: local
+    # engine, deferred writes, embed_pending) — the three FR-MEM-1.11/1.12 scenarios above
+    # were duplicates of that rule's live scenarios, so the rule is dropped here.
 
-    @FR-MEM-1.13 @FR-MEM-1.14 @AC-6 @ignore
+    @FR-MEM-1.13 @FR-MEM-1.14 @AC-6
     Rule: Extensions observe memory operations through a hook pipeline
         Scenario: Registered extensions run their hooks in order
             Given two extensions are registered
@@ -127,36 +105,27 @@ Feature: Agent memory management (ai-raccoon MCP server)
 
     @FR-MEM-1.15 @AC-7
     Rule: Degradation removes only low-rated, aged memories
-        @ignore
         Scenario: A dry run lists candidates without deleting
             Given an entry rated below threshold and older than the TTL exists
             When I call memory_sweep with dry_run=true
             Then the entry is listed as a candidate
             And memory_stats still reports the entry
-        @ignore
         Scenario: A real sweep deletes exactly the candidates
             Given an entry rated below threshold and older than the TTL exists
             And an entry rated above threshold exists
             When I call memory_sweep with dry_run=false
             Then the low-rated aged entry is deleted
             And the highly-rated entry survives
-        @ignore
         Scenario: Shared entries are protected from the sweep
             Given a shared entry rated below threshold and older than the TTL exists
             When I call memory_sweep with dry_run=false
             Then the shared entry is not deleted
 
-    @FR-MEM-1.16 @FR-MEM-1.22 @AC-8 @ignore
+    @FR-MEM-1.16 @FR-MEM-1.22 @AC-8
     Rule: Cloud sync is opt-in, carries committed bank contexts only, and is the correlation point between installs
-        Scenario: Sync without credentials errors cleanly
-            When I call memory_sync for project "acme-web" without cloud credentials
-            Then the tool errors with sync-not-configured
-        Scenario: Sync exchanges committed contexts, never workspace scratch
-            Given cloud credentials are configured
-            And workspace "ws-1" contains "private scratch"
-            When I call memory_sync for project "acme-web"
-            Then committed project and shared entries are sent and received
-            And "private scratch" is never part of the synced payload
+        # Credential errors and workspace exclusion are live in native-memory FR-NM-8
+        # ("Sync without credentials errors cleanly", "Workspace rows never leave the bank");
+        # the shared-tier payload coverage is kept below.
         Scenario: A local-only install syncs its bank to the cloud database
             Given the tool is installed in project scope with no user-scope instance
             And a shared entry exists in the local bank
