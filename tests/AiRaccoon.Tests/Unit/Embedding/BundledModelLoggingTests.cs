@@ -42,6 +42,13 @@ public sealed class BundledModelLoggingTests
     [Fact]
     public async Task EnsureAsync_WhenAssetsVerified_LogsDebug()
     {
+        if (!FindBundledModel())
+        {
+            // The bundled ONNX is gitignored — fresh checkouts (CI) never carry it, and this
+            // branch of EnsureAsync cannot run without the real SHA-pinned assets.
+            Assert.Skip("bundled ONNX model not present (gitignored; absent on CI)");
+        }
+
         var logger = new FakeLogger<BundledModel>();
         var model = new BundledModel(logger, new ThrowingHttpClientFactory());
 
@@ -53,6 +60,22 @@ public sealed class BundledModelLoggingTests
         record.Id.Id.ShouldBe(3);
         record.Level.ShouldBe(LogLevel.Debug);
         record.Message.ShouldContain("Bundled model assets verified");
+    }
+
+    /// <summary>Walks up from the test output to the repo's src/AiRaccoon/Models — the same
+    /// resolution EnsureAsync uses — and reports whether the pinned assets are present.</summary>
+    private static bool FindBundledModel()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "Models", BundledModel.ModelFileName);
+            if (File.Exists(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private sealed class ThrowingHttpClientFactory : IHttpClientFactory

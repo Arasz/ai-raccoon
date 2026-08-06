@@ -15,7 +15,7 @@ public sealed class EncryptionKeyResolver(IEncryptionState encryptionState, IRea
     public ResolvedKey Resolve()
     {
         var encryptionData = encryptionState.Read();
-        var source = encryptionData.Source == EncryptionData.NoneEncryptedSource ? "env" : encryptionData.Source;
+        var source = encryptionData.Source == EncryptionData.NoneEncryptedSource ? EnvEncryptionKeyProvider.EncryptionSource : encryptionData.Source;
         var resolvedPassphrase = providers.Where(provider => provider.IsForSource(source))
             .Select(encryptionKeyProvider => encryptionKeyProvider.GetPassphrase(encryptionData))
             .FirstOrDefault() ?? ThrowHelper.ThrowArgumentNullException<Passphrase>();

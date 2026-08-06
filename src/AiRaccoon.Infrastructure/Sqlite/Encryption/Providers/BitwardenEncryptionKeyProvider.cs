@@ -12,7 +12,9 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
 {
     private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
 
-    public string Source => "bitwarden";
+    public const string EncryptionSource = "bitwarden";
+
+    public string Source => EncryptionSource;
 
     public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 

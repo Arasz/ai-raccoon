@@ -115,9 +115,9 @@ internal static partial class ConfigCommands
             if (openError is null)
             {
                 // Current-source open succeeded → rekey to the derived key (verify-reopen inside).
-                Log.RekeyingBank(logger, "bitwarden");
+                Log.RekeyingBank(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
                 await bank.RekeyBankAsync(derived, cancellationToken);
-                Log.BankRekeyed(logger, "bitwarden");
+                Log.BankRekeyed(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
             }
             else if (await TryOpenAsync(bank, derived, cancellationToken))
             {
@@ -128,7 +128,7 @@ internal static partial class ConfigCommands
             {
                 // Amendment 1 (unset crash window): rekey-back landed but the sidecar was never
                 // deleted. The env key opens the bank → report and leave the sidecar consistent.
-                var envPassphrase = env.GetPassphrase(new EncryptionData("env")).Value;
+                var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
                 if (File.Exists(EncryptionState.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(bank, envPassphrase, cancellationToken))
                 {
@@ -144,8 +144,8 @@ internal static partial class ConfigCommands
 
         // (f) Persist: sidecar FIRST (the resolver reads it pre-open), then the settings
         // mirror — the store's opens now resolve the bitwarden key because the sidecar is set.
-        encryptionState.Write(new EncryptionData("bitwarden") { ProjectId = projectId, SecretId = secretId });
-        await store.SetSettingAsync(EncryptionSettingsKeys.Source, "bitwarden", cancellationToken);
+        encryptionState.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
+        await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
 
@@ -168,7 +168,7 @@ internal static partial class ConfigCommands
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
         var sidecar = bank is not null ? encryptionState.Read() : null;
-        if (sourceRow == "bitwarden" || sidecar?.Source == "bitwarden")
+        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || sidecar?.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
             // Settings first, sidecar fallback (crash-window self-description, plan §4).
             var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
@@ -212,9 +212,9 @@ internal static partial class ConfigCommands
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
 
                 // Rekey back to the env passphrase (current key resolves from the sidecar).
-                Log.RekeyingBank(logger, "env");
+                Log.RekeyingBank(logger, EnvEncryptionKeyProvider.EncryptionSource);
                 await bank.RekeyBankAsync(envPassphrase, cancellationToken);
-                Log.BankRekeyed(logger, "env");
+                Log.BankRekeyed(logger, EnvEncryptionKeyProvider.EncryptionSource);
                 encryptionState.Delete();
             }
             else
