@@ -69,7 +69,7 @@ public sealed class WatchTools(
             activity.RecordInvocation();
             return new WatchAddResult(projectId, path);
         }
-        catch (Exception ex) when (ex is not McpException)
+        catch (Exception ex)
         {
             activity.RecordError(ex);
             throw;
@@ -93,7 +93,7 @@ public sealed class WatchTools(
             activity.RecordInvocation();
             return new WatchStatusResult(states);
         }
-        catch (Exception ex) when (ex is not McpException)
+        catch (Exception ex)
         {
             activity.RecordError(ex);
             throw;
@@ -118,7 +118,7 @@ public sealed class WatchTools(
             activity.RecordInvocation();
             return new WatchRemoveResult(projectId, path);
         }
-        catch (Exception ex) when (ex is not McpException)
+        catch (Exception ex)
         {
             activity.RecordError(ex);
             throw;
