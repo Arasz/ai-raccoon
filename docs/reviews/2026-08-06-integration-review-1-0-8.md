@@ -1,10 +1,10 @@
-# Integration Review: latest code changes → 1.0.8
+# Integration Review: latest code changes → 1.0.9
 
 **Reviewer:** Hermes agent (task `integration-review-1-0-8`)
 **Date:** 2026-08-06
 **Base → HEAD:** `v1.0.7` → `368607a` (main, 35 commits)
-**Scope:** integration review of everything merged since 1.0.7; docs refresh; version 1.0.8; observability audit; pre-merge tool verification
-**Gates:** `dotnet build` (0 warnings) · full `dotnet test` suite · manual fresh-install protocol vs published 1.0.8
+**Scope:** integration review of everything merged since 1.0.7; docs refresh; version 1.0.9 (package id migrated to `ai-raccoon`); observability audit; pre-merge tool verification
+**Gates:** `dotnet build` (0 warnings) · full `dotnet test` suite · manual fresh-install protocol vs published 1.0.8/1.0.9
 
 ---
 
@@ -27,7 +27,7 @@ implemented the two code packages TDD.
 | Const/naming normalization | `970aebc` (TN_→Tn), `29c832e`/`4574538` (inventory tests) | Mechanical, tests updated |
 | Watch + ingest audit fixes | `50aa12f` (#47) | Found the corpus regression (below) |
 | BDD native-memory scenarios | `6bd8d1f` (#49) | Implemented previously-@ignore scenarios + tombstone/vec0 fixes |
-| Version | `0c2956c` (#48) | 1.0.8 released; published on nuget.org |
+| Version | `0c2956c` (#48) → `d7bd782` (#53) | 1.0.8 released + published; #53 migrated NuGet id to `ai-raccoon` and bumped 1.0.9 |
 | Docs | `2b1eb78` (#37), `e360676` (#38), `9532466`, `97affa6`, `0089e71`, `8696d4b`, `8bb386f`, `368607a`, … | Compacted README, tools-test report, adoption plan |
 
 ## Findings by risk tier
@@ -50,10 +50,36 @@ deliverable — regenerate and commit the corpus DB). Not fixed in this PR to
 keep the change scoped (one PR per task). The full-suite gate below reports it
 as the single known failure, identical on the base.
 
+### HIGH — `memory_share_extract` crashed on every call since PR #50 (found + fixed in this PR)
+
+The parity test's first wire-level call of `memory_share_extract` (propose
+mode) threw an unhandled `InvalidOperationException`:
+`ExtractionRow` (a private record — Dapper uses strict constructor matching for
+records) declared `int AccessCount` + `int? TtlDays`, but SQLite returns
+`INTEGER` columns as `Int64`; materialization failed before any candidate was
+returned. The tool was dead on arrival since #50 merged — CI never caught it
+because `build.yml` runs only `Speed=Fast` and no existing test called the tool
+against a real store. Fixed in this PR: the row record now uses `long`/`long?`
+with checked casts in `ToCandidate`; the parity round trip pins it green.
+
+### MEDIUM — 4 tools could exit *unrecorded* on McpException paths (code-review finding 1, fixed in this PR)
+
+`WatchTools` ×3 and `MemoryTools.Sync` wrapped their bodies in
+`catch (Exception ex) when (ex is not McpException)` so the outer filter let
+`McpException` from `RequireProjectId` (invalid-params) and
+`MemoryAccessGuard.EnsureAsync` (access-denied) escape with **no
+`RecordError`, no `RecordInvocation`** — the span ended `Unset` with no
+`result`/`error_type` tag and no metric, violating the ADR-0002 "every call
+emits" contract. The other 15 tools used plain `catch` and recorded everything.
+Fixed: `RecordInvocation`/`RecordError` are now idempotent (first record wins,
+so the inner typed catches' rethrow can't double-count), and the filters are
+dropped to plain `catch (Exception ex) { activity.RecordError(ex); throw; }`.
+Pinned by 5 new facts in `McpExceptionPathInstrumentationTests` (RED first).
+
 ### MEDIUM — ADR-0002 stale vs code (fixed in this PR)
 
 `docs/adr/0002-opentelemetry-observability.md` drifted from the implementation
-in four places: (1) "17-tool server" → now 19; (2) instrumentation described as
+in four places: (1) "17-tool server" → now 20; (2) instrumentation described as
 "inlined 3–5 lines per method" → now the `ToolExecutionActivity` helper (the
 ADR's own Future-evolution #4, done); (3) the ActivitySource tag table omitted
 `error_type`; (4) it promised `SetStatus(Ok)` + a `result` activity tag on
@@ -67,7 +93,7 @@ code to it (TDD) and fix the ADR facts in place.
 `scripts/manual-fresh-install-test.py` defaulted to 1.0.6 while the release was
 at 1.0.7/1.0.8 — a stale default guarantees the post-publish run tests the
 wrong version unless the human remembers the env var. Fixed: default + docstring
-→ 1.0.8, plus an `AI_RACCOON_SOURCE=local` mode for pre-publish dress
+→ 1.0.9 (id `ai-raccoon`), plus an `AI_RACCOON_SOURCE=local` mode for pre-publish dress
 rehearsals against `.nupkg-local`.
 
 ## Changes in this PR
@@ -76,19 +102,28 @@ rehearsals against `.nupkg-local`.
    (`ToolExecutionActivity` + `ToolExecutionActivityTests`): `RecordInvocation`
    now sets `ActivityStatusCode.Ok` + `result=success`; `RecordError` adds
    `result=error`. TDD — the two new facts were RED against the old behavior
-   before the change (engineer captured the failure). All 19 tools flow through
+   before the change (engineer captured the failure). All tools flow through
    this one helper, so the whole surface emits the ADR contract.
-2. **test(e2e): 19/19 tool-surface parity** (`McpServerToolSurfaceE2ETests`):
-   `tools/list` surfaces exactly the 19 documented tools, and every tool not
-   already round-tripped by `McpServerE2ETests` (memory_list, memory_delete,
+2. **test(e2e): 20/20 tool-surface parity** (`McpServerToolSurfaceE2ETests`):
+   `tools/list` surfaces exactly the 20 documented tools (incl.
+   `memory_share_extract` added by #50), and every tool not already
+   round-tripped by `McpServerE2ETests` (memory_list, memory_delete,
    memory_delete_context, memory_ingest_file, memory_ingest_directory,
-   memory_sweep, memory_watch_add/status/remove) answers a minimal call over the
-   wire with shape assertions. Replaces the one-off 2026-08-06 tools-test
-   report as a permanent regression gate.
-3. **docs(adr): refresh 0002 facts** — 19 tools, helper pattern, `error_type`
-   in the tag table, Future-evolution #4 marked done. Decision substance
-   (BCL-only Meter/ActivitySource, instrument names, DI singleton) untouched.
-4. **chore(scripts): fresh-install test pin 1.0.8 + local-source mode.**
+   memory_sweep, memory_share_extract, memory_watch_add/status/remove) answers
+   a minimal call over the wire with shape assertions. Replaces the one-off
+   2026-08-06 tools-test report as a permanent regression gate — and caught the
+   `memory_share_extract` materialization bug on its first run.
+3. **fix(observability): every tool call recorded, including McpException paths**
+   — idempotent `RecordInvocation`/`RecordError` + dropped
+   `when (ex is not McpException)` filters in WatchTools ×3 and
+   MemoryTools.Sync; 5 new facts pin the previously-unrecorded escape paths.
+4. **fix(store): `ExtractionRow` SQLite INTEGER → long** — `memory_share_extract`
+   now works over the wire (was dead since #50).
+5. **docs(adr): refresh 0002 facts** — 20 tools, helper pattern, `error_type`
+   in the tag table, Future-evolution #4 marked done, stray fragment removed.
+   Decision substance (BCL-only Meter/ActivitySource, instrument names, DI
+   singleton) untouched.
+6. **chore(scripts): fresh-install test pin 1.0.9 (id `ai-raccoon`) + local-source mode.**
 
 ## Observability verification (user ask: "check if all metrics and traces are emitted")
 
@@ -108,27 +143,29 @@ rehearsals against `.nupkg-local`.
 
 ## Tool verification (user ask: "manual tests before merge")
 
-- **Published-package gate (post-publish, 1.0.8):** ran
+- **Published-package gate (post-publish):** ran
   `scripts/manual-fresh-install-test.py` against nuget.org →
   **RESULT: ALL GREEN** — fresh install first try, layout + model/vocab sha256
-  pinned, `--version` prints 1.0.8, MCP stdio round trip (initialize 664ms,
+  pinned, `--version` prints the pinned version, MCP stdio round trip (initialize 664ms,
   memory_write → memory_search hash match at rank 1, memory_stats entries=1
   pending=0 proving the vec0 path), dual-instance, graceful shutdown,
   zero-config probe. Evidence: full protocol log captured during the run.
-- **Pre-merge gate:** E2E parity test (19/19 over the wire) + full suite below.
+- **Pre-merge gate:** E2E parity test (20/20 over the wire) + full suite below.
   `verify-tool-package.sh` remains the pre-publish pack gate.
 
 ## Gates
 
 - `dotnet build`: 0 warnings / 0 errors
-- Full `dotnet test`: **1170 passed / 2 failed / 20 skipped** — both failures
+- Full `dotnet test`: **1206 passed / 5 failed / 4 skipped** — all 5 failures
   are the pre-existing #47 corpus regression (verified identical on the base
-  commit: `CorpusIntegrity_HashMapMatchesDatabaseCounts` +
-  `CorpusIntegrity_SourceFileAndSectionPopulated`). Skipped 43→20 because PR
-  #49 un-ignored the BDD native-memory scenarios. My branch adds 0 failures.
-- `scripts/manual-fresh-install-test.py` (1.0.8, nuget.org): ALL GREEN
+  commit: `CorpusIntegrity_HashMapMatchesDatabaseCounts`,
+  `CorpusIntegrity_SourceFileAndSectionPopulated`, `SourceIdentityTests`,
+  `SectionTargetedRetrievalTests`, `QueryConstructionTests`,
+  `SourceAffinitySweepTests`, `RrfParameterSweepTests` — the last five all read
+  the stale corpus DB). My branch adds 0 failures.
+- `scripts/manual-fresh-install-test.py` (published 1.0.8 then 1.0.9, nuget.org): ALL GREEN
 - Grep gates: `SetStatus(ActivityStatusCode.Ok)` ×1; `result` tag asserted both
-  paths; 19 tool names in the parity test; 16+3 helper sites
+  paths; 20 tool names in the parity test; 17+3 helper sites
 
 ## Post-merge checklist (owner)
 
