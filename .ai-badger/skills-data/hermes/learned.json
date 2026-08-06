@@ -99,6 +99,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T11:21:35Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
+    },
+    {
+      "category": "uncategorized",
+      "name": "nuget-publishing",
+      "sourceHash": "df0463a900024bb1f1527e902891fd24e792da45ff53d0a9cc1622cf6f96466d",
+      "sourcePath": "devops/nuget-publishing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:51:21Z",
+      "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
     }
   ],
   "version": 1
