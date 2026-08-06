@@ -34,6 +34,14 @@
         "timeoutSec": 10,
         "matcher": "memory_search"
       }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "grep|rg|Glob|bash"
+      }
     ]
   }
 }
