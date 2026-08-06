@@ -901,11 +901,12 @@
           "branch": "task/fix-unit-test",
           "risk": false,
           "startedAt": "2026-08-06T18:27:23.683803+00:00",
-          "finishedAt": null,
-          "state": "STARTED",
+          "finishedAt": "2026-08-06T19:00:13.739458+00:00",
+          "state": "FINISHED",
           "trackingSource": "hermes",
           "resumeCommand": "hermes --resume 20260806_200618_3e0adc",
-          "resumeAttempts": []
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
     }
   ]
 }
