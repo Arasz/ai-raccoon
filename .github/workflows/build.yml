@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-fast:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
