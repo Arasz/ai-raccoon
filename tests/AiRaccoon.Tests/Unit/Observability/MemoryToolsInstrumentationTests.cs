@@ -36,7 +36,7 @@ public class MemoryToolsInstrumentationTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = a => startedActivities.Add(a),
             ActivityStopped = _ => { }
         };
@@ -89,7 +89,7 @@ public class MemoryToolsInstrumentationTests
         var tools = CreateTools(store, metrics);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            tools.Sync("acme", cancellationToken: TestContext.Current.CancellationToken));
+            tools.Sync("acme", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("sync-not-configured");
 
@@ -126,7 +126,7 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = CreateTools(store, metrics);
 
-        await tools.Stats("acme", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Stats("acme", TestContext.Current.CancellationToken);
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);

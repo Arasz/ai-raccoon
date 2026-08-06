@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
@@ -47,8 +46,6 @@ public sealed class MemoryTools(
     private const string TnMemorySweep = "memory_sweep";
     private const string TnMemorySync = "memory_sync";
 
-    private const string ToolActivityTag = "tool";
-    private const string ProjectIdActivityTag = "project_id";
     private static readonly SearchQuery.Validator SearchQueryValidator = new();
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
 
@@ -85,10 +82,7 @@ public sealed class MemoryTools(
         string? section = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryWrite);
-        activity?.SetTag(ToolActivityTag, TnMemoryWrite);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryWrite, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -99,13 +93,12 @@ public sealed class MemoryTools(
 
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
-            observability.RecordInvocation(TnMemoryWrite, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryWrite, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -134,10 +127,7 @@ public sealed class MemoryTools(
         string? contextLabel = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemorySearch);
-        activity?.SetTag(ToolActivityTag, TnMemorySearch);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemorySearch, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -158,13 +148,12 @@ public sealed class MemoryTools(
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
-            observability.RecordInvocation(TnMemorySearch, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemorySearch, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -198,23 +187,19 @@ public sealed class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryStats);
-        activity?.SetTag(ToolActivityTag, TnMemoryStats);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryStats, projectId);
         try
         {
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
             var stats = await store.GetStatsAsync(projectId, cancellationToken);
             var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
-            observability.RecordInvocation(TnMemoryStats, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryStats, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -228,10 +213,7 @@ public sealed class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryShare);
-        activity?.SetTag(ToolActivityTag, TnMemoryShare);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryShare, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -240,13 +222,12 @@ public sealed class MemoryTools(
 
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
-            observability.RecordInvocation(TnMemoryShare, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryShare, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -259,10 +240,7 @@ public sealed class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryDelete);
-        activity?.SetTag(ToolActivityTag, TnMemoryDelete);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryDelete, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -271,13 +249,12 @@ public sealed class MemoryTools(
 
             var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
             var result = new DeletedResult(deleted ? 1 : 0);
-            observability.RecordInvocation(TnMemoryDelete, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryDelete, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -290,10 +267,7 @@ public sealed class MemoryTools(
         string context,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryDeleteContext);
-        activity?.SetTag(ToolActivityTag, TnMemoryDeleteContext);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryDeleteContext, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -302,13 +276,12 @@ public sealed class MemoryTools(
 
             var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
             var result = new DeletedContextResult(deleted);
-            observability.RecordInvocation(TnMemoryDeleteContext, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryDeleteContext, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -323,10 +296,7 @@ public sealed class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestFile);
-        activity?.SetTag(ToolActivityTag, TnMemoryIngestFile);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryIngestFile, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -335,13 +305,12 @@ public sealed class MemoryTools(
 
             var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
             var result = new IngestResult(indexed);
-            observability.RecordInvocation(TnMemoryIngestFile, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryIngestFile, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -356,10 +325,7 @@ public sealed class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestDirectory);
-        activity?.SetTag(ToolActivityTag, TnMemoryIngestDirectory);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryIngestDirectory, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -368,13 +334,12 @@ public sealed class MemoryTools(
 
             var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
             var result = new ScannedResult(scanned);
-            observability.RecordInvocation(TnMemoryIngestDirectory, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryIngestDirectory, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -388,10 +353,7 @@ public sealed class MemoryTools(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryEmbedPending);
-        activity?.SetTag(ToolActivityTag, TnMemoryEmbedPending);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryEmbedPending, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -399,13 +361,12 @@ public sealed class MemoryTools(
 
             var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
             var embedResult = new EmbedResult(result.Processed, result.Pending);
-            observability.RecordInvocation(TnMemoryEmbedPending, sw.Elapsed, false);
+            activity.RecordInvocation();
             return embedResult;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryEmbedPending, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -421,10 +382,7 @@ public sealed class MemoryTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceBegin);
-        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceBegin);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceBegin, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -432,13 +390,12 @@ public sealed class MemoryTools(
 
             var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
             var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
-            observability.RecordInvocation(TnMemoryWorkspaceBegin, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryWorkspaceBegin, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -450,10 +407,7 @@ public sealed class MemoryTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceStatus);
-        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceStatus);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceStatus, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -462,13 +416,12 @@ public sealed class MemoryTools(
 
             var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
             var result = new WorkspaceStatusResult(entries, entries.Count);
-            observability.RecordInvocation(TnMemoryWorkspaceStatus, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryWorkspaceStatus, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -483,10 +436,7 @@ public sealed class MemoryTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceConsolidate);
-        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceConsolidate);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceConsolidate, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -496,13 +446,12 @@ public sealed class MemoryTools(
 
             var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
             var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
-            observability.RecordInvocation(TnMemoryWorkspaceConsolidate, sw.Elapsed, false);
+            activity.RecordInvocation();
             return toolResult;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryWorkspaceConsolidate, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -514,10 +463,7 @@ public sealed class MemoryTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceDiscard);
-        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceDiscard);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceDiscard, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -526,13 +472,12 @@ public sealed class MemoryTools(
 
             var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
             var result = new WorkspaceDiscardResult(discarded);
-            observability.RecordInvocation(TnMemoryWorkspaceDiscard, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryWorkspaceDiscard, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -546,10 +491,7 @@ public sealed class MemoryTools(
         bool dryRun = true,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemorySweep);
-        activity?.SetTag(ToolActivityTag, TnMemorySweep);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemorySweep, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -558,13 +500,12 @@ public sealed class MemoryTools(
             var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
             var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
-            observability.RecordInvocation(TnMemorySweep, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemorySweep, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -579,10 +520,7 @@ public sealed class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemorySync);
-        activity?.SetTag(ToolActivityTag, TnMemorySync);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemorySync, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -593,8 +531,7 @@ public sealed class MemoryTools(
             {
                 var notConfigured = new McpException(
                     "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
-                activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(McpException));
+                activity.RecordError(notConfigured);
                 throw notConfigured;
             }
 
@@ -603,45 +540,35 @@ public sealed class MemoryTools(
             {
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
                 var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, false);
+                activity.RecordInvocation();
                 return syncResult;
             }
             catch (SyncNotConfiguredException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(SyncNotConfiguredException));
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncNotConfiguredException));
+                activity.RecordError(ex);
                 throw new McpException(
                     "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
             }
             catch (SyncAuthFailedException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(SyncAuthFailedException));
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncAuthFailedException));
+                activity.RecordError(ex);
                 throw new McpException(
                     "sync-auth-failed: run 'az login' (azure --cli) or 'aws configure' / 'aws sso login' (s3 --cli), or verify the keys with 'ai-raccoon sync show'");
             }
             catch (SyncConflictException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(SyncConflictException));
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncConflictException));
+                activity.RecordError(ex);
                 throw new McpException(
                     "sync-conflict: remote changed during merge — retry the sync");
             }
             catch (SyncNetworkException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(SyncNetworkException));
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncNetworkException));
+                activity.RecordError(ex);
                 throw new McpException($"sync-network: {ex.Message}");
             }
             catch (SyncCorruptFileException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(SyncCorruptFileException));
-                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncCorruptFileException));
+                activity.RecordError(ex);
                 throw new McpException($"sync-corrupt-file: {ex.Message}");
             }
         }
@@ -652,8 +579,7 @@ public sealed class MemoryTools(
                                    && ex is not SyncCorruptFileException
                                    && ex is not McpException)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -705,42 +631,4 @@ public sealed class MemoryTools(
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SyncToolResult(int Sent, int Received, int Reindexed);
-
-    private sealed record ToolExecutionActivity : IDisposable
-    {
-        private const string ToolActivityTag = "tool";
-        private const string ProjectIdActivityTag = "project_id";
-
-        private readonly Activity? _activity;
-        private readonly ToolCallMetrics _metrics;
-        private readonly Stopwatch _stopwatch;
-        private readonly string _toolName;
-
-        public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId)
-        {
-            _metrics = metrics;
-            _toolName = toolName;
-            _activity = metrics.ActivitySource.StartActivity(toolName);
-            _activity?.SetTag(ToolActivityTag, toolName);
-            _activity?.SetTag(ProjectIdActivityTag, projectId);
-            _stopwatch = Stopwatch.StartNew();
-        }
-
-        public TimeSpan Elapsed => _stopwatch.Elapsed;
-
-        public void Dispose()
-        {
-            _activity?.Dispose();
-            _stopwatch.Stop();
-            _stopwatch.Reset();
-        }
-
-        public void RecordInvocation() => _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, false);
-
-        public void RecordError(Exception exception)
-        {
-            _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
-            _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, true, exception.GetType().Name);
-        }
-    }
 }

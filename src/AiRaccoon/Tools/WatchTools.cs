@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
@@ -41,10 +40,7 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnWatchAdd);
-        activity?.SetTag("tool", TnWatchAdd);
-        activity?.SetTag("project_id", projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnWatchAdd, projectId);
         try
         {
             RequireProjectId(projectId);
@@ -56,33 +52,26 @@ public sealed class WatchTools(
             }
             catch (WatchDisabledException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(WatchDisabledException));
-                observability.RecordInvocation(TnWatchAdd, sw.Elapsed, true, nameof(WatchDisabledException));
+                activity.RecordError(ex);
                 throw new McpException($"watching-disabled: {ex.Message}");
             }
             catch (PathOutsideScopeException ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(PathOutsideScopeException));
-                observability.RecordInvocation(TnWatchAdd, sw.Elapsed, true, nameof(PathOutsideScopeException));
+                activity.RecordError(ex);
                 throw new McpException($"path-outside-scope: {ex.Message}");
             }
             catch (PathNotFound ex)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag("error_type", nameof(PathNotFound));
-                observability.RecordInvocation(TnWatchAdd, sw.Elapsed, true, nameof(PathNotFound));
+                activity.RecordError(ex);
                 throw new McpException($"path-not-found: {ex.Message}");
             }
 
-            observability.RecordInvocation(TnWatchAdd, sw.Elapsed, false);
+            activity.RecordInvocation();
             return new WatchAddResult(projectId, path);
         }
         catch (Exception ex) when (ex is not McpException)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnWatchAdd, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -94,23 +83,19 @@ public sealed class WatchTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnWatchStatus);
-        activity?.SetTag("tool", TnWatchStatus);
-        activity?.SetTag("project_id", projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnWatchStatus, projectId);
         try
         {
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
             var states = await watch.StatusAsync(projectId, cancellationToken);
-            observability.RecordInvocation(TnWatchStatus, sw.Elapsed, false);
+            activity.RecordInvocation();
             return new WatchStatusResult(states);
         }
         catch (Exception ex) when (ex is not McpException)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnWatchStatus, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -123,23 +108,19 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnWatchRemove);
-        activity?.SetTag("tool", TnWatchRemove);
-        activity?.SetTag("project_id", projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnWatchRemove, projectId);
         try
         {
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
             await watch.RemoveAsync(projectId, path, cancellationToken);
-            observability.RecordInvocation(TnWatchRemove, sw.Elapsed, false);
+            activity.RecordInvocation();
             return new WatchRemoveResult(projectId, path);
         }
         catch (Exception ex) when (ex is not McpException)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnWatchRemove, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }

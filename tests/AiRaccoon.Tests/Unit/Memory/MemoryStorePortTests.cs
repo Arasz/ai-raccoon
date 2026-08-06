@@ -94,7 +94,7 @@ public class MemoryStorePortTests
         var metadata = await store.GetMetadataAsync("acme", "h1", TestContext.Current.CancellationToken);
 
         metadata.ShouldNotBeNull();
-        metadata!.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
+        metadata.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
     }
 
     [Fact]
@@ -213,6 +213,7 @@ public class MemoryStorePortTests
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
