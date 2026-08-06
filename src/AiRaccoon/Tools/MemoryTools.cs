@@ -175,23 +175,19 @@ public sealed class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TnMemoryList);
-        activity?.SetTag(ToolActivityTag, TnMemoryList);
-        activity?.SetTag(ProjectIdActivityTag, projectId);
-        var sw = Stopwatch.StartNew();
+        using var activity = new ToolExecutionActivity(observability, TnMemoryList, projectId);
         try
         {
             RequireProjectId(projectId);
             await RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
             var files = await store.ListFilesAsync(projectId, cancellationToken);
             var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
-            observability.RecordInvocation(TnMemoryList, sw.Elapsed, false);
+            activity.RecordInvocation();
             return result;
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TnMemoryList, sw.Elapsed, true, ex.GetType().Name);
+            activity.RecordError(ex);
             throw;
         }
     }
@@ -709,4 +705,42 @@ public sealed class MemoryTools(
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SyncToolResult(int Sent, int Received, int Reindexed);
+
+    private sealed record ToolExecutionActivity : IDisposable
+    {
+        private const string ToolActivityTag = "tool";
+        private const string ProjectIdActivityTag = "project_id";
+
+        private readonly Activity? _activity;
+        private readonly ToolCallMetrics _metrics;
+        private readonly Stopwatch _stopwatch;
+        private readonly string _toolName;
+
+        public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId)
+        {
+            _metrics = metrics;
+            _toolName = toolName;
+            _activity = metrics.ActivitySource.StartActivity(toolName);
+            _activity?.SetTag(ToolActivityTag, toolName);
+            _activity?.SetTag(ProjectIdActivityTag, projectId);
+            _stopwatch = Stopwatch.StartNew();
+        }
+
+        public TimeSpan Elapsed => _stopwatch.Elapsed;
+
+        public void Dispose()
+        {
+            _activity?.Dispose();
+            _stopwatch.Stop();
+            _stopwatch.Reset();
+        }
+
+        public void RecordInvocation() => _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, false);
+
+        public void RecordError(Exception exception)
+        {
+            _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, true, exception.GetType().Name);
+        }
+    }
 }
