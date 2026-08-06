@@ -50,6 +50,7 @@ internal static partial class McpServerSetup
             .AddMcpServer()
             .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging)
             .WithTools<MemoryTools>()
+            .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
         return builder.Build();
     }
@@ -93,6 +94,7 @@ internal static partial class McpServerSetup
                 .AddMcpServer()
                 .ConfigureMcpTransport(transports, webApplicationBuilder.Logging)
                 .WithTools<MemoryTools>()
+                .WithTools<WatchTools>()
                 .WithPrompts<MemoryPrompts>();
     }
 
