@@ -101,6 +101,18 @@ Real P5 finds: an exclusion glob that only matched literally (`.remember/
 today-*.md` — no fnmatch branch ever fired) and an ADR preamble chunk whose
 content repeats the H1. Both pinned as-is in tests and flagged in the report.
 
+Real P6 finds (benchmark corpus split): parameterized-collector fixtures
+must replicate the FULL config shape — `collect_docs` indexes every repo key
+(`repos["badger"]`, `repos["home"]`) and `os.listdir`s `docs/adr`
+unconditionally, so a "minimal" single-repo fixture crashes (KeyError /
+FileNotFoundError) even when the behavior under test is the short-doc skip.
+Also pinned: topic keywords are substring matches ("consistently" contains
+"ci" → ci-cost topic) and `strip_md` has no fence branch (the inline-code
+regex eats fences by accident). P6's byte-identity proof used a NO-TOUCH
+smoke (module-global OUT redirected to tmp, diff legacy-vs-new) because
+regeneration of the tracked corpus was forbidden — recipe in
+`references/behavior-pinning-derivation.md`.
+
 Importing the legacy module for derivation needs `sys.modules[spec.name] = m`
 BEFORE `spec.loader.exec_module(m)` — otherwise dataclasses with `from
 __future__ import annotations` crash with `AttributeError: 'NoneType' object
@@ -108,6 +120,38 @@ has no attribute '__dict__'`.
 
 Full recipe, importlib fix, split-adjustment checklist, and the golden-artifact
 smoke compare: `references/behavior-pinning-derivation.md`.
+
+## Step 4c — Shell→Python ports: byte-identical output discipline
+
+For converted scripts whose gates are "same messages, same exit codes"
+(verify-tool-package.sh → src/package_verify.py pattern):
+
+- Split streams exactly: FAIL lines go to stderr (`>&2`), present/verified/OK
+  lines to stdout; capsys tests assert each stream separately.
+- Preserve print-before-fail ordering: a .sh loop that prints
+  "present in package: X" for each entry BEFORE failing on the first missing
+  one must stay a loop — compute the missing set, then iterate entries in
+  order printing present-or-FAIL. Failing on the first item of the missing
+  list changes output order.
+- `set -e` propagates the child's exit code; Python should
+  `subprocess.run(..., check=True)` with `except CalledProcessError: return
+  exc.returncode` — not hardcode 1.
+- Testability split for fallback chains (dotnet --info then uname mapping):
+  the subprocess lives behind a tiny adapter (`_dotnet_rid()` returning None
+  on any failure), pure logic separate (`rid_from_uname(system, machine)`).
+  Tests monkeypatch the adapter, parametrize the table — no real subprocess
+  in unit tests.
+- SHA-pin comparisons can't be unit-tested green: no fake content hashes to a
+  fixed pin (preimage). Honest coverage = hash fn vs `hashlib` reference on
+  known content, the MISMATCH branch asserting the pin text in the message,
+  the pin constant in the bundle-contract test, and the green path proven by
+  a real end-to-end smoke (pitfall below).
+- Report behavior deltas in the handoff even when exit codes match (e.g.
+  missing `<PackageVersion>` now fails earlier with a clearer message;
+  tempfile default dir ≠ `${TMPDIR:-/tmp}`).
+
+Worked example with message/exit table and smoke recipe:
+`references/shell-to-python-port-checklist.md`.
 
 ## Step 5 — Reference-update checklist (after conversions)
 
@@ -166,3 +210,18 @@ behaves like the original.
   (P5's HASH_MAP_PATH would otherwise have landed in scripts/src/).
 - Run the pytest gate on both the dev python and the oldest supported
   system python — proves the syntax-compat claim instead of asserting it.
+- PATH binaries may be shadowed by an UNDELIBERATE test-harness shim (echoes
+  args, exits 0, emits nothing on stdout) — `which dotnet` lied while the
+  real SDK sat at /opt/homebrew/bin. For a full-green smoke, verify the
+  binary is real (`dotnet --info | grep RID`), then run with
+  `PATH=/real/bin:$PATH`. (Step 6b's harness builds shims on purpose; this is
+  the inverse: bypassing an ambient shim to reach the real tool.)
+- Full-green smokes may need gitignored inputs (a 23 MB model): `git
+  check-ignore` first (confirms provisioning is tree-safe), fetch via the
+  repo's own download script — turns a "usage path" gate into a real proof
+  (green OK, exit 0) without dirtying the tree, and double-smokes the P1
+  download script.
+- Other lanes' files can appear in the shared worktree MID-SESSION (P6/P7
+  landed while P2 ran; `git status` was clean at start). Leave them
+  untouched, list them in the report so the parent can reconcile — never
+  `git add -A` over them.

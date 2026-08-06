@@ -46,7 +46,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
     /// <summary>The pre-sweep default point (measured baseline: ADR nDCG@5 0.722).</summary>
     private static readonly SweepPoint CurrentDefaults =
-        new(60, 1, 1, 0.0, CandidateWindowMode.Max3X100);
+        new(60, 1, 1);
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
@@ -308,11 +308,11 @@ public sealed class RrfParameterSweepTests : IDisposable
             }
 
             var hybrid = await SearchAsync(query.Query, new SweepPoint(
-                ChosenK, ChosenFtsWeight, ChosenVectorWeight, ChosenMinScore, ChosenWindow), cancellationToken);
+                ChosenK, ChosenFtsWeight, ChosenVectorWeight), cancellationToken);
             var fts = await SearchAsync(query.Query, new SweepPoint(
-                ChosenK, 1, 0, 0.0, ChosenWindow), cancellationToken);
+                ChosenK, 1, 0), cancellationToken);
             var vector = await SearchAsync(query.Query, new SweepPoint(
-                ChosenK, 0, 1, 0.0, ChosenWindow), cancellationToken);
+                ChosenK, 0, 1), cancellationToken);
 
             var fileSet = _fileHashes[FileKey(query.ExpectedSource)];
             rows.Add(new FusionRow(

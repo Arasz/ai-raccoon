@@ -9,7 +9,7 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class EncryptionStateTests : IDisposable
 {
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot();
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 

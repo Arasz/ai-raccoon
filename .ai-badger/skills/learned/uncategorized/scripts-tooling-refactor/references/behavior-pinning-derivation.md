@@ -87,6 +87,65 @@ enumerate + classify + chunk + hash over the real tree. If it mismatches:
 investigate and report — don't auto-fail, don't silently rewrite the golden.
 Restore the committed file if the smoke modified it.
 
+## No-touch smoke (when regeneration is forbidden)
+
+Some packages forbid regenerating tracked artifacts (P6 benchmark corpus:
+"regeneration stays a deliberate owner act"). Prove byte-identity anyway by
+redirecting the module-global output constant to tmp dirs and diffing
+legacy-vs-new — no tracked file is ever written:
+
+```python
+# 1. LEGACY run — even after the working-tree file was rewritten:
+text = subprocess.run(["git", "-C", WT, "show",
+    "HEAD:scripts/generate-benchmark-corpus.py"], capture_output=True,
+    check=True, text=True).stdout
+ns = {"__name__": "smoke_legacy", "__file__": "smoke_legacy.py"}
+exec(compile(text, "smoke_legacy.py", "exec"), ns)
+ns["OUT"] = tmp1                    # patch the module global BEFORE calling;
+                                    # functions read globals at call time
+docs = ns["collect_docs"](); ns["emit_cs"](docs, ns["build_queries"](docs))
+
+# 2. NEW wrapper run — importlib exec_module executes the wrapper's
+#    sys.path.insert + imports exactly like a real invocation (faithful
+#    subprocess-free smoke of main()):
+import benchmark_corpus as bc      # the NEW src module
+bc.OUT = tmp2                      # wrapper's `from benchmark_corpus import
+                                   # emit_cs` binds the same function object,
+                                   # which reads OUT from ITS module
+spec = importlib.util.spec_from_file_location("gbc", "scripts/generate-benchmark-corpus.py")
+wm = importlib.util.module_from_spec(spec); sys.modules[spec.name] = wm
+spec.loader.exec_module(wm); wm.main()
+
+# 3. diff -r tmp1 tmp2 → byte-identical is the parity proof. Then diff tmp2
+#    against the committed artifacts for DRIFT REPORTING only: source repos
+#    evolve, so committed != current is expected and NOT refactor-caused
+#    when legacy == new. Report the drift delta, leave regeneration to the
+#    owner.
+```
+
+Requires a clean-ish baseline: snapshot `git status --short` FIRST — HEAD is
+only the pre-change script if the tree was clean at start (or if the change
+is uncommitted, which also works: HEAD still holds the original).
+
+## P6 finds (benchmark corpus)
+
+- Substring keyword matching: topic labels match on plain `in` substring
+  checks over lowercased title+body — "consistently" contains "ci", so an
+  ADR about naming gets the ci-cost topic. Substring noise is expected; pin
+  it, don't "fix" it.
+- `strip_md` has NO fence branch: "```\ncode block\n```" → "code block" via
+  the inline-code regex eating both backtick pairs (trace: pair 1 matches
+  empty group, pair 2 captures the interior, pair 3 matches empty).
+- `body_excerpt` truncation can cut mid-word at MAX_BODY_CHARS (appends
+  sentences until >= cap, then slices).
+
+## Expected-artifact transcription
+
+Emitted C# contains `"""` (raw-literal delimiters) and backslashes, which
+break raw triple-quoted Python literals. Store expected content as a list of
+lines joined with `"\n"` (mirrors the emit code's own structure; escapes are
+predictable, and the line list reads as the file structure).
+
 ## Version-safety gate
 
 Run the pytest gate on BOTH the dev python and the oldest supported system

@@ -310,6 +310,5 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldNotBeEmpty();
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("ai-raccoon-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot();
 }

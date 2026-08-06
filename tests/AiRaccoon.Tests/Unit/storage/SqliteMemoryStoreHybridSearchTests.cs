@@ -204,13 +204,12 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             .ShouldBeEmpty();
 
         (await _store.SearchAsync(
-                new SearchQuery("acme", "container", SearchScope.All),
+                new SearchQuery("acme", "container"),
                 TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldBe([entry.Hash]);
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("airaccoon-store-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class StubChunker : IChunker
     {

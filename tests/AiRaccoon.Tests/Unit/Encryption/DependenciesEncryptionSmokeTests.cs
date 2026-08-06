@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
+using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -21,12 +22,12 @@ public sealed class DependenciesEncryptionSmokeTests
     [Fact]
     public void RegisterMemoryServices_WiresEncryptionProviderFamily()
     {
-        var tempRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+        var tempRoot = TestData.CreateTempRoot();
         try
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User });
+            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
 
             using var provider = services.BuildServiceProvider();
 
@@ -34,8 +35,6 @@ public sealed class DependenciesEncryptionSmokeTests
             provider.GetServices<IEncryptionKeyProvider>().Count().ShouldBe(3);
             provider.GetRequiredService<ICliSecretManager>().ShouldNotBeNull();
             provider.GetRequiredService<SqliteConnectionFactory>().ShouldNotBeNull();
-            // BundledModel resolves an IHttpClientFactory — without the registration the
-            // server boot fails with "Unable to resolve service for IHttpClientFactory".
             provider.GetRequiredService<IHttpClientFactory>().ShouldNotBeNull();
         }
         finally
@@ -47,7 +46,7 @@ public sealed class DependenciesEncryptionSmokeTests
     [Fact]
     public void RegisterMemoryServices_ResolverReadsEnvPassphraseWhenNoSidecar()
     {
-        var tempRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+        var tempRoot = TestData.CreateTempRoot();
         TestData.EnvVarGate.Wait(TestContext.Current.CancellationToken);
         try
         {
@@ -57,7 +56,7 @@ public sealed class DependenciesEncryptionSmokeTests
                 Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, "smoke-pass");
                 var services = new ServiceCollection();
                 services.AddLogging();
-                services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User });
+                services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
 
                 using var provider = services.BuildServiceProvider();
 

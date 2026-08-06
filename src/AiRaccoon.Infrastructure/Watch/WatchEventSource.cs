@@ -16,15 +16,15 @@ public sealed partial class WatchEventSource(
     Action<WatchEventError> onError,
     ILogger<WatchEventSource> logger) : IDisposable
 {
-    private readonly object _gate = new();
-
-    private readonly Dictionary<(string ProjectId, string Path), FileSystemWatcher> _watchers =
-        new(WatchKeyComparer.Instance);
-
     // File-mode registrations: (projectId, registeredPath) → the watched file. The
     // underlying watcher watches the PARENT directory (FileSystemWatcher requires a
     // directory); Translate filters events to this target file.
     private readonly Dictionary<(string ProjectId, string Path), string> _fileTargets =
+        new(WatchKeyComparer.Instance);
+
+    private readonly object _gate = new();
+
+    private readonly Dictionary<(string ProjectId, string Path), FileSystemWatcher> _watchers =
         new(WatchKeyComparer.Instance);
 
     public void Dispose() => StopAll();
@@ -180,7 +180,7 @@ public sealed partial class WatchEventSource(
                         // Rename-away: the watched file left its registered name — the
                         // registration is now gone, so surface a Deleted for the target
                         // (a Renamed would make DigestAsync ingest the new name).
-                        onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Deleted, null));
+                        onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Deleted));
                     }
                     else if (WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
                     {

@@ -102,12 +102,30 @@
     },
     {
       "category": "uncategorized",
+      "name": "ai-badger-contribution",
+      "sourceHash": "e9fa418f82d3590a2bc15d1436eeaac4ee06612cf200e3e71cb23ca589ba1960",
+      "sourcePath": "software-development/ai-badger-contribution",
+      "status": "synced",
+      "syncedAt": "2026-08-06T16:24:59Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-contribution"
+    },
+    {
+      "category": "uncategorized",
       "name": "ai-badger-project-ops",
-      "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
+      "sourceHash": "80f55a387662096ed4f8808f49dccf70a554f6720447e51ca43965b9f5e3c012",
       "sourcePath": "ai-badger-project-ops",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:16:04Z",
+      "syncedAt": "2026-08-06T16:25:00Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
+    },
+    {
+      "category": "uncategorized",
+      "name": "ai-badger-task-orchestration",
+      "sourceHash": "536c565f39cd7d539d539969363e3498b1dddc3bac819e86c99d5aa7a8527ec8",
+      "sourcePath": "autonomous-ai-agents/ai-badger-task-orchestration",
+      "status": "synced",
+      "syncedAt": "2026-08-06T16:24:43Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-task-orchestration"
     },
     {
       "category": "uncategorized",
@@ -193,19 +211,19 @@
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-review",
-      "sourceHash": "6cec5869dd9d5c8e588c87fa689f70b70e15ee4859f4fe65d7eda5d862e2c30a",
+      "sourceHash": "badb800b3ccb80e841bab29781b458ededb2ba91c7b5daa22e7bda6bb1b40736",
       "sourcePath": "software-development/dotnet-hosted-service-review",
       "status": "synced",
-      "syncedAt": "2026-08-06T15:17:47Z",
+      "syncedAt": "2026-08-06T16:33:36Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-review"
     },
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-testing",
-      "sourceHash": "c8d0f8b25baf2c455da3e87c464264597a91ee6d704b9928d898dd974a84dd17",
+      "sourceHash": "46d400ce94a9671b3a0433f3e3748a80ed9b1ad99d3df69b943aa4688efec58e",
       "sourcePath": "software-development/dotnet-hosted-service-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:07:02Z",
+      "syncedAt": "2026-08-06T16:34:32Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
     },
     {
@@ -220,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-mcp-server",
-      "sourceHash": "a4185049cd32f9fea5378d852a9f3bb8d50e873549fd9161eec080459cc9da75",
+      "sourceHash": "761368b6540911ef165d7c414a04f4db6a08f929cc91853609c027e6295789da",
       "sourcePath": "software-development/dotnet-mcp-server",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:15:59Z",
+      "syncedAt": "2026-08-06T16:37:48Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-mcp-server"
     },
     {
@@ -382,10 +400,10 @@
     {
       "category": "uncategorized",
       "name": "scripts-tooling-refactor",
-      "sourceHash": "dc66532f9965e0ad6f8f8d9c2704623c0126744e1c9491c0c7673d31f2ba456f",
+      "sourceHash": "aa899e7078f9987f092ed015da5546568ded59f2e220e4e8d01ca78021f97500",
       "sourcePath": "software-development/scripts-tooling-refactor",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:17:40Z",
+      "syncedAt": "2026-08-06T16:26:35Z",
       "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
     },
     {

@@ -1,4 +1,3 @@
-using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
@@ -23,7 +22,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…'
     private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot();
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
@@ -33,8 +32,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
-    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) =>
-        new(new EncryptionSourceSidecar(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
+    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) => new(new EncryptionSourceSidecar(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
 
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 
