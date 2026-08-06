@@ -235,6 +235,8 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceDiscard_ReportsDiscardedKey()
     {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
+
         var result = await _tools.WorkspaceDiscard("acme", "ws-1", CancellationToken.None);
 
         var json = JsonSerializer.Serialize(result);

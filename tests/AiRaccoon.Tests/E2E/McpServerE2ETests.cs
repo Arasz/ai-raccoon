@@ -129,7 +129,7 @@ public class McpServerE2ETests : IAsyncLifetime
 
         var discard = await CallAsync("memory_workspace_discard",
             ("projectId", "acme"), ("workspaceId", workspaceId));
-        Text(discard).ShouldContain("\"deleted\":1");
+        Text(discard).ShouldContain("\"discarded\":1");
 
         var status = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
