@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-06T15:10:00Z",
+  "lastUpdated": "2026-08-06T16:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "check-what-is-the-interface-for-hermes-memory",
+      "title": "Research: what interface do Hermes memory plugins use",
+      "summary": "Evidence-first record docs/work/2026-08-06-hermes-memory-provider-interface.md, sourced from the Hermes source checkout (~/.hermes/hermes-agent @ 8f2712725, the revision the installed CLI runs). The interface is ONE Python ABC — agent.memory_provider.MemoryProvider (4 abstract: name / is_available / initialize(session_id, **kwargs) / get_tool_schemas; ~14 optional hooks incl. prefetch, sync_turn, on_session_end, on_session_switch, on_memory_write, on_delegation, backup_paths) — registered via register(ctx) -> ctx.register_memory_provider(provider), discovered from bundled plugins/memory/<name>/ or $HERMES_HOME/plugins/<name>/ (heuristic: register_memory_provider|MemoryProvider in __init__.py), selected single-select via memory.provider config (empty = builtin only; one-external rule; core-tool shadowing rejected), and called IN-PROCESS by MemoryManager (system-prompt block; trivial-prompt-gated prefetch @ turn_context.py:1171 + 8s timeout; background sync w/ 5s drain; OpenAI-format tool schemas normalized; JSON-string results; optional active-gated cli.py). Built-in MEMORY.md/USER.md always active alongside; on_memory_write mirrors writes. F10 (INFERRED): a server-backed memory (AiRaccoon MCP) plugs in as a thin in-process Python shim — plain MCP tools get no provider lifecycle (prefetch/sync/hooks). Grades: 1 MEASURED (loader round trip via checkout venv, reproduced byte-identical by reviewer), 8 READ, 1 INFERRED. Gates: evidence-first renderer clean pre+post fixes; code-reviewer persona APPROVE-WITH-CHANGES (1 SHOULD-FIX: F5 prefetch gating wording; 4 NITs) all folded. Copilot reviewer absent in repo (established) — persona gate is the fallback. PR #60 ready for owner merge.",
+      "pr": 60,
+      "date": "2026-08-06"
+    },
     {
       "id": "integration-review-1-0-9",
       "title": "Integration review after parallel session: 1.0.9 package-id migration + baseline re-pin + hosted-service PR #55 + 1.0.10 release PR #59",
