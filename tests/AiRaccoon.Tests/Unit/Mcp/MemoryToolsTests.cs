@@ -404,6 +404,12 @@ public class MemoryToolsTests
 
         public string FilesJson { get; set; } = "{\"root\":\"\"}";
 
+        public List<ExtractionCandidateRow> Candidates { get; } = [];
+
+        public SharedIndex Index { get; set; } = new([], []);
+
+        public List<string> ProjectIds { get; } = ["acme"];
+
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
@@ -436,21 +442,13 @@ public class MemoryToolsTests
             return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
         }
 
-        public List<ExtractionCandidateRow> Candidates { get; } = [];
-
-        public SharedIndex Index { get; set; } = new([], []);
-
         public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
             bool includeTtlRows, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>(Candidates);
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Index);
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(Index);
 
-        public List<string> ProjectIds { get; } = ["acme"];
-
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<string>>(ProjectIds);
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(ProjectIds);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
 
@@ -509,7 +507,7 @@ public class MemoryToolsTests
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),
-        (_, _) => Task.FromResult<SqliteConnection>(null!), TimeProvider.System, null!)
+        (_, _) => Task.FromResult<SqliteConnection>(null!), (_, _) => Task.FromResult<SqliteConnection>(null!), TimeProvider.System, null!)
     {
         public SyncResult Result { get; set; } = new(0, 0, 0);
 

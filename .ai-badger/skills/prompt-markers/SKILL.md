@@ -86,7 +86,7 @@ Code runs all registered hooks for an event.
 
 ## Agent-facing contract
 
-Whichever agent instruction file the project maintains (`CLAUDE.md`, `.junie/AGENTS.md`, …)
+Whichever agent instruction file the project maintains (`CLAUDE.md`, …)
 should tell agents that these markers exist and name the required behavior for each — the hook
 delivers the instruction text at the moment a marker is used, but a standing mention in the
 always-loaded instructions makes the behavior legible to a human reading the file, and keeps it

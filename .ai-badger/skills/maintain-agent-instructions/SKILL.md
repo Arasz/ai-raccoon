@@ -11,7 +11,7 @@ description: >-
 
 This skill keeps agent guidance consistent while minimizing always-loaded context. It follows a
 hub-and-spoke model: one compact, always-loaded entrypoint per agent (`CLAUDE.md`,
-`.github/copilot-instructions.md`, `.junie/AGENTS.md`, …) plus detailed, path-scoped or on-demand
+`.github/copilot-instructions.md`, …) plus detailed, path-scoped or on-demand
 instruction files. The model is machine-readable so drift between agent files can be checked by
 script instead of by eye — if the project records this decision as an ADR, link it here.
 

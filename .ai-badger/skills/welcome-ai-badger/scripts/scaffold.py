@@ -10,7 +10,7 @@ Usage:
               [--skills task,prompt-markers] [--no-install] [--generated-at <iso>]
               [--overwrite-agent-files] [--reset-seed-files] [--execute]
 
-  --overwrite-agent-files  replace hand-authored CLAUDE.md/copilot/junie files
+  --overwrite-agent-files  replace hand-authored CLAUDE.md/copilot/hermes files
   --reset-seed-files       reseed SEED-ONCE files, discarding project-owned edits
   --execute                actually run skill install commands (default: print them)
 
@@ -19,7 +19,7 @@ from <target>/.ai-badger/manifest.json rather than treated as an instruction to 
 discovery symlink (#129). Omitting --skills scaffolds the catalog defaults.
 
 Outputs under <target>/.ai-badger/ plus copied agent-discovery files (CLAUDE.md, copilot,
-junie) per config.agents, and <target>/.ai-badger/manifest.json.
+hermes) per config.agents, and <target>/.ai-badger/manifest.json.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
 
 def _bootstrap_lib() -> Path:
     """Put the framework's engine/ and tooling/ on sys.path and return its root.
@@ -146,11 +147,6 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _shared import (  # noqa: E402 — re-exported for backward compatibility
-    _test_ignore, PROJECT_LOCAL_FILE, MANAGED_HEADER, _MANAGED_PREFIX,
-    cfg_get, requirement_met, _condition_met, _within,
-)
-
 # Declared once in badger_lib.SKILL_SCOPES so the scaffold and the plugin ship list cannot
 # disagree about what a project gets without asking. Resolved against the catalog
 # scaffold_skills actually reads, so a default-scope skill shipped from another stack is
@@ -220,14 +216,14 @@ def demote_headings(text: str, levels: int = 2) -> str:
 # The shared context, the manifest's generated-config ledger, and the seven collaborators
 from scaffold_context import ScaffoldContext  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
-from hook_wiring import HookWiring, merge_hooks  # noqa: E402
+from hook_wiring import HookWiring  # noqa: E402
 from template_rendering import TemplateRendering  # noqa: E402
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
-from skill_delivery import SkillDelivery, relink_hermes_skills  # noqa: E402
+from skill_delivery import SkillDelivery  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 
@@ -766,7 +762,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-install", action="store_true")
     ap.add_argument("--overwrite-agent-files", action="store_true",
                     help="Overwrite existing hand-authored discovery files (CLAUDE.md, copilot, "
-                         "junie, .github/instructions/*). Default preserves any that lack the "
+                         "hermes, .github/instructions/*). Default preserves any that lack the "
                          "ai-badger managed header.")
     ap.add_argument("--reset-seed-files", action="store_true",
                     help="Reseed SEED-ONCE files (.ai-badger/state.json, agent-instructions/"

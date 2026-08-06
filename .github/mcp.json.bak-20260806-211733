@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "code-review-graph",
+      "args": [
+        "serve"
+      ],
+      "tools": [
+        "*"
+      ]
+    },
+      "rider": {
+          "url": "http://127.0.0.1:64482/stream",
+          "type": "http"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 """Agent file scaffolding, one of the scaffold's collaborators.
 
 Applies scaffolding.json to write agent discovery files (CLAUDE.md, copilot,
-junie, .github/instructions/*) based on each agent's feature directory.
+hermes, .github/instructions/*) based on each agent's feature directory.
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from typing import Dict, List
 
 from scaffold_context import ScaffoldContext
 from template_rendering import TemplateRendering
-
 
 # Known non-standard agent file locations that may coexist with the standard ones.
 _NONSTANDARD_AGENT_FILES: Dict[str, List[str]] = {

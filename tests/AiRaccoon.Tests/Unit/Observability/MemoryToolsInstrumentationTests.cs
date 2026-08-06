@@ -171,15 +171,14 @@ public class MemoryToolsInstrumentationTests
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
 
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-        bool includeTtlRows, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
         public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "content", 1));
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
@@ -224,6 +223,7 @@ public class MemoryToolsInstrumentationTests
         public SimpleFakeSyncService() : base(
             new SimpleFakeCloudStore(),
             _ => Task.FromResult<SqliteConnection>(null!),
+            (_, _) => Task.FromResult<SqliteConnection>(null!),
             (_, _) => Task.FromResult<SqliteConnection>(null!),
             TimeProvider.System,
             null!)

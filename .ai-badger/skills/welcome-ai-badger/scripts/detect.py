@@ -225,7 +225,7 @@ def expand_requires(stacks: List[str], index: Dict) -> List[str]:
 
 
 def detect_agents(target: Path) -> List[str]:
-    """Detect which coding agents (claude/copilot/junie) this repo already has traces of."""
+    """Detect which coding agents (claude/copilot/hermes) this repo already has traces of."""
     home = Path.home()
     agents: List[str] = []
     if (target / "CLAUDE.md").exists() or (home / ".claude").exists():
@@ -235,8 +235,6 @@ def detect_agents(target: Path) -> List[str]:
             or (target / "COPILOT_INSTRUCTIONS.md").exists()
             or (home / ".copilot").exists()):
         agents.append("copilot")
-    if (target / ".junie").is_dir() or (target / "AGENTS.md").exists():
-        agents.append("junie")
     # Hermes detection: .hermes.md / HERMES.md in repo, or ~/.hermes/ in user scope
     if ((target / ".hermes.md").exists()
             or (target / "HERMES.md").exists()
