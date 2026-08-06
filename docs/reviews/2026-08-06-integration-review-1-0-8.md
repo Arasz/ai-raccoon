@@ -34,14 +34,16 @@ implemented the two code packages TDD.
 
 ### HIGH — corpus regression on main since PR #47 (pre-existing, not from this task)
 
-`CorpusIntegrity_HashMapMatchesDatabaseCounts` fails on `main` itself
-(map = 761 distinct hashes, committed `jsaa-memory.db` = 752 rows). PR #47
+Two `RetrievalBaselineTests.CorpusIntegrity_*` facts fail on `main` itself:
+`HashMapMatchesDatabaseCounts` (map = 761 distinct hashes, committed
+`jsaa-memory.db` = 752 rows) and `SourceFileAndSectionPopulated` (the stale DB
+lacks the source-identity columns the regenerated map expects). PR #47
 regenerated `scripts/chunk-hash-map.json` at the re-pinned jsaa commit
 (9397bbef, 772 keys → 761 distinct hashes) but never committed the regenerated
 corpus DB — the "real re-ingest" (issue #44, P5) produced 761 rows on a live
 data root, only the map was committed. Verified green before #47 (752/752) and
-red after. CI does not catch it: `build.yml` runs only `Speed=Fast`, and this
-test is Integration/Slow.
+red after. CI does not catch it: `build.yml` runs only `Speed=Fast`, and these
+tests are Integration/Slow.
 
 **Resolution:** recorded here; belongs to the retrieval workstream (#44 P5
 deliverable — regenerate and commit the corpus DB). Not fixed in this PR to
@@ -119,8 +121,11 @@ rehearsals against `.nupkg-local`.
 ## Gates
 
 - `dotnet build`: 0 warnings / 0 errors
-- Full `dotnet test`: see suite result below — expected single known failure is
-  the pre-existing #47 corpus regression (identical on the base commit)
+- Full `dotnet test`: **1170 passed / 2 failed / 20 skipped** — both failures
+  are the pre-existing #47 corpus regression (verified identical on the base
+  commit: `CorpusIntegrity_HashMapMatchesDatabaseCounts` +
+  `CorpusIntegrity_SourceFileAndSectionPopulated`). Skipped 43→20 because PR
+  #49 un-ignored the BDD native-memory scenarios. My branch adds 0 failures.
 - `scripts/manual-fresh-install-test.py` (1.0.8, nuget.org): ALL GREEN
 - Grep gates: `SetStatus(ActivityStatusCode.Ok)` ×1; `result` tag asserted both
   paths; 19 tool names in the parity test; 16+3 helper sites
