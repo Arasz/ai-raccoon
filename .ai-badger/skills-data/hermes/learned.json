@@ -49,10 +49,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-flaky-test-diagnosis",
-      "sourceHash": "3c34c7baf7868b445edc490b5a6d07e1bb77e67877020c2a4149f946b36f182a",
+      "sourceHash": "17976128ba0795b9e48f5b4ba72cf38a484cb5e9761f9ac4404fa65aa141468e",
       "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:17:37Z",
+      "syncedAt": "2026-08-06T11:52:38Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
     },
     {
@@ -108,6 +108,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T11:51:21Z",
       "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "spec-driven-refactoring",
+      "sourceHash": "e556d062554ceca48de4e0e622f631cfa0cd33e6120ef4e8771338c51bf87f9f",
+      "sourcePath": "software-development/spec-driven-refactoring",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:52:07Z",
+      "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
     }
   ],
   "version": 1

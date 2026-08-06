@@ -16,7 +16,12 @@ skill does not apply.
    candidate; fails → real bug, stop.
 3. **Clean-main baseline**: run the same test on pristine origin/main (no branch changes).
    Fails there too → pre-existing flake, NOT caused by your branch — do not chase it as
-   your regression.
+   your regression. Cleanest method in a multi-session repo: a THROWAWAY WORKTREE at the
+   base commit — `git worktree add /tmp/base-check-<sha> <base-sha>` (plus any
+   gitignored runtime assets the suite needs, e.g. an ONNX model), run the failing test
+   there, then `git worktree remove --force`. This never touches the shared main checkout
+   (which other sessions may be using) and survives stash-less. Evidence: the same test
+   name failing at base = pre-existing; passing at base but failing on your branch = yours.
 4. **Classify the root cause** (the two classes below). The discriminator: does the test
    itself fan out concurrent work (intra-test), or does it use real I/O with wall-clock
    deadlines (inter-test)?
