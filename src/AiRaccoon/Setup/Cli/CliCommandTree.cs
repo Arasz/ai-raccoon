@@ -45,6 +45,7 @@ internal static class CliCommandTree
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
         root.Add(new Option<int>("--port") { Description = "HTTP port to bind; 0 picks a random free port", HelpName = "port", DefaultValueFactory = _ => 7721 });
+        root.Add(new Option<bool>("--status-words") { Description = "One-word status on stderr per tool call; info logs quieted" });
         // WebApplicationFactory bootstraps the entry point with these host-config flags;
         // declared hidden so the E2E host builds — values are intentionally never consumed
         // (CreateBuilder([]) drops generic host flags by design).

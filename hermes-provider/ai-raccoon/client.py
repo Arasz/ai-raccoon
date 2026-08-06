@@ -187,11 +187,19 @@ class HttpClient(_MCPClient):
 
 
 def create_client(config: dict) -> _MCPClient:
-    """Build a client for the plugin config (transport: stdio | http)."""
+    """Build a client for the plugin config (transport: stdio | http).
+
+    stdio spawns carry ``--status-words`` by default so the child prints
+    one-word progress cues instead of log noise; set ``status_words:
+    false`` in the plugin config for full logs.
+    """
     transport = config.get("transport", "stdio")
     if transport == "http":
         return HttpClient(config.get("url", DEFAULT_HTTP_URL))
-    return StdioClient(config.get("binary", "ai-raccoon"), config.get("binary_args") or [])
+    args = list(config.get("binary_args") or [])
+    if config.get("status_words", True):
+        args.append("--status-words")
+    return StdioClient(config.get("binary", "ai-raccoon"), args)
 
 
 def _text(result: Any) -> Any:

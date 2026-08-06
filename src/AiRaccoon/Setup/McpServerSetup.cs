@@ -48,7 +48,7 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(config.Options, registerExtractionHostedService: false);
         builder.Services
             .AddMcpServer()
-            .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging)
+            .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging, quietInfo: config.Options.StatusWords)
             .WithTools<MemoryTools>()
             .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
@@ -61,10 +61,14 @@ internal static partial class McpServerSetup
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
         builder.Services.RegisterMemoryServices(config.Options);
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        if (config.Options.StatusWords)
+        {
+            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        }
         // Explicit endpoint: bind the configured port (7721 default, 0 = random) instead
         // of the ASP.NET default 5000, which collides with other listeners on the host.
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
-        builder.ConfigureMcpServer(transports);
+        builder.ConfigureMcpServer(transports, quietInfo: config.Options.StatusWords);
         return builder.Build().ConfigureMcpEndpoints(transports);
     }
 
@@ -88,33 +92,42 @@ internal static partial class McpServerSetup
 
     extension(WebApplicationBuilder webApplicationBuilder)
     {
-        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports) =>
+        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports, bool quietInfo = false) =>
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
-                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging)
+                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo: quietInfo)
                 .WithTools<MemoryTools>()
                 .WithTools<WatchTools>()
                 .WithPrompts<MemoryPrompts>();
     }
 
-    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder) => loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder, bool quietInfo = false)
+    {
+        loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        if (quietInfo)
+        {
+            // Status-words mode: the one-word lines are the only stderr output the client
+            // should see; warnings and errors still surface.
+            loggingBuilder.SetMinimumLevel(LogLevel.Warning);
+        }
+    }
 
     extension(IMcpServerBuilder mcpServerBuilder)
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
-            ILoggingBuilder loggingBuilder)
+            ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
             if (selectedTransports.Count == 0)
             {
-                return mcpServerBuilder.HandleStdioTransport(loggingBuilder);
+                return mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo);
             }
 
             foreach (var selectedTransport in selectedTransports)
             {
                 mcpServerBuilder = selectedTransport switch
                 {
-                    McpTransport.Stdio => mcpServerBuilder.HandleStdioTransport(loggingBuilder),
+                    McpTransport.Stdio => mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo),
                     McpTransport.Http => mcpServerBuilder.HandleHttpTransport(),
                     McpTransport.Https => mcpServerBuilder.HandleHttpsTransport(),
                     _ => mcpServerBuilder
@@ -124,9 +137,9 @@ internal static partial class McpServerSetup
             return mcpServerBuilder;
         }
 
-        private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder)
+        private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
-            AddStderrConsoleLogging(loggingBuilder);
+            AddStderrConsoleLogging(loggingBuilder, quietInfo: quietInfo);
             return mcpServerBuilder.WithStdioServerTransport();
         }
 

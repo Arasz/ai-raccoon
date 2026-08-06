@@ -47,6 +47,7 @@ plugins:
     url: http://127.0.0.1:7721/mcp   # http mode
     binary: ai-raccoon    # stdio mode (resolved on PATH)
     binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
+    status_words: true    # one-word stderr cue per tool call ("searching", "remembering", …)
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
     search_limit: 5
     min_score: 0.5
@@ -65,6 +66,16 @@ plugins:
 
 No secrets: AiRaccoon is local. The bank passphrase stays in the server's own
 environment, never in this plugin.
+
+## Data sources
+
+- **Status words:** with `status_words: true` (default) the spawned server prints one
+  word per tool call to stderr — "remembering", "searching", "counting", … — instead of
+  info logs. Set `status_words: false` for full logs.
+- **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var points at a file
+  (inherited by the spawned server), every tool invocation appends one JSONL row:
+  `{"ts", "tool", "project_id", "status", "error_type?", "duration_ms"}` — an analysis
+  data source for memory usage and retrieval behavior.
 
 ## Notes
 

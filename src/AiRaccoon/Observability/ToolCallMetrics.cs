@@ -13,8 +13,11 @@ public sealed class ToolCallMetrics : IDisposable
     private readonly Counter<long> _invocationCount;
     private readonly Histogram<double> _invocationDurationMs;
 
-    public ToolCallMetrics()
+    public ToolCallMetrics(bool statusWords = false, string? memoryLogPath = null)
     {
+        StatusWords = statusWords;
+        OperationLog = memoryLogPath is null ? null : new MemoryOperationLog(memoryLogPath);
+
         Meter = new Meter("AiRaccoon.MemoryTools");
         ActivitySource = new ActivitySource("AiRaccoon.MemoryTools");
 
@@ -39,6 +42,12 @@ public sealed class ToolCallMetrics : IDisposable
 
     /// <summary>ActivitySource for OpenTelemetry tracing.</summary>
     public ActivitySource ActivitySource { get; }
+
+    /// <summary>When true, each tool call writes its one-word status to stderr as it starts.</summary>
+    public bool StatusWords { get; }
+
+    /// <summary>Append-only JSONL operation log; null when no AIRACCOON_MEMORY_LOG path is configured.</summary>
+    public MemoryOperationLog? OperationLog { get; }
 
     /// <summary>Records a tool invocation: increments the counter and records the duration histogram.</summary>
     public void RecordInvocation(string tool, TimeSpan duration, bool isError, string? errorType = null)
@@ -70,5 +79,9 @@ public sealed class ToolCallMetrics : IDisposable
         _invocationDurationMs.Record(duration.TotalMilliseconds, histoTags);
     }
 
-    public void Dispose() => Meter.Dispose();
+    public void Dispose()
+    {
+        OperationLog?.Dispose();
+        Meter.Dispose();
+    }
 }

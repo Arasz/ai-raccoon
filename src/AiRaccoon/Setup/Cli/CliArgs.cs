@@ -89,7 +89,8 @@ internal static class CliArgs
                 DataRoot = parseResult.GetResult("--data-root") is OptionResult { Tokens.Count: > 0 } dataRoot ? dataRoot.GetValueOrDefault<string>() : DefaultOptions.DataRoot,
                 InstallScope = parseResult.GetResult("--install-scope") is OptionResult { Tokens.Count: > 0 } scope ? scope.GetValueOrDefault<InstallScope>() : DefaultOptions.InstallScope,
                 Port = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 } port ? port.GetValueOrDefault<int>() : DefaultOptions.Port,
-                IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 }
+                IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
+                StatusWords = parseResult.GetResult("--status-words") is OptionResult statusWordsResult ? statusWordsResult.GetValueOrDefault<bool>() : false
             };
         }
         catch (InvalidOperationException)

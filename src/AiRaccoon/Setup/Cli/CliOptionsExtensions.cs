@@ -23,7 +23,9 @@ public static class CliOptionsExtensions
             var infrastructureOptions = new InfrastructureOptions
             {
                 DataRoot = options.ExpandedDataRoot(),
-                Scope = options.InstallScope
+                Scope = options.InstallScope,
+                StatusWords = options.StatusWords,
+                MemoryLogPath = Environment.GetEnvironmentVariable("AIRACCOON_MEMORY_LOG")
             };
 
             return new ServerConfig(options.Port, options.Transport, infrastructureOptions);

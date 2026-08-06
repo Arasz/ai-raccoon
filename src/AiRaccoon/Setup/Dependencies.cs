@@ -74,7 +74,9 @@ public static partial class Dependencies
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
                 sp.GetRequiredService<IMemoryStore>()));
-            services.AddSingleton<ToolCallMetrics>();
+            services.AddSingleton<ToolCallMetrics>(_ => new ToolCallMetrics(
+                statusWords: options.StatusWords,
+                memoryLogPath: options.MemoryLogPath));
 
             // Watch services resolve the same MemoryExtensionHost-decorated IMemoryStore, so
             // extension hooks (OnSourceChangedAsync) observe watcher digests. The hosted

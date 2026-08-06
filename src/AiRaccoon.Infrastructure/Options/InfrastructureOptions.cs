@@ -20,4 +20,10 @@ public sealed record InfrastructureOptions
     public string Rid { get; init; } = RuntimeInformation.RuntimeIdentifier;
 
     public required InstallScope Scope { get; init; }
+
+    /// <summary>When true, each tool call prints its one-word status to stderr as it starts.</summary>
+    public bool StatusWords { get; init; }
+
+    /// <summary>Append-only JSONL operation log path (from the AIRACCOON_MEMORY_LOG env var); null = off.</summary>
+    public string? MemoryLogPath { get; init; }
 }
