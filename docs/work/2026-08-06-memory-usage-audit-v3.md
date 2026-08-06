@@ -60,7 +60,7 @@ Rows 4302/4303/4305 = the multi-RID tool-fix fact, the watch-tools MCP regressio
 `context_label='final-suite classification'`, `source_file=tests/.../SourceIdentityTests.cs`, rating 0.5, access 0. The `context` param silently set scope='custom' — exactly the trap the adoption plan's WP2 (reserved-context rejection) proposes to block.
 
 **B4 — Adoption: +1 organic search since v2 (10:52, rank-1 hit, ungraded); zero searches in the window; grading coverage 2/12; still zero claude/copilot lines [MEASURED]**
-Organic total 5 in the grade log's lifetime. The new search ("watch tools registration McpServerSetup") returned the exactly-right doc at rank 1 — retrieval quality holds when tried. The ask-after-search loop fires ~17% (K2 target ≥50%). 10:52 → 13:04 UTC: the busiest work period of the day, zero memory reads.
+Organic total 5 in the grade log's lifetime (plus this audit's own probe at 13:07:44 — the log's 13th line). The new organic search ("watch tools registration McpServerSetup") returned the exactly-right doc at rank 1 — retrieval quality holds when tried. The ask-after-search loop fires ~17% (K2 target ≥50%). 10:52 → 13:04 UTC: the busiest work period of the day, zero memory reads.
 
 **B5 — v2 adoption-lever scorecard: supply shipped, demand is paper [MEASURED/INFERRED]**
 L1 memory_brief — no traction (unshipped, not on the 20-tool surface). L2 seed shared tier — shipped (B1), demand zero. L3 memory in the default loop — minimal (the one new organic search; WP5/WP6 unshipped). L4 retrieval ceiling — holds (0 pending, provenance contract, gates re-pinned #54, error loop dead). L5 KPI loop — machinery exists, loop weak (2/12 graded, log demonstrably incomplete — the jsaa re-ingest's self-search bumps at 10:59 are unlogged, no weekly report).
