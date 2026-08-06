@@ -27,16 +27,25 @@ public class MemoryToolsTests
 
     private readonly FakeStore _store = new();
     private readonly FakeSyncService _sync = new();
+    private readonly FakePromotionQueue _queue = new();
     private readonly MemoryTools _tools;
+    private readonly ShareTools _share;
+    private readonly WorkspaceTools _workspace;
+    private readonly SweepTools _sweep;
+    private readonly SyncTools _syncTools;
 
     public MemoryToolsTests()
     {
+        var access = new MemoryAccessGuard(_store);
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, _sync, workspaces, sweeper, new MemoryAccessGuard(_store),
-            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
-            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
-            new ToolCallMetrics(), new SharedExtractionService());
+        var metrics = new ToolCallMetrics();
+        _tools = new MemoryTools(_store, access, metrics, _queue);
+        _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), _queue);
+        _workspace = new WorkspaceTools(workspaces, access, metrics, _queue);
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics, _queue);
+        _syncTools = new SyncTools(_sync,
+            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance), access, metrics, _queue);
     }
 
     private void SeedSyncSettings(string? objectKey = null)
@@ -66,27 +75,25 @@ public class MemoryToolsTests
             "organic fact about job-search-ai-assistant", null, 0.5, 0,
             DateTimeOffset.UtcNow.AddDays(-5), null));
 
-        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _share.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.ShouldHaveSingleItem();
-        result.Candidates[0].Hash.ShouldBe("h1");
-        result.Candidates[0].Reasons.ShouldContain("organic-write");
-        result.PromotedHashes.ShouldBeEmpty();
+        result.Data!.Candidates.ShouldHaveSingleItem();
+        result.Data!.Candidates[0].Hash.ShouldBe("h1");
+        result.Data!.Candidates[0].Reasons.ShouldContain("organic-write");
+        result.Data!.PromotedHashes.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
     }
 
     [Fact]
     public async Task ShareExtract_Promote_SharesTheTopCandidates()
     {
-        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
-            "organic fact about job-search-ai-assistant", null, 0.5, 0,
-            DateTimeOffset.UtcNow.AddDays(-5), null));
+        _queue.PromoteOutcome = new PromoteOutcome(["h1"], 0, new Dictionary<string, int>());
 
-        var result = await _tools.ShareExtract(["acme"], mode: "promote",
+        var result = await _share.ShareExtract(["acme"], mode: "promote",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        result.PromotedHashes.ShouldBe(["h1"]);
-        _store.Shared.ShouldBe(("acme", "h1"));
+        result.Data!.PromotedHashes.ShouldBe(["h1"]);
+        _queue.LastPromoteProjects.ShouldBe(["acme"]);
     }
 
     [Fact]
@@ -100,10 +107,10 @@ public class MemoryToolsTests
                 DateTimeOffset.UtcNow.AddDays(-5), null));
         }
 
-        var result = await _tools.ShareExtract(["acme"],
+        var result = await _share.ShareExtract(["acme"],
             cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
+        result.Data!.Candidates.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
     }
 
     [Fact]
@@ -113,9 +120,9 @@ public class MemoryToolsTests
             DateTimeOffset.UtcNow.AddDays(-5), null));
         _store.Index = new SharedIndex(["samefact"], []);
 
-        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _share.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.ShouldBeEmpty();
+        result.Data!.Candidates.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
     }
 
@@ -123,7 +130,7 @@ public class MemoryToolsTests
     public async Task ShareExtract_InvalidProjectIds_ThrowsTyped()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract([], cancellationToken: TestContext.Current.CancellationToken));
+            _share.ShareExtract([], cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("invalid-params");
     }
 
@@ -131,7 +138,7 @@ public class MemoryToolsTests
     public async Task ShareExtract_InvalidMode_ThrowsTyped()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme"], mode: "auto", cancellationToken: TestContext.Current.CancellationToken));
+            _share.ShareExtract(["acme"], mode: "auto", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("invalid-params");
     }
 
@@ -139,7 +146,7 @@ public class MemoryToolsTests
     public async Task ShareExtract_InvalidLimit_ThrowsTyped()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme"], limit: 0, cancellationToken: TestContext.Current.CancellationToken));
+            _share.ShareExtract(["acme"], limit: 0, cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("invalid-params");
     }
 
@@ -147,7 +154,7 @@ public class MemoryToolsTests
     public async Task ShareExtract_AutoPromote_WithoutConfirm_IsGated()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme"], autoPromote: true, cancellationToken: TestContext.Current.CancellationToken));
+            _share.ShareExtract(["acme"], autoPromote: true, cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("confirm-required");
         ex.Message.ShouldContain("ALL projects");
         _store.Shared.ShouldBeNull();
@@ -156,15 +163,13 @@ public class MemoryToolsTests
     [Fact]
     public async Task ShareExtract_AutoPromote_WithConfirm_PromotesInCall()
     {
-        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
-            "organic fact about job-search-ai-assistant", null, 0.5, 0,
-            DateTimeOffset.UtcNow.AddDays(-5), null));
+        _queue.PromoteOutcome = new PromoteOutcome(["h1"], 0, new Dictionary<string, int>());
 
-        var result = await _tools.ShareExtract(["acme"], autoPromote: true, confirm: true,
+        var result = await _share.ShareExtract(["acme"], autoPromote: true, confirm: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
-        result.PromotedHashes.ShouldBe(["h1"]);
-        _store.Shared.ShouldBe(("acme", "h1"));
+        result.Data!.PromotedHashes.ShouldBe(["h1"]);
+        _queue.LastPromoteProjects.ShouldBe(["acme"]);
     }
 
     [Fact]
@@ -174,9 +179,9 @@ public class MemoryToolsTests
             "organic fact about job-search-ai-assistant", null, 0.5, 0,
             DateTimeOffset.UtcNow.AddDays(-5), null));
 
-        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _share.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
 
-        result.PromotedHashes.ShouldBeEmpty();
+        result.Data!.PromotedHashes.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
     }
 
@@ -188,8 +193,8 @@ public class MemoryToolsTests
         var result = await _tools.Write("acme", "content", agentId: "agent-a",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Hash.ShouldBe("h1");
-        result.Context.ShouldBe("project:acme");
+        result.Data!.Hash.ShouldBe("h1");
+        result.Data!.Context.ShouldBe("project:acme");
         _store.LastRequest!.ProjectId.ShouldBe("acme");
         _store.LastRequest.AgentId.ShouldBe("agent-a");
     }
@@ -256,10 +261,10 @@ public class MemoryToolsTests
     {
         _store.SharedEntry = new MemoryEntry("h1", "p.md", ContextNaming.SharedContext, "v", 1);
 
-        var result = await _tools.Share("acme", "h1", TestContext.Current.CancellationToken);
+        var result = await _share.Share("acme", "h1", TestContext.Current.CancellationToken);
 
-        result.Shared.ShouldBeTrue();
-        result.Context.ShouldBe(ContextNaming.SharedContext);
+        result.Data!.Shared.ShouldBeTrue();
+        result.Data!.Context.ShouldBe(ContextNaming.SharedContext);
         _store.Shared.ShouldBe(("acme", "h1"));
     }
 
@@ -267,7 +272,7 @@ public class MemoryToolsTests
     public async Task Sync_WithoutCredentials_ThrowsMcpExceptionWithSyncNotConfigured()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Sync("acme", TestContext.Current.CancellationToken));
+            _syncTools.Sync("acme", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("sync-not-configured");
     }
@@ -278,11 +283,11 @@ public class MemoryToolsTests
         SeedSyncSettings();
         _sync.Result = new SyncResult(3, 2, 5);
 
-        var result = await _tools.Sync("acme", TestContext.Current.CancellationToken);
+        var result = await _syncTools.Sync("acme", TestContext.Current.CancellationToken);
 
-        result.Sent.ShouldBe(3);
-        result.Received.ShouldBe(2);
-        result.Reindexed.ShouldBe(5);
+        result.Data!.Sent.ShouldBe(3);
+        result.Data!.Received.ShouldBe(2);
+        result.Data!.Reindexed.ShouldBe(5);
         _sync.LastObjectKey.ShouldBe("memory-acme.db");
     }
 
@@ -291,7 +296,7 @@ public class MemoryToolsTests
     {
         SeedSyncSettings(objectKey: "bank.db");
 
-        await _tools.Sync("acme", TestContext.Current.CancellationToken);
+        await _syncTools.Sync("acme", TestContext.Current.CancellationToken);
 
         _sync.LastObjectKey.ShouldBe("bank.db");
     }
@@ -299,11 +304,11 @@ public class MemoryToolsTests
     [Fact]
     public async Task WorkspaceBegin_ReturnsWorkspaceIdAndContext()
     {
-        var result = await _tools.WorkspaceBegin("acme", "agent-a",
+        var result = await _workspace.WorkspaceBegin("acme", "agent-a",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        result.WorkspaceId.ShouldNotBeNullOrWhiteSpace();
-        result.Context.ShouldStartWith("workspace:");
+        result.Data!.WorkspaceId.ShouldNotBeNullOrWhiteSpace();
+        result.Data!.Context.ShouldStartWith("workspace:");
     }
 
     [Fact]
@@ -316,10 +321,10 @@ public class MemoryToolsTests
             new MemoryEntry("h2", "b.md", "workspace:ws-1", "two", 2)
         ];
 
-        var result = await _tools.WorkspaceConsolidate("acme", "ws-1", ["all"],
+        var result = await _workspace.WorkspaceConsolidate("acme", "ws-1", ["all"],
             TestContext.Current.CancellationToken);
 
-        result.Promoted.ShouldBe(2);
+        result.Data!.Promoted.ShouldBe(2);
     }
 
     [Fact]
@@ -329,9 +334,9 @@ public class MemoryToolsTests
 
         var result = await _tools.Stats("acme", TestContext.Current.CancellationToken);
 
-        result.Entries.ShouldBe(5);
-        result.Pending.ShouldBe(2);
-        result.Contexts.ShouldContain("shared");
+        result.Data!.Entries.ShouldBe(5);
+        result.Data!.Pending.ShouldBe(2);
+        result.Data!.Contexts.ShouldContain("shared");
     }
 
     [Fact]
@@ -339,7 +344,7 @@ public class MemoryToolsTests
     {
         var result = await _tools.List("acme", CancellationToken.None);
 
-        result.Files.ShouldBeOfType<JsonObject>();
+        result.Data!.Files.ShouldBeOfType<JsonObject>();
         JsonSerializer.Serialize(result).ShouldContain("\"files\":{\"root\":\"\"}");
     }
 
@@ -358,7 +363,7 @@ public class MemoryToolsTests
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
 
-        var result = await _tools.WorkspaceDiscard("acme", "ws-1", CancellationToken.None);
+        var result = await _workspace.WorkspaceDiscard("acme", "ws-1", CancellationToken.None);
 
         var json = JsonSerializer.Serialize(result);
         json.ShouldContain("\"discarded\":");
@@ -375,10 +380,10 @@ public class MemoryToolsTests
         _store.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme"]);
 
-        var result = await _tools.Sweep("acme", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _sweep.Sweep("acme", cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.Count.ShouldBe(1);
-        result.Deleted.Count.ShouldBe(0);
+        result.Data!.Candidates.Count.ShouldBe(1);
+        result.Data!.Deleted.Count.ShouldBe(0);
     }
 
 

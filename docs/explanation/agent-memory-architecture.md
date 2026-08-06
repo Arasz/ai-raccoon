@@ -52,6 +52,19 @@ enough to promote — rather than a second write lane that fills with noise. Bec
 is curated, it is also **sweep-exempt**: degradation removes old, low-rated *project*
 entries but never promoted knowledge.
 
+## Why proposals wait in a propose tier
+
+Sharing is a two-step ritual: `memory_share_extract` (propose) *queues* ranked candidates
+into a per-project **propose tier** (the `promotion_queue` table), the agent reviews what
+is waiting with `memory_promotion_list`, then `memory_share_extract` (mode=promote) — or
+the extraction loop, in promote mode — shares the top queued candidates and drains them.
+The queue is capacity-capped (`extract.queue-capacity.global`, default 1000): the cap is
+split into per-project reservations (cap ÷ project count), projects may borrow each
+other's unused space, and when the queue is over the cap the weakest candidate of the
+biggest occupier is evicted. The propose tier is a waiting surface, not memory: queue rows
+are never searchable and never counted by `memory_stats`, and degradation never touches
+them — only the agent's promote/discard and the capacity rule do.
+
 ## Why the workspace is a context, not a flag
 
 A workspace is isolated *by design* — the presence of a `workspace_id` on a write routes

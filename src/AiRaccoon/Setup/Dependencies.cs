@@ -17,6 +17,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Observability;
 using Microsoft.Data.Sqlite;
 
@@ -42,6 +43,11 @@ public static partial class Dependencies
             services.AddSingleton<SqliteMemoryStore>();
             services.AddSingleton<SqliteWorkspaceStore>();
             services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
+            services.AddSingleton<SqlitePromotionQueueStore>();
+            services.AddSingleton<IPromotionQueueStore>(sp => sp.GetRequiredService<SqlitePromotionQueueStore>());
+            services.AddSingleton<IEvictionPolicy, UniformCountEvictionPolicy>();
+            services.AddSingleton<IPromotionQueueMetrics, PromotionQueueMetrics>();
+            services.AddSingleton<IPromotionQueue, PromotionQueueService>();
             services.AddSingleton<IChunker, TokenizerChunker>();
             services.AddSingleton<MemoryExtensionHost>(sp => new MemoryExtensionHost(
                 sp.GetRequiredService<SqliteMemoryStore>(),

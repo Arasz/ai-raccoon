@@ -5,7 +5,7 @@ Proves a clean install from nuget.org works perfectly first try: all deps presen
 no missing models, no silent repair. Post-publish complement to the pre-publish pack
 gate; model/vocab sha256 pins come from scripts/src/bundle.py — the single source of
 the bundle contract. Run from anywhere; everything happens in temp dirs and never touches
-~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.10 (pin must be
+~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.1.0 (pin must be
 bumped after each republish — NuGet versions are immutable). Source override:
 AI_RACCOON_SOURCE=local installs from the repo's .nupkg-local (pre-publish dress
 rehearsal of the same shell+payload nuget.org receives); default nuget fetches from
@@ -50,7 +50,7 @@ if "--help" in sys.argv or "-h" in sys.argv:
     print(__doc__)
     sys.exit(0)
 
-VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.10")
+VERSION = os.environ.get("AI_RACCOON_VERSION", "1.1.0")
 SOURCE = os.environ.get("AI_RACCOON_SOURCE", "nuget")  # "nuget" | "local" (.nupkg-local)
 LOCAL_SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".nupkg-local"))
 # Model/vocab sha256 pins are imported from scripts/src/bundle.py — the single source
@@ -116,7 +116,9 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(TOOLPATH, ".store")):
 check("store layout found", store_root is not None, TOOLPATH)
 tool_dir = os.path.join(store_root, "tools", "net10.0", "osx-arm64") if store_root else ""
 for f in ["AiRaccoon.dll", "AiRaccoon.deps.json", "AiRaccoon.runtimeconfig.json",
-          "libonnxruntime.dylib", "libe_sqlite3.dylib", "libe_sqlite3mc.dylib", "vec0.dylib"]:
+          "libonnxruntime.dylib", "libsqlite3mc.dylib", "vec0.dylib"]:
+    # libsqlite3mc.dylib is the only sqlite native since the 2.4.0 bundle switch
+    # (e_sqlite3mc deprecated; libe_sqlite3.dylib no longer ships).
     check(f"present: {f}", os.path.isfile(os.path.join(tool_dir, f)))
 model = os.path.join(tool_dir, "Models", "model_qint8_arm64.onnx")
 vocab = os.path.join(tool_dir, "Models", "vocab.txt")

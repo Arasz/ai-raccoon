@@ -22,7 +22,7 @@ public sealed class WatchToolsTests
 
     public WatchToolsTests()
     {
-        _tools = new WatchTools(_watch, new FakeAccessGuard(), new ToolCallMetrics());
+        _tools = new WatchTools(_watch, new FakeAccessGuard(), new ToolCallMetrics(), new FakePromotionQueue());
     }
 
     [Fact]
@@ -41,8 +41,8 @@ public sealed class WatchToolsTests
         var result = await _tools.Add("proj-a", "/repo", TestContext.Current.CancellationToken);
 
         _watch.Added.ShouldBe([("proj-a", "/repo")]);
-        result.ProjectId.ShouldBe("proj-a");
-        result.Path.ShouldBe("/repo");
+        result.Data!.ProjectId.ShouldBe("proj-a");
+        result.Data!.Path.ShouldBe("/repo");
     }
 
     [Fact]
@@ -110,11 +110,11 @@ public sealed class WatchToolsTests
 
         var result = await _tools.Status("proj-a", TestContext.Current.CancellationToken);
 
-        result.Watches.Count.ShouldBe(2);
-        result.Watches[0].State.ShouldBe(WatchState.Retrying);
-        result.Watches[0].LastError.ShouldBe("boom");
-        result.Watches[0].LastSync.ShouldBe(lastSync);
-        result.Watches[1].State.ShouldBe(WatchState.Healthy);
+        result.Data!.Watches.Count.ShouldBe(2);
+        result.Data!.Watches[0].State.ShouldBe(WatchState.Retrying);
+        result.Data!.Watches[0].LastError.ShouldBe("boom");
+        result.Data!.Watches[0].LastSync.ShouldBe(lastSync);
+        result.Data!.Watches[1].State.ShouldBe(WatchState.Healthy);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class WatchToolsTests
     {
         var result = await _tools.Status("proj-a", TestContext.Current.CancellationToken);
 
-        result.Watches.ShouldBeEmpty();
+        result.Data!.Watches.ShouldBeEmpty();
     }
 
     [Fact]
@@ -141,8 +141,8 @@ public sealed class WatchToolsTests
         var result = await _tools.Remove("proj-a", "/repo", TestContext.Current.CancellationToken);
 
         _watch.Removed.ShouldBe([("proj-a", "/repo")]);
-        result.ProjectId.ShouldBe("proj-a");
-        result.Path.ShouldBe("/repo");
+        result.Data!.ProjectId.ShouldBe("proj-a");
+        result.Data!.Path.ShouldBe("/repo");
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class WatchToolsTests
         var result = await _tools.Remove("proj-a", "/never-registered", TestContext.Current.CancellationToken);
 
         _watch.Removed.ShouldBe([("proj-a", "/never-registered")]);
-        result.ShouldNotBeNull();
+        result.Data!.ShouldNotBeNull();
     }
 
     private sealed class FakeWatchService : IWatchService

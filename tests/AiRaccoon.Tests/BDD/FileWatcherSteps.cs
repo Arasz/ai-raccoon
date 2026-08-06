@@ -52,7 +52,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     private Exception? _lastError;
     private string? _lastFile;
     private string? _lastFileContent;
-    private WatchTools.WatchStatusResult? _lastStatus;
+    private WatchTools.WatchStatusResult? _lastStatusDataData;
     private string? _removedPath;
 
     /// <summary>True once a scope was configured explicitly (the add step may then create a missing target dir).</summary>
@@ -191,7 +191,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             (await SearchAsync(projectId, token)).Count == 0, maxFakeSeconds);
     }
 
-    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) => _lastStatus = await Ctx.Tools.Status(projectId);
+    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) =>
+        _lastStatusDataData = (await Ctx.Tools.Status(projectId)).Data!;
 
     private void MakeUnreadable(string path)
     {

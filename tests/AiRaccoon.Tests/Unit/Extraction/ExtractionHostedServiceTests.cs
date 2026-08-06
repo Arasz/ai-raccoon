@@ -16,15 +16,17 @@ public sealed class ExtractionHostedServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 6, 12, 0, 0, TimeSpan.Zero);
 
-    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service) NewStack() => NewStack(NullLogger<ExtractionHostedService>.Instance);
+    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
+        FakePromotionQueue Queue) NewStack() => NewStack(NullLogger<ExtractionHostedService>.Instance);
 
-    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service) NewStack(
-        ILogger<ExtractionHostedService> logger)
+    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
+        FakePromotionQueue Queue) NewStack(ILogger<ExtractionHostedService> logger)
     {
         var store = new FakeStore();
         var time = new FakeTimeProvider(FixedNow);
-        var service = new ExtractionHostedService(store, new SharedExtractionService(), time, logger);
-        return (store, time, service);
+        var queue = new FakePromotionQueue();
+        var service = new ExtractionHostedService(store, new SharedExtractionService(), queue, time, logger);
+        return (store, time, service, queue);
     }
 
     private static ExtractionCandidateRow Row(string hash, string? sourceFile = null, string value = "fact",
@@ -34,7 +36,7 @@ public sealed class ExtractionHostedServiceTests
     [Fact]
     public async Task RunOnce_Disabled_DoesNothing()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, _) = NewStack();
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
@@ -46,7 +48,7 @@ public sealed class ExtractionHostedServiceTests
     [Fact]
     public async Task RunOnce_ProposeMode_ListsCandidates_WithoutSharing()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, _) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
 
@@ -57,28 +59,26 @@ public sealed class ExtractionHostedServiceTests
     }
 
     [Fact]
-    public async Task RunOnce_PromoteMode_SharesRankedCandidates_WithDedup()
+    public async Task RunOnce_PromoteMode_DelegatesToTheQueue()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
-        store.Candidates["acme"] =
-        [
-            Row("h1", null, "organic fact about beta"),
-            Row("h2", null, "already shared fact"),
-            Row("h3", "docs/x.md")
-        ];
-        store.Index = new SharedIndex(["alreadysharedfact"], []);
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+        queue.PromoteOutcome = new PromoteOutcome(["h1"], 1, new Dictionary<string, int>());
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
-        store.Shared.ShouldBe([("acme", "h1")]);
+        // Promote-from-queue: the loop no longer shares directly — dedup and sharing
+        // live in PromotionQueueService (covered by its own integration tests).
+        store.Shared.ShouldBeEmpty();
+        queue.PromoteCalls.ShouldBe([new[] { "acme" }, new[] { "beta" }]);
     }
 
     [Fact]
-    public async Task RunOnce_PromoteMode_CapsAtSharedDefault()
+    public async Task RunOnce_PromoteMode_PassesTheSharedDefaultLimit()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = Enumerable.Range(0, 25)
@@ -87,44 +87,45 @@ public sealed class ExtractionHostedServiceTests
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
-        store.Shared.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
+        queue.LastLimit.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
     }
 
     [Fact]
-    public async Task RunOnce_PromoteMode_DedupsIdenticalContentAcrossProjectsInOnePass()
+    public async Task RunOnce_PromoteMode_CallsTheQueuePerProject()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
-        // Both projects hold the identical fact; the first promote must make the
-        // second dedup against the refreshed shared index within the same pass.
+        // Cross-project dedup lives inside PromotionQueueService (the shared index is
+        // refreshed per PromoteAsync there); the loop just delegates per project.
         store.Candidates["acme"] = [Row("h1", null, "identical cross-project fact")];
         store.Candidates["beta"] = [Row("h1", null, "identical cross-project fact")];
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
-        store.Shared.ShouldBe([("acme", "h1")]);
+        queue.PromoteCalls.ShouldBe([new[] { "acme" }, new[] { "beta" }]);
+        store.Shared.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task RunOnce_ProjectError_IsTolerated_OthersStillProcessed()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["beta"] = [Row("h9", null, "organic fact about acme")];
-        store.ExtractionError = new InvalidOperationException("boom");
+        queue.PromoteError = new InvalidOperationException("boom");
 
         await Should.NotThrowAsync(() =>
             service.RunOnceAsync(TestContext.Current.CancellationToken));
 
-        store.Shared.ShouldBe([("beta", "h9")]);
+        queue.PromoteCalls.Count.ShouldBe(2, "acme's failure must not abort beta");
     }
 
     [Fact]
     public async Task RunOnce_NoProjects_NoOp()
     {
-        var (store, _, service) = NewStack();
+        var (store, _, service, _) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Projects.Clear();
 
@@ -137,7 +138,7 @@ public sealed class ExtractionHostedServiceTests
     [Fact]
     public async Task ExecuteAsync_IntervalReadFailure_DoesNotKillTheLoop()
     {
-        var (store, time, service) = NewStack();
+        var (store, time, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
@@ -153,7 +154,7 @@ public sealed class ExtractionHostedServiceTests
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
         run.IsFaulted.ShouldBeFalse();
-        store.ExtractionCalls.ShouldBeGreaterThan(0);
+        queue.PromoteCalls.Count.ShouldBeGreaterThan(0);
 
         await cts.CancelAsync();
         await run;
@@ -162,7 +163,7 @@ public sealed class ExtractionHostedServiceTests
     [Fact]
     public async Task ExecuteAsync_PollLoop_RespectsInterval_AndStopsOnCancellation()
     {
-        var (store, time, service) = NewStack();
+        var (store, time, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
@@ -175,14 +176,12 @@ public sealed class ExtractionHostedServiceTests
 
         time.Advance(TimeSpan.FromMinutes(30)); // default interval
         await Task.Delay(100, TestContext.Current.CancellationToken);
-        store.Shared.Count.ShouldBe(1);
+        queue.PromoteCalls.Count.ShouldBe(2); // 2 projects, one pass
 
         time.Advance(TimeSpan.FromMinutes(30));
         await Task.Delay(100, TestContext.Current.CancellationToken);
-        // Second pass re-reads the shared index and dedups, so the share count stays 1;
-        // the loop's iteration is proven by the extraction call count (2 passes x 2 projects).
-        store.Shared.Count.ShouldBe(1);
-        store.ExtractionCalls.ShouldBe(4);
+        // Second pass proves the loop iterates: 2 passes x 2 projects.
+        queue.PromoteCalls.Count.ShouldBe(4);
 
         await cts.CancelAsync();
         await run;
@@ -192,17 +191,17 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_Cancelled_PropagatesOperationCanceled_WithoutProjectFailedLog()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service) = NewStack(logger);
+        var (store, _, service, queue) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        store.ExtractionError = new OperationCanceledException(); // BARE — no token attached
+        queue.PromoteError = new OperationCanceledException(); // BARE — no token attached
 
         await Should.ThrowAsync<OperationCanceledException>(() => service.RunOnceAsync(cts.Token));
 
-        store.ExtractionCalls.ShouldBe(1); // aborts at acme; beta never scanned
+        queue.PromoteCalls.Count.ShouldBe(1); // aborts at acme; beta never scanned
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 503);
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
     }
@@ -211,16 +210,16 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_UncancelledOce_IsTolerated_OthersStillProcessed()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service) = NewStack(logger);
+        var (store, _, service, queue) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["beta"] = [Row("h9", null, "organic fact about acme")];
         using var cts = new CancellationTokenSource(); // NOT cancelled
-        store.ExtractionError = new OperationCanceledException("boom");
+        queue.PromoteError = new OperationCanceledException("boom");
 
         await Should.NotThrowAsync(() => service.RunOnceAsync(cts.Token));
 
-        store.Shared.ShouldBe([("beta", "h9")]);
+        queue.PromoteCalls.Count.ShouldBe(2, "beta must still be processed");
         logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 503 && r.Level == LogLevel.Warning);
     }
 
@@ -228,7 +227,7 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_ProposeMode_LogsRankedCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service) = NewStack(logger);
+        var (store, _, service, queue) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Candidates["acme"] =
         [
@@ -258,7 +257,7 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_PromoteMode_LogsCountsOnly_NoCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service) = NewStack(logger);
+        var (store, _, service, queue) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];

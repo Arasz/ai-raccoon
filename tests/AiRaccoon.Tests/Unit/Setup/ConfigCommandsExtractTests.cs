@@ -123,6 +123,41 @@ public class ConfigCommandsExtractTests
     }
 
     [Fact]
+    public async Task ExtractCapacitySet_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["extract", "capacity", "3"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.QueueCapacityGlobal].ShouldBe("3");
+        outp.ShouldContain("capacity: 3 candidates");
+    }
+
+    [Fact]
+    public async Task ExtractCapacityInvalid_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["extract", "capacity", "0"], store);
+
+        exit.ShouldBe(1);
+        err.ShouldContain("capacity must be a positive number");
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.QueueCapacityGlobal);
+    }
+
+    [Fact]
+    public async Task ExtractList_ShowsTheQueueCapacity()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["extract", "list"], store);
+
+        exit.ShouldBe(0);
+        outp.ShouldContain("queue-capacity: 1000");
+    }
+
+    [Fact]
     public async Task ExtractList_ShowsDefaults_WhenUnset()
     {
         var store = new FakeConfigStore();

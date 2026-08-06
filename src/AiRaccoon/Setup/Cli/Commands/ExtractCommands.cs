@@ -58,6 +58,22 @@ public sealed class ExtractCommands : IExtractCommands
         return 0;
     }
 
+    public async Task<int> SetCapacityAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var capacity = parseResult.GetValue<string>("capacity");
+        if (!int.TryParse(capacity, out var parsed) || parsed <= 0)
+        {
+            await stderr.WriteLineAsync("ai-raccoon: capacity must be a positive number of queued candidates");
+            return 1;
+        }
+
+        await store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, parsed.ToString(),
+            cancellationToken);
+        await stdout.WriteLineAsync($"propose-tier capacity: {parsed} candidates");
+        return 0;
+    }
+
     public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken)
     {
         var enabled = ExtractionConfigKeys.ParseEnabled(
@@ -66,8 +82,11 @@ public sealed class ExtractCommands : IExtractCommands
             await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken));
         var interval = ExtractionConfigKeys.ParseIntervalMinutes(
             await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken));
+        var capacity = ExtractionConfigKeys.ParseQueueCapacity(
+            await store.GetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, cancellationToken));
         await stdout.WriteLineAsync(
-            $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min");
+            $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min  " +
+            $"queue-capacity: {capacity}");
         return 0;
     }
 

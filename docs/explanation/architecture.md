@@ -80,6 +80,19 @@ The CHECK constraint `(workspace_id IS NULL AND scope IN ('shared','project','cu
 OR (workspace_id IS NOT NULL AND scope IS NULL)` enforces the mutual exclusion at
 the schema level.
 
+### Propose tier (`promotion_queue`)
+
+Candidates waiting for promotion review live in their own table, deliberately outside
+`entries`: they are not searchable, not counted by `memory_stats`, and never swept.
+`UNIQUE(project_id, hash)` makes re-propose an upsert (first `created_at` survives);
+`idx_promotion_queue_project` / `idx_promotion_queue_score` serve the review order
+(score DESC, created_at ASC) and the per-project eviction query (lowest score, oldest
+first). Capacity is enforced by `PromotionQueueService` against the
+`extract.queue-capacity.global` setting (default 1000) with `UniformCountEvictionPolicy`
+— the biggest occupier loses its weakest row (docs/adr/0007).
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:146-172`
+
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:21-119`
 
 ### Indexes and virtual tables

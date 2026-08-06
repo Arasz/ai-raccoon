@@ -23,10 +23,12 @@ public sealed record ShareCandidate(
     string Hash,
     string Path,
     string ValuePreview,
+    double Score,
     double Rating,
     int AccessCount,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<string> Reasons);
+    IReadOnlyList<string> Reasons,
+    string? SourceFile);
 
 /// <summary>Extraction outcome: ranked candidates; in promote mode the hashes actually promoted.</summary>
 public sealed record ShareExtractResult(

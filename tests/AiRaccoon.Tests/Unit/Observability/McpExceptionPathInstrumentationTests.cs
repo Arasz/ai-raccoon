@@ -33,7 +33,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics, new FakePromotionQueue());
 
         await Should.ThrowAsync<McpException>(() =>
             tools.Add("", "/repo", TestContext.Current.CancellationToken));
@@ -49,7 +49,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics, new FakePromotionQueue());
 
         await Should.ThrowAsync<McpException>(() =>
             tools.Status("", TestContext.Current.CancellationToken));
@@ -65,7 +65,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new AllowAllGuard(), metrics, new FakePromotionQueue());
 
         await Should.ThrowAsync<McpException>(() =>
             tools.Remove("", "/repo", TestContext.Current.CancellationToken));
@@ -81,7 +81,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        var tools = new WatchTools(new FakeWatchService(), new DenyWriteGuard(), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new DenyWriteGuard(), metrics, new FakePromotionQueue());
 
         await Should.ThrowAsync<McpException>(() =>
             tools.Add("proj-a", "/repo", TestContext.Current.CancellationToken));
@@ -98,7 +98,9 @@ public class McpExceptionPathInstrumentationTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
         var store = new SimpleFakeStore();
-        var tools = CreateMemoryTools(store, metrics, new DenyWriteGuard());
+        var tools = new SyncTools(new SimpleFakeSyncService(),
+            new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
+            new DenyWriteGuard(), metrics, new FakePromotionQueue());
 
         await Should.ThrowAsync<McpException>(() =>
             tools.Sync("proj-a", TestContext.Current.CancellationToken));
@@ -111,13 +113,7 @@ public class McpExceptionPathInstrumentationTests
 
     private static MemoryTools CreateMemoryTools(SimpleFakeStore store, ToolCallMetrics metrics, IMemoryAccessGuard guard)
     {
-        var workspaces = new WorkspaceService(store, new FakeWorkspaceStore(), new FakeTimeProvider());
-        var sweeper = new SweepService(store, new FakeTimeProvider());
-        return new MemoryTools(store, new SimpleFakeSyncService(), workspaces, sweeper,
-            guard,
-            new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ForgettingPolicyService(store, guard),
-            metrics, new SharedExtractionService());
+        return new MemoryTools(store, guard, metrics, new FakePromotionQueue());
     }
 
     private sealed class AllowAllGuard : IMemoryAccessGuard

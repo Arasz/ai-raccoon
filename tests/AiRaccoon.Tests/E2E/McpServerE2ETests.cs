@@ -65,7 +65,7 @@ public class McpServerE2ETests : IAsyncLifetime
     public async Task Isolation_WorkspaceWrite_IsNotVisibleInProjectScope()
     {
         var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
-        var wsId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("workspaceId").GetString()!;
+        var wsId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString()!;
 
         await CallAsync("memory_write",
             ("projectId", "acme"),
@@ -88,7 +88,7 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         var begin = await CallAsync("memory_workspace_begin",
             ("projectId", "acme"), ("name", "feature-x"));
-        var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("workspaceId").GetString();
+        var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString();
         workspaceId.ShouldNotBeNullOrWhiteSpace();
 
         await CallAsync("memory_write",
@@ -116,7 +116,7 @@ public class McpServerE2ETests : IAsyncLifetime
     public async Task Worktree_Discard_RemovesTheOutbox()
     {
         var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
-        var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("workspaceId").GetString()!;
+        var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString()!;
 
         await CallAsync("memory_write",
             ("projectId", "acme"),
@@ -141,7 +141,7 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         var write = await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "cross project convention"));
-        var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("hash").GetString()!;
+        var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("data").GetProperty("hash").GetString()!;
 
         var share = await CallAsync("memory_share", ("projectId", "acme"), ("hash", hash));
         Text(share).ShouldContain("shared");
