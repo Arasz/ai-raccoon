@@ -12,17 +12,19 @@ public sealed class EncryptionSourceException(string message) : InvalidOperation
 ///     Reads/writes the <c>memory.db.source</c> sidecar next to the bank. Absence means the env
 ///     source; a corrupt sidecar fails loudly with the path; writes are atomic (temp + rename).
 /// </summary>
-public sealed class EncryptionState : IEncryptionState
+public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private readonly string _path;
 
-    public EncryptionState(string encryptionDataFilePath)
+    public EncryptionSourceSidecar(string encryptionDataFilePath)
     {
         Guard.IsNotNullOrWhiteSpace(encryptionDataFilePath);
         _path = PathFor(encryptionDataFilePath);
     }
+
+    public string FilePath => _path;
 
     public EncryptionData Read()
     {

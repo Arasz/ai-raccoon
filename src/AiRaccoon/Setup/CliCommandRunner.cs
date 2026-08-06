@@ -14,11 +14,11 @@ using Microsoft.Extensions.Logging.Console;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     The one-shot config-verb path (Program.cs): explicit composition of the bank, watch
-///     store and encryption provider family — no DI container, no host, no key probe/embedding
-///     bootstrap. Logging goes to stderr (the stdio protocol owns stdout).
+///     One-shot composition root for all CLI verbs (Program.cs): explicit composition of the
+///     bank, watch store and encryption provider family — no DI container, no host, no key
+///     probe/embedding bootstrap. Logging goes to stderr (the stdio protocol owns stdout).
 /// </summary>
-internal static class ConfigVerbRunner
+internal static class CliCommandRunner
 {
     public static async Task<int> RunAsync(CliParseResult parsed, ServerConfig config, TextWriter stdout,
         TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default)
@@ -29,17 +29,17 @@ internal static class ConfigVerbRunner
         });
         var logger = loggerFactory.CreateLogger("ConfigCommands");
 
-        var encryptionState = new EncryptionState(SqliteConnectionFactory.BankPathFor(config.Options));
+        var bankPath = SqliteConnectionFactory.BankPathFor(config.Options);
+        var sidecar = new EncryptionSourceSidecar(bankPath);
         var bws = new BitwardenCliSecretManager();
-        var none = new NoneEncryptionKeyProvider();
+        var resolver = EncryptionKeyResolver.Create(bankPath, bws, sidecar);
         var env = new EnvEncryptionKeyProvider();
-        var resolver = new EncryptionKeyResolver(encryptionState,
-            [none, env, new BitwardenEncryptionKeyProvider(bws)]);
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
 
+        var encryptionCommands = new EncryptionCommands(bank, bws, env, sidecar, logger);
+
         return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin,
-            cancellationToken, bank: bank, bws: bws, env: env, watchStore: new WatchStore(bank),
-            encryptionState: encryptionState, logger: logger);
+            encryptionCommands: encryptionCommands, watchStore: new WatchStore(bank), cancellationToken);
     }
 }

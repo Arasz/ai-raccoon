@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -30,10 +31,10 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionState.PathFor(BankPath());
+    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
     private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) =>
-        new(new EncryptionState(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
+        new(new EncryptionSourceSidecar(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
 
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 
@@ -68,7 +69,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public void Resolve_SidecarBitwarden_FetchesSecretAndDerives()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         var passphrase = resolver.Resolve().Passphrase;
@@ -105,7 +106,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public void Resolve_ReadsSidecarFreshOnEveryCall()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"),
-            new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")));
+            new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
         resolver.Resolve().Passphrase.ShouldBe("env-pass");
 
@@ -130,7 +131,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"),
-            new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")));
+            new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
         var resolved = resolver.Resolve();
 
@@ -175,79 +176,6 @@ public sealed class EncryptionKeyResolverTests : IDisposable
             }
 
             return _result!;
-        }
-    }
-
-    /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
-    private sealed class OpenSshKeyBuilder
-    {
-        private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
-        private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
-        private uint _checkint1 = 0x01234567;
-        private uint _checkint2 = 0x01234567;
-        private string _cipherName = "none";
-        private string _kdfName = "none";
-        private string _keyType = "ssh-ed25519";
-
-        private string _magic = "openssh-key-v1\0";
-
-        public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
-        {
-            _cipherName = cipherName;
-            _kdfName = kdfName;
-            return this;
-        }
-
-        public OpenSshKeyBuilder WithKeyType(string keyType)
-        {
-            _keyType = keyType;
-            return this;
-        }
-
-        public string Build()
-        {
-            using var body = new MemoryStream();
-            body.Write(Encoding.ASCII.GetBytes(_magic));
-            WriteString(body, _cipherName);
-            WriteString(body, _kdfName);
-            WriteString(body, []);
-            WriteUInt32(body, 1);
-            WriteString(body, BuildPublicKeyBlob());
-            WriteString(body, BuildPrivateSection());
-
-            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-                                                           + "\n-----END OPENSSH PRIVATE KEY-----\n";
-        }
-
-        private byte[] BuildPublicKeyBlob()
-        {
-            using var blob = new MemoryStream();
-            WriteString(blob, _keyType);
-            WriteString(blob, PublicKey01To20);
-            return blob.ToArray();
-        }
-
-        private byte[] BuildPrivateSection()
-        {
-            using var section = new MemoryStream();
-            WriteUInt32(section, _checkint1);
-            WriteUInt32(section, _checkint2);
-            WriteString(section, _keyType);
-            WriteString(section, PublicKey01To20);
-            WriteString(section, [.. Seed00To1F, .. PublicKey01To20]);
-            WriteString(section, []);
-            section.Write(new byte[8 - (int)section.Length % 8]);
-            return section.ToArray();
-        }
-
-        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
-
-        private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
-
-        private static void WriteString(Stream stream, byte[] value)
-        {
-            WriteUInt32(stream, (uint)value.Length);
-            stream.Write(value);
         }
     }
 }

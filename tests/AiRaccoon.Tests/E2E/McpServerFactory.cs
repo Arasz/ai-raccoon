@@ -55,7 +55,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         var options = new InfrastructureOptions { DataRoot = DataRoot, Scope = _scope };
         var store = new SqliteMemoryStore(
             new SqliteConnectionFactory(options,
-                new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+                new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));

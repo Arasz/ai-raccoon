@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Encryption;
+using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 
@@ -9,7 +10,7 @@ namespace AiRaccoon.Infrastructure.Sqlite.Encryption;
 ///     call (the config commands change it between calls). Absent sidecar or "env" → the env
 ///     provider; "bitwarden" → bws fetch + derivation; a corrupt sidecar fails loudly (plan §5.2).
 /// </summary>
-public sealed class EncryptionKeyResolver(IEncryptionState encryptionState, IReadOnlyCollection<IEncryptionKeyProvider> providers)
+public sealed class EncryptionKeyResolver(IEncryptionSourceSidecar encryptionState, IReadOnlyCollection<IEncryptionKeyProvider> providers)
     : IEncryptionKeyResolver
 {
     public ResolvedKey Resolve()
@@ -21,6 +22,16 @@ public sealed class EncryptionKeyResolver(IEncryptionState encryptionState, IRea
             .FirstOrDefault() ?? ThrowHelper.ThrowArgumentNullException<Passphrase>();
 
         return new ResolvedKey(resolvedPassphrase.Value, resolvedPassphrase.Source);
+    }
+
+    /// <summary>Creates a resolver with the standard three-provider chain for one-shot paths (config verbs).</summary>
+    public static EncryptionKeyResolver Create(string bankPath, ICliSecretManager? bws = null,
+        IEncryptionSourceSidecar? sidecar = null)
+    {
+        sidecar ??= new EncryptionSourceSidecar(bankPath);
+        bws ??= new BitwardenCliSecretManager();
+        return new EncryptionKeyResolver(sidecar,
+            [new NoneEncryptionKeyProvider(), new EnvEncryptionKeyProvider(), new BitwardenEncryptionKeyProvider(bws)]);
     }
 }
 

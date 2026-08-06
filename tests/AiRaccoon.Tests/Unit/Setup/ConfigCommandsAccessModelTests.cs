@@ -24,7 +24,7 @@ public class ConfigCommandsAccessModelTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -254,7 +254,7 @@ public class ConfigCommandsAccessModelTests
         {
             Settings =
             {
-                ["embedding.baseUrl"] = "https://old.example.com",
+                ["embedding.baseUrl"] = "https://stdin, TestContext.Current.CancellationToken.example.com",
                 ["embedding.apiKey"] = "k"
             }
         };

@@ -195,7 +195,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
             .ShouldBe("bitwarden");
-        var sidecar = new EncryptionState(Ctx.BankPath).Read();
+        var sidecar = new EncryptionSourceSidecar(Ctx.BankPath).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
     }
@@ -205,7 +205,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.ProjectId)).ShouldBe(_capturedProjectId);
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.SecretId)).ShouldBe(_capturedSecretId);
-        var sidecar = new EncryptionState(Ctx.BankPath).Read();
+        var sidecar = new EncryptionSourceSidecar(Ctx.BankPath).Read();
         sidecar.ShouldNotBeNull();
         sidecar.ProjectId.ShouldBe(_capturedProjectId);
         sidecar.SecretId.ShouldBe(_capturedSecretId);

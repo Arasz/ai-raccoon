@@ -27,7 +27,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
 
     private static IEncryptionKeyResolver Resolver(InfrastructureOptions options, IEncryptionKeyProvider provider) =>
-        new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)), [provider]);
+        new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)), [provider]);
 
     private SqliteConnectionFactory Factory(string? passphrase = null) =>
         new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
@@ -205,7 +205,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // Sidecar points at bitwarden; the fake bws secret derives a key that is NOT bank-key-A.
         File.WriteAllText(bankFactory.BankPath + ".source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var resolver = new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+        var resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")))]);
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
 

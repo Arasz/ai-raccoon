@@ -23,12 +23,12 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     returns the process exit code. User-run commands get no access-tier checks; errors
 ///     go to stderr, results to stdout.
 /// </summary>
-internal static partial class ConfigCommands
+internal static class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
-        SqliteConnectionFactory? bank = null, ICliSecretManager? bws = null, IEncryptionKeyProvider? env = null,
-        IWatchStore? watchStore = null, IEncryptionState? encryptionState = null, ILogger? logger = null)
+        TextWriter stdout, TextWriter stderr, TextReader stdin,
+        IEncryptionCommands? encryptionCommands = null, IWatchStore? watchStore = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -59,9 +59,9 @@ internal static partial class ConfigCommands
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
                 ["watch", "registered"] => await WatchRegisteredAsync(parseResult, watchStore, stdout, cancellationToken),
                 ["watch", "remove"] => await WatchRemoveAsync(parseResult, store, stdout, cancellationToken),
-                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, env, encryptionState, logger, cancellationToken),
-                ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, encryptionState, logger, cancellationToken),
-                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, env, encryptionState, logger, cancellationToken),
+                ["encryption", "bitwarden"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).BitwardenAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
+                ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

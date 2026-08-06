@@ -43,10 +43,10 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionState.PathFor(BankPath());
+    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
     private void WriteSidecar(string source, string projectId, string secretId) =>
-        new EncryptionState(BankPath()).Write(new EncryptionData(source) { ProjectId = projectId, SecretId = secretId });
+        new EncryptionSourceSidecar(BankPath()).Write(new EncryptionData(source) { ProjectId = projectId, SecretId = secretId });
 
     private FakeLogger? _lastLogger;
 
@@ -58,15 +58,18 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         parsed.CommandPath.ShouldNotBeEmpty();
 
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(envPassphrase), new BitwardenEncryptionKeyProvider(runner)]));
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var logger = new FakeLogger();
         _lastLogger = logger;
+        var encryptionState = new EncryptionSourceSidecar(BankPath());
+        var envProvider = new StubEnvProvider(envPassphrase);
+        var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, TestContext.Current.CancellationToken, bank, runner,
-            new StubEnvProvider(envPassphrase), watchStore: null, encryptionState: new EncryptionState(BankPath()), logger: logger);
+            stdin ?? TextReader.Null, encryptionCommands,
+            cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -125,7 +128,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
         store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe(DefaultProjectId);
         store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(DefaultSecretId);
-        var sidecar = new EncryptionState(BankPath()).Read();
+        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
         sidecar.ProjectId.ShouldBe(DefaultProjectId);
@@ -148,7 +151,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe("p-111");
         store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe("s-222");
-        var sidecar = new EncryptionState(BankPath()).Read();
+        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.ProjectId.ShouldBe("p-111");
         sidecar.SecretId.ShouldBe("s-222");
@@ -208,7 +211,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
@@ -219,7 +222,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
-        var sidecar = new EncryptionState(BankPath()).Read();
+        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 2 && r.Level == LogLevel.Information
@@ -242,7 +245,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
@@ -267,7 +270,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
@@ -293,7 +296,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
@@ -404,7 +407,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
@@ -442,7 +445,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
@@ -486,7 +489,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(new EncryptionState(BankPath()),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
         await using (var seed = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
@@ -498,6 +501,67 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
+    }
+
+    // ── constructor null-guards ──
+
+    [Fact]
+    public void Constructor_NullBank_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(null!,
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullBws_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                null!,
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullEnv_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                null!,
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullEncryptionState_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                null!,
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullLogger_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                null!));
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider

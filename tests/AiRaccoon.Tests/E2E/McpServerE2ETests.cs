@@ -259,11 +259,11 @@ public class McpServerE2ETests : IAsyncLifetime
         var options = new InfrastructureOptions { DataRoot = _factory.DataRoot, Scope = InstallScope.User };
         var store = new SqliteMemoryStore(
             new SqliteConnectionFactory(options,
-                new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+                new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

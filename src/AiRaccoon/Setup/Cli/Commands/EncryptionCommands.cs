@@ -12,11 +12,11 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     encryption bitwarden/show/unset handlers (plan §S3): bws presence check, interactive id
+///     encryption bitwarden/show/unset handlers: bws presence check, interactive id
 ///     collection with owner defaults, per-run-only -t token, reachability validation, and the
 ///     rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
 /// </summary>
-internal static partial class ConfigCommands
+public sealed partial class EncryptionCommands : IEncryptionCommands
 {
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
@@ -30,51 +30,63 @@ internal static partial class ConfigCommands
     private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
 
-    private static async Task<int> EncryptionBitwardenAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, SqliteConnectionFactory? bank,
-        ICliSecretManager? bws, IEncryptionKeyProvider? env, IEncryptionState? encryptionState, ILogger? logger,
-        CancellationToken cancellationToken)
+    private readonly SqliteConnectionFactory _bank;
+    private readonly ICliSecretManager _bws;
+    private readonly IEncryptionKeyProvider _env;
+    private readonly IEncryptionSourceSidecar _sidecar;
+    private readonly ILogger _logger;
+
+    public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
+        IEncryptionKeyProvider env, IEncryptionSourceSidecar sidecar, ILogger logger)
     {
         Guard.IsNotNull(bank);
         Guard.IsNotNull(bws);
         Guard.IsNotNull(env);
-        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(sidecar);
         Guard.IsNotNull(logger);
 
+        _bank = bank;
+        _bws = bws;
+        _env = env;
+        _sidecar = sidecar;
+        _logger = logger;
+    }
+
+    public async Task<int> BitwardenAsync(ParseResult parseResult, IMemoryStore store,
+        TextWriter stdout, TextWriter stderr, TextReader stdin,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            bws.Run(["--version"], null, PresenceTimeout);
+            _bws.Run(["--version"], null, PresenceTimeout);
         }
         catch (BwsInvocationException ex)
         {
-            Log.BwsInvocationFailed(logger, ex);
+            Log.BwsInvocationFailed(_logger, ex);
             await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
-        // (b) Interactive collection; empty input = the owner default (ids are not secrets).
         var projectId = await PromptAsync(stderr, stdin, $"project id [{DefaultProjectId}]", DefaultProjectId, cancellationToken);
         var secretId = await PromptAsync(stderr, stdin, $"secret id [{DefaultSecretId}]", DefaultSecretId, cancellationToken);
 
-        // (c) Reachability validation: fetch + parse + derive, with the per-run token only.
-        // Any failure = §5.4 error, exit 1, no state change.
         var token = parseResult.GetResult("-t") is not null ? parseResult.GetValue<string>("-t") : null;
         BwsResult fetched;
         try
         {
-            fetched = bws.Run(["secret", "get", secretId], token, FetchTimeout);
+            fetched = _bws.Run(["secret", "get", secretId], token, FetchTimeout);
         }
         catch (BwsInvocationException ex)
         {
-            Log.BwsInvocationFailed(logger, ex);
+            Log.BwsInvocationFailed(_logger, ex);
             await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
         if (fetched.ExitCode != 0)
         {
-            var errorLine = FirstStderrLine(fetched.Stderr);
-            Log.BwsCommandFailed(logger, fetched.ExitCode, errorLine);
+            var errorLine = fetched.FirstErrorLine;
+            Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
             await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
             return 1;
         }
@@ -92,18 +104,15 @@ internal static partial class ConfigCommands
 
         var derived = SshKeyDerivation.DeriveRawKey(seed);
 
-        // (d) Rotation warning (config success path).
         await stderr.WriteLineAsync(RotationWarning);
 
-        // (e) Bank: rekey the existing bank to the derived key, self-healing the crash
-        // windows. Fresh bank (no file yet): skip rekey — the first server start creates it.
-        var bankPath = bank.BankPath;
+        var bankPath = _bank.BankPath;
         if (File.Exists(bankPath))
         {
             SqliteException? openError = null;
             try
             {
-                await using (var probe = await bank.OpenBankAsync(cancellationToken))
+                await using (var probe = await _bank.OpenBankAsync(cancellationToken))
                 {
                 }
             }
@@ -114,25 +123,20 @@ internal static partial class ConfigCommands
 
             if (openError is null)
             {
-                // Current-source open succeeded → rekey to the derived key (verify-reopen inside).
-                Log.RekeyingBank(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
-                await bank.RekeyBankAsync(derived, cancellationToken);
-                Log.BankRekeyed(logger, BitwardenEncryptionKeyProvider.EncryptionSource);
+                Log.RekeyingBank(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
+                await _bank.RekeyBankAsync(derived, cancellationToken);
+                Log.BankRekeyed(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
             }
-            else if (await TryOpenAsync(bank, derived, cancellationToken))
+            else if (await TryOpenAsync(_bank, derived, cancellationToken))
             {
-                // Crash window between rekey and sidecar write: the bank is already
-                // derived-keyed — skip the rekey and complete the persistence.
             }
             else
             {
-                // Amendment 1 (unset crash window): rekey-back landed but the sidecar was never
-                // deleted. The env key opens the bank → report and leave the sidecar consistent.
-                var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
-                if (File.Exists(EncryptionState.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
-                    await TryOpenAsync(bank, envPassphrase, cancellationToken))
+                var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+                if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
+                    await TryOpenAsync(_bank, envPassphrase, cancellationToken))
                 {
-                    encryptionState.Delete();
+                    _sidecar.Delete();
                     await stderr.WriteLineAsync("ai-raccoon: bank is env-keyed; source was not switched");
                     return 0;
                 }
@@ -142,9 +146,7 @@ internal static partial class ConfigCommands
             }
         }
 
-        // (f) Persist: sidecar FIRST (the resolver reads it pre-open), then the settings
-        // mirror — the store's opens now resolve the bitwarden key because the sidecar is set.
-        encryptionState.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
+        _sidecar.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
         await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
@@ -153,24 +155,15 @@ internal static partial class ConfigCommands
         return 0;
     }
 
-    private static async Task<int> EncryptionShowAsync(IMemoryStore store, TextWriter stdout,
-        SqliteConnectionFactory? bank, IEncryptionState? encryptionState, ILogger? logger,
+    public async Task<int> ShowAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        Guard.IsNotNull(encryptionState);
-        Guard.IsNotNull(logger);
-
-        if (bank is not null)
-        {
-            // Validate the bank opens with the configured source (loud on corrupt sidecar).
-            await using var probe = await bank.OpenBankAsync(cancellationToken);
-        }
+        await using var probe = await _bank.OpenBankAsync(cancellationToken);
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        var sidecar = bank is not null ? encryptionState.Read() : null;
+        var sidecar = _sidecar.Read();
         if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || sidecar?.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
-            // Settings first, sidecar fallback (crash-window self-description, plan §4).
             var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
                             ?? sidecar?.ProjectId ?? "(unset)";
             var secretId = await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken)
@@ -185,45 +178,33 @@ internal static partial class ConfigCommands
         return 0;
     }
 
-    private static async Task<int> EncryptionUnsetAsync(IMemoryStore store, TextWriter stdout, TextWriter stderr,
-        SqliteConnectionFactory? bank, IEncryptionKeyProvider? env, IEncryptionState? encryptionState, ILogger? logger,
+    public async Task<int> UnsetAsync(IMemoryStore store, TextWriter stdout, TextWriter stderr,
         CancellationToken cancellationToken)
     {
-        Guard.IsNotNull(bank);
-        Guard.IsNotNull(env);
-        Guard.IsNotNull(encryptionState);
-        Guard.IsNotNull(logger);
-        var bankPath = bank.BankPath;
+        var bankPath = _bank.BankPath;
         var bankExists = File.Exists(bankPath);
 
         if (bankExists)
         {
-            // Open with the current source (sidecar still says bitwarden) to prove the key works.
-            await using (var probe = await bank.OpenBankAsync(cancellationToken))
+            await using (var probe = await _bank.OpenBankAsync(cancellationToken))
             {
             }
 
-            var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+            var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
             if (!string.IsNullOrEmpty(envPassphrase))
             {
-                // Rows first — the store still opens with the bitwarden key at this point.
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
 
-                // Rekey back to the env passphrase (current key resolves from the sidecar).
-                Log.RekeyingBank(logger, EnvEncryptionKeyProvider.EncryptionSource);
-                await bank.RekeyBankAsync(envPassphrase, cancellationToken);
-                Log.BankRekeyed(logger, EnvEncryptionKeyProvider.EncryptionSource);
-                encryptionState.Delete();
+                Log.RekeyingBank(_logger, EnvEncryptionKeyProvider.EncryptionSource);
+                await _bank.RekeyBankAsync(envPassphrase, cancellationToken);
+                Log.BankRekeyed(_logger, EnvEncryptionKeyProvider.EncryptionSource);
+                _sidecar.Delete();
             }
             else
             {
-                // No env passphrase: DO NOT auto-decrypt (deferred empty-rekey per plan §7.3) —
-                // warn loudly and LEAVE the sidecar + rows in place (source stays bitwarden) so
-                // the documented retry actually works: setting AIRACCOON_DB_PASSPHRASE and
-                // re-running unset reopens with the bitwarden key and rekeys back.
-                Log.UnsetSkippedRekey(logger);
+                Log.UnsetSkippedRekey(_logger);
                 await stderr.WriteLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
                 return 1;
@@ -231,11 +212,10 @@ internal static partial class ConfigCommands
         }
         else
         {
-            // No bank exists — nothing is stranded; clean up the mirror rows and the sidecar.
             await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
-            encryptionState.Delete();
+            _sidecar.Delete();
         }
 
         await stdout.WriteLineAsync("encryption source reset to env");
@@ -262,12 +242,6 @@ internal static partial class ConfigCommands
         {
             return false;
         }
-    }
-
-    private static string FirstStderrLine(string stderr)
-    {
-        var line = stderr.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
-        return line ?? "(no stderr)";
     }
 
     private static partial class Log

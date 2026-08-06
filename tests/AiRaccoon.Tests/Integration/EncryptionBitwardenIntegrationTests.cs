@@ -79,13 +79,13 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionState.PathFor(BankPath());
+    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
     private void WriteSidecar(string secretId = SecretId) =>
         File.WriteAllText(SidecarPath(),
             $$"""{"source":"bitwarden","projectId":"{{ProjectId}}","secretId":"{{secretId}}"}""");
 
-    private EncryptionKeyResolver Resolver() => new(new EncryptionState(BankPath()),
+    private EncryptionKeyResolver Resolver() => new(new EncryptionSourceSidecar(BankPath()),
         [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
 
     /// <summary>Resolver pinned to the derived key, independent of the sidecar (the old StubEnvProvider semantics).</summary>
@@ -342,7 +342,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         // routes the child's resolve through the fake bws, which serves a key that derives to
         // something else → the probe open fails with SQLCipher code 26 → exit 2.
         var envFactory = new SqliteConnectionFactory(Options(), new EncryptionKeyResolver(
-            new EncryptionState(BankPath()), [new StubEnvProvider("env-passphrase")]));
+            new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider("env-passphrase")]));
         await using (var seed = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
@@ -445,8 +445,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>Never sees a sidecar — the resolver behaves like the pre-sidecar env stub.</summary>
-    private sealed class FixedState : IEncryptionState
+    private sealed class FixedState : IEncryptionSourceSidecar
     {
+        public string FilePath => "";
         public EncryptionData Read() => EncryptionData.None;
         public void Write(EncryptionData config) { }
         public void Delete() { }
