@@ -28,7 +28,7 @@ public static partial class HostExtensions
 
     internal static partial class Log
     {
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ai-raccoon: http transport listening on {Urls}")]
+        [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "ai-raccoon: http transport listening on {Urls}")]
         public static partial void HttpTransportListening(ILogger logger, string urls);
     }
 }

@@ -161,9 +161,6 @@ internal static partial class McpServerSetup
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "ai-raccoon: https transport is not supported")]
         public static partial void HttpsTransportNotSupported(ILogger logger);
-
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ai-raccoon: http transport listening on {Urls}")]
-        public static partial void HttpTransportListening(ILogger logger, string urls);
     }
 }
 

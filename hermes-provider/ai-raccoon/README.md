@@ -78,8 +78,9 @@ provider emits both signals itself.
   `status_words: false` to silence.
 - **Quiet server:** with `quiet: true` (default) the spawned server runs with `--quiet`
   (info logs off, Warning+ only) — the status words are the only routine stderr output.
-- **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var points at a file
-  (inherited by the spawned server), the provider appends one JSONL row per call:
+- **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var is set (read by the
+  provider at session start — a change needs a session restart; the spawned server merely
+  inherits it), the provider appends one JSONL row per call:
   `{"ts", "tool", "project_id", "status", "error_type?", "duration_ms", "agent_id",
   "session_id"}` — with caller attribution the server cannot know. An analysis data
   source for memory usage and retrieval behavior.

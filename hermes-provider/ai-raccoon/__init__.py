@@ -326,6 +326,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
                 call_args["agent_id"] = f"hermes-{self._agent_identity}"
             result = method(self._project_id, **call_args)
         except KeyError as exc:
+            # Defensive: the arg mapping is `in`-guarded, so this only fires if a
+            # required schema arg is missing from the model's call.
             self._log(tool_name, "error", (time.monotonic() - start) * 1000,
                       error_type="KeyError")
             return json.dumps({"error": f"Missing required argument: {exc}"})
