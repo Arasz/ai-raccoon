@@ -82,7 +82,7 @@ internal sealed class FakeConfigStore : IMemoryStore
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();

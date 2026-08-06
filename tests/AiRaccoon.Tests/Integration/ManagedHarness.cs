@@ -67,7 +67,7 @@ public sealed class ManagedHarness
         {
             cancellationToken.ThrowIfCancellationRequested();
             await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var harness = new ManagedHarness(dataRoot, store)

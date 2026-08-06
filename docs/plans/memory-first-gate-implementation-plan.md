@@ -126,6 +126,8 @@ git add -A && git commit -m "feat(agents): remove junie support — three-agent 
 
 ## Phase 1 — Shared gate module (ai-badger repo)
 
+**STATUS (2026-08-06): DONE.** Commits 8230c7b (shared module + hook) — 31 tests green.
+
 ### Task 1.1: Write failing matcher tests
 
 **Files:** Create `tests/test_memory_first_gate.py` (new), under `/Users/arasz/RiderProjects/ai-badger/`.
@@ -191,6 +193,8 @@ Run tests → PASS. Commit.
 
 ## Phase 2 — Hermes plugin gate (ai-badger repo)
 
+**STATUS (2026-08-06): DONE.** Commit 7e7538e — plugin `pre_tool_call` gate, manifest entry.
+
 ### Task 2.1: Write failing plugin hook test
 
 **Files:** Modify `tests/test_hermes_plugin_payloads.py` (existing payload-shape tests) — or new
@@ -253,6 +257,8 @@ Run manifest test → PASS. Commit.
 
 ## Phase 3 — Claude Code gate (ai-badger repo)
 
+**STATUS (2026-08-06): DONE.** Commit 43b582a — PreToolUse `Grep|Glob|Bash`; recorder folded into memory_grade_hook.py (a separate `--record` entry was rejected: select_hooks' endswith filter cannot match a trailing flag).
+
 ### Task 3.1: Write failing Claude wiring test
 
 **Files:** Modify `tests/test_hook_wiring_claude.py`.
@@ -310,6 +316,8 @@ Expected: JSON with `permissionDecision: "deny"` + reason naming `memory_search`
 
 ## Phase 4 — Copilot gate (ai-badger repo)
 
+**STATUS (2026-08-06): DONE.** Commit 1126100 — preToolUse `grep|rg|Glob|bash` via new per-agent `matcher` override (schema + adjuster).
+
 ### Task 4.1: Write failing Copilot wiring test
 
 **Files:** Modify `tests/test_adjust_hooks_copilot.py`.
@@ -351,6 +359,8 @@ discipline is mandatory).
 ---
 
 ## Phase 5 — Framework release + deploy to ai-raccoon + verify (both repos)
+
+**STATUS (2026-08-06): DONE.** Release 0.84.0 as Arasz/ai-badger PR #319 (all pre-push lanes green); deploy as Arasz/ai-raccoon PR #74. Live Claude/Copilot CLI probes blocked by account state (Claude OAuth expired + workspace untrusted; Copilot quota exhausted) — deployed-script e2e stands as the artifact-level evidence; see docs/work/2026-08-06-enforce-memory-mcp-first-hooks.md outcome.
 
 ### Task 5.1: Framework docs + changelog + version (release-shaped PR per project convention)
 

@@ -139,3 +139,18 @@ enforced gate. I did not instrument a session to check, because that would requi
   inspection rather than tool matchers — unverified whether their deny surfaces return usable redirect context.
 - Is the reason string enough, or should the block also offer the exact memory_search arguments (project_id)?
   ai-raccoon's project_id is repo-known, so the hook could inject it.
+
+---
+
+## Implementation outcome (2026-08-06 evening, SHIPPED 0.84.0)
+
+The memory-first gate is implemented, tested and deployed per `docs/plans/memory-first-gate-implementation-plan.md` (Phases 1-5). Summary of what landed and how it was verified:
+
+- **Framework (Arasz/ai-badger PR #319, release 0.84.0):** shared `memory_first_gate.py` + `memory_first_gate_hook.py` under `features/common/skills/ai-raccoon-memory/scripts/`; Hermes plugin registers `pre_tool_call` (`pre_tool_call_memory_gate`, in-process state keyed by project cwd, reset at session start); Claude hooks.json PreToolUse matcher `Grep|Glob|Bash`; Copilot preToolUse matcher `grep|rg|Glob|bash` via a new per-agent `matcher` override in the hooks manifest schema; the consulted marker is recorded by the existing PostToolUse memory_search entry (folded into `memory_grade_hook.py`, unconditional — one process per search). ADR-0017 + changelog 0.84.0. Full pytest suite: 3241 passed, 0 failed (18 pre-existing environmental skips, verified identical on the base commit); `.lefthook verify.sh` all lanes pass. Also tagged `ai-badger--v0.83.0` at the Junie release commit (the tag was missing and the release lane blocks every push until it exists).
+- **Deploy (Arasz/ai-raccoon PR #74):** `den-refresh` to 0.84.0 regenerated `.ai-badger/` (hooks, skills scripts, manifest), `.claude/settings.json`, `.github/hooks/ai-badger-hooks.json`, the generated agent files, and the user-scope Hermes plugin (`~/.hermes/plugins/ai-badger/`, plugin.yaml now declares `pre_tool_call`, enabled at 0.84.0).
+- **Verification evidence:**
+  - Unit: 41 new tests (`test_memory_first_gate.py` 19, `test_memory_first_gate_hook.py` 12, `test_memory_first_gate_hermes.py` 10) + wiring tests for Claude/Copilot/manifest/plugin install updated.
+  - Deployed-copy e2e (scratch HOME): Claude Grep → deny with reason naming `memory_search (project_id=ai-raccoon)`; Copilot camelCase grep + bash-grep → deny; non-search bash → silent pass; memory_grade_hook records the marker; same session passes after consultation; malformed JSON exits 0.
+  - Live Hermes plugin drive (fresh-load of the deployed module): block → memory_search → allow, terminal-grep allowed post-consultation, read_file never blocked.
+  - Live Claude Code and Copilot CLI probes could not run: Claude Code's OAuth session is expired and the workspace trust dialog is unaccepted (`hasTrustDialogAccepted`), and the Copilot CLI account is out of monthly quota. Neither is a code defect — the wiring is pinned by tests and on-disk inspection of `.claude/settings.json` / `.github/hooks/ai-badger-hooks.json`; the script-level e2e above exercises the exact deployed artifacts. Re-run `claude -p "grep ..."` / `copilot -p ...` after re-auth/quota reset for the transcript evidence.
+- **Known limitations (recorded in ADR-0017):** Hermes gateway multi-session shares the consulted flag per project until the next session start (plugin payloads carry no session_id); Copilot cloud-agent jobs are ephemeral, so the per-session marker has no cross-job meaning there.

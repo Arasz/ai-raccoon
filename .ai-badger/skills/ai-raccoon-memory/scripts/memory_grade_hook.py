@@ -14,10 +14,16 @@ from typing import Any, Dict
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory_grade  # pylint: disable=wrong-import-position
+import memory_first_gate as gate  # pylint: disable=wrong-import-position  # consulted marker
 
 
 def main() -> int:
-    """Read the hook payload from stdin; print additionalContext iff a search was logged."""
+    """Read the hook payload from stdin; print additionalContext iff a search was logged.
+
+    The memory-first gate's consulted marker is recorded here too (unconditional —
+    the grade logging below stays gated on AI_BADGER_MEMORY_GRADE, the marker must not
+    be), so Claude/Copilot run one process per memory_search instead of two.
+    """
     try:
         payload: Dict[str, Any] = json.load(sys.stdin)
     except json.JSONDecodeError:
@@ -27,6 +33,8 @@ def main() -> int:
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
     if not memory_grade.is_memory_search(tool_name):
         return 0
+    session_id = payload.get("session_id") or payload.get("sessionId")
+    gate.record_search(session_id)
     tool_input = payload.get("tool_input")
     tool_response = payload.get("tool_response")
     ask = memory_grade.log_search(
@@ -35,7 +43,7 @@ def main() -> int:
         payload.get("cwd") or "",
         stash=False,
         host="claude",
-        session_id=payload.get("session_id") or payload.get("sessionId"),
+        session_id=session_id,
     )
     if ask is None:
         return 0

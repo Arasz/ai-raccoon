@@ -241,7 +241,7 @@ public sealed class SqliteMemoryStore(
         // (FR-NM-7; see docs/work/features-native-memory/native-memory.feature) differs from the source row's by construction. AddContentAsync is idempotent:
         // re-sharing finds the existing shared row.
         return await AddContentAsync(projectId, $"shared/{source.Path}", source.Value,
-                ContextNaming.SharedContext, cancellationToken)
+                ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -255,7 +255,19 @@ public sealed class SqliteMemoryStore(
                 Def(MemorySql.SelectExtractionCandidates,
                     new { projectId, includeTtlRows = includeTtlRows ? 1 : 0 }, cancellationToken))
             .ConfigureAwait(false);
-        return rows.Select(r => r.ToCandidate()).ToList();
+
+        // Operator-configured source_file exclusions (extract.exclude.prefixes): rows whose
+        // source_file starts with an excluded prefix never become shared-extraction candidates.
+        var excluded = ExtractionConfigKeys.ParseExcludePrefixes(
+            await connection.QueryFirstOrDefaultAsync<string?>(
+                    Def(MemorySql.SelectSetting,
+                        new { key = ExtractionConfigKeys.ExcludePrefixesGlobal }, cancellationToken))
+                .ConfigureAwait(false));
+        return rows
+            .Where(r => r.SourceFile is null ||
+                        !excluded.Any(p => r.SourceFile.StartsWith(p, StringComparison.Ordinal)))
+            .Select(r => r.ToCandidate())
+            .ToList();
     }
 
     public async Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default)
@@ -505,7 +517,8 @@ public sealed class SqliteMemoryStore(
     }
 
     public async Task<MemoryEntry> AddContentAsync(
-        string projectId, string path, string content, string? context, CancellationToken cancellationToken = default)
+        string projectId, string path, string content, string? context, string? sourceFile = null,
+        string? section = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -534,8 +547,8 @@ public sealed class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
-                        sourceFile = (string?)null,
-                        section = (string?)null,
+                        sourceFile,
+                        section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
@@ -1170,7 +1183,7 @@ public sealed class SqliteMemoryStore(
         public int TotalChunks { get; set; }
     }
 
-    private sealed record SourceRow(string Path, string Value);
+    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section);
 
     private sealed record SharedRow(string Path, string Value);
 
