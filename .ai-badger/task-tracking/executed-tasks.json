@@ -875,6 +875,21 @@
       "resumeCommand": "hermes --resume 20260806_174951_0317b5",
         "resumeAttempts": [],
         "stateJsonUpdated": true
+    },
+      {
+          "taskId": "release-1-0-11",
+          "title": "Release 1.0.11: status words + memory op log + --quiet (folds unreleased 1.0.10)",
+          "sessionId": "20260806_193156_17bbc1",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/release-1-0-11",
+          "risk": false,
+          "startedAt": "2026-08-06T17:32:38.595351+00:00",
+          "finishedAt": null,
+          "state": "IN_PROGRESS",
+          "trackingSource": "hermes",
+          "resumeCommand": "hermes --resume 20260806_193156_17bbc1",
+          "resumeAttempts": []
     }
   ]
 }

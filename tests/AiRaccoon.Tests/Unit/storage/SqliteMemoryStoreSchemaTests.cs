@@ -20,20 +20,6 @@ namespace AiRaccoon.Tests.Unit.storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteMemoryStoreSchemaTests : IDisposable
 {
-    private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
-
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-schema");
-    private readonly SqliteConnectionFactory _factory;
-
-    public SqliteMemoryStoreSchemaTests()
-    {
-        _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-    }
-
-    public void Dispose() => Directory.Delete(_dataRoot, true);
-
     // The legacy schema shape: entries without source_file and a single-column entries_fts.
     private const string LegacyDdl = """
                                      CREATE TABLE IF NOT EXISTS entries (
@@ -66,6 +52,20 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
                                          INSERT INTO entries_fts(rowid, value) VALUES (new.id, new.value);
                                      END;
                                      """;
+
+    private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-schema");
+    private readonly SqliteConnectionFactory _factory;
+
+    public SqliteMemoryStoreSchemaTests()
+    {
+        _factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+    }
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task OpenBank_OnLegacySchema_AddsSourceFileColumn_AndRebuildsWeightedFts()
@@ -278,7 +278,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await SeedDuplicateBucketsAsync(("h1", "shared/a.md", "shared", "acme", null),
             ("h1", "shared/a.md", "shared", "beta", null));
 
-        await using (var first = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             // First open heals.
         }

@@ -87,8 +87,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null,
-            settings: new SettingsCommands(), sync: new SyncCommands(),
-            watch: new WatchCommands(Ctx.WatchStore));
+            new SettingsCommands(), new SyncCommands(),
+            new WatchCommands(Ctx.WatchStore));
         _lastCliMessage = stdout.ToString() + stderr.ToString();
         if (exit != 0)
         {
@@ -98,7 +98,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         return _lastCliMessage;
     }
 
-    private string NextToken(string seed) => "zephyr" + seed.Replace("/", string.Empty).Replace(".", string.Empty) + _tokenSeq++;
+    private string NextToken(string seed) => $"zephyr{seed.Replace("/", string.Empty).Replace(".", string.Empty)}{_tokenSeq++}";
 
     private string Map(string virtualPath) => Ctx.MapPath(virtualPath);
 
@@ -158,7 +158,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var path = Path.Combine(Map(virtualDir), name);
         var token = NextToken(name);
-        Ctx.WriteFile(path, token + " content");
+        Ctx.WriteFile(path, $"{token} content");
         _contentByPath[path] = token;
         if (!_contentsByPath.TryGetValue(path, out var list))
         {
@@ -217,7 +217,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     private void QueueUnreadableChange(string path)
     {
         MakeReadable(path);
-        Ctx.WriteFile(path, NextToken(Path.GetFileName(path)) + " locked");
+        Ctx.WriteFile(path, $"{NextToken(Path.GetFileName(path))} locked");
         MakeUnreadable(path);
     }
 
@@ -256,7 +256,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             : "SELECT count(*) FROM entries WHERE source_file = @path AND value LIKE @value";
         object parameters = valueContains is null
             ? new { path = Normalized(path) }
-            : new { path = Normalized(path), value = "%" + valueContains + "%" };
+            : new { path = Normalized(path), value = $"%{valueContains}%" };
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, parameters));
     }
@@ -367,7 +367,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var real = Map(path);
         Directory.CreateDirectory(Path.GetDirectoryName(real)!);
         var token = NextToken(Path.GetFileName(real));
-        Ctx.WriteFile(real, token + " content");
+        Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
         _lastFile = real;
         _lastFileContent = token;
@@ -485,7 +485,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             {
                 var path = Path.Combine(Map(dir), $"f{seq}.md");
                 var token = NextToken($"f{seq}");
-                Ctx.WriteFile(path, token + " content");
+                Ctx.WriteFile(path, $"{token} content");
                 _searchables.Add((project, path, token));
                 seq++;
             }
@@ -716,11 +716,11 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var dir = Ctx.RepoDir;
         var token = NextToken("x");
-        Ctx.WriteFile(Path.Combine(dir, "x.md"), token + " content");
+        Ctx.WriteFile(Path.Combine(dir, "x.md"), $"{token} content");
         File.Move(Path.Combine(dir, "x.md"), Path.Combine(dir, "y.md"));
-        Ctx.WriteFile(Path.Combine(dir, "y.md"), token + " content");
+        Ctx.WriteFile(Path.Combine(dir, "y.md"), $"{token} content");
         File.Move(Path.Combine(dir, "y.md"), Path.Combine(dir, "x.md"), true);
-        Ctx.WriteFile(Path.Combine(dir, "x.md"), token + " final");
+        Ctx.WriteFile(Path.Combine(dir, "x.md"), $"{token} final");
         _contentByPath[Path.Combine(dir, "x.md")] = token;
         _lastFile = Path.Combine(dir, "x.md");
         _lastFileContent = token;
@@ -731,7 +731,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var outside = Path.Combine(Ctx.DataRoot, "outside.md");
         var token = NextToken("outside");
-        Ctx.WriteFile(outside, token + " content");
+        Ctx.WriteFile(outside, $"{token} content");
         _contentByPath[outside] = token;
         _lastFile = outside;
         _lastFileContent = token;
@@ -745,7 +745,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var path = Path.Combine(Ctx.RepoDir, "file.md");
         var token = NextToken("v2");
-        Ctx.WriteFile(path, token + " content");
+        Ctx.WriteFile(path, $"{token} content");
         _contentByPath[path] = token;
         _lastFile = path;
         _lastFileContent = token;
@@ -758,7 +758,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         for (var i = 1; i <= 3; i++)
         {
             var token = NextToken("save");
-            Ctx.WriteFile(path, token + " content");
+            Ctx.WriteFile(path, $"{token} content");
             _contentByPath[path] = token;
             if (!_contentsByPath.TryGetValue(path, out var list))
             {
@@ -854,7 +854,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var path = Resolve(file);
         var token = NextToken("v2");
-        Ctx.WriteFile(path, token + " content");
+        Ctx.WriteFile(path, $"{token} content");
         _contentByPath[path] = token;
         _lastFile = path;
         _lastFileContent = token;
@@ -869,7 +869,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var file = BrokenFile(Ctx.RepoDir);
         MakeReadable(file);
         var token = NextToken("recovered");
-        Ctx.WriteFile(file, token + " content");
+        Ctx.WriteFile(file, $"{token} content");
         _contentByPath[file] = token;
         await Task.Delay(150);
     }
@@ -889,7 +889,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var file = BrokenFile(Ctx.RepoDir);
         MakeReadable(file);
         var token = NextToken("recovered");
-        Ctx.WriteFile(file, token + " content");
+        Ctx.WriteFile(file, $"{token} content");
         _contentByPath[file] = token;
         await Task.Delay(150);
         Ctx.TimeProvider.Advance(TimeSpan.FromSeconds(1));
@@ -953,7 +953,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         _lastError.ShouldNotBeNull("expected a tool error");
         _lastError!.ShouldBeOfType<McpException>();
-        _lastError.Message.ShouldStartWith(code + ":");
+        _lastError.Message.ShouldStartWith($"{code}:");
     }
 
     // "the tool errors with access-denied" is intentionally NOT bound here: NativeMemorySteps
@@ -1359,7 +1359,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var real = Map(path);
         var token = NextToken("shared");
-        Ctx.WriteFile(real, token + " content");
+        Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
         (await EnsureSearchableAsync("proj-a", token, real)).ShouldBeTrue();
         (await EnsureSearchableAsync("proj-b", token, real)).ShouldBeTrue();
@@ -1370,7 +1370,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var real = Map("/repo/readme.md");
         var token = NextToken("edited");
-        Ctx.WriteFile(real, token + " content");
+        Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
         // The watched path is a bare FILE: WatchEventSource cannot start a FileSystemWatcher on
         // a file (FileSystemWatcher requires a directory — S5 src limitation), so the edit event
@@ -1386,7 +1386,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var real = Resolve(path);
         var token = NextToken("edited");
-        Ctx.WriteFile(real, token + " content");
+        Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
         (await EnsureSearchableAsync(DefaultProject, token, real)).ShouldBeTrue(
             "editing the watched file did not become searchable");
@@ -1476,7 +1476,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         var real = Path.Combine(Ctx.RepoDir, "file.md");
         var token = NextToken("ownbank");
-        Ctx.WriteFile(real, token + " content");
+        Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
         (await EnsureSearchableAsync("proj-a", token, real)).ShouldBeTrue();
         (await EnsureSearchableAsync("proj-b", token, real)).ShouldBeTrue();

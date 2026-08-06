@@ -1,4 +1,3 @@
-using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
@@ -36,7 +35,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public void GetPassphrase_StdoutWithTrailingNewline_StillDerives()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build() + "\n", ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, $"{new TestOpenSshKeyBuilder().Build()}\n", ""));
 
         new BitwardenEncryptionKeyProvider(runner).GetPassphrase(new EncryptionData("bitwarden") { SecretId = "secret-1" }).Value.ShouldBe(DerivedRawKey);
     }

@@ -34,7 +34,7 @@ public sealed class WatchHostedServiceTests
     {
         using var dir = TempDir.New("hosted-disabled");
         var (stack, source, _, hosted) = NewStack();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
 
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
@@ -51,10 +51,10 @@ public sealed class WatchHostedServiceTests
     {
         using var dir = TempDir.New("hosted-full");
         var file = dir.File("a.md");
-        File.WriteAllText(file, "zephyrone");
+        await File.WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
         var (stack, source, catchUp, hosted) = NewStack();
         stack.Enable();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
 
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
@@ -75,12 +75,12 @@ public sealed class WatchHostedServiceTests
         var watermark = stack.Time.GetUtcNow().ToUnixTimeSeconds();
         var older = dir.File("older.md");
         var newer = dir.File("newer.md");
-        File.WriteAllText(older, "zephyrone");
-        File.WriteAllText(newer, "zephyrtwo");
+        await File.WriteAllTextAsync(older, "zephyrone", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(newer, "zephyrtwo", TestContext.Current.CancellationToken);
         File.SetLastWriteTimeUtc(older, DateTimeOffset.FromUnixTimeSeconds(watermark - 3600).UtcDateTime);
         File.SetLastWriteTimeUtc(newer, DateTimeOffset.FromUnixTimeSeconds(watermark + 3600).UtcDateTime);
         stack.Enable();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: watermark,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, watermark,
             TestContext.Current.CancellationToken);
 
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
@@ -99,7 +99,7 @@ public sealed class WatchHostedServiceTests
         using var dir = TempDir.New("hosted-removed");
         var (stack, source, _, hosted) = NewStack();
         stack.Enable();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         source.IsWatching(Project, dir.Path).ShouldBeTrue();
@@ -117,7 +117,7 @@ public sealed class WatchHostedServiceTests
         using var dir = TempDir.New("hosted-flip");
         var (stack, source, _, hosted) = NewStack();
         stack.Enable();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         source.IsWatching(Project, dir.Path).ShouldBeTrue();
@@ -136,7 +136,7 @@ public sealed class WatchHostedServiceTests
         using var dir = TempDir.New("hosted-stop");
         var (stack, source, _, hosted) = NewStack();
         stack.Enable();
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         source.IsWatching(Project, dir.Path).ShouldBeTrue();
@@ -153,8 +153,8 @@ public sealed class WatchHostedServiceTests
         var (stack, source, catchUp, hosted) = NewStack();
         stack.Enable();
         var file = dir.File("a.md");
-        File.WriteAllText(file, "zephyrone");
-        await stack.Store.AddWatchAsync(Project, dir.Path, createdAt: 0, lastChangeTs: 0,
+        await File.WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
             TestContext.Current.CancellationToken);
 
         _ = hosted.StartAsync(TestContext.Current.CancellationToken);

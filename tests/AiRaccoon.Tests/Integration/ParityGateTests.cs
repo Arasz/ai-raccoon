@@ -52,31 +52,24 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
             bestDelta = Math.Min(bestDelta, delta);
             worstDelta = Math.Max(worstDelta, delta);
             rows.AppendLine(
-                $"| {outcome.Point.Id} | {outcome.NdcgAt10:F4} | {outcome.NdcgAt20:F4} | {outcome.Mrr:F4} | " +
-                $"{outcome.RecallAt10:F4} | {outcome.RecallAt30:F4} | {delta:+0.0000;-0.0000} |");
+                $"| {outcome.Point.Id} | {outcome.NdcgAt10:F4} | {outcome.NdcgAt20:F4} | {outcome.Mrr:F4} | {outcome.RecallAt10:F4} | {outcome.RecallAt30:F4} | {delta:+0.0000;-0.0000} |");
             if (delta < -NdcgParityDelta)
             {
-                regressions.Add($"{outcome.Point.Id}: new-side nDCG@10 {outcome.NdcgAt10:F4} is " +
-                                $"{Math.Abs(delta):F4} below reference {reference.NdcgAt10:F4} " +
-                                $"(regression > {NdcgParityDelta:F2})");
+                regressions.Add($"{outcome.Point.Id}: new-side nDCG@10 {outcome.NdcgAt10:F4} is {Math.Abs(delta):F4} below reference {reference.NdcgAt10:F4} (regression > {NdcgParityDelta:F2})");
             }
         }
 
         regressions.ShouldBeEmpty(
-            $"{regressions.Count} sweep point(s) regressed more than {NdcgParityDelta:F2} below the reference:\n" +
-            string.Join("\n", regressions));
+            $"{regressions.Count} sweep point(s) regressed more than {NdcgParityDelta:F2} below the reference:\n{string.Join("\n", regressions)}");
         output.WriteLine(
-            $"observed nDCG@10 delta range across all sweep points: {bestDelta:+0.0000;-0.0000} .. " +
-            $"{worstDelta:+0.0000;-0.0000} (positive = new side above the reference)");
+            $"observed nDCG@10 delta range across all sweep points: {bestDelta:+0.0000;-0.0000} .. {worstDelta:+0.0000;-0.0000} (positive = new side above the reference)");
 
         var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
         p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
             $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget");
 
-        output.WriteLine($"reference (golden k={golden.K}): nDCG@10 {reference.NdcgAt10:F4}, MRR {reference.Mrr:F4}, " +
-                         $"Recall@10 {reference.RecallAt10:F4}");
-        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms " +
-                         $"over {fixture.Harness.QueryLatenciesMs.Count} queries");
+        output.WriteLine($"reference (golden k={golden.K}): nDCG@10 {reference.NdcgAt10:F4}, MRR {reference.Mrr:F4}, Recall@10 {reference.RecallAt10:F4}");
+        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms over {fixture.Harness.QueryLatenciesMs.Count} queries");
         output.WriteLine(rows.ToString());
 
         WriteReportIfRequested(golden, reference, outcomes, p95);
@@ -114,11 +107,9 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
 
         var referenceSubsetNdcg = degenerate.Average(q => perQueryReference[q.Id].Ndcg10);
         var delta = Math.Abs(subsetNdcg.Average() - referenceSubsetNdcg);
-        output.WriteLine($"degenerate subset ({degenerate.Count} queries): new-side nDCG@10 {subsetNdcg.Average():F4} " +
-                         $"vs reference {referenceSubsetNdcg:F4} (delta {delta:F4})");
+        output.WriteLine($"degenerate subset ({degenerate.Count} queries): new-side nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} (delta {delta:F4})");
         delta.ShouldBeLessThanOrEqualTo(NdcgParityDelta,
-            $"degenerate subset nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} " +
-            $"(delta {delta:F4} > {NdcgParityDelta:F2})");
+            $"degenerate subset nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} (delta {delta:F4} > {NdcgParityDelta:F2})");
     }
 
     private static AggregateMetrics AggregateFromGolden(GoldenFile golden)
@@ -178,11 +169,9 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         var report = new StringBuilder();
         report.AppendLine("# Retrieval parity report (P6 FR-NM-5)");
         report.AppendLine();
-        report.AppendLine($"- Generated: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} on {Environment.OSVersion} " +
-                          $"({RuntimeInformation.OSArchitecture})");
-        report.AppendLine($"- Reference oracle: {golden.Engine}, model {golden.Model} (SHA-256 " +
-                          $"{golden.ModelSha256[..12]}…), golden k={golden.K}, {golden.DocumentCount} docs, " +
-                          $"{golden.Queries.Count} graded queries");
+        report.AppendLine($"- Generated: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} on {Environment.OSVersion} ({RuntimeInformation.OSArchitecture})");
+        report.AppendLine(
+            $"{$"- Reference oracle: {golden.Engine}, model {golden.Model} (SHA-256 {golden.ModelSha256[..12]}…), golden k={golden.K}, {golden.DocumentCount} docs, "}{golden.Queries.Count} graded queries");
         report.AppendLine("- New side: managed store (FTS5 + vec0), bundled int8 ONNX all-MiniLM-L6-v2, " +
                           "RRF fusion, rank depth 60, minScore 0 (full capture)");
         report.AppendLine("- Gate: one-sided 'no regression' — new-side nDCG@10 must not fall more than 0.02 " +
@@ -193,8 +182,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine();
         report.AppendLine("| nDCG@10 | nDCG@20* | MRR | Recall@10 |");
         report.AppendLine($"|---|---|---|---|");
-        report.AppendLine($"| {reference.NdcgAt10:F4} | {reference.NdcgAt20:F4} | {reference.Mrr:F4} | " +
-                          $"{reference.RecallAt10:F4} |");
+        report.AppendLine($"| {reference.NdcgAt10:F4} | {reference.NdcgAt20:F4} | {reference.Mrr:F4} | {reference.RecallAt10:F4} |");
         report.AppendLine();
         report.AppendLine("*nDCG@20 is computed over the golden's k=10 window and is a lower-bound reference.");
         report.AppendLine();
@@ -206,8 +194,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         {
             var delta = outcome.NdcgAt10 - reference.NdcgAt10;
             report.AppendLine(
-                $"| {outcome.Point.Id} | {outcome.NdcgAt10:F4} | {outcome.NdcgAt20:F4} | {outcome.Mrr:F4} | " +
-                $"{outcome.RecallAt10:F4} | {outcome.RecallAt30:F4} | {delta:+0.0000;-0.0000} |");
+                $"| {outcome.Point.Id} | {outcome.NdcgAt10:F4} | {outcome.NdcgAt20:F4} | {outcome.Mrr:F4} | {outcome.RecallAt10:F4} | {outcome.RecallAt30:F4} | {delta:+0.0000;-0.0000} |");
         }
 
         report.AppendLine();
@@ -220,8 +207,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine($"- Queries with new side better than reference by > 0.02: {audit.Better}");
         report.AppendLine($"- Queries within ±0.02 of the reference: {audit.Within}");
         report.AppendLine($"- Queries with new side worse than reference by > 0.02 (regressions): {audit.Worse}");
-        report.AppendLine($"- Worst per-query regression: {audit.WorstRegression:+0.0000;-0.0000} " +
-                          $"({audit.WorstQueryId})");
+        report.AppendLine($"- Worst per-query regression: {audit.WorstRegression:+0.0000;-0.0000} ({audit.WorstQueryId})");
         report.AppendLine();
         report.AppendLine("### Regressing queries (default config), modality attribution");
         report.AppendLine();
@@ -233,8 +219,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine("|---|---|---|---|---|");
         foreach (var row in audit.RegressionRows)
         {
-            report.AppendLine($"| {row.QueryId} | {row.Reference:F4} | {row.Default:F4} | {row.FtsOnly:F4} | " +
-                              $"{row.VecOnly:F4} |");
+            report.AppendLine($"| {row.QueryId} | {row.Reference:F4} | {row.Default:F4} | {row.FtsOnly:F4} | {row.VecOnly:F4} |");
         }
 
         report.AppendLine();
@@ -242,9 +227,8 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine();
         report.AppendLine($"| p50 | p95 | max | samples |");
         report.AppendLine($"|---|---|---|---|");
-        report.AppendLine($"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | " +
-                          $"{(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | " +
-                          $"{fixture.Harness.QueryLatenciesMs.Count} |");
+        report.AppendLine(
+            $"{$"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | {(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | "}{fixture.Harness.QueryLatenciesMs.Count} |");
 
         File.WriteAllText(Path.Combine(managedDir, "parity-report.md"), report.ToString());
         output.WriteLine($"wrote {Path.Combine(managedDir, "parity-report.md")}");

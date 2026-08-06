@@ -46,10 +46,8 @@ public class ChunkingFeatureTests
     public void IngestingNoteWithFencedCodeBlock_NeverSplitsTheFence()
     {
         var chunker = new TokenizerChunker();
-        var fence = "```csharp\n"
-                    + string.Join("\n", Enumerable.Range(1, 40).Select(i => $"var value{i} = Compute({i});"))
-                    + "\n```\n";
-        var note = "# Code sample\n\n" + fence + "Trailing prose after the fence.\n";
+        var fence = $"```csharp\n{string.Join("\n", Enumerable.Range(1, 40).Select(i => $"var value{i} = Compute({i});"))}\n```\n";
+        var note = $"# Code sample\n\n{fence}Trailing prose after the fence.\n";
 
         var chunks = chunker.Chunk(note, 50);
 

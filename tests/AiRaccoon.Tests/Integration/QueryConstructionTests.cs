@@ -246,8 +246,7 @@ public sealed class QueryConstructionTests : IDisposable
     private async Task EnsureModelAsync()
     {
         var ensured = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
-        ensured.AllPresent.ShouldBeTrue("bundled embedding model must be provisioned: "
-                                        + string.Join("; ", ensured.Errors));
+        ensured.AllPresent.ShouldBeTrue($"bundled embedding model must be provisioned: {string.Join("; ", ensured.Errors)}");
     }
 
     private async Task<IReadOnlyList<string>> TopHashesAsync(

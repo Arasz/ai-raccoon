@@ -95,7 +95,7 @@ public sealed class MemoryToolsAccessModeTests
         result.Candidates.ShouldBeEmpty();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme-web"], mode: "promote", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.ShareExtract(["acme-web"], "promote", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("access-denied");
 
         var autoEx = await Should.ThrowAsync<McpException>(() =>
@@ -123,7 +123,7 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "full");
         _store.EntriesByContext["workspace:ws-1"] = [];
 
-        var result = await _tools.WorkspaceDiscard("acme-web", "ws-1", TestContext.Current.CancellationToken);
+        await _tools.WorkspaceDiscard("acme-web", "ws-1", TestContext.Current.CancellationToken);
 
         _store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
@@ -227,11 +227,9 @@ public sealed class MemoryToolsAccessModeTests
             bool includeTtlRows, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>([]);
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SharedIndex([], []));
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(new SharedIndex([], []));
 
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<string>>(["acme-web"]);
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(["acme-web"]);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
 

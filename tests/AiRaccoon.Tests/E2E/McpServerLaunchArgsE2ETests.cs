@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using ModelContextProtocol.Client;
 using Shouldly;
@@ -29,12 +28,8 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_client is not null)
-        {
-            await _client.DisposeAsync();
-        }
-
-        _factory?.Dispose();
+        await _client.DisposeAsync();
+        await _factory.DisposeAsync();
     }
 
     [Fact]

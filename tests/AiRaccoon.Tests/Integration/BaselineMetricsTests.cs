@@ -84,8 +84,7 @@ public sealed class BaselineMetricsTests : IDisposable
     {
         var ensured = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         ensured.AllPresent.ShouldBeTrue(
-            "bundled embedding model must be provisioned before vector/hybrid searches: "
-            + string.Join("; ", ensured.Errors));
+            $"bundled embedding model must be provisioned before vector/hybrid searches: {string.Join("; ", ensured.Errors)}");
     }
 
     /// <summary>
@@ -185,8 +184,7 @@ public sealed class BaselineMetricsTests : IDisposable
         foreach (var category in categories)
         {
             _output.WriteLine(
-                $"  {category.Category}: nDCG@5={category.Ndcg5:F3} MRR={category.Mrr:F3} " +
-                $"recall@5={category.Recall5:F3} ({category.EvaluatedQueryCount}/{category.QueryCount} evaluated)");
+                $"  {category.Category}: nDCG@5={category.Ndcg5:F3} MRR={category.Mrr:F3} recall@5={category.Recall5:F3} ({category.EvaluatedQueryCount}/{category.QueryCount} evaluated)");
         }
 
         var missing = metrics.Where(m => m.ExpectedFileFoundBy == "none").Select(m => m.Id).ToList();
@@ -235,16 +233,14 @@ public sealed class BaselineMetricsTests : IDisposable
         }
 
         mismatches.ShouldBeEmpty(
-            "identical top-5 hashes per query across two consecutive runs; run1 vs run2: "
-            + string.Join("; ", mismatches.Select(id =>
+            $"identical top-5 hashes per query across two consecutive runs; run1 vs run2: {string.Join("; ", mismatches.Select(id =>
             {
                 var i = Array.FindIndex(queries, q => q.Id == id);
                 return $"{id}(run1={string.Join(",", firstPass[i])} run2={string.Join(",", secondPass[i])})";
-            })));
+            }))}");
         firstPass.ShouldNotBeEmpty("the query set must be non-empty");
 
-        _output.WriteLine($"Determinism double-run: {queries.Length - mismatches.Count}/{queries.Length} " +
-                          $"queries identical, {withFullDepth}/{queries.Length} returned a full top-5");
+        _output.WriteLine($"Determinism double-run: {queries.Length - mismatches.Count}/{queries.Length} queries identical, {withFullDepth}/{queries.Length} returned a full top-5");
     }
 
     /// <summary>

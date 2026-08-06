@@ -205,7 +205,7 @@ public sealed class WatchIntegrationTests
                 TestContext.Current.CancellationToken))
             .ShouldBeTrue("source content did not become searchable");
 
-        File.Move(stack.File("source.md"), stack.File("target.md"), overwrite: true);
+        File.Move(stack.File("source.md"), stack.File("target.md"), true);
 
         (await stack.StepUntilAsync(async () =>
         {
@@ -224,7 +224,7 @@ public sealed class WatchIntegrationTests
     [Fact]
     public async Task Restart_ReWatches_AndCatchUpReDigestsChangedFiles_SkippingUnchangedOnes()
     {
-        using var first = new Stack(name: "restart", now: FixedNow, deleteDataRoot: false);
+        using var first = new Stack("restart", FixedNow, false);
         await first.EnableAsync(TestContext.Current.CancellationToken);
         await first.AllowScopeAsync(TestContext.Current.CancellationToken);
         first.Write("a.md", "zephyrone v1");
@@ -251,7 +251,7 @@ public sealed class WatchIntegrationTests
         first.Write("a.md", "zephyrtwo v2");
         first.Write("b.md", "zephyrbee new");
 
-        using var second = new Stack(name: "restart", now: first.Time.GetUtcNow(), deleteDataRoot: true);
+        using var second = new Stack("restart", first.Time.GetUtcNow(), true);
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {
@@ -317,7 +317,7 @@ public sealed class WatchIntegrationTests
     [Fact]
     public async Task Restart_CatchUp_RemovesChunksOfFilesDeletedWhileTheServerWasDown()
     {
-        using var first = new Stack(name: "restart-delete", now: FixedNow, deleteDataRoot: false);
+        using var first = new Stack("restart-delete", FixedNow, false);
         await first.EnableAsync(TestContext.Current.CancellationToken);
         await first.AllowScopeAsync(TestContext.Current.CancellationToken);
         first.Write("a.md", "zephyrdoomed v1");
@@ -343,7 +343,7 @@ public sealed class WatchIntegrationTests
         first.Time.Advance(TimeSpan.FromMinutes(5));
         File.Delete(first.File("a.md"));
 
-        using var second = new Stack(name: "restart-delete", now: first.Time.GetUtcNow(), deleteDataRoot: true);
+        using var second = new Stack("restart-delete", first.Time.GetUtcNow(), true);
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {
@@ -362,7 +362,7 @@ public sealed class WatchIntegrationTests
     [Fact]
     public async Task Restart_SingleFileWatch_FileChangedWhileDown_IsReIngestedOnCatchUp()
     {
-        using var first = new Stack(name: "restart-single", now: FixedNow, deleteDataRoot: false);
+        using var first = new Stack("restart-single", FixedNow, false);
         await first.EnableAsync(TestContext.Current.CancellationToken);
         await first.AllowScopeAsync(TestContext.Current.CancellationToken);
         first.Write("readme.md", "zephyrsingle v1");
@@ -375,8 +375,8 @@ public sealed class WatchIntegrationTests
         }
 
         (await first.StepUntilAsync(async () =>
-            (await first.SearchAsync("zephyrsingle", TestContext.Current.CancellationToken))
-            .Any(r => r.SourceFile == first.File("readme.md")), TestContext.Current.CancellationToken))
+                (await first.SearchAsync("zephyrsingle", TestContext.Current.CancellationToken))
+                .Any(r => r.SourceFile == first.File("readme.md")), TestContext.Current.CancellationToken))
             .ShouldBeTrue("the single-file watch did not ingest its file on the initial scan");
 
         // "Server down": watcher off, downtime passes, the watched file changes while down.
@@ -384,7 +384,7 @@ public sealed class WatchIntegrationTests
         first.Time.Advance(TimeSpan.FromMinutes(5));
         first.Write("readme.md", "zephyrsingle v2");
 
-        using var second = new Stack(name: "restart-single", now: first.Time.GetUtcNow(), deleteDataRoot: true);
+        using var second = new Stack("restart-single", first.Time.GetUtcNow(), true);
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {
@@ -484,7 +484,7 @@ public sealed class WatchIntegrationTests
             var results = await stack.SearchAsync("zephyrword299", TestContext.Current.CancellationToken);
             var current = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
             return results.Any() && current.Count == 1 && current[0].State == WatchState.Healthy;
-        }, TestContext.Current.CancellationToken, maxSeconds: 30)).ShouldBeTrue("large-dir scan did not finish");
+        }, TestContext.Current.CancellationToken, 30)).ShouldBeTrue("large-dir scan did not finish");
         (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBeGreaterThanOrEqualTo(300);
     }
@@ -492,8 +492,8 @@ public sealed class WatchIntegrationTests
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
     private sealed class Stack : IDisposable
     {
-        private readonly SqliteConnectionFactory _factory;
         private readonly bool _deleteDataRoot;
+        private readonly SqliteConnectionFactory _factory;
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true)
         {
@@ -505,8 +505,8 @@ public sealed class WatchIntegrationTests
             WatchDir = Path.Combine(DataRoot, "repo");
             Directory.CreateDirectory(WatchDir);
             _factory = new SqliteConnectionFactory(
-            new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
-            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+                new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+                NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService());
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);
@@ -543,17 +543,30 @@ public sealed class WatchIntegrationTests
 
         public List<WatchEventError> Errors { get; } = [];
 
+        public void Dispose()
+        {
+            EventSource.StopAll();
+            if (_deleteDataRoot)
+            {
+                try
+                {
+                    Directory.Delete(DataRoot, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
         public string File(string name) => Path.Combine(WatchDir, name);
 
-        public Task EnableAsync(CancellationToken cancellationToken) =>
-            Memory.SetSettingAsync(WatchConfigKeys.EnabledProject(Project), "true", cancellationToken);
+        public Task EnableAsync(CancellationToken cancellationToken) => Memory.SetSettingAsync(WatchConfigKeys.EnabledProject(Project), "true", cancellationToken);
 
         public Task AllowScopeAsync(CancellationToken cancellationToken) =>
             Memory.SetSettingAsync(WatchConfigKeys.ScopeProject(Project),
                 WatchConfigKeys.SerializeScope([WatchDir]), cancellationToken);
 
-        public Task AddWatchAsync(CancellationToken cancellationToken) =>
-            Service.AddAsync(Project, WatchDir, cancellationToken);
+        public Task AddWatchAsync(CancellationToken cancellationToken) => Service.AddAsync(Project, WatchDir, cancellationToken);
 
         /// <summary>Writes the file and stamps its mtime at the CURRENT fake time.</summary>
         public void Write(string name, string content)
@@ -570,8 +583,7 @@ public sealed class WatchIntegrationTests
             System.IO.File.SetLastWriteTimeUtc(path, Time.GetUtcNow().Subtract(age).UtcDateTime);
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
-            Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken);
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) => Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken);
 
         public async Task<int> CountEntriesAsync(string path, string? valueContains,
             CancellationToken cancellationToken)
@@ -582,7 +594,7 @@ public sealed class WatchIntegrationTests
                 : "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @path AND value LIKE @value";
             object parameters = valueContains is null
                 ? new { p = Project, path }
-                : new { p = Project, path, value = "%" + valueContains + "%" };
+                : new { p = Project, path, value = $"%{valueContains}%" };
             return await connection.ExecuteScalarAsync<int>(
                 new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
         }
@@ -592,7 +604,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file LIKE @prefix",
-                new { p = Project, prefix = dirPrefix + "%" }, cancellationToken: cancellationToken));
+                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
         public async Task<int> CountFingerprintsUnderAsync(string dirPrefix, CancellationToken cancellationToken)
@@ -600,7 +612,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM watch_files WHERE project_id = @p AND path LIKE @prefix",
-                new { p = Project, prefix = dirPrefix + "%" }, cancellationToken: cancellationToken));
+                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
         /// <summary>
@@ -624,21 +636,6 @@ public sealed class WatchIntegrationTests
             }
 
             return true;
-        }
-
-        public void Dispose()
-        {
-            EventSource.StopAll();
-            if (_deleteDataRoot)
-            {
-                try
-                {
-                    Directory.Delete(DataRoot, true);
-                }
-                catch (IOException)
-                {
-                }
-            }
         }
     }
 }

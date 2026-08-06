@@ -18,7 +18,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 {
     // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…'
     private const string DerivedHex = "277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b";
-    private const string DerivedRawKey = "x'" + DerivedHex + "'";
+    private const string DerivedRawKey = $"x'{DerivedHex}'";
 
     private readonly string _dataRoot = CreateTempRoot();
 
@@ -29,8 +29,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     private static IEncryptionKeyResolver Resolver(InfrastructureOptions options, IEncryptionKeyProvider provider) =>
         new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)), [provider]);
 
-    private SqliteConnectionFactory Factory(string? passphrase = null) =>
-        new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
+    private SqliteConnectionFactory Factory(string? passphrase = null) => new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
 
     [Fact]
     public async Task OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase()
@@ -49,7 +48,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await connection.CloseAsync();
 
         // Verify encryption: file header is not the standard SQLite header
-        var header = File.ReadAllBytes(factory.BankPath);
+        var header = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
         var headerStr = Encoding.ASCII.GetString(header[..16]);
         headerStr.ShouldNotStartWith("SQLite format 3");
 
@@ -74,7 +73,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await connection.CloseAsync();
 
         // Verify unencrypted: standard header
-        var header = File.ReadAllBytes(factory.BankPath);
+        var header = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
         var headerStr = Encoding.ASCII.GetString(header[..16]);
         headerStr.ShouldStartWith("SQLite format 3");
 
@@ -169,7 +168,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         reopen.State.ShouldBe(ConnectionState.Open);
 
         // The bank is encrypted now, not plaintext.
-        var header = File.ReadAllBytes(factory.BankPath);
+        var header = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
         Encoding.ASCII.GetString(header[..16]).ShouldNotStartWith("SQLite format 3");
     }
 
@@ -204,7 +203,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         }
 
         // Sidecar points at bitwarden; the fake bws secret derives a key that is NOT bank-key-A.
-        File.WriteAllText(bankFactory.BankPath + ".source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
+        await File.WriteAllTextAsync($"{bankFactory.BankPath}.source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""", TestContext.Current.CancellationToken);
         var resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")))]);
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
@@ -238,7 +237,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             || file.EndsWith("-shm", StringComparison.Ordinal));
         foreach (var file in files)
         {
-            File.ReadAllText(file, Encoding.Latin1).ShouldNotContain(DerivedHex);
+            (await File.ReadAllTextAsync(file, Encoding.Latin1, TestContext.Current.CancellationToken)).ShouldNotContain(DerivedHex);
         }
     }
 
@@ -251,7 +250,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         var pub = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
 
         using var body = new MemoryStream();
-        body.Write(Encoding.ASCII.GetBytes("openssh-key-v1\0"));
+        body.Write("openssh-key-v1\0"u8);
         WriteString(body, "none");
         WriteString(body, "none");
         WriteString(body, []);
@@ -273,8 +272,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         priv.Write(new byte[8 - (int)priv.Length % 8]);
         WriteString(body, priv.ToArray());
 
-        return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-                                                       + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        return $"-----BEGIN OPENSSH PRIVATE KEY-----\n{Convert.ToBase64String(body.ToArray())}\n-----END OPENSSH PRIVATE KEY-----\n";
     }
 
     private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);

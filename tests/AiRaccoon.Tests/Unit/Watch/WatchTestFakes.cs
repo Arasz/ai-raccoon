@@ -133,27 +133,26 @@ internal sealed class FakeWatchStore : IWatchStore
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>([
             .. FileHashes.Keys
-                .Where(k => k.StartsWith(projectId + "\u0000", StringComparison.Ordinal))
+                .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal))
                 .Select(k => k[(projectId.Length + 1)..])
         ]);
 
     /// <summary>Mirrors the real DeleteSourcePathAsync transaction: chunks + fingerprint die together.</summary>
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
 
-    private static string Key(string projectId, string path) => projectId + "\u0000" + path;
+    private static string Key(string projectId, string path) => $"{projectId}\u0000{path}";
 }
 
 /// <summary>IMemoryStore fake: settings + the watch-used slice; the rest is unsupported.</summary>
 internal sealed class FakeMemoryStore : IMemoryStore
 {
+    private readonly object _sync = new();
     public Dictionary<string, string?> Settings { get; } = new(StringComparer.Ordinal);
 
     // Scheduler jobs run concurrently (Task.Run, concurrency 4) — plain lists would race.
     public List<(string ProjectId, string Path, string Content)> Ingested { get; } = [];
 
     public List<(string ProjectId, string Path)> DeletedPaths { get; } = [];
-
-    private readonly object _sync = new();
 
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
     public Exception? IngestError { get; set; }
@@ -186,6 +185,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         {
             Ingested.Add((projectId, path, content));
         }
+
         FirstIngestTcs.TrySetResult();
         if (OnIngest is not null)
         {
@@ -202,6 +202,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         {
             DeletedPaths.Add((projectId, path));
         }
+
         OnDeletePath?.Invoke(projectId, path);
         return Task.FromResult(0);
     }
@@ -241,15 +242,14 @@ internal sealed class FakeMemoryStore : IMemoryStore
     public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
     public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
         bool includeTtlRows, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
     public Task<MemoryEntry> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();

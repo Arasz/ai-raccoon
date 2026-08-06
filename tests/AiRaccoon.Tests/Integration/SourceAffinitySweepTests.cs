@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
@@ -27,6 +28,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
     /// <summary>The chosen configuration — must match the SearchQuery defaults.</summary>
     private const double ChosenLambda = 0.1;
+
     private const double ChosenThreshold = 0.1;
     private const DocScoreFormula ChosenFormula = DocScoreFormula.Max;
 
@@ -35,13 +37,14 @@ public sealed class SourceAffinitySweepTests : IDisposable
     /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (see docs/adr/0005-source-affinity-ranking.md).</summary>
     private static readonly string[] SourceAffinityGateQueryIds =
         ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly string _dataRoot;
-    private readonly SqliteMemoryStore _store;
-    private readonly ITestOutputHelper _output;
-    private readonly Dictionary<string, string> _hashMap;
     private readonly Dictionary<string, HashSet<string>> _fileHashes;
+    private readonly Dictionary<string, string> _hashMap;
+    private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public SourceAffinitySweepTests(ITestOutputHelper output)
     {
@@ -138,10 +141,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         WriteSweepReport(points, rows, chosen, baseline);
 
         _output.WriteLine(
-            $"chosen λ={ChosenLambda} thr={ChosenThreshold} {ChosenFormula}: S2={chosen.S2ExactRank} " +
-            $"A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} A1 file={chosen.A1FileRank} " +
-            $"A4 file={chosen.A4FileRank} C1/C2/C5={chosen.C1ExactRank}/{chosen.C2ExactRank}/{chosen.C5ExactRank} " +
-            $"nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3}");
+            $"chosen λ={ChosenLambda} thr={ChosenThreshold} {ChosenFormula}: S2={chosen.S2ExactRank} A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} A1 file={chosen.A1FileRank} A4 file={chosen.A4FileRank} C1/C2/C5={chosen.C1ExactRank}/{chosen.C2ExactRank}/{chosen.C5ExactRank} nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3}");
     }
 
     private static IReadOnlyList<(double Lambda, double Threshold, DocScoreFormula Formula)> GridPoints()
@@ -245,7 +245,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         int? exactRank = null;
         int? fileRank = null;
         var expectedHash = query.ExpectedSource is not null
-            && _hashMap.TryGetValue(query.ExpectedSource, out var hash)
+                           && _hashMap.TryGetValue(query.ExpectedSource, out var hash)
             ? hash
             : null;
         var fileSet = query.ExpectedSource is not null && _fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var set)
@@ -272,16 +272,15 @@ public sealed class SourceAffinitySweepTests : IDisposable
         IReadOnlyList<(double Lambda, double Threshold, DocScoreFormula Formula)> points,
         IReadOnlyList<SweepRow> rows, SweepRow chosen, SweepRow baseline)
     {
-        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var invariant = CultureInfo.InvariantCulture;
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 3 Source-Affinity Scoring — Parameter Sweep");
         builder.AppendLine();
         builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/jsaa-memory.db (752 chunks).");
         builder.AppendLine($"Measured by SourceAffinitySweepTests (limit {SearchLimit}, RRF k=60, 1:1 weights).");
         builder.AppendLine();
-        builder.AppendLine($"**Chosen configuration: λ = {ChosenLambda.ToString("0.0", invariant)}, " +
-                           $"consolidation threshold = {ChosenThreshold.ToString("0.0", invariant)}, " +
-                           $"document-score formula = {ChosenFormula}** (the SearchQuery defaults).");
+        builder.AppendLine(
+            $"{$"**Chosen configuration: λ = {ChosenLambda.ToString("0.0", invariant)}, consolidation threshold = {ChosenThreshold.ToString("0.0", invariant)}, "}document-score formula = {ChosenFormula}** (the SearchQuery defaults).");
         builder.AppendLine();
         builder.AppendLine("Gates at the chosen point: S2 decision ≤ 3 ✓, A6 file ≤ 3 ✓, A1/A4 file ≤ 2 ✓, " +
                            "C1/C2/C5 rank 1 ✓, ADR nDCG@5 > 0.650 ✓.");
@@ -294,20 +293,12 @@ public sealed class SourceAffinitySweepTests : IDisposable
                 ? "off"
                 : row.Threshold.ToString("0.00", invariant);
             builder.AppendLine(
-                $"| {row.Lambda.ToString("0.00", invariant)} | {threshold} | {row.Formula} | " +
-                $"{row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.AdrNdcg5.ToString("0.000", invariant)} | {row.AdrMrr.ToString("0.000", invariant)} | " +
-                $"{row.AdrRecall5.ToString("0.000", invariant)} |");
+                $"{$"| {row.Lambda.ToString("0.00", invariant)} | {threshold} | {row.Formula} | {row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | {row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | {row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | {row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | {row.AdrNdcg5.ToString("0.000", invariant)} | {row.AdrMrr.ToString("0.000", invariant)} | "}{row.AdrRecall5.ToString("0.000", invariant)} |");
         }
 
         builder.AppendLine();
-        builder.AppendLine($"Baseline (λ=0): nDCG@5 {baseline.AdrNdcg5.ToString("0.000", invariant)}, " +
-                           $"MRR {baseline.AdrMrr.ToString("0.000", invariant)}, " +
-                           $"recall@5 {baseline.AdrRecall5.ToString("0.000", invariant)} — " +
-                           "matches the Wave 6 merged state (0.650 / 0.786 / 0.581).");
+        builder.AppendLine(
+            $"Baseline (λ=0): nDCG@5 {baseline.AdrNdcg5.ToString("0.000", invariant)}, MRR {baseline.AdrMrr.ToString("0.000", invariant)}, recall@5 {baseline.AdrRecall5.ToString("0.000", invariant)} — matches the Wave 6 merged state (0.650 / 0.786 / 0.581).");
         builder.AppendLine();
         builder.AppendLine("Notes:");
         builder.AppendLine("- λ = 0 is the pre-Wave-3 ranker (no source affinity).");

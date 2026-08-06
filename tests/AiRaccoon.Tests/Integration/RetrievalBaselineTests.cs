@@ -111,8 +111,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             if (query.ExpectedSource is not null)
             {
                 _output.WriteLine(
-                    $"{query.Id}: expected '{query.ExpectedSource}' " +
-                    $"exact@{firstExactRank?.ToString() ?? "-"} file@{firstFileRank?.ToString() ?? "-"}");
+                    $"{query.Id}: expected '{query.ExpectedSource}' exact@{firstExactRank?.ToString() ?? "-"} file@{firstFileRank?.ToString() ?? "-"}");
             }
 
             scored.Add(new QueryResult(query.Id, query.Category, query.Query,
@@ -175,8 +174,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     {
         var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
         stats.PendingCount.ShouldBe(0,
-            $"Wave 0 requires a fully embedded corpus (embed_state='embedded'); " +
-            $"{stats.PendingCount} entries still pending");
+            $"Wave 0 requires a fully embedded corpus (embed_state='embedded'); {stats.PendingCount} entries still pending");
         _output.WriteLine($"Corpus: {stats.EntryCount} entries, {stats.PendingCount} pending");
     }
 
@@ -192,8 +190,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         foreach (var query in expected)
         {
             hashMap.ContainsKey(query.ExpectedSource!).ShouldBeTrue(
-                $"{query.Id}: expectedSource '{query.ExpectedSource}' is missing from " +
-                "scripts/chunk-hash-map.json");
+                $"{query.Id}: expectedSource '{query.ExpectedSource}' is missing from scripts/chunk-hash-map.json");
         }
 
         // The regenerated corpus stores provenance in the source_file column (plan C §3 2d;
@@ -238,8 +235,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             .Where(r => !string.Equals(ContentHash.Of(r.Path, r.Value), r.Hash, StringComparison.Ordinal))
             .Select(r => $"{r.Path}: stored {r.Hash[..12]}… != ContentHash.Of {ContentHash.Of(r.Path, r.Value)[..12]}…")
             .ToList();
-        mismatches.ShouldBeEmpty("every stored entry hash must satisfy ContentHash.Of(path, value); "
-                                 + string.Join("; ", mismatches.Take(3)));
+        mismatches.ShouldBeEmpty($"every stored entry hash must satisfy ContentHash.Of(path, value); {string.Join("; ", mismatches.Take(3))}");
     }
 
     [Fact]
@@ -253,8 +249,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             "every entry must carry source_file provenance (Wave 2)");
         var withSection = rows.Count(r => !string.IsNullOrWhiteSpace(r.Section));
         _output.WriteLine(
-            $"Source identity: {rows.Count} entries, {withSection} with section, "
-            + $"{rows.Count - withSection} without, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files");
+            $"Source identity: {rows.Count} entries, {withSection} with section, {rows.Count - withSection} without, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files");
 
         // section populated ⟺ the entry's hash maps to a structured path with a '#section' part.
         var keysByHash = hashMap
@@ -357,7 +352,7 @@ public sealed class RetrievalBaselineTests : IDisposable
 
     private static async Task<int> CountSourceFileLikeAsync(SqliteConnection connection, string marker)
     {
-        using var command = connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM entries WHERE source_file LIKE '%' || $marker || '%'";
         command.Parameters.AddWithValue("$marker", marker);
         var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
@@ -369,9 +364,9 @@ public sealed class RetrievalBaselineTests : IDisposable
         SqliteConnection connection, CancellationToken cancellationToken)
     {
         var rows = new List<EntryRow>();
-        using var command = connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandText = "SELECT hash, path, value, section, source_file FROM entries";
-        using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             rows.Add(new EntryRow(
@@ -392,8 +387,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         if (!File.Exists(hashMapPath))
         {
             throw new InvalidOperationException(
-                $"scripts/chunk-hash-map.json not found under {projectRoot}; Wave 0 requires it " +
-                "committed so expected-source detection can be honest (plan C step 1).");
+                $"scripts/chunk-hash-map.json not found under {projectRoot}; Wave 0 requires it committed so expected-source detection can be honest (plan C step 1).");
         }
 
         var json = File.ReadAllText(hashMapPath);

@@ -220,7 +220,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         // The fake bws rejects any token other than the known one and logs every argv line —
         // the log proves the CLI passed -t <token> to the fetch (and only the fetch: the
         // presence check never takes the token).
-        var calls = File.ReadAllText(Ctx.CallsLogPath);
+        var calls = await File.ReadAllTextAsync(Ctx.CallsLogPath);
         calls.ShouldContain($"secret get {EncryptionBitwardenFeatureContext.SecretId} -t {EncryptionBitwardenFeatureContext.KnownToken}");
         calls.ShouldNotContain($"--version -t");
     }
@@ -230,7 +230,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         var rows = await Ctx.ConfigStore.GetSettingsByPrefixAsync("encryption.");
         rows.Values.ShouldNotContain(v => v.Contains(EncryptionBitwardenFeatureContext.KnownToken));
-        File.ReadAllText(Ctx.SidecarPath).ShouldNotContain(EncryptionBitwardenFeatureContext.KnownToken);
+        (await File.ReadAllTextAsync(Ctx.SidecarPath)).ShouldNotContain(EncryptionBitwardenFeatureContext.KnownToken);
         _lastCli.Out.ShouldNotContain(EncryptionBitwardenFeatureContext.KnownToken);
         _lastCli.Err.ShouldNotContain(EncryptionBitwardenFeatureContext.KnownToken);
     }

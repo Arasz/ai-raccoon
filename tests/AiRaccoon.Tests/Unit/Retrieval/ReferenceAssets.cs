@@ -84,8 +84,7 @@ public sealed class ReferenceAssets
                 continue;
             }
 
-            errors.Add($"{asset.Name}: expected sha256 {asset.Sha256}, got " +
-                       $"{(File.Exists(target) ? Sha256Of(target) : "<missing>")} (source: {source ?? "none"})");
+            errors.Add($"{asset.Name}: expected sha256 {asset.Sha256}, got {(File.Exists(target) ? Sha256Of(target) : "<missing>")} (source: {source ?? "none"})");
         }
 
         return new EnsureResult(errors.Count == 0, errors);

@@ -242,15 +242,12 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             .Select(query => $"{query.Id}: {contentOnly[query.Id]} -> {fused[query.Id]}")
             .ToList();
 
-        _output.WriteLine("File-level ranks (content-only -> fused): "
-                          + string.Join("; ", queries.Select(query =>
-                              $"{query.Id} {contentOnly[query.Id]?.ToString() ?? "miss"}->{fused[query.Id]?.ToString() ?? "miss"}")));
+        _output.WriteLine($"File-level ranks (content-only -> fused): {string.Join("; ", queries.Select(query =>
+            $"{query.Id} {contentOnly[query.Id]?.ToString() ?? "miss"}->{fused[query.Id]?.ToString() ?? "miss"}"))}");
         hit5Regressions.ShouldBeEmpty(
-            "every expected file must stay in the top 5 under dual-vector fusion; "
-            + string.Join(", ", hit5Regressions));
+            $"every expected file must stay in the top 5 under dual-vector fusion; {string.Join(", ", hit5Regressions)}");
         rankRegressions.ShouldBeEmpty(
-            $"no query may lose more than {MaxFileRankRegression} file-level rank positions vs content-only; "
-            + string.Join("; ", rankRegressions));
+            $"no query may lose more than {MaxFileRankRegression} file-level rank positions vs content-only; {string.Join("; ", rankRegressions)}");
     }
 
     /// <summary>Pre-Wave-6 banks gain the structure columns on open (ALTER TABLE migration path).</summary>
@@ -273,8 +270,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var index = results.FindIndex(r => r.Hash == expectedHash);
         if (index < 0)
         {
-            _output.WriteLine($"[{text}] expected '{expectedSource}' not in top {results.Count}: "
-                              + string.Join(", ", results.Take(RankCutoff).Select(r => r.Hash[..8])));
+            _output.WriteLine($"[{text}] expected '{expectedSource}' not in top {results.Count}: {string.Join(", ", results.Take(RankCutoff).Select(r => r.Hash[..8]))}");
             return null;
         }
 
