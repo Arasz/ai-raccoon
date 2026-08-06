@@ -96,3 +96,20 @@ def test_operation_log_not_created_without_env(make_provider, tmp_path, monkeypa
     _init(provider)
     provider.handle_tool_call("memory_stats", {})
     assert not (tmp_path / "memory-log.jsonl").exists()
+
+
+def test_operation_log_blank_env_treated_as_unset(make_provider, tmp_path, monkeypatch):
+    """A set-but-empty AIRACCOON_MEMORY_LOG must not break calls (old-review finding)."""
+    monkeypatch.setenv("AIRACCOON_MEMORY_LOG", "")
+    provider, fake = make_provider()
+    _init(provider)
+    result = provider.handle_tool_call("memory_stats", {})
+    assert '"entries"' in result  # call succeeded, log silently off
+    assert provider._op_log is None
+
+
+def test_all_provider_tools_have_status_words(provider_module, status_module):
+    """Drift guard: every tool the provider can dispatch or emit for must have a word."""
+    tools = set(provider_module._TOOL_DISPATCH) | {"memory_search", "memory_write"}
+    missing = [t for t in tools if t not in status_module.STATUS_WORDS]
+    assert missing == [], f"tools without status words: {missing}"

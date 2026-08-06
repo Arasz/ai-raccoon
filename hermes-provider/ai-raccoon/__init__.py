@@ -193,7 +193,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         self._agent_context = kwargs.get("agent_context")
         workspace = kwargs.get("agent_workspace") or "hermes"
         self._project_id = self._config.get("project_id") or f"{workspace}-{self._agent_identity}"
-        log_path = os.environ.get("AIRACCOON_MEMORY_LOG")
+        log_path = os.environ.get("AIRACCOON_MEMORY_LOG") or None  # blank = unset
         self._op_log = MemoryOperationLog(log_path) if log_path else None
         factory = self._client_factory
         if factory is None:
