@@ -29,15 +29,20 @@ public sealed class MemoryToolsAccessModeTests
 
     private readonly FakeStore _store = new();
     private readonly MemoryTools _tools;
+    private readonly ShareTools _share;
+    private readonly WorkspaceTools _workspace;
+    private readonly SweepTools _sweep;
 
     public MemoryToolsAccessModeTests()
     {
+        var access = new MemoryAccessGuard(_store);
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(_store), new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
-            new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
-            new ToolCallMetrics(), new SharedExtractionService());
+        var metrics = new ToolCallMetrics();
+        _tools = new MemoryTools(_store, access, metrics);
+        _share = new ShareTools(_store, access, metrics, new SharedExtractionService());
+        _workspace = new WorkspaceTools(workspaces, access, metrics);
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics);
     }
 
     private void SetMode(string? global = null, string? perProject = null)
@@ -90,16 +95,16 @@ public sealed class MemoryToolsAccessModeTests
     {
         SetMode(perProject: "ro");
 
-        var result = await _tools.ShareExtract(["acme-web"], cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _share.ShareExtract(["acme-web"], cancellationToken: TestContext.Current.CancellationToken);
 
         result.Candidates.ShouldBeEmpty();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme-web"], "promote", cancellationToken: TestContext.Current.CancellationToken));
+            _share.ShareExtract(["acme-web"], "promote", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("access-denied");
 
         var autoEx = await Should.ThrowAsync<McpException>(() =>
-            _tools.ShareExtract(["acme-web"], autoPromote: true, confirm: true,
+            _share.ShareExtract(["acme-web"], autoPromote: true, confirm: true,
                 cancellationToken: TestContext.Current.CancellationToken));
         autoEx.Message.ShouldContain("access-denied");
     }
@@ -123,7 +128,7 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "full");
         _store.EntriesByContext["workspace:ws-1"] = [];
 
-        await _tools.WorkspaceDiscard("acme-web", "ws-1", TestContext.Current.CancellationToken);
+        await _workspace.WorkspaceDiscard("acme-web", "ws-1", TestContext.Current.CancellationToken);
 
         _store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
@@ -162,7 +167,7 @@ public sealed class MemoryToolsAccessModeTests
         _store.Rating = 0.1;
         _store.Stats = new MemoryStats(1, 0, ["project:acme-web"]);
 
-        var result = await _tools.Sweep("acme-web", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _sweep.Sweep("acme-web", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Candidates.Count.ShouldBe(1);
     }
@@ -171,7 +176,7 @@ public sealed class MemoryToolsAccessModeTests
     public async Task RwMode_SweepWithoutDryRun_IsDenied()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Sweep("acme-web", false, TestContext.Current.CancellationToken));
+            _sweep.Sweep("acme-web", false, TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("access-denied: memory_sweep requires mode full (current rw)");
     }

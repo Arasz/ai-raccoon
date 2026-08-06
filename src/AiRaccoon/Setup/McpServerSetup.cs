@@ -55,6 +55,10 @@ internal static partial class McpServerSetup
             .AddMcpServer()
             .ConfigureMcpTransport(mcpTransport, builder.Logging, config.Options.Quiet)
             .WithTools<MemoryTools>()
+            .WithTools<ShareTools>()
+            .WithTools<WorkspaceTools>()
+            .WithTools<SweepTools>()
+            .WithTools<SyncTools>()
             .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
         return builder.Build();
@@ -123,6 +127,10 @@ internal static partial class McpServerSetup
                 .AddMcpServer()
                 .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo: quietInfo)
                 .WithTools<MemoryTools>()
+                .WithTools<ShareTools>()
+                .WithTools<WorkspaceTools>()
+                .WithTools<SweepTools>()
+                .WithTools<SyncTools>()
                 .WithTools<WatchTools>()
                 .WithPrompts<MemoryPrompts>();
     }

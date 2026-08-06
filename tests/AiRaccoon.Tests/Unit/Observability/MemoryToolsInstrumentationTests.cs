@@ -86,7 +86,9 @@ public class MemoryToolsInstrumentationTests
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
 
         var store = new SimpleFakeStore();
-        var tools = CreateTools(store, metrics);
+        var tools = new SyncTools(new SimpleFakeSyncService(),
+            new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
+            new MemoryAccessGuard(store), metrics);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             tools.Sync("acme", TestContext.Current.CancellationToken));
@@ -138,13 +140,7 @@ public class MemoryToolsInstrumentationTests
         SimpleFakeStore store,
         ToolCallMetrics metrics)
     {
-        var workspaces = new WorkspaceService(store, new SimpleFakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
-        var sweeper = new SweepService(store, new FakeTimeProvider(FixedNow));
-        return new MemoryTools(store, new SimpleFakeSyncService(), workspaces, sweeper,
-            new MemoryAccessGuard(store),
-            new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ForgettingPolicyService(store, new MemoryAccessGuard(store)),
-            metrics, new SharedExtractionService());
+        return new MemoryTools(store, new MemoryAccessGuard(store), metrics);
     }
 
     // ── Minimal fake implementations ──
