@@ -164,7 +164,7 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I call memory_workspace_consolidate with keep=["all"]
             Then the committed entry keeps path "docs/note.md"
 
-    @FR-NM-8 @AC-8 @ignore
+    @FR-NM-8 @AC-8
     Rule: Sync transports one snapshot file to S3-compatible storage and merges rows
         Scenario: Sync without credentials errors cleanly
             When I call memory_sync without sync credentials

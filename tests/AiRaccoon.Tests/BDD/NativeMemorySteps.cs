@@ -609,37 +609,179 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── FR-NM-8: Sync ──
     [When("I call memory_sync without sync credentials")]
-    public void WhenISyncWithoutCredentials()
+    public async Task WhenISyncWithoutCredentials()
     {
-        // These scenarios are verified at the integration/E2E level
-        // This step is a no-op; only verifies error handling in real tools
+        try
+        {
+            var factory = new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance);
+            await RunSyncAsync(await factory.CreateAsync(CancellationToken.None), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _lastError = ex;
+        }
     }
 
     [Then("the tool errors with sync-not-configured")]
-    public void ThenSyncNotConfigured()
-    {
-        /* bound for @ignore scenarios */
-    }
+    public void ThenSyncNotConfigured() => _lastError.ShouldBeOfType<SyncNotConfiguredException>();
 
     [Given("sync credentials are configured")]
-    public void GivenSyncCredentialsConfigured()
-    {
-        /* bound for @ignore scenarios */
-    }
+    public void GivenSyncCredentialsConfigured() => scenarioContext[CloudStoreKey] = new FakeCloudStore();
 
     [When(@"I call memory_sync for project ""(.*)""")]
-    public async Task WhenISyncForProject(string projectId) => await Task.CompletedTask /* bound for @ignore scenarios */;
+    public async Task WhenISyncForProject(string projectId) => await RunSyncAsync(CloudStore, CancellationToken.None);
+
+    [When("I call memory_sync")]
+    public async Task WhenICallMemorySync()
+    {
+        if (!scenarioContext.ContainsKey(CloudStoreKey))
+        {
+            scenarioContext[CloudStoreKey] = new FakeCloudStore();
+        }
+
+        await RunSyncAsync(CloudStore, CancellationToken.None);
+    }
+
+    [Given("the remote snapshot changed since the last pull")]
+    public async Task GivenRemoteSnapshotChanged()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        // A local write that must survive the merge.
+        await _store.WriteAsync(new MemoryWriteRequest(projectId, "local kept fact"), CancellationToken.None);
+        fake.Set(ObjectKeyFor(projectId),
+            await BuildRemoteSnapshotAsync(projectId, [("remote merged fact", "remote.md")]));
+    }
+
+    [Given("an entry was deleted locally since the last sync")]
+    public async Task GivenEntryDeletedLocallySinceLastSync()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(projectId, "doomed entry"),
+            CancellationToken.None);
+        scenarioContext["DoomedHash"] = entry.Hash;
+        // Baseline: the remote has the entry before the local delete.
+        await RunSyncAsync(fake, CancellationToken.None);
+        await _store.DeleteAsync(projectId, entry.Hash, CancellationToken.None);
+    }
+
+    [Given("the remote contributed new rows")]
+    public async Task GivenRemoteContributedNewRows()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var fake = new FakeCloudStore();
+        scenarioContext[CloudStoreKey] = fake;
+        // Local engine configured so the pipeline seam can embed merged rows.
+        await _store.ConfigureEmbeddingAsync("local", null, null, CancellationToken.None);
+        fake.Set(ObjectKeyFor(projectId),
+            await BuildRemoteSnapshotAsync(projectId, [("merged fresh fact", "fresh.md")]));
+    }
 
     [Then("a snapshot object is uploaded with If-Match")]
-    public void ThenSnapshotUploaded()
+    public async Task ThenSnapshotUploaded()
     {
-        /* bound for @ignore scenarios */
+        var obj = await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"]));
+        obj.ShouldNotBeNull();
+        obj!.ETag.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Then("the snapshot passed integrity check before upload")]
-    public void ThenSnapshotIntegrityCheck()
+    public async Task ThenSnapshotIntegrityCheck()
     {
-        /* bound for @ignore scenarios */
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var result = (string)(await conn.ExecuteScalarAsync("PRAGMA quick_check"))!;
+            result.ShouldBe("ok");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the remote rows are merged row-wise")]
+    public async Task ThenRemoteRowsMerged()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE value = 'remote merged fact'");
+        count.ShouldBe(1);
+    }
+
+    [Then("no local write since the last sync is lost")]
+    public async Task ThenNoLocalWriteLost()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE value = 'local kept fact'");
+        count.ShouldBe(1);
+    }
+
+    [Then("the deletion reaches the remote")]
+    public async Task ThenDeletionReachesRemote()
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var count = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE hash = @hash",
+                new { hash = (string)scenarioContext["DoomedHash"] });
+            count.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the entry is not resurrected by the merge")]
+    public async Task ThenEntryNotResurrected()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash",
+            new { hash = (string)scenarioContext["DoomedHash"] });
+        count.ShouldBe(0);
+    }
+
+    [Then(@"""(.*)"" is not part of any synced payload")]
+    public async Task ThenNotPartOfSyncedPayload(string content)
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var count = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE value = @value", new { value = content });
+            count.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Then("the new rows are embedded and searchable")]
+    public async Task ThenNewRowsEmbeddedAndSearchable()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        await _store.EmbedPendingAsync(projectId, null, CancellationToken.None);
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE value = 'merged fresh fact'");
+        state.ShouldBe("embedded");
+        var results = await _store.SearchAsync(
+            new SearchQuery(projectId, "merged fresh fact", SearchScope.All), CancellationToken.None);
+        results.Count.ShouldBeGreaterThan(0);
     }
 
     // ── FR-NM-9: MCP surface ──
@@ -964,7 +1106,22 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenAccessDenied() { }
 
     [Then("the workspace entry was never part of a sync payload")]
-    public void ThenWorkspaceNotInSync() { }
+    public async Task ThenWorkspaceNotInSync()
+    {
+        var obj = (await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"])))!;
+        var path = await WriteTempAsync(obj.Data);
+        try
+        {
+            await using var conn = await OpenReadOnlyAsync(path, CancellationToken.None);
+            var wsRows = await conn.QueryFirstOrDefaultAsync<int>(
+                "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL");
+            wsRows.ShouldBe(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 
     [When("I adjust the sweep threshold or an entry's ttl_days")]
     public void WhenIAdjustSweepThreshold() { }
@@ -998,9 +1155,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None);
         await sweeper.SweepAsync(projectId, 0.3, dryRun: false, CancellationToken.None);
     }
-
-    [When("I call memory_sync")]
-    public async Task WhenICallMemorySync() => await Task.CompletedTask;
 
     [When("I scan the bank and extension directories")]
     public void WhenIScanBankDirectories() { }
