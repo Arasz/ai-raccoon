@@ -11,7 +11,9 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using CommunityToolkit.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -26,7 +28,7 @@ internal static partial class ConfigCommands
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
         SqliteConnectionFactory? bank = null, ICliSecretManager? bws = null, IEncryptionKeyProvider? env = null,
-        IWatchStore? watchStore = null)
+        IWatchStore? watchStore = null, IEncryptionState? encryptionState = null, ILogger? logger = null)
     {
         try
         {
@@ -57,9 +59,9 @@ internal static partial class ConfigCommands
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
                 ["watch", "registered"] => await WatchRegisteredAsync(parseResult, watchStore, stdout, cancellationToken),
                 ["watch", "remove"] => await WatchRemoveAsync(parseResult, store, stdout, cancellationToken),
-                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, env, cancellationToken),
-                ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, cancellationToken),
-                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, env, cancellationToken),
+                ["encryption", "bitwarden"] => await EncryptionBitwardenAsync(parseResult, store, stdout, stderr, stdin, bank, bws, env, encryptionState, logger, cancellationToken),
+                ["encryption", "show"] => await EncryptionShowAsync(store, stdout, bank, encryptionState, logger, cancellationToken),
+                ["encryption", "unset"] => await EncryptionUnsetAsync(store, stdout, stderr, bank, env, encryptionState, logger, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }
