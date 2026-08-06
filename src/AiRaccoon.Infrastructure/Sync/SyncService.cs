@@ -57,14 +57,11 @@ public partial class SyncService(
                 await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            // Strip workspace rows — they never leave the bank.
-            await using (var snap = new SqliteConnection($"Data Source={localSnapshot}"))
+            // Strip workspace rows — they never leave the bank. The snapshot of an encrypted
+            // bank is itself encrypted, so it opens through openReadOnly with the bank key
+            // (and vec0, which the entry triggers need).
+            await using (var snap = await openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
             {
-                await snap.OpenAsync(cancellationToken).ConfigureAwait(false);
-                // The bank's vec0 tables + entry triggers need the module on snapshot
-                // connections too, or the strip DELETE fails with "no such module: vec0".
-                snap.EnableExtensions();
-                snap.LoadVector();
                 await using var del = snap.CreateCommand();
                 del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
                 await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -223,9 +220,26 @@ public partial class SyncService(
 
             await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
 
-            // ATTACH the remote snapshot.
+            // ATTACH the remote snapshot. When the local bank is encrypted its snapshots are
+            // encrypted copies, so the ATTACH needs the same key (quote() produces the literal
+            // form Microsoft.Data.Sqlite uses for Password — same trick as the rekey path).
+            // A remote in a different encryption state fails here and maps to SyncCorruptFile.
+            var attachKey = new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
+            string attachSql;
+            if (attachKey is null)
+            {
+                attachSql = $"ATTACH DATABASE '{remotePath}' AS remote";
+            }
+            else
+            {
+                await using var quote = conn.CreateCommand();
+                quote.CommandText = "SELECT quote($key)";
+                quote.Parameters.AddWithValue("$key", attachKey);
+                attachSql = $"ATTACH DATABASE '{remotePath}' AS remote KEY {(string)(await quote.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!}";
+            }
+
             await using var attach = conn.CreateCommand();
-            attach.CommandText = $"ATTACH DATABASE '{remotePath}' AS remote";
+            attach.CommandText = attachSql;
             await attach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             try
