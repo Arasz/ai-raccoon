@@ -12,6 +12,12 @@ if (!CliArgs.TryParse(args, out var cliParseResult))
 var cancellationTokenSource = new CancellationTokenSource();
 
 var serverConfig = cliParseResult.Options.ToServerConfig();
+if (cliParseResult.CommandPath.Length > 0)
+{
+    return await ConfigVerbRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, Console.In,
+        cancellationTokenSource.Token);
+}
+
 var app = McpServerSetup.CreateServerHost(serverConfig);
 var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailability>();
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
