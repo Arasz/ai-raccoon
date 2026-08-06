@@ -3198,6 +3198,14 @@
           "delegationId": "deleg_3a5c2235",
           "model": "deepseek-v4-flash",
           "apiCalls": 38
+        },
+        {
+          "description": "BDD @ignore scenarios implementation + tombstone/vec0 fixes",
+          "at": "2026-08-06T11:19:36.381201+00:00",
+          "totalTokens": 26089412,
+          "delegationId": "deleg_ddf575ff",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 118
         }
       ],
       "grade": null,
@@ -3237,7 +3245,7 @@
         "cacheReadTokens": 0,
         "cacheCreationTokens": 0,
         "cacheEfficiency": null,
-        "subagentTokens": 6748581,
+        "subagentTokens": 32837993,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,

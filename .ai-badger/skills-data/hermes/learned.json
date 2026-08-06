@@ -67,11 +67,20 @@
     {
       "category": "uncategorized",
       "name": "mcp-tool-surface-testing",
-      "sourceHash": "4b8e0484a2de0bc6a2be40c44e285c7587df6be20a5dc3a11e8aad0cea5752f1",
+      "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
       "sourcePath": "mcp/mcp-tool-surface-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:38:44Z",
+      "syncedAt": "2026-08-06T11:20:46Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "memory-quality-logging",
+      "sourceHash": "6e0769a964865462c2a771e2818d50ca630079e17e68db584ce9f89175a51a42",
+      "sourcePath": "ai-raccoon-integration/memory-quality-logging",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:21:35Z",
+      "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
     }
   ],
   "version": 1

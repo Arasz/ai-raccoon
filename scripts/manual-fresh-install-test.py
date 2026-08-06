@@ -26,9 +26,17 @@ Protocol (revised per architect plan review deleg_98028a5e):
  14. cleanup
 Exit 0 = all green on first install attempt, zero manual repair.
 """
-import json, os, re, shutil, subprocess, sys, tempfile, time, uuid
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
 
-VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.7")
+VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.8")
 # NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
 # this script, scripts/verify-tool-package.sh, and scripts/download-embedding-model.sh.
 # After every model swap (or republish of a new bundle), re-derive the hashes from
