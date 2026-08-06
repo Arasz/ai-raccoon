@@ -127,7 +127,10 @@ def run_probe(home: Path, plugins_dir: Path, python: str) -> None:
         bank = tmp / "bank"
         (iso_home / "config.yaml").write_text(
             "plugins:\n  ai-raccoon:\n    transport: stdio\n"
-            f"    binary_args: ['--data-root', '{bank}']\n",
+            f"    binary_args: ['--data-root', '{bank}']\n"
+            # status_words: false — the probe must work against any released
+            # binary; the --status-words flag ships with the server.
+            "    status_words: false\n",
             encoding="utf-8")
         env = {**os.environ, "HERMES_HOME": str(iso_home)}
         result = subprocess.run(
