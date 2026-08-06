@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
-///     Bank maintenance loop: every tick it checkpoints the WAL (TRUNCATE) and, on the
-///     vacuum cadence, VACUUM + ANALYZE. One startup pass bounds the WAL before traffic
-///     (stdio processes are session-bound, so the boundary checkpoint is the only one
-///     they get) and StopAsync runs a final best-effort checkpoint. See
-///     docs/work/2026-08-07-bank-maintenance-design.md.
+///     Bank maintenance loop: WAL checkpoint (TRUNCATE) at startup, shutdown and on the
+///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence. See the design doc.
 /// </summary>
 public sealed partial class BankMaintenanceHostedService : BackgroundService
 {
@@ -41,7 +38,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            throw;
+            return;
         }
         catch (Exception ex)
         {
@@ -75,7 +72,14 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         try
         {
             await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-            await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                await RestoreBusyTimeoutAsync(connection, CancellationToken.None).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -89,38 +93,60 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        var now = _timeProvider.GetUtcNow();
-        if (_lastVacuumUtc is null)
+        try
         {
-            // Seed on first run: short-lived processes never vacuum (the clock resets per process).
+            await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+
+            var now = _timeProvider.GetUtcNow();
+            if (_lastVacuumUtc is null)
+            {
+                // Seed on first run: short-lived processes never vacuum (the clock resets per process).
+                _lastVacuumUtc = now;
+                return;
+            }
+
+            var vacuumIntervalDays = await ReadVacuumIntervalDaysSafeAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
+            if (now - _lastVacuumUtc.Value < TimeSpan.FromDays(vacuumIntervalDays))
+            {
+                return;
+            }
+
+            try
+            {
+                await using (var vacuum = connection.CreateCommand())
+                {
+                    vacuum.CommandText = "VACUUM";
+                    await vacuum.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6) // SQLITE_BUSY / SQLITE_LOCKED
+            {
+                // A contended VACUUM defers like a contended checkpoint: Warning, clock
+                // untouched so the next tick retries — never an Error.
+                Log.VacuumDeferred(_logger);
+                return;
+            }
+
+            // VACUUM drops sqlite_stat1, so ANALYZE must run after it.
+            await using (var analyze = connection.CreateCommand())
+            {
+                analyze.CommandText = "ANALYZE";
+                await analyze.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // The VACUUM rewrote the whole file through the WAL; truncate it now, not at the next tick.
+            await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+
             _lastVacuumUtc = now;
-            return;
+            Log.Vacuum(_logger);
         }
-
-        var vacuumIntervalDays = await ReadVacuumIntervalDaysSafeAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
-        if (now - _lastVacuumUtc.Value < TimeSpan.FromDays(vacuumIntervalDays))
+        finally
         {
-            return;
+            // The connection returns to the pool: restore the factory's busy timeout so a
+            // future borrower never inherits the maintenance connection's short one.
+            await RestoreBusyTimeoutAsync(connection, CancellationToken.None).ConfigureAwait(false);
         }
-
-        await using (var vacuum = connection.CreateCommand())
-        {
-            vacuum.CommandText = "VACUUM";
-            await vacuum.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        // VACUUM drops sqlite_stat1, so ANALYZE must run after it.
-        await using (var analyze = connection.CreateCommand())
-        {
-            analyze.CommandText = "ANALYZE";
-            await analyze.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        _lastVacuumUtc = now;
-        Log.Vacuum(_logger);
     }
 
     /// <summary>
@@ -150,6 +176,14 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         {
             Log.Checkpoint(_logger);
         }
+    }
+
+    /// <summary>Re-applies the factory's busy timeout (5000 ms) before the connection returns to the pool.</summary>
+    private static async Task RestoreBusyTimeoutAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var busy = connection.CreateCommand();
+        busy.CommandText = "PRAGMA busy_timeout=5000";
+        await busy.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TimeSpan> ReadCheckpointIntervalSafeAsync(CancellationToken cancellationToken)
@@ -212,6 +246,10 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
 
         [LoggerMessage(EventId = 512, Level = LogLevel.Information, Message = "Bank vacuum + analyze complete")]
         public static partial void Vacuum(ILogger logger);
+
+        [LoggerMessage(EventId = 516, Level = LogLevel.Warning,
+            Message = "Bank vacuum deferred: the bank is busy (retries next tick)")]
+        public static partial void VacuumDeferred(ILogger logger);
 
         [LoggerMessage(EventId = 513, Level = LogLevel.Error, Message = "Bank maintenance run failed")]
         public static partial void RunFailed(ILogger logger, Exception exception);

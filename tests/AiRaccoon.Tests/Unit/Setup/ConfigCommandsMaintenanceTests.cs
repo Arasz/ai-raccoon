@@ -90,6 +90,18 @@ public class ConfigCommandsMaintenanceTests
     }
 
     [Fact]
+    public async Task MaintenanceVacuumIntervalOutOfRange_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["maintenance", "vacuum-interval", "20000000"], store);
+
+        exit.ShouldBe(1);
+        err.ShouldContain("days");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
+    }
+
+    [Fact]
     public async Task MaintenanceList_ShowsDefaults_WhenUnset()
     {
         var store = new FakeConfigStore();

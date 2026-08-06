@@ -32,6 +32,13 @@ public sealed class MaintenanceCommands : IMaintenanceCommands
             return 1;
         }
 
+        if (parsed > BankMaintenanceConfigKeys.MaxVacuumIntervalDays)
+        {
+            await stderr.WriteLineAsync(
+                $"ai-raccoon: vacuum interval must be at most {BankMaintenanceConfigKeys.MaxVacuumIntervalDays} days");
+            return 1;
+        }
+
         await store.SetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, parsed.ToString(),
             cancellationToken);
         await stdout.WriteLineAsync($"vacuum interval: {parsed} days");

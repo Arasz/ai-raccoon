@@ -33,6 +33,8 @@ Date: 2026-08-07. Status: implemented (R1/R2/R4).
   contended checkpoint returns `busy>0` quickly and retries next tick instead of blocking the
   maintenance connection for the stock 5 s. (Measured: with a reader pinning the WAL, a stock
   connection blocks the full busy timeout before returning the same `busy>0` tuple.)
+- **The stock busy timeout is restored** before the maintenance connection returns to the
+  pool, so no borrower ever inherits the 250 ms override.
 
 ## Settings keys (settings table is the only runtime config channel)
 
@@ -46,6 +48,10 @@ Bad values (unparseable, zero, negative) fall back to the defaults, never throw.
 ## Failure modes
 
 - Checkpoint busy (reader/writer pins the WAL) → Warning 511, defer to next tick.
+- Vacuum busy (any active statement blocks VACUUM) → Warning 516, defer to next tick (the
+  vacuum clock is untouched, so a persistently busy bank retries each tick without error spam).
+- Vacuum interval values above 36500 days are clamped to the ceiling (the parse never throws;
+  the CLI rejects them outright).
 - Run failure → Error 513, loop survives.
 - Settings read failure (e.g. missing table) → Warning 514, defaults used, loop survives.
 - Shutdown checkpoint failure → Warning 515, shutdown proceeds.

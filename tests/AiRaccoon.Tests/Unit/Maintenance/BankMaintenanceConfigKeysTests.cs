@@ -67,4 +67,16 @@ public sealed class BankMaintenanceConfigKeysTests
         BankMaintenanceConfigKeys.ParseVacuumIntervalDays("1").ShouldBe(1);
         BankMaintenanceConfigKeys.ParseVacuumIntervalDays("30").ShouldBe(30);
     }
+
+    [Fact]
+    public void ParseVacuumIntervalDays_ClampsAbsurdValues_ToTheTimeSpanSafeCeiling()
+    {
+        // TimeSpan.FromDays overflows past ~10.7M days; the parse must clamp so the
+        // service can never throw OverflowException on a settings value.
+        BankMaintenanceConfigKeys.ParseVacuumIntervalDays("20000000")
+            .ShouldBe(BankMaintenanceConfigKeys.MaxVacuumIntervalDays);
+        BankMaintenanceConfigKeys.ParseVacuumIntervalDays(
+            BankMaintenanceConfigKeys.MaxVacuumIntervalDays.ToString()).ShouldBe(
+            BankMaintenanceConfigKeys.MaxVacuumIntervalDays);
+    }
 }

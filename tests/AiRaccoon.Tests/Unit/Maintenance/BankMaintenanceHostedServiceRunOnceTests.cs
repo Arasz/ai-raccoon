@@ -157,6 +157,41 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunOnce_VacuumDeferred_WhenBankBusy_ThenRunsOnRetry()
+    {
+        await SeedFreelistAsync(TestContext.Current.CancellationToken);
+        await _service.RunOnceAsync(TestContext.Current.CancellationToken); // seeds the clock
+
+        // In WAL mode a reader does not block VACUUM (writers and readers coexist) — only
+        // the single write lock does. Hold one so VACUUM fails with SQLITE_BUSY: the pass
+        // must defer with Warning 516 (never Error 513), leave the clock unseeded-forward
+        // so the next pass retries, and then complete once the writer lets go.
+        await using var writer = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using (var begin = writer.CreateCommand())
+        {
+            begin.CommandText = "BEGIN IMMEDIATE";
+            await begin.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        _time.Advance(TimeSpan.FromDays(7));
+        await _service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 516 && r.Level == LogLevel.Warning);
+        _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 513);
+        (await ReadFreelistCountAsync(TestContext.Current.CancellationToken)).ShouldBeGreaterThan(0);
+
+        await using (var rollback = writer.CreateCommand())
+        {
+            rollback.CommandText = "ROLLBACK";
+            await rollback.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await _service.RunOnceAsync(TestContext.Current.CancellationToken); // retry: vacuum now runs
+        (await ReadFreelistCountAsync(TestContext.Current.CancellationToken)).ShouldBe(0);
+        _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 512);
+    }
+
+    [Fact]
     public async Task RunOnce_VacuumAndAnalyze_AfterIntervalElapses()
     {
         await _service.RunOnceAsync(TestContext.Current.CancellationToken); // seeds the clock
@@ -167,6 +202,9 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
 
         await _service.RunOnceAsync(TestContext.Current.CancellationToken);
 
+        // The vacuum pass ends with a second checkpoint: the WAL the VACUUM rewrites
+        // through must not sit untruncated until the next tick.
+        new FileInfo(WalPath).Length.ShouldBe(0);
         (await ReadFreelistCountAsync(TestContext.Current.CancellationToken)).ShouldBe(0);
         (await CountStatTablesAsync(TestContext.Current.CancellationToken)).ShouldBe(1);
         _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 512);
