@@ -101,7 +101,7 @@ public class McpServerSetupHostTests : IDisposable
     }
 
     /// <summary>
-    ///     The registered MCP surface is the full 19 tools: 16 memory + 3 watch. Regression
+    ///     The registered MCP surface is the full 20 tools: 17 memory + 3 watch. Regression
     ///     gate for PR #30 dropping .WithTools&lt;WatchTools&gt;() — host tests previously
     ///     pinned transport shape only, so the watch trio silently vanished from tools/list.
     /// </summary>
@@ -114,7 +114,8 @@ public class McpServerSetupHostTests : IDisposable
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
             .Select(t => t.ProtocolTool.Name).ToList();
 
-        toolNames.Count.ShouldBe(19);
+        toolNames.Count.ShouldBe(20);
+        toolNames.ShouldContain("memory_share_extract");
         toolNames.ShouldContain("memory_watch_add");
         toolNames.ShouldContain("memory_watch_status");
         toolNames.ShouldContain("memory_watch_remove");
