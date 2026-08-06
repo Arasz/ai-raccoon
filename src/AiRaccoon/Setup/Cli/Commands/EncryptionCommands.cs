@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using CommunityToolkit.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -38,6 +39,12 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
     public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
         IEncryptionKeyProvider env, IEncryptionSourceSidecar encryptionState, ILogger logger)
     {
+        Guard.IsNotNull(bank);
+        Guard.IsNotNull(bws);
+        Guard.IsNotNull(env);
+        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(logger);
+
         _bank = bank;
         _bws = bws;
         _env = env;

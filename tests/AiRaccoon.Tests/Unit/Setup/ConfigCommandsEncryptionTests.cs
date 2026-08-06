@@ -503,6 +503,67 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
+    // ── constructor null-guards ──
+
+    [Fact]
+    public void Constructor_NullBank_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(null!,
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullBws_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                null!,
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullEnv_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                null!,
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullEncryptionState_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                null!,
+                new FakeLogger()));
+    }
+
+    [Fact]
+    public void Constructor_NullLogger_ThrowsArgumentNullException()
+    {
+        Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                null!));
+    }
+
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {
         public string Source => "env";
