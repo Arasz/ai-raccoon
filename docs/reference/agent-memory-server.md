@@ -319,6 +319,25 @@ print to **stderr** (exit 0 / exit 1). Generic host flags (`--environment`,
 `.mcp.json` entry is just `{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`;
 registry installs (`.mcp/server.json`) pass no args (`packageArguments: []`).
 
+When a client points `command` at the repo instead of the installed tool (e.g. VS Code's
+`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "AiRaccoon": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "<PATH TO PROJECT DIRECTORY>", "--no-launch-profile"]
+    }
+  }
+}
+```
+
+`--no-launch-profile` matters: without it `dotnet run` prints its launch-settings
+notice to stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP
+clients expect on stdio.
+
 ## Local embedding model
 
 Local embeddings run in-process on ONNX Runtime over the small int8
