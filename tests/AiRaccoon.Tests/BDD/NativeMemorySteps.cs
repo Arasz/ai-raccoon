@@ -1,7 +1,14 @@
+using AiRaccoon.Core.Common;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Reqnroll;
 using Shouldly;
 
@@ -12,12 +19,85 @@ namespace AiRaccoon.Tests.BDD;
 [Binding]
 public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 {
+    private const string CloudStoreKey = "CloudStore";
+
     private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
     private readonly IMemoryStore _store = scenarioContext.ScenarioContainer.Resolve<IMemoryStore>();
     private Exception? _lastError;
     private IReadOnlyList<MemorySearchResult>? _lastSearch;
+    private string? _customModelPath;
 
     private MemoryEntry? _lastWrite;
+
+    private string ObjectKeyFor(string projectId) => $"memory-{projectId}.db";
+
+    private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
+
+    /// <summary>A real copy of the bundled ONNX model under a distinct path (engine fingerprint change).</summary>
+    private string EnsureCustomModelCopy()
+    {
+        if (_customModelPath is null)
+        {
+            var source = BundledModel.ResolveModelPath();
+            _customModelPath = Path.Combine(_ctx.DataRoot, "custom-model.onnx");
+            File.Copy(source, _customModelPath);
+        }
+
+        return _customModelPath;
+    }
+
+    private async Task RunSyncAsync(ICloudStore cloud, CancellationToken cancellationToken)
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var sync = new SyncService(cloud, _ctx.Factory.OpenBankAsync, OpenReadOnlyAsync,
+            _ctx.TimeProvider, NullLogger<SyncService>.Instance);
+        await sync.MemorySyncAsync(projectId, ObjectKeyFor(projectId), cancellationToken);
+    }
+
+    private static async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection($"Data Source={path};Mode=ReadOnly");
+        await connection.OpenAsync(cancellationToken);
+        connection.EnableExtensions();
+        connection.LoadVector();
+        return connection;
+    }
+
+    private static async Task<string> WriteTempAsync(byte[] data)
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllBytesAsync(path, data);
+        return path;
+    }
+
+    /// <summary>Builds a VACUUM INTO snapshot of a scratch bank containing the given committed rows.</summary>
+    private static async Task<byte[]> BuildRemoteSnapshotAsync(string projectId,
+        IReadOnlyList<(string Content, string Path)> rows)
+    {
+        using var scratch = new MemoryFeatureContext();
+        foreach (var (content, path) in rows)
+        {
+            await scratch.Store.AddContentAsync(projectId, path, content,
+                ContextNaming.ProjectContext(projectId), CancellationToken.None);
+        }
+
+        var snapshotPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await scratch.Factory.OpenBankAsync(CancellationToken.None))
+            {
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"VACUUM INTO '{snapshotPath}'";
+                await cmd.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+
+            return await File.ReadAllBytesAsync(snapshotPath, CancellationToken.None);
+        }
+        finally
+        {
+            File.Delete(snapshotPath);
+        }
+    }
 
     // ── Background ──
     [Given("the ai-raccoon MCP server is running")]
@@ -112,6 +192,137 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     // ── FR-NM-2: Access modes ──
+
+    // ── FR-NM-3: Pluggable embeddings ──
+    [Given("the small model ships inside the tool package")]
+    public void GivenSmallModelShips() => File.Exists(BundledModel.ResolveModelPath()).ShouldBeTrue();
+
+    [Given("a custom model file exists")]
+    public void GivenCustomModelFileExists() => File.Exists(EnsureCustomModelCopy()).ShouldBeTrue();
+
+    [When(@"^I call memory_configure with provider ""([^""]*)""$")]
+    public async Task WhenIConfigureProvider(string provider) =>
+        await _store.ConfigureEmbeddingAsync(provider, null, null, CancellationToken.None);
+
+    [When(@"^I call memory_configure with provider ""([^""]*)"" and a model path$")]
+    public async Task WhenIConfigureProviderWithModelPath(string provider) =>
+        await _store.ConfigureEmbeddingAsync(provider, EnsureCustomModelCopy(), null, CancellationToken.None);
+
+    [When("I call memory_configure with a different engine")]
+    public async Task WhenIConfigureDifferentEngine() =>
+        await _store.ConfigureEmbeddingAsync("local", EnsureCustomModelCopy(), null, CancellationToken.None);
+
+    [When(@"^I call memory_configure with provider ""([^""]*)"", baseUrl ""([^""]*)"" and model ""([^""]*)""$")]
+    public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) =>
+        await _store.ConfigureEmbeddingAsync(provider, model, baseUrl, CancellationToken.None);
+
+    [Given(@"project ""(.*)"" has no embedding model configured")]
+    public void GivenNoEmbeddingModelConfigured(string projectId) { }
+
+    [Given(@"project ""(.*)"" has one pending entry")]
+    public async Task GivenProjectHasOnePendingEntry(string projectId) =>
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "deferred note"),
+            CancellationToken.None);
+
+    [Given(@"project ""(.*)"" has embedded entries")]
+    public async Task GivenProjectHasEmbeddedEntries(string projectId)
+    {
+        await _store.ConfigureEmbeddingAsync("local", null, null, CancellationToken.None);
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "re-embed me"),
+            CancellationToken.None);
+    }
+
+    [When("I call memory_embed_pending")]
+    public async Task WhenIEmbedPending() =>
+        await _store.EmbedPendingAsync((string)scenarioContext["ProjectId"], null, CancellationToken.None);
+
+    [Then("the write is embedded with the local engine")]
+    public async Task ThenWriteEmbeddedWithLocalEngine()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        state.ShouldBe("embedded");
+    }
+
+    [Then("no external server process or download is required")]
+    public async Task ThenNoExternalServerRequired()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        engine.ShouldBe("local:bundled");
+    }
+
+    [Then("the custom model is used")]
+    public async Task ThenCustomModelUsed()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var model = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.model'");
+        model.ShouldBe(EnsureCustomModelCopy());
+    }
+
+    [Then("writes are embedded through that endpoint")]
+    public async Task ThenWritesEmbeddedThroughEndpoint()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var baseUrl = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.baseUrl'");
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        baseUrl.ShouldBe("http://localhost:11434");
+        engine.ShouldBe("openai:nomic-embed-text@http://localhost:11434");
+    }
+
+    [Then("the entry is stored but not indexed")]
+    public async Task ThenEntryStoredButNotIndexed()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var state = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT embed_state FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        state.ShouldBe("pending");
+    }
+
+    [Then("memory_stats reports one pending entry")]
+    public async Task ThenStatsReportsOnePendingEntry()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
+        stats.PendingCount.ShouldBe(1);
+    }
+
+    [Then("memory_stats reports zero pending entries")]
+    public async Task ThenStatsReportsZeroPendingEntries()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
+        stats.PendingCount.ShouldBe(0);
+    }
+
+    [Then("the entry is searchable")]
+    public async Task ThenEntrySearchable()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var results = await _store.SearchAsync(
+            new SearchQuery(projectId, "deferred note", SearchScope.All), CancellationToken.None);
+        results.Count.ShouldBeGreaterThan(0);
+    }
+
+    [Then("every embedded entry is re-embedded with the new engine")]
+    public async Task ThenEveryEmbeddedReembedded()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var embedded = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE embed_state = 'embedded'");
+        var total = await conn.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM entries");
+        embedded.ShouldBe(total);
+        var engine = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.engine'");
+        engine.ShouldBe($"local:{EnsureCustomModelCopy()}");
+    }
 
     // ── FR-NM-4: Hybrid search ──
     [When(@"I search for ""(.*)"" in project ""([^""]*)""(?! with)")]

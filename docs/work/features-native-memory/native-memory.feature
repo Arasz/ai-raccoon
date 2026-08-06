@@ -70,12 +70,13 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: The store emits metrics and tracing for its own operations
     # Part 2: metrics and tracing so the knowledge about the memory is complete.
 
-    @FR-NM-3 @AC-3 @ignore
+    @FR-NM-3 @AC-3
     Rule: Embeddings are pluggable; the default engine is the small in-process model bundled with the tool
         Scenario: The default engine embeds locally without a sidecar
             Given the small model ships inside the tool package
             When I call memory_configure with provider "local"
-            Then writes are embedded with the local engine
+            And I write "embedded content" to project "acme-web"
+            Then the write is embedded with the local engine
             And no external server process or download is required
         Scenario: A custom model path overrides the bundled model
             Given a custom model file exists
@@ -97,7 +98,7 @@ Feature: Native memory store (ai-raccoon MCP server)
             And the entry is searchable
         Scenario: Changing the engine re-embeds the bank
             Given project "acme-web" has embedded entries
-            When I call memory_configure with a different provider
+            When I call memory_configure with a different engine
             Then every embedded entry is re-embedded with the new engine
 
     @FR-NM-4 @AC-4
