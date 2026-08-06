@@ -36,7 +36,7 @@
     </ItemGroup>
 
     <!-- Bundled embedding model (FR-NM-3): the int8 ONNX binary is downloaded by
-         scripts/download-embedding-model.sh (gitignored); vocab.txt is committed. Both are
+         scripts/download-embedding-model.py (gitignored); vocab.txt is committed. Both are
          copied to the output for tests and packed into the tool package under Models/. -->
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>

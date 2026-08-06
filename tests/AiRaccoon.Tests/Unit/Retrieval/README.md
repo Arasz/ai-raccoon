@@ -11,7 +11,7 @@ can remove the runtime extension without losing the oracle.
 - `Sweep/` — the RRF parameter matrix (k ∈ {10,30,60} × weights { (1,1), (1,2), (2,1)}) and the result-recording types
   the P6 fusion plugs into. No fusion code yet.
 - `Assets/` — `manifest.json` pins the reference binaries (sqlite-memory 1.3.5 full, sqlite-vector 1.0.0, all-MiniLM
-  GGUF with SHA-256 from `scripts/download-embedding-model.sh`).
+  GGUF with SHA-256 from `scripts/download-embedding-model.py`).
   `ReferenceAssets` bootstraps them into `assets/` (gitignored): verified copy from
   `~/.ai-raccoon/extensions/osx-arm64/` + `~/.ai-raccoon/models/` first, pinned GitHub / HuggingFace download otherwise.
   The gate test **fails** (never skips) when an asset is missing or mismatched.
@@ -40,7 +40,7 @@ First run bootstraps the assets (needs network or a provisioned `~/.ai-raccoon`)
 ## Regenerate the golden file
 
 ```bash
-scripts/regenerate-retrieval-golden.sh   # sets AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
+scripts/regenerate-retrieval-golden.py   # sets AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
 ```
 
 Run after the corpus or the pinned oracle changes; commit the updated `reference-topk.json`. The committed file is
