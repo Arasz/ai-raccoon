@@ -21,6 +21,15 @@ Class of work: periodic memory-usage audits (v1/v2/v3 pattern in ai-raccoon/docs
 7. **Access/rating loop:** distribution of access_count (94%+ at 0 is normal here), `MAX(last_accessed_at)` to date the last real search hit. Re-verify "access 0" claims at the END of the audit — live banks move under you (a search during the audit bumped the shared tier).
 8. **Growth model:** decompose per-day and per-hour creation counts into discrete events (one-time bulk load, maintenance re-ingest, watch-init scan, organic new docs). NEVER extrapolate a burst (e.g. 43 rows/10min = ONE 43-chunk file ingest, series decays to 0 between events). Storage per row from `page_count*page_size - freelist` / row count. Project quiet vs heavy scenarios; name the wrong extrapolation explicitly.
 9. **Grade every finding** `[MEASURED]` (you ran it / it's in the data) or `[INFERRED]` (reasoned), with SQL/file/line evidence. End with a verdict + top N risks at 10x scale.
+10. **Space-utilization analysis (sqlite3_analyzer):** the tool for "why is the bank file this big / what is it wasting" questions. It is space-only forensics (freelist, unused bytes, fragmentation per table/index) — blind to the WAL and to
+    query performance (doc: 0 hits for wal/performance). On a live WAL-mode bank: `.backup` snapshot first (preserves freelist/layout — cross-check with live `PRAGMA page_count/freelist_count`, they matched exactly), analyze the snapshot,
+    then quantify reclaim with `VACUUM INTO` + size compare. NEVER analyze a vacuumed copy when the question is live-bank waste — vacuuming destroys the evidence. 2026-08-06 baseline: bank 47.9% freelist (3446/7200 pages), VACUUM → −48%
+    (29.5 → 15.3 MB); ENTRIES 33.7% unused bytes, 41.9% non-sequential pages; a 431 MB WAL beside the 29.5 MB DB (checkpoint issue, invisible to the tool). Full recipe in references/sqlite3-analyzer.md.
+11. **WAL + holder forensics** (for "why is the WAL huge" / footprint >> logical): the decisive test runs on a COPY of db+wal+shm — `PRAGMA wal_checkpoint(TRUNCATE)`; tuple `0|0|0` and the file drops to ~0 bytes = the whole WAL was
+    already-checkpointed garbage (crash replays nothing). A huge-but-checkpointable WAL + pooled connections (Microsoft.Data.Sqlite default ON) in N long-lived processes is the classic never-truncates shape: passive auto-checkpoints sync
+    content, but truncation needs a reader-free window and close-time truncation only fires on the LAST connection closing — which pooling prevents. `grep wal_checkpoint|wal_autocheckpoint|auto_vacuum|VACUUM|ANALYZE` — no hits = no
+    maintenance path; the only TRUNCATE may sit in a sync flow that never ran (verify via its metadata table row count). Enumerate holders with `lsof` + `ps -o lstart`; date sidecars with APFS birth time (`stat -f "%N born=%SB"`) to
+    correlate WAL birth with process starts. Check `sqlite_stat%` tables (0 = ANALYZE never ran; low impact for point-lookup/FTS5/vec0 workloads). Full recipe + baseline: references/physical-layer-space-wal-audit.md.
 
 ## Pitfalls
 
@@ -29,7 +38,14 @@ Class of work: periodic memory-usage audits (v1/v2/v3 pattern in ai-raccoon/docs
 - Multiple server processes on ONE bank (5-6 ai-raccoon instances all loading watch config) each run a watcher → concurrent ingests of the same file event → duplicate rows (measured 14.2% of the bank). Expected at this deployment shape; flag the fix (UNIQUE index on (project_id, path, hash, scope, context_label, workspace_id) or single ingester).
 - Zombie dev servers (running from a deleted worktree, no --data-root) write to the LIVE bank with older, pre-dedup semantics. Check `ps` for ai-raccoon processes and their data roots before attributing rows.
 - Data packages / orchestrator notes are snapshots; every claim they make about the bank should be re-queried if you cite it.
+- vec0 chunk tables allocate in **1024-vector capacity units**: one chunk row = `1024 × vector_bytes` (float[384] → rows of exactly 1,572,864 B). `count(*)` on chunk tables counts CHUNK ROWS, not vectors — 4 rows is not 4 vectors; 1772
+  vectors can live in 4 rows (2 full + 2 partial chunks). Verify with `<table>_chunks` validity bitmaps + `<table>_rowids` counts; chunk-table dbstat pages are capacity allocation and VACUUM cannot shrink them — not bloat. (Nearly published
+  as "vector index emptied" 2026-08-06; caught via dbstat + `length(vectors)` before it entered the record.)
 
 ## Support files
 
 - `references/sql-query-cookbook.md` — copy-paste SQL for every audit dimension (version dup, hash dup, per-day/hour, windowed counts, metadata gaps, sync/workspaces, settings) + v3 audit baseline snapshot (2026-08-06) for future comparison.
+- `references/sqlite3-analyzer.md` — sqlite3_analyzer space-utilization audit: binary acquisition (sqlite.org anti-robot PRODUCT CSV trick), .backup-first workflow, VACUUM-into reclaim quantification, scope limits (blind to WAL and query
+  perf), measured 2026-08-06 baseline.
+- `references/physical-layer-space-wal-audit.md` — WAL/holder/vec0 forensics: checkpoint-on-copy test and tuple semantics, WAL-never-truncates mechanism, lsof + APFS birth-time dating, vec0 chunk-capacity gotchas, sqlite_stat check,
+  2026-08-06/07 baseline.

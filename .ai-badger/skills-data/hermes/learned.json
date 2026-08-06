@@ -263,6 +263,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
     },
     {
+        "category": "uncategorized",
+        "name": "dotnet-sqlcipher-encryption",
+        "sourceHash": "361e27d01d7551d4d1ac7628095583d68f189dd9a3462fa3fef2361a2741bc40",
+        "sourcePath": "software-development/dotnet-sqlcipher-encryption",
+        "status": "synced",
+        "syncedAt": "2026-08-06T22:23:34Z",
+        "target": ".ai-badger/skills/learned/uncategorized/dotnet-sqlcipher-encryption"
+    },
+      {
       "category": "uncategorized",
       "name": "dotnet-tool-publishing",
       "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
@@ -337,10 +346,10 @@
     {
       "category": "uncategorized",
       "name": "memory-bank-audit",
-      "sourceHash": "6902b96c8208818e85bac639a451c78345a78f10f44ab6ad78c610b497592b5d",
+        "sourceHash": "9b0d5c88584db323ad710fcfe78c68d30a3e6ad9560e1359a289f80e736e146c",
       "sourcePath": "data-analysis/memory-bank-audit",
       "status": "synced",
-      "syncedAt": "2026-08-06T13:13:01Z",
+        "syncedAt": "2026-08-06T22:30:15Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
     },
     {
