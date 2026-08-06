@@ -92,7 +92,7 @@ public sealed class PromotionTools(
     }
 
     private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRow> Rows);

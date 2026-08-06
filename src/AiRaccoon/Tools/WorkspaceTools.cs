@@ -149,7 +149,7 @@ public sealed class WorkspaceTools(
     }
 
     private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WorkspaceBeginResult(string WorkspaceId, string Context);

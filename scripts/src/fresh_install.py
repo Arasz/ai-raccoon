@@ -19,7 +19,7 @@ def unwrap(result):
     content = (result or {}).get("content") or []
     if content and content[0].get("type") == "text":
         parsed = json.loads(content[0]["text"])
-        if isinstance(parsed, dict) and "data" in parsed and "meta" in parsed and "result" in parsed:
+        if isinstance(parsed, dict) and "data" in parsed and "meta" in parsed:
             return parsed["data"]
         return parsed
     return result

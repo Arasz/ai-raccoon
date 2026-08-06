@@ -42,11 +42,14 @@ common response envelope that surfaces what is waiting.
 - **Review surface.** `memory_promotion_list` shows the queue; `memory_promotion_discard`
   drops rows or a whole project's queue. The background extraction loop (propose mode)
   fills the queue on its schedule.
-- **Envelope.** Every tool response is `ApiEnvelope<T>(data, meta, result)`; `meta`
+- **Envelope.** Every tool response is `ApiEnvelope<T>(data, meta)`; `meta`
   carries `waitingPromotionsCount`, `promotionsWaitTimeSeconds` and the per-project
-  breakdown — the "something is waiting" signal. `result` is an in-band
-  `OperationStatus` (HTTP code; `OperationStatus.Ok` = 200/"ok"); protocol errors stay
-  `McpException`. Breaking change for clients, hence 1.1.0.
+  breakdown — the "something is waiting" signal. An in-band `result` slot with an
+  `OperationStatus` (HTTP codes, `Ok` = 200/"ok") was designed and removed before
+  shipping: every call site only ever produced the success sentinel, and a schema field
+  that cannot vary is dead weight — domain outcomes that are not plain success stay on
+  the `McpException` protocol channel until a real in-band consumer exists. Breaking
+  change for clients, hence 1.1.0.
 - **Observability.** `IPromotionQueueMetrics` port, implemented as
   `PromotionQueueMetrics` (Meter "AiRaccoon.PromotionQueue"): queued deltas, evictions,
   promoted/discarded counts, wait-time and evicted-score histograms, capacity

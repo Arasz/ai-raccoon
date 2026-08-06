@@ -25,11 +25,12 @@ still curated, sweep-exempt, never swept.
 loop fills the queue on its schedule. The shared-extraction prompts now describe the
 two-step ritual.
 
-**Response envelope (breaking).** Every tool returns
-`ApiEnvelope<T>(data, meta, result)`; `meta` carries `waitingPromotionsCount`,
-`promotionsWaitTimeSeconds`, `waitingByProject` — the "something is waiting" signal the
-owner asked for. `result` is `OperationStatus` (HTTP code; `OperationStatus.Ok` =
-(200, "ok")), protocol errors stay `McpException`.
+**Response envelope (breaking).** Every tool returns `ApiEnvelope<T>(data, meta)`;
+`meta` carries `waitingPromotionsCount`, `promotionsWaitTimeSeconds`,
+`waitingByProject` — the "something is waiting" signal the owner asked for. An in-band
+`OperationStatus` result slot was designed (HTTP codes, `Ok` = (200, "ok")) and removed
+before shipping — every call site only ever produced `Ok`, so it was dead schema weight;
+domain failures stay on the `McpException` channel until a real consumer exists.
 
 **Architecture parts (all new, injectable):** `IPromotionQueue` /
 `PromotionQueueService` (Infrastructure), `IPromotionQueueStore` /
