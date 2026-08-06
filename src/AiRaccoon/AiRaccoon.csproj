@@ -11,9 +11,9 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>ai-raccoon</PackageId>
         <ToolCommandName>ai-raccoon</ToolCommandName>
-        <PackageVersion>1.0.10</PackageVersion>
-        <InformationalVersion>1.0.10</InformationalVersion>
-        <AssemblyVersion>1.0.10</AssemblyVersion>
+        <PackageVersion>1.0.11</PackageVersion>
+        <InformationalVersion>1.0.11</InformationalVersion>
+        <AssemblyVersion>1.0.11</AssemblyVersion>
         <PackageTags>ai mcp mcp-server model-context-protocol agent agents agent-memory memory knowledge knowledge-base server dotnet-tool global-tool tool cli sqlite vector vector-search embeddings semantic-search hybrid-search search retrieval rag llm stdio http dotnet</PackageTags>
         <PackageReleaseNotes>https://github.com/Arasz/ai-raccoon/releases</PackageReleaseNotes>
         <Authors>Rafał Araszkiewicz</Authors>

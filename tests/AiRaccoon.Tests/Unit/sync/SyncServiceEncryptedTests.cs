@@ -65,11 +65,23 @@ public class SyncServiceEncryptedTests : IDisposable
         return conn;
     }
 
-    /// <summary>Mirrors the DI openReadOnly after the encrypted-sync fix: key + vec0 loaded.</summary>
-    private Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshotReadOnly() =>
+    /// <summary>Mirrors the DI openSnapshot after the encrypted-sync fix: key + vec0 loaded,
+    /// read-write (the strip DELETEs + VACUUMs the snapshot).</summary>
+    private Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshot() =>
         async (path, ct) =>
         {
             var conn = new SqliteConnection($"Data Source={path};Password={Key}");
+            await conn.OpenAsync(ct);
+            conn.EnableExtensions();
+            conn.LoadVector();
+            return conn;
+        };
+
+    /// <summary>Mirrors the DI openReadOnly: key + vec0 loaded, read-only (quick_check only).</summary>
+    private Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshotReadOnly() =>
+        async (path, ct) =>
+        {
+            var conn = new SqliteConnection($"Data Source={path};Password={Key};Mode=ReadOnly");
             await conn.OpenAsync(ct);
             conn.EnableExtensions();
             conn.LoadVector();
@@ -95,8 +107,8 @@ public class SyncServiceEncryptedTests : IDisposable
     public async Task MemorySync_EncryptedBank_PushesEncryptedSnapshot()
     {
         var cloud = new FakeCloudStore();
-        var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshotReadOnly(),
-            TimeProvider.System, null!);
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshot(),
+            OpenSnapshotReadOnly(), TimeProvider.System, null!);
 
         await InsertEntryAsync(_bankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
@@ -149,8 +161,8 @@ public class SyncServiceEncryptedTests : IDisposable
         // Local encrypted bank holds its own entry; sync must pull + merge the encrypted remote.
         await InsertEntryAsync(_bankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
-        var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshotReadOnly(),
-            TimeProvider.System, null!);
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshot(),
+            OpenSnapshotReadOnly(), TimeProvider.System, null!);
 
         var result = await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
         result.Received.ShouldBe(1);
