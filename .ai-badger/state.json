@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-05T21:48:37Z",
+  "lastUpdated": "2026-08-06T04:20:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "encryption-commands-rework",
+      "title": "Complete encryption refactor: injected interfaces + logging in EncryptionCommands, BundledModel logging, test adjustments",
+      "summary": "Completed the encryption refactor started in 7b468ff (build-red, verb dispatch deleted, ~25 broken test files). WP1 BundledModel LoggerMessage logging (CS9113) + AddHttpClient() DI registration + Program logger via ILoggerFactory (non-generic ILogger is not registered by default hosts — server boot was broken, caught by E2E + live boot). WP2 resolver absent-sidecar -> env contract fix (was 'none' -> unencrypted, breaking env-keyed banks incl. encryption unset rekey-back). WP3 EncryptionCommands full rework: injected IEncryptionState/ICliSecretManager/IEncryptionKeyProvider/ILogger, zero hand-created providers (grep-verified), Guard.IsNotNull at handler entry, 5 LoggerMessage events, user-facing strings byte-identical. WP4 test-API migration (TryParse out-var, RenderTo, ServerConfigTests rewritten against CliOptions.ToServerConfig, ReadOptions parse-error tolerance). WP5 ConfigVerbRunner recreated (explicit composition root, stderr console logger) + Program.cs verb branch restored before host build. WP6 NullKeyProvider reworked to always-null resolver double, ~20 factory sites migrated, required Scope supplied everywhere. WP7 BDD alignment incl. new Program.cs error surface. Review gate (code-reviewer, no MUST-FIX): S1 BDD start-error discrimination (SqliteException 26 typed, no pass-on-any-exception), S2 startup open-failure log carries the cause + literal EventIds, S3 two process-level tests pinning exit codes 1/2 with hermetic child PATH (a real bws on the dev machine leaked in on first attempt — fixed), NITs: named provider locals in ConfigVerbRunner (no index coupling), bws non-zero-exit log EventId 5, temp-root disposal in 3 test classes. Gates: build 0 warnings; full suite 1107 passed/0 failed/43 skipped; DoD greps clean; live smokes access list -> 'default: rw', encryption show -> 'source: env'. Copilot reviewer confirmed absent repo-wide (zero reviews PRs #24-31) — persona gate is the configured fallback. PR #31 ready for owner merge.",
+      "pr": 31,
+      "date": "2026-08-06"
+    },
     {
       "id": "ai-raccoon-mcp-setup-refactor",
       "title": "MCP setup refactor: plain app host for stdio-only, web host with configurable port (1.0.6)",
