@@ -36,7 +36,7 @@ public sealed class ConfigVerbRunnerTests : IDisposable
         try
         {
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-            var exit = await ConfigVerbRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
+            var exit = await CliCommandRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
                 TestContext.Current.CancellationToken);
             return (exit, stdout.ToString(), stderr.ToString(), config);
         }

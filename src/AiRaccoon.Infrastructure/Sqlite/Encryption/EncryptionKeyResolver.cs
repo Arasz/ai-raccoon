@@ -25,9 +25,10 @@ public sealed class EncryptionKeyResolver(IEncryptionSourceSidecar encryptionSta
     }
 
     /// <summary>Creates a resolver with the standard three-provider chain for one-shot paths (config verbs).</summary>
-    public static EncryptionKeyResolver Create(string bankPath, ICliSecretManager? bws = null)
+    public static EncryptionKeyResolver Create(string bankPath, ICliSecretManager? bws = null,
+        IEncryptionSourceSidecar? sidecar = null)
     {
-        var sidecar = new EncryptionSourceSidecar(bankPath);
+        sidecar ??= new EncryptionSourceSidecar(bankPath);
         bws ??= new BitwardenCliSecretManager();
         return new EncryptionKeyResolver(sidecar,
             [new NoneEncryptionKeyProvider(), new EnvEncryptionKeyProvider(), new BitwardenEncryptionKeyProvider(bws)]);

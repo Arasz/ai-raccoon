@@ -14,7 +14,7 @@ var cancellationTokenSource = new CancellationTokenSource();
 var serverConfig = cliParseResult.Options.ToServerConfig();
 if (cliParseResult.CommandPath.Length > 0)
 {
-    return await ConfigVerbRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, Console.In,
+    return await CliCommandRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, Console.In,
         cancellationTokenSource.Token);
 }
 

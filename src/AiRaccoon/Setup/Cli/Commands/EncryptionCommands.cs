@@ -33,22 +33,22 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
     private readonly SqliteConnectionFactory _bank;
     private readonly ICliSecretManager _bws;
     private readonly IEncryptionKeyProvider _env;
-    private readonly IEncryptionSourceSidecar _encryptionState;
+    private readonly IEncryptionSourceSidecar _sidecar;
     private readonly ILogger _logger;
 
     public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
-        IEncryptionKeyProvider env, IEncryptionSourceSidecar encryptionState, ILogger logger)
+        IEncryptionKeyProvider env, IEncryptionSourceSidecar sidecar, ILogger logger)
     {
         Guard.IsNotNull(bank);
         Guard.IsNotNull(bws);
         Guard.IsNotNull(env);
-        Guard.IsNotNull(encryptionState);
+        Guard.IsNotNull(sidecar);
         Guard.IsNotNull(logger);
 
         _bank = bank;
         _bws = bws;
         _env = env;
-        _encryptionState = encryptionState;
+        _sidecar = sidecar;
         _logger = logger;
     }
 
@@ -136,7 +136,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
                 if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(_bank, envPassphrase, cancellationToken))
                 {
-                    _encryptionState.Delete();
+                    _sidecar.Delete();
                     await stderr.WriteLineAsync("ai-raccoon: bank is env-keyed; source was not switched");
                     return 0;
                 }
@@ -146,7 +146,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
             }
         }
 
-        _encryptionState.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
+        _sidecar.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
         await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
@@ -161,7 +161,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
         await using var probe = await _bank.OpenBankAsync(cancellationToken);
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        var sidecar = _encryptionState.Read();
+        var sidecar = _sidecar.Read();
         if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || sidecar?.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
             var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
@@ -200,7 +200,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
                 Log.RekeyingBank(_logger, EnvEncryptionKeyProvider.EncryptionSource);
                 await _bank.RekeyBankAsync(envPassphrase, cancellationToken);
                 Log.BankRekeyed(_logger, EnvEncryptionKeyProvider.EncryptionSource);
-                _encryptionState.Delete();
+                _sidecar.Delete();
             }
             else
             {
@@ -215,7 +215,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
             await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
             await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
-            _encryptionState.Delete();
+            _sidecar.Delete();
         }
 
         await stdout.WriteLineAsync("encryption source reset to env");
