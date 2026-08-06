@@ -8,4 +8,5 @@ public static class DefaultOptions
     public const McpTransport Transport = McpTransport.Stdio;
     public const InstallScope InstallScope = Infrastructure.Options.InstallScope.User;
     public static readonly string DataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ai-raccoon");
+    internal static TimeSpan IdleTimeout => TimeSpan.FromHours(4);
 }

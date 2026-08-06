@@ -207,6 +207,15 @@ one surviving variable.
 - `stdio` (default) — MCP clients launch the server as a subprocess.
 - `http` — Streamable HTTP at `/mcp`, selected via `--transport http`
   (stateless per the 2026-07-28 spec revision).
+- `serve` — the HTTP mode as a verb: `ai-raccoon serve` forces http, arms a 4h
+  idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0` disables), prints the bound
+  URL to stdout, and stays in the foreground (`ai-raccoon serve > serve.log
+  2>&1 &` to background, POSIX). If the port already hosts an ai-raccoon
+  server, `serve` attaches and exits 0 — the owner keeps the watchdog, the
+  attached run never touches the bank; a foreign listener on the port fails
+  fast with exit code 3 and a `--port 0` hint. `serve --mcp-entry
+  [--format hermes|claude|all]` prints the client config entry for the bound
+  URL (keep stderr out: `> entry.json 2> serve.log`).
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 

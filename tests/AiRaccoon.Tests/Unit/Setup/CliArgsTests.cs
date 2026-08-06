@@ -474,6 +474,66 @@ public class CliArgsTests
         parsed.ParseResult.GetValue<string>("target").ShouldBe("acme");
     }
 
+    // ── Verb tree: serve ──
+
+    [Fact]
+    public void Parse_ServeAlone_ParsesCommandPathAndDefaultFormat()
+    {
+        CliArgs.TryParse(["serve"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+        parsed.ParseResult.GetValue(CliCommandTree.ServeFormatOption).ShouldBe("hermes");
+    }
+
+    [Fact]
+    public void Parse_Serve_ParsesServeOptions()
+    {
+        CliArgs.TryParse(
+            ["serve", "--port", "0", "--idle-timeout", "30m", "--mcp-entry", "--format", "claude"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+        parsed.ParseResult.GetValue(CliCommandTree.ServePortOption).ShouldBe(0);
+        parsed.ParseResult.GetValue(CliCommandTree.ServeIdleTimeoutOption).ShouldBe("30m");
+        parsed.ParseResult.GetValue(CliCommandTree.ServeMcpEntryOption).ShouldBeTrue();
+        parsed.ParseResult.GetValue(CliCommandTree.ServeFormatOption).ShouldBe("claude");
+    }
+
+    [Fact]
+    public void Parse_ServeInvalidIdleTimeout_ReturnsError()
+    {
+        CliArgs.TryParse(["serve", "--idle-timeout", "4x"], out var parsed);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_ServeInvalidFormat_ReturnsError()
+    {
+        CliArgs.TryParse(["serve", "--mcp-entry", "--format", "bogus"], out var parsed);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Render_ServeHelp_ListsServeOptionsAndRecipe()
+    {
+        var writer = new StringWriter();
+
+        CliArgs.TryParse(["serve", "--help"], out var parsed);
+        var exit = parsed.RenderTo(writer);
+
+        exit.ShouldBe(0);
+        var help = writer.ToString();
+        help.ShouldContain("--port");
+        help.ShouldContain("--idle-timeout");
+        help.ShouldContain("--mcp-entry");
+        help.ShouldContain("--format");
+        help.ShouldContain("ai-raccoon serve > serve.log 2>&1 &");
+        help.ShouldContain("always HTTP");
+    }
+
     // ── Option placement ──
 
     [Fact]
