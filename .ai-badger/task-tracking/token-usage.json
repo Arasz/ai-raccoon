@@ -4228,7 +4228,24 @@
     },
     {
       "taskId": "hermes-provider-status-words",
-      "subagents": [],
+        "subagents": [
+            {
+                "description": "obsolete-design review (pre-correction); MUST-FIX superseded by rework amend; 2 surviving findings folded",
+                "at": "2026-08-06T16:44:28.160670+00:00",
+                "totalTokens": 1711111,
+                "delegationId": "deleg_619e82b5",
+                "model": "deepseek-v4-flash",
+                "apiCalls": 28
+            },
+            {
+                "description": "final-design code-reviewer gate: APPROVE (no MUST-FIX), 2 SHOULD-FIX + 5 NIT all folded",
+                "at": "2026-08-06T16:56:11.226977+00:00",
+                "totalTokens": 1477716,
+                "delegationId": "deleg_3b743445",
+                "model": "deepseek-v4-flash",
+                "apiCalls": 22
+            }
+        ],
       "grade": null,
       "sessionId": "20260806_171739_6038fc",
       "trackingSource": "hermes",
@@ -4246,7 +4263,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-06T15:57:06.686902+00:00",
+            "timestamp": "2026-08-06T16:59:57.241723+00:00",
+            "contextTokens": 0,
+            "assistantMessages": 0,
+            "byModel": {},
+            "cumulative": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheCreationTokens": 0
+            }
+        },
+          "finish": {
+              "timestamp": "2026-08-06T16:59:57.241723+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
@@ -4257,6 +4286,21 @@
             "cacheCreationTokens": 0
           }
         }
+      },
+        "usage": {
+            "outputByModel": {},
+            "modelMix": {},
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0,
+            "cacheEfficiency": null,
+            "subagentTokens": 3188827,
+            "contextTokensAtStart": 0,
+            "contextTokensAtFinish": 0,
+            "contextGrowth": 0,
+            "mainSessionTotal": 0,
+            "grandTotal": 0
       }
     },
     {
@@ -4285,6 +4329,14 @@
           "delegationId": "deleg_582f9939",
           "model": "deepseek-v4-flash",
           "apiCalls": 47
+        },
+          {
+              "description": "code-reviewer gate",
+              "at": "2026-08-06T16:48:25.128282+00:00",
+              "totalTokens": 3078282,
+              "delegationId": "deleg_a4b17511",
+              "model": "deepseek-v4-flash",
+              "apiCalls": 35
         }
       ],
       "grade": null,
@@ -4312,40 +4364,64 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-06T16:00:26.652773+00:00",
+            "timestamp": "2026-08-06T16:48:40.769571+00:00",
           "contextTokens": 0,
-          "assistantMessages": 17,
+            "assistantMessages": 68,
           "byModel": {
             "deepseek-v4-flash": {
-              "inputTokens": 81070,
-              "outputTokens": 17583,
-              "cacheReadTokens": 993152,
+                "inputTokens": 138565,
+                "outputTokens": 74766,
+                "cacheReadTokens": 9153664,
               "cacheCreationTokens": 0,
-              "assistantMessages": 17
+                "assistantMessages": 69
             }
           },
           "cumulative": {
-            "inputTokens": 80810,
-            "outputTokens": 17285,
-            "cacheReadTokens": 992896,
+              "inputTokens": 645598,
+              "outputTokens": 309183,
+              "cacheReadTokens": 19968896,
+              "cacheCreationTokens": 0
+          }
+        },
+          "finish": {
+              "timestamp": "2026-08-06T16:48:40.769571+00:00",
+              "contextTokens": 0,
+              "assistantMessages": 68,
+              "byModel": {
+                  "deepseek-v4-flash": {
+                      "inputTokens": 138565,
+                      "outputTokens": 74766,
+                      "cacheReadTokens": 9153664,
+                      "cacheCreationTokens": 0,
+                      "assistantMessages": 69
+                  }
+              },
+              "cumulative": {
+                  "inputTokens": 645598,
+                  "outputTokens": 309183,
+                  "cacheReadTokens": 19968896,
             "cacheCreationTokens": 0
           }
         }
       },
       "usage": {
-        "outputByModel": {},
-        "modelMix": {},
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "cacheReadTokens": 0,
+          "outputByModel": {
+              "deepseek-v4-flash": 57183
+          },
+          "modelMix": {
+              "deepseek-v4-flash": 1.0
+          },
+          "inputTokens": 564788,
+          "outputTokens": 291898,
+          "cacheReadTokens": 18976000,
         "cacheCreationTokens": 0,
-        "cacheEfficiency": null,
-        "subagentTokens": 8479646,
+          "cacheEfficiency": 1.0,
+          "subagentTokens": 11557928,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,
-        "mainSessionTotal": 0,
-        "grandTotal": 0
+          "mainSessionTotal": 19832686,
+          "grandTotal": 19832686
       }
     }
   ]

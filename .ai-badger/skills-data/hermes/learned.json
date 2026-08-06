@@ -83,6 +83,15 @@
       "target": ".ai-badger/skills/learned/software-development/dotnet-logger-message-design"
     },
     {
+        "category": "software-development",
+        "name": "dotnext-library",
+        "sourceHash": "a49fa02f2d48995153fed77303d09baec392a5399f275fc0e22dca311ccf29ad",
+        "sourcePath": "software-development/dotnext-library",
+        "status": "synced",
+        "syncedAt": "2026-08-06T16:57:31Z",
+        "target": ".ai-badger/skills/learned/software-development/dotnext-library"
+    },
+      {
       "category": "software-development",
       "name": "observability-contract-review",
       "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
@@ -184,10 +193,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-cli-parsing",
-      "sourceHash": "0fc0b01d2fb665785a07e08d69bbda82363b67f460e0f2ea395f7f6a66f8f7d4",
+        "sourceHash": "17c8ec3363cd169b510d897f538ef2d9eb625d453502acc6009994c93e4d0087",
       "sourcePath": "dotnet-cli-parsing",
       "status": "synced",
-      "syncedAt": "2026-08-06T15:24:54Z",
+        "syncedAt": "2026-08-06T16:49:43Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-cli-parsing"
     },
     {
@@ -265,10 +274,10 @@
     {
       "category": "uncategorized",
       "name": "git-worktree-isolation",
-      "sourceHash": "22478618d371437213b272e5fb35699f08a2389ebbae72b0bf0a0d75c26d2656",
+        "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
       "sourcePath": "git-worktree-isolation",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:49:02Z",
+        "syncedAt": "2026-08-06T16:51:43Z",
       "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
     },
     {
@@ -355,10 +364,10 @@
     {
       "category": "uncategorized",
       "name": "observability-contract-review",
-      "sourceHash": "311b8933439db4bb976ecd627310fd7c0680a1cdc53ff5c69e1346bf79b1d0f3",
+        "sourceHash": "fe7f03c188c0909feb0f5ba1178f17e8a2da80c69d1f6e6ee613c559523e156a",
       "sourcePath": "software-development/observability-contract-review",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:55:42Z",
+        "syncedAt": "2026-08-06T16:50:07Z",
       "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
     },
     {
@@ -400,10 +409,10 @@
     {
       "category": "uncategorized",
       "name": "scripts-tooling-refactor",
-      "sourceHash": "aa899e7078f9987f092ed015da5546568ded59f2e220e4e8d01ca78021f97500",
+        "sourceHash": "be0dfd1ef1ca076e266c15fb2810505747a7860d79d65830b0949e87464ae9a0",
       "sourcePath": "software-development/scripts-tooling-refactor",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:26:35Z",
+        "syncedAt": "2026-08-06T16:48:53Z",
       "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
     },
     {

@@ -25,6 +25,19 @@ Two agents in the same directory cause:
 3. **After completion:** Pull subagent commits into orchestrator's worktree via `git fetch` +
    `git merge`, then remove with `git worktree remove`.
 
+## One task worktree can host parallel subagents — if file sets are disjoint
+
+The task skill mandates one worktree per task; parallel implementation subagents CAN share it safely when the plan
+assigns each package a disjoint file set (verified 2026-08-06:
+waves of 3 agents on P1/P3+P4/P5 then P2/P7/P6 in one worktree, zero collisions). The plan must name which files each
+package owns — shared files (docs edits, .gitignore) belong to ONE package or a final text-only sweep package. The
+orchestrator reviews at the seams (full suite run together after the wave), then commits per package.
+
+- Subagents that `git rm` a file leave the deletion STAGED; a later `git add <deleted-path>`
+  fails with "pathspec did not match any files" — stage only the surviving paths of the package (the deletion rides
+  along in the commit automatically).
+- Commit per package as each wave lands, not one mega-commit — keeps the review and any rollback scoped.
+
 ## Multi-branch task worktrees: check `git branch --show-current` BEFORE committing
 
 A task worktree hosts ALL of a task's branches at once — the task branch plus every PR
@@ -152,6 +165,29 @@ they compare a bundled corpus DB fixture against a hash-map JSON that had drifte
   run just the failing tests there, then `git worktree remove --force /tmp/base-check`.
 - Identical failure at base = pre-existing fixture drift / env issue; report it with that
   evidence instead of chasing it. (If it PASSES at base, it is yours — bisect your diff.)
+
+## Verify merged content with a throwaway worktree when the shared checkout is blocked
+
+After integration (task worktree removed, PR merged), fresh gate evidence on the MERGED state may be needed while the
+shared main checkout cannot be updated — another session's staged files block a fast-forward (verified 2026-08-06: main
+held another session's staged ai-badger learned-skill adds while origin/main had moved 4+ commits past local main).
+
+- `git worktree add /tmp/verify-<topic> origin/main`, run the gates there (pytest, dotnet test), then
+  `git worktree remove --force /tmp/verify-<topic>`. Detached HEAD is fine — read-only verification, no commits.
+- This is the honest answer when "the suite passed on the branch" needs re-proving on the exact merged content (e.g. the
+  owner squash-merged while you were mid-task).
+
+## A no-op tool shim on PATH can fake a green gate
+
+A leftover shim can shadow a real tool and exit 0 without doing anything (verified 2026-08-06: another session's test
+harness left `/tmp/pts_parity/dotnet` on PATH — `dotnet
+build` printed only `cwd=… env_regenerate=UNSET args=build` and exited 0; no build happened, so a silent gate would have
+looked green).
+
+- When a gate command exits 0 but the output lacks the expected success marker (`Build
+  succeeded`, test counts), run `which <tool>` before trusting the result.
+- Run the real SDK by absolute path (`/usr/local/share/dotnet/dotnet build`) or with a cleaned PATH, and grep the output
+  for the success marker — never rely on the exit code alone.
 
 ## dotnet build serialisation
 

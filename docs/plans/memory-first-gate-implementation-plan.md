@@ -94,10 +94,11 @@ Run: `.venv/bin/python3 -m pytest tests/ -q` → all PASS, no skips (main checko
   agents (claude, copilot, hermes); rationale = unused by owner, no manpower to maintain a fourth agent surface;
   effect = configs naming junie fail schema validation; supersedes index.json/support.json junie entries. (No existing
   ADR mentions junie — verified `grep junie docs/adr/` is empty — so this is a new decision record, not an edit.)
-- Create `docs/changelog/0.82.0-junie-support-removed.md`
-- `VERSION` 0.81.0 → 0.82.0; run `version_sync.py`; `release_guard` per project convention
+- Create `docs/changelog/0.83.0-junie-support-removed.md`
+- `VERSION` 0.81.0 → 0.83.0 (0.82.0 was claimed by a concurrent release, #316, while this task was in flight — the guard
+  demands the next free number); run `version_sync.py`; `release_guard` per project convention
 - KEEP `docs/changelog/0.47.0-junie-can-see-skills.md` — historical release record; the releases-are-traceable invariant
-  keeps it, and the 0.82.0 entry documents the removal. (Flagged for user override.)
+  keeps it, and the 0.83.0 entry documents the removal. (Flagged for user override.)
 
 ### Task 0.6: ONE commit + PR + verification
 
@@ -350,8 +351,8 @@ discipline is mandatory).
 
 ### Task 5.1: Framework docs + changelog + version (release-shaped PR per project convention)
 
-**Files (ai-badger repo):** `VERSION` 0.82.0 → 0.83.0 (0.82.0 is the Junie removal from Phase 0);
-`docs/changelog/0.83.0-memory-first-gate.md`; run `version_sync.py`; update `references/hooks-subsystem.md` (already
+**Files (ai-badger repo):** `VERSION` 0.83.0 → 0.84.0 (0.83.0 is the Junie removal from Phase 0);
+`docs/changelog/0.84.0-memory-first-gate.md`; run `version_sync.py`; update `references/hooks-subsystem.md` (already
 flagged in `docs/work/2026-08-06-hermes-integration-diagnosis.md` §5.4 — fold in the pre_tool_call surface); ADR note in
 `docs/adr/` for the memory-first gate decision (deny-and-retry, matcher strictness, loop guard). Run the full suite:
 `.venv/bin/python3 -m pytest tests/ -q` → all PASS, no skips. Pre-push gate: `.lefthook verify.sh`. **PR:** one PR in

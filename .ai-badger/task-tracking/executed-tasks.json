@@ -853,11 +853,12 @@
       "branch": "task/hermes-provider-status-words",
       "risk": false,
       "startedAt": "2026-08-06T15:57:06.687873+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+        "finishedAt": "2026-08-06T16:59:57.241758+00:00",
+        "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_171739_6038fc",
-      "resumeAttempts": []
+        "resumeAttempts": [],
+        "stateJsonUpdated": true
     },
     {
       "taskId": "scripts-refactor",
@@ -868,11 +869,12 @@
       "branch": "task/scripts-refactor",
       "risk": false,
       "startedAt": "2026-08-06T16:00:26.653331+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+        "finishedAt": "2026-08-06T16:48:40.769586+00:00",
+        "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_174951_0317b5",
-      "resumeAttempts": []
+        "resumeAttempts": [],
+        "stateJsonUpdated": true
     }
   ]
 }
