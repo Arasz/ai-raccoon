@@ -30,11 +30,20 @@
     },
     {
       "category": "uncategorized",
+      "name": "dotnet-domain-modeling",
+      "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
+      "sourcePath": "software-development/dotnet-domain-modeling",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:17:27Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-domain-modeling"
+    },
+    {
+      "category": "uncategorized",
       "name": "dotnet-flaky-test-diagnosis",
-      "sourceHash": "6f1739979eab003e4f1951d338332a04ac0a0dbb6295e3501293a67ed63495ae",
+      "sourceHash": "3c34c7baf7868b445edc490b5a6d07e1bb77e67877020c2a4149f946b36f182a",
       "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
       "status": "synced",
-      "syncedAt": "2026-08-06T10:55:47Z",
+      "syncedAt": "2026-08-06T11:17:37Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
     },
     {
@@ -45,6 +54,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T10:51:03Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-tool-publishing",
+      "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
+      "sourcePath": "software-development/dotnet-tool-publishing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:12:36Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
     },
     {
       "category": "uncategorized",

@@ -84,6 +84,13 @@ owner's approval.
   turn (same root cause, different name) — don't re-diagnose each one; pull the fix in.
 - After the fix, the discriminating evidence is: fail in full suite pre-fix, pass in
   isolation post-fix, AND pass in a fresh full-suite run.
+- **Verify against the branch the changes are actually on.** A worktree checkout can sit
+  on a different branch than the one you're verifying (e.g. worktree on PR G while PR F's
+  files live on another branch). An ad-hoc verification script that greps for files will
+  then FAIL with "file not found" even though everything is correct — the grep ran in the
+  wrong working tree. Check `git branch --show-current` (and that the files exist in THAT
+  tree) before reading a script's failures as real; re-run it on the right checkout. The
+  full-suite gate run is branch-bound evidence — record which commit it ran on.
 - **Concurrent-session half-fix breaks origin/main — your gate inherits the RED.**
   In a multi-session repo (verified 2026-08-06 twice): another session renames something
   (consts, methods, tool names) and updates only PART of the test contract (e.g. the
