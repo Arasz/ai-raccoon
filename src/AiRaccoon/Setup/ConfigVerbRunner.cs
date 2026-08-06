@@ -31,13 +31,15 @@ internal static class ConfigVerbRunner
 
         var encryptionState = new EncryptionState(SqliteConnectionFactory.BankPathFor(config.Options));
         var bws = new BitwardenCliSecretManager();
-        IEncryptionKeyProvider[] providers = [new NoneEncryptionKeyProvider(), new EnvEncryptionKeyProvider(), new BitwardenEncryptionKeyProvider(bws)];
-        var resolver = new EncryptionKeyResolver(encryptionState, providers);
+        var none = new NoneEncryptionKeyProvider();
+        var env = new EnvEncryptionKeyProvider();
+        var resolver = new EncryptionKeyResolver(encryptionState,
+            [none, env, new BitwardenEncryptionKeyProvider(bws)]);
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
 
         return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin,
-            cancellationToken, bank: bank, bws: bws, env: providers[1], watchStore: new WatchStore(bank),
+            cancellationToken, bank: bank, bws: bws, env: env, watchStore: new WatchStore(bank),
             encryptionState: encryptionState, logger: logger);
     }
 }

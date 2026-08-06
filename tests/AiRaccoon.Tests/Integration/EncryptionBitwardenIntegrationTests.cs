@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics;
 using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
@@ -307,6 +308,89 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
             untouched.State.ShouldBe(ConnectionState.Open);
         });
+    }
+
+    [Fact]
+    public async Task Startup_BwsMissing_Exits1WithResolveError()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // the child launches a shell-based fake; the PATH override is unix-shaped
+        }
+
+        WriteSidecar();
+        var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
+        Directory.CreateDirectory(emptyPathDir);
+
+        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
+
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        stderr.Contains("Failed to resolve encryption key", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+    }
+
+    [Fact]
+    public async Task Startup_WrongKey_Exits2WithOpenError()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // the child launches a shell-based fake; the PATH override is unix-shaped
+        }
+
+        InstallFakeBws();
+        // Bank keyed with a passphrase that is NOT in the child's environment; the sidecar then
+        // routes the child's resolve through the fake bws, which serves a key that derives to
+        // something else → the probe open fails with SQLCipher code 26 → exit 2.
+        var envFactory = new SqliteConnectionFactory(Options(), new EncryptionKeyResolver(
+            new EncryptionState(BankPath()), [new StubEnvProvider("env-passphrase")]));
+        await using (var seed = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        WriteSidecar();
+        var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!);
+
+        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        stderr.Contains("Failed to open encrypted bank with bitwarden encryption source key", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+    }
+
+    /// <summary>Runs the real server binary with a hermetic PATH rooted at bwsDir (an empty
+    /// dir = bws missing, the fake-bws dir = fake resolves) plus the system dirs the fake
+    /// script needs; returns the exit code and both streams. Program.cs's error mapping and
+    /// exit codes 1/2 are only exercised by this process-level path.</summary>
+    private async Task<(int Exit, string Stderr, string Stdout)> RunServerProcessAsync(string bwsDir)
+    {
+        var dll = Path.Combine(AppContext.BaseDirectory, "AiRaccoon.dll");
+        File.Exists(dll).ShouldBeTrue($"AiRaccoon.dll not found at {dll}");
+
+        var dotnetPath = Environment.GetEnvironmentVariable("PATH")!.Split(Path.PathSeparator)
+            .Select(dir => Path.Combine(dir, "dotnet"))
+            .FirstOrDefault(File.Exists)
+            ?? throw new InvalidOperationException("dotnet not found on PATH");
+
+        var psi = new ProcessStartInfo(dotnetPath)
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = _dataRoot
+        };
+        psi.ArgumentList.Add("exec");
+        psi.ArgumentList.Add(dll);
+        psi.ArgumentList.Add("--data-root");
+        psi.ArgumentList.Add(_dataRoot);
+        // Hermetic: the child sees only the fake dir + /usr/bin + /bin — a real bws on the
+        // dev machine's PATH can never leak into the run (the fake script needs cat/sh).
+        psi.Environment["PATH"] = string.Join(Path.PathSeparator, [bwsDir, "/usr/bin", "/bin"]);
+        psi.Environment["BWS_ACCESS_TOKEN"] = "";
+        psi.Environment[EnvEncryptionKeyProvider.EnvVarName] = "";
+
+        using var process = Process.Start(psi)!;
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        return (process.ExitCode, await stderrTask, await stdoutTask);
     }
 
     /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>

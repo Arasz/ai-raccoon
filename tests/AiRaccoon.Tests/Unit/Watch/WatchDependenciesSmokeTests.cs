@@ -14,8 +14,12 @@ namespace AiRaccoon.Tests.Unit.Watch;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class WatchDependenciesSmokeTests
+public sealed class WatchDependenciesSmokeTests : IDisposable
 {
+    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
     [Fact]
     public void RegisterMemoryServices_ResolvesCatchUpEventSource_AndHostsTheWatcherService()
     {
@@ -24,7 +28,10 @@ public sealed class WatchDependenciesSmokeTests
         // RegisterMemoryServices runs (watch components take ILogger<T>).
         services.AddLogging();
         services.RegisterMemoryServices(new InfrastructureOptions
-    { DataRoot = TestData.CreateTempRoot("ai-raccoon-tests"), Scope = InstallScope.User });
+        {
+            DataRoot = _dataRoot,
+            Scope = InstallScope.User
+        });
 
         using var provider = services.BuildServiceProvider();
 

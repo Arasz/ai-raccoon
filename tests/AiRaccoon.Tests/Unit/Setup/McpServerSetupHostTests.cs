@@ -18,9 +18,12 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public class McpServerSetupHostTests
+public class McpServerSetupHostTests : IDisposable
 {
-    private static readonly string DataRoot = TestData.CreateTempRoot("mcp-host-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot("mcp-host-tests");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
     [Fact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
     {
@@ -94,8 +97,8 @@ public class McpServerSetupHostTests
         await runTask;
     }
 
-    private static ServerConfig Config(McpTransport transport, int port = 7721) =>
-        new(port, transport, new InfrastructureOptions { DataRoot = DataRoot, Scope = InstallScope.User });
+    private ServerConfig Config(McpTransport transport, int port = 7721) =>
+        new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
     private static int FreePort()
     {

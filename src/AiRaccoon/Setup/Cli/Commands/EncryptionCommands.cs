@@ -73,7 +73,9 @@ internal static partial class ConfigCommands
 
         if (fetched.ExitCode != 0)
         {
-            await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {FirstStderrLine(fetched.Stderr)}");
+            var errorLine = FirstStderrLine(fetched.Stderr);
+            Log.BwsCommandFailed(logger, fetched.ExitCode, errorLine);
+            await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
             return 1;
         }
 
@@ -281,5 +283,8 @@ internal static partial class ConfigCommands
 
         [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
         public static partial void UnsetSkippedRekey(ILogger logger);
+
+        [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
+        public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
     }
 }

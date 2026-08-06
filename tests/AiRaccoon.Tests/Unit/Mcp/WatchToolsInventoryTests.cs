@@ -17,8 +17,12 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class WatchToolsInventoryTests
+public sealed class WatchToolsInventoryTests : IDisposable
 {
+    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
     [Fact]
     public void WatchTools_ExposesAll3SpecTools()
     {
@@ -83,7 +87,10 @@ public sealed class WatchToolsInventoryTests
         // RegisterMemoryServices runs (WatchPipeline takes ILogger<WatchPipeline>).
         services.AddLogging();
         services.RegisterMemoryServices(new InfrastructureOptions
-    { DataRoot = TestData.CreateTempRoot("ai-raccoon-tests"), Scope = InstallScope.User });
+        {
+            DataRoot = _dataRoot,
+            Scope = InstallScope.User
+        });
 
         using var provider = services.BuildServiceProvider();
 

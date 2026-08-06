@@ -200,8 +200,10 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>
     ///     "The server opens the bank": the Program.cs eager-startup open (resolve the key, open
     ///     with it) with the same loud failure mapping — returns null on success, else the error
-    ///     text the process would print (bws invocation errors verbatim; code-26 with a bitwarden
-    ///     source → the encryption-mismatch message; code-26 with no source → the no-source message).
+    ///     text the process would print. Resolve failures map to the generic resolve message
+    ///     (Program.cs catches broadly there); an open failure only maps to the mismatch message
+    ///     when the cause really is a key mismatch (SQLCipher code 26), so a scenario cannot pass
+    ///     on an unrelated open error.
     /// </summary>
     public async Task<string?> StartServerErrorAsync(CancellationToken cancellationToken = default)
     {
@@ -220,9 +222,13 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
             await using var probe = await Bank.OpenBankWithKeyAsync(resolved.Passphrase, cancellationToken);
             return null;
         }
-        catch (Exception)
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 26)
         {
-            return $"Failed to open encrypted bank with {resolved.SourceName} encryption source key";
+            return $"Failed to open encrypted bank with {resolved.SourceName} encryption source key: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
         }
     }
 
