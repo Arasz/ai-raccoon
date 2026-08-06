@@ -58,7 +58,7 @@ Scope: all 21 exported tools = 19 `memory_*` tools + 2 prompts (`list_prompts`, 
 | 7 | `memory_search(scope=project)` | project rows only — the custom-ctx row (d4da12bf) did NOT appear | **PASS** — project scope excludes custom-scope rows (by design) |
 | 8 | `memory_search(scope=shared)` before share | `{results: []}` | **PASS** |
 | 9 | `memory_search(contextLabel="tool-test-custom-ctx")` | BOTH project rows AND the custom row returned | **PASS vs schema** — `contextLabel` is *additive* (project scope + labelled rows), not a filter; schema wording says exactly this |
-| 10 | `memory_list()` | `{files: "<json string>"}` — stringified tree containing the project row's path | **PARTIAL** — works, but `files` is an escaped JSON *string*, not an object; custom-ctx row absent (consistent with project-only view) |
+| 10 | `memory_list()` | `{files: "<json string>"}` — stringified tree containing the project row's path | **PARTIAL → FIXED** — was an escaped JSON *string*; tool now returns a real JSON object (`files` is parsed into the response). See section 6. Custom-ctx row absent (consistent with project-only view) |
 | 11 | `memory_stats()` | `{entries: 1, pending: 0, contexts: […, "project:tool-test-20260806"]}` | **PASS** — entries counts committed rows only (custom-ctx row invisible, by design); `pending: 0` proves write-time embedding |
 | 12 | `memory_embed_pending(limit=1)` | `{processed: 0, pending: 0}` | **PASS** — nothing pending (model embeds at write time); limit accepted |
 | 13 | `memory_workspace_begin(name=…)` | `{workspaceId: 019fd65d…, context: "workspace:019fd65d…"}` | **PASS** |
@@ -83,10 +83,10 @@ Scope: all 21 exported tools = 19 `memory_*` tools + 2 prompts (`list_prompts`, 
 | 32 | `memory_ingest_file(a.md)` | `{indexed: 1}` | **PASS** |
 | 33 | `memory_ingest_file(a.md)` re-run | `{indexed: 0}` | **PASS** — unchanged skip |
 | 34 | `memory_ingest_directory(/tmp/tool-test-ingest)` | `{scanned: 2}` | **PASS** |
-| 35 | `memory_workspace_discard(ws2)` | `{deleted: 1}` — entry gone, zero trace in search | **PARTIAL** — works, but response key is `deleted` while docs (and `consolidate`) say `discarded` |
+| 35 | `memory_workspace_discard(ws2)` | `{deleted: 1}` — entry gone, zero trace in search | **PARTIAL → FIXED** — response key was `deleted` while docs say `discarded`; tool now returns `{discarded: n}` (code aligned to the documented contract). See section 6 |
 
-**Summary: 33/35 calls PASS, 2 PARTIAL, 0 FAIL.** All 21 tools functional; no bugs found in
-tool behaviour itself. The two PARTIALs are response-shape warts, not failures.
+**Summary: 33/35 calls PASS, 2 PARTIAL, 0 FAIL** (all 21 tools functional; the two PARTIALs were
+response-shape warts, not failures — both FIXED same-day, see section 6).
 
 ## 3. Findings
 
@@ -97,22 +97,42 @@ tool behaviour itself. The two PARTIALs are response-shape warts, not failures.
    - `memory_search` result rows carry `sourceFile`, `chunkIndex`, `totalChunks` — not in the table.
    - `memory_workspace_discard` documented as `{discarded}`, actual response is `{deleted}` —
      inconsistent with `memory_workspace_consolidate`'s `discarded` key.
-2. **`memory_delete` intent in the mcp-index overstates the gate** ("Denied in rw access mode
-   (needs full)") — on this deployment deletes succeeded (tier is full). Either the deployment is
-   full-access or the claim is stale; the intent should not promise a denial.
-3. **Hash derivation is undocumented**: `path = sha256(content).md`, `hash = sha256(path+content)`.
+2. **`memory_delete` gating — expectation corrected, intent was RIGHT.** The index intent says
+   "denied in rw access mode (needs full)". The live calls (delete, delete_context,
+   workspace_discard) all succeeded — not because the intent is wrong, but because the tested
+   data root resolves **full** access (per-project or global setting). Verified in code:
+   `MemoryAccessGuard.EnsureAsync` → `RequireAsync(..., AccessRequirement.Destructive, ...)`
+   gates all three tools at mode `full`; `rw` denies them. The intent's claim is accurate.
+3. **Delete scope (Q1 answer).** Both delete tools are project-scoped by the `project_id`
+   **column**, not by the context:
+   - `memory_delete(projectId, hash)` runs `DELETE FROM entries WHERE hash = @hash AND
+     project_id = @projectId` (MemorySql.cs:124). It can delete any row owned by that project —
+     committed rows AND that project's shared rows (a shared row keeps the originating
+     project's `project_id`; its `hash` differs from the source row's because the path gains a
+     `shared/` prefix, so you must pass the shared row's own hash, e.g. from a scope=shared
+     search). Rows of other projects are never touched.
+   - `memory_delete_context(projectId, context)` builds `DELETE FROM entries WHERE {filter}`
+     via `FilterFor` (SqliteMemoryStore.cs:908): `project:<id>`, `workspace:<id>`,
+     custom labels and `label:` prefixes all carry a `project_id` filter.
+   - **Hazard found:** the `"shared"` context branch filters ONLY `scope = 'shared'` — no
+     `project_id`. `memory_delete_context(<anyProjectId>, "shared")` therefore deletes **every
+     shared row in the bank, across all projects**. The access gate checks the caller's project
+     mode, so a full-mode caller of any project can wipe the shared tier. This deserves an
+     owner decision: either scope the shared branch to the caller's `project_id`, or document
+     that the shared tier is globally managed and gate it separately.
+4. **Hash derivation is undocumented**: `path = sha256(content).md`, `hash = sha256(path+content)`.
    `memory_share` re-hashes the shared row (path gains a `shared/` prefix), so the shared row's
    hash differs from the source row's — callers who match hashes across scopes will be surprised.
-4. **Custom-context rows are invisible to project scope** (search, stats counts, list) and
+5. **Custom-context rows are invisible to project scope** (search, stats counts, list) and
    `contextLabel` is *additive*, not a filter. This is documented in the codebase's own skill
    (ingest-docs-to-memory) but not visible in the tool description; a caller holding a context
    label can find its rows only via `contextLabel`.
-5. **`memory_sweep` returns arrays** (`candidates: []`, `deleted: []`); the docs table does not
+6. **`memory_sweep` returns arrays** (`candidates: []`, `deleted: []`); the docs table does not
    say counts vs arrays. Array shape is fine but should be stated.
-6. **Error UX is typed and actionable** (good): `sync-not-configured` names the exact CLI command;
+7. **Error UX is typed and actionable** (good): `sync-not-configured` names the exact CLI command;
    `watching-disabled` names the state. Perfect version of the latter would also name the remedy
    (`ai-raccoon watch enable '<id>' true` + `watch scope add`), saving a docs lookup.
-7. **Response envelope inconsistency** (host-side, not server-side): prompt tools return bare JSON
+8. **Response envelope inconsistency** (host-side, not server-side): prompt tools return bare JSON
    (`{prompts: …}`), memory tools return a stringified JSON payload inside `{"result": "…"}`.
    Both parse fine; clients must handle both shapes.
 
@@ -153,3 +173,26 @@ Per tool, the ideal (contract-conformant) response:
 - All expectations that were corrected during the run (write path semantics, delete gating,
   contextLabel additive semantics) are marked in section 2 — the corrections came from the live
   contract, which outranks prior assumptions.
+
+## 6. Fixes applied (same day, TDD)
+
+Both PARTIALs fixed with failing tests first (RED → GREEN), plus the docs drift:
+
+| Fix | Change | Tests |
+|-----|--------|-------|
+| `memory_list` returns a real JSON object | `ListResult(string Files)` → `ListResult(JsonNode Files)`; tool parses the store's JSON string (`JsonNode.Parse(files) ?? new JsonObject()`). Response shape: `{"files": {<tree>}}` | new: `List_ReturnsFilesAsJsonObject`, `List_PreservesNestedFileTree` (unit, MemoryToolsTests) |
+| `memory_workspace_discard` returns `{discarded: n}` | new `WorkspaceDiscardResult(int Discarded)` used by `WorkspaceDiscard`; `DeleteContext` keeps `DeletedContextResult` | new: `WorkspaceDiscard_ReportsDiscardedKey` (unit); E2E `Worktree_Discard_RemovesTheOutbox` assertion updated `"deleted":1` → `"discarded":1` |
+| Docs drift | `agent-memory-server.md` tool table: `memory_write` gains `sourceFile?`, `section?`; `memory_search` gains `contextLabel?` param and `sourceFile?`, `chunkIndex`, `totalChunks` in the result row. (`memory_workspace_discard` row already said `{discarded}` — the code was the drift.) | n/a (docs) |
+
+Targeted suite: 20/20 green. Full suite run after the changes (section 7).
+
+## 7. Quality gate
+
+- Targeted (MemoryToolsTests + E2E discard): **20/20 passed**.
+- Full suite (`dotnet test`): **1116 passed / 0 failed / 43 skipped** (baseline 1110/2-flaky/43
+  — net +6 green, both known flakes absent this run).
+- Live re-test of the two fixed tools against the Hermes MCP bridge was not possible without
+  restarting that server (it runs the installed tool, not this build tree); the E2E suite
+  (`McpServerE2ETests`, real server over WebApplicationFactory) covers the fixed paths instead.
+- Remaining open decision for the owner: the `memory_delete_context(…, "shared")` cross-project
+  hazard (finding 3) — not changed unilaterally since it alters destructive semantics.

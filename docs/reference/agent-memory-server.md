@@ -29,8 +29,8 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
 
 | Tool | Parameters | Returns |
 |---|---|---|
-| `memory_write` | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?` | `{hash, path, context, createdAt}` |
-| `memory_search` | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1` | `{results:[{hash, seq, ranking, path, snippet}], projectId}` |
+| `memory_write` | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?` | `{hash, path, context, createdAt}` |
+| `memory_search` | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
 | `memory_list` | `projectId` | `{files: <json tree>}` |
 | `memory_stats` | `projectId` | `{entries, pending, contexts}` |
 | `memory_share` | `projectId`, `hash` | `{shared: true, context: "shared"}` |
