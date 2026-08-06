@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Observability;
@@ -12,7 +14,8 @@ namespace AiRaccoon.Tools;
 public sealed class WatchTools(
     IWatchService watch,
     IMemoryAccessGuard access,
-    ToolCallMetrics observability)
+    ToolCallMetrics observability,
+    IPromotionQueue queue)
 {
     private const string TnWatchAdd = "memory_watch_add";
     private const string TnWatchStatus = "memory_watch_status";
@@ -33,7 +36,7 @@ public sealed class WatchTools(
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
         "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon watch enable' / 'watch scope add'). Already-watched paths are a no-op. Returns immediately — the initial scan runs in the background (status reports scanning).")]
-    public async Task<WatchAddResult> Add(
+    public async Task<ApiEnvelope<WatchAddResult>> Add(
         [Description("The project id; watches are scoped to a project.")]
         string projectId,
         [Description("Absolute path of the file or directory to watch.")]
@@ -67,7 +70,7 @@ public sealed class WatchTools(
             }
 
             activity.RecordInvocation();
-            return new WatchAddResult(projectId, path);
+            return await WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -79,7 +82,7 @@ public sealed class WatchTools(
     [McpServerTool(Name = TnWatchStatus)]
     [Description(
         "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error and last sync; empty list when none. Available in every access tier.")]
-    public async Task<WatchStatusResult> Status(
+    public async Task<ApiEnvelope<WatchStatusResult>> Status(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
@@ -91,7 +94,7 @@ public sealed class WatchTools(
 
             var states = await watch.StatusAsync(projectId, cancellationToken);
             activity.RecordInvocation();
-            return new WatchStatusResult(states);
+            return await WrapAsync(new WatchStatusResult(states), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -102,7 +105,7 @@ public sealed class WatchTools(
 
     [McpServerTool(Name = TnWatchRemove)]
     [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op.")]
-    public async Task<WatchRemoveResult> Remove(
+    public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
         [Description("The project id.")] string projectId,
         [Description("Absolute path of the watched file or directory.")]
         string path,
@@ -116,7 +119,7 @@ public sealed class WatchTools(
 
             await watch.RemoveAsync(projectId, path, cancellationToken);
             activity.RecordInvocation();
-            return new WatchRemoveResult(projectId, path);
+            return await WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -124,6 +127,9 @@ public sealed class WatchTools(
             throw;
         }
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     public sealed record WatchAddResult(string ProjectId, string Path);
 

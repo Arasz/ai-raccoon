@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
@@ -16,7 +18,8 @@ public sealed class SyncTools(
     SyncService sync,
     SyncCloudStoreFactory syncFactory,
     IMemoryAccessGuard access,
-    ToolCallMetrics observability)
+    ToolCallMetrics observability,
+    IPromotionQueue queue)
 {
     private const string TnMemorySync = "memory_sync";
 
@@ -38,7 +41,7 @@ public sealed class SyncTools(
         "Configure with `ai-raccoon sync add s3 <url> --bucket <name>` or `ai-raccoon sync add azure " +
         "<container>` (settings table); add `--cli` to use the machine's az/aws CLI login instead of " +
         "stored secrets.")]
-    public async Task<SyncToolResult> Sync(
+    public async Task<ApiEnvelope<SyncToolResult>> Sync(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
@@ -63,7 +66,7 @@ public sealed class SyncTools(
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
                 var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
                 activity.RecordInvocation();
-                return syncResult;
+                return await WrapAsync(syncResult, cancellationToken);
             }
             catch (SyncNotConfiguredException ex)
             {
@@ -100,6 +103,9 @@ public sealed class SyncTools(
             throw;
         }
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SyncToolResult(int Sent, int Received, int Reindexed);

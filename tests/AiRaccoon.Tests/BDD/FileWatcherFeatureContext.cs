@@ -195,6 +195,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         Service = new WatchService(WatchStore, Host, Pipeline, TimeProvider);
         Metrics?.Dispose();
         Metrics = new ToolCallMetrics();
-        Tools = new WatchTools(Service, new MemoryAccessGuard(Host), Metrics);
+        Tools = new WatchTools(Service, new MemoryAccessGuard(Host), Metrics, new FakePromotionQueue());
     }
 }

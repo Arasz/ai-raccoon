@@ -1,3 +1,4 @@
+using AiRaccoon.Core;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
@@ -202,7 +203,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     public async Task GetMeta_ReflectsTheQueue()
     {
         (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
-            .ShouldBe(new QueueMeta(0, null, null));
+            .ShouldBe(new ResponseMeta(0, null, null));
 
         await _service.ProposeAsync("acme", [Candidate("h1", "fact", 1.0)],
             TestContext.Current.CancellationToken);

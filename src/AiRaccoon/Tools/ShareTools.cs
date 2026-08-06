@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Observability;
@@ -37,7 +38,7 @@ public sealed class ShareTools(
     [McpServerTool(Name = TnMemoryShare)]
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
-    public async Task<ShareResult> Share(
+    public async Task<ApiEnvelope<ShareResult>> Share(
         [Description("The project id.")] string projectId,
         [Description("The content hash to promote.")]
         string hash,
@@ -53,7 +54,7 @@ public sealed class ShareTools(
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -65,7 +66,7 @@ public sealed class ShareTools(
     [McpServerTool(Name = TnMemoryShareExtract)]
     [Description(
         "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with memory_promotion_list. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
-    public async Task<ShareExtractResult> ShareExtract(
+    public async Task<ApiEnvelope<ShareExtractResult>> ShareExtract(
         [Description("Project ids to scan (1..8).")]
         string[] projectIds,
         [Description("propose (default) queues ranked candidates; promote shares the top queued candidates.")]
@@ -122,7 +123,7 @@ public sealed class ShareTools(
                 var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false);
                 activity.RecordInvocation();
-                return new ShareExtractResult([], outcome.PromotedHashes);
+                return await WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
             }
 
             var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
@@ -145,7 +146,7 @@ public sealed class ShareTools(
             }
 
             activity.RecordInvocation();
-            return new ShareExtractResult(candidates, []);
+            return await WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -166,6 +167,9 @@ public sealed class ShareTools(
                 : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
             .ToList();
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ShareResult(bool Shared, string Context);

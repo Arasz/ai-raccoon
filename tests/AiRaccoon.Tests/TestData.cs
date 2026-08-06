@@ -1,3 +1,4 @@
+using AiRaccoon.Core;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -96,6 +97,6 @@ public sealed class FakePromotionQueue : IPromotionQueue
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
 
-    public Task<QueueMeta> GetMetaAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new QueueMeta(0, null, null));
+    public Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ResponseMeta(0, null, null));
 }

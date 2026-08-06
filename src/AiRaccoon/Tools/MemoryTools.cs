@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Observability;
@@ -17,7 +18,8 @@ namespace AiRaccoon.Tools;
 public sealed class MemoryTools(
     IMemoryStore store,
     IMemoryAccessGuard access,
-    ToolCallMetrics observability)
+    ToolCallMetrics observability,
+    IPromotionQueue queue)
 {
     private const string TnMemoryWrite = "memory_write";
     private const string TnMemorySearch = "memory_search";
@@ -47,7 +49,7 @@ public sealed class MemoryTools(
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. Returns the stored entry.")]
-    public async Task<WriteResult> Write(
+    public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
         string projectId,
         [Description("The content to remember.")]
@@ -76,7 +78,7 @@ public sealed class MemoryTools(
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -88,7 +90,7 @@ public sealed class MemoryTools(
     [McpServerTool(Name = TnMemorySearch)]
     [Description(
         "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only.")]
-    public async Task<SearchResultList> Search(
+    public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] string projectId,
         [Description("The search query.")] string query,
         [Description("Search scope: all (default), project, or shared.")]
@@ -131,7 +133,7 @@ public sealed class MemoryTools(
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -142,7 +144,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryList)]
     [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
-    public async Task<ListResult> List(
+    public async Task<ApiEnvelope<ListResult>> List(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
@@ -154,7 +156,7 @@ public sealed class MemoryTools(
             var files = await store.ListFilesAsync(projectId, cancellationToken);
             var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -165,7 +167,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryStats)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
-    public async Task<StatsResult> Stats(
+    public async Task<ApiEnvelope<StatsResult>> Stats(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
@@ -177,7 +179,7 @@ public sealed class MemoryTools(
             var stats = await store.GetStatsAsync(projectId, cancellationToken);
             var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -188,7 +190,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryDelete)]
     [Description("Deletes a specific memory entry by its content hash.")]
-    public async Task<DeletedResult> Delete(
+    public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")] string projectId,
         [Description("The content hash to delete.")]
         string hash,
@@ -204,7 +206,7 @@ public sealed class MemoryTools(
             var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
             var result = new DeletedResult(deleted ? 1 : 0);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -215,7 +217,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryDeleteContext)]
     [Description("Deletes every entry stored under a context label (e.g. a project or workspace context).")]
-    public async Task<DeletedContextResult> DeleteContext(
+    public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
         [Description("The project id.")] string projectId,
         [Description("The context label to delete.")]
         string context,
@@ -231,7 +233,7 @@ public sealed class MemoryTools(
             var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
             var result = new DeletedContextResult(deleted);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -242,7 +244,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryIngestFile)]
     [Description("Indexes one file from disk into memory.")]
-    public async Task<IngestResult> IngestFile(
+    public async Task<ApiEnvelope<IngestResult>> IngestFile(
         [Description("The project id.")] string projectId,
         [Description("Path of the file to index.")]
         string path,
@@ -260,7 +262,7 @@ public sealed class MemoryTools(
             var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
             var result = new IngestResult(indexed);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -271,7 +273,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryIngestDirectory)]
     [Description("Recursively indexes a directory tree into memory, skipping unchanged files.")]
-    public async Task<ScannedResult> IngestDirectory(
+    public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
         [Description("The project id.")] string projectId,
         [Description("Path of the directory to index.")]
         string path,
@@ -289,7 +291,7 @@ public sealed class MemoryTools(
             var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
             var result = new ScannedResult(scanned);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -300,7 +302,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryEmbedPending)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
-    public async Task<EmbedResult> EmbedPending(
+    public async Task<ApiEnvelope<EmbedResult>> EmbedPending(
         [Description("The project id.")] string projectId,
         [Description("Maximum rows to process in this call; omit for all.")]
         int? limit = null,
@@ -315,7 +317,7 @@ public sealed class MemoryTools(
             var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
             var embedResult = new EmbedResult(result.Processed, result.Pending);
             activity.RecordInvocation();
-            return embedResult;
+            return await WrapAsync(embedResult, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -323,6 +325,9 @@ public sealed class MemoryTools(
             throw;
         }
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt);

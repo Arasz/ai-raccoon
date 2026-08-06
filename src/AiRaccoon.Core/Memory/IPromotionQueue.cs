@@ -24,6 +24,6 @@ public interface IPromotionQueue
     Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,
         CancellationToken cancellationToken = default);
 
-    /// <summary>What is waiting right now — count, average wait age, per-project breakdown.</summary>
-    Task<QueueMeta> GetMetaAsync(CancellationToken cancellationToken = default);
+    /// <summary>What is waiting right now — count, average wait age, per-project breakdown (the envelope meta).</summary>
+    Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default);
 }

@@ -40,10 +40,11 @@ public sealed class MemoryToolsAccessModeTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
-        _tools = new MemoryTools(_store, access, metrics);
+        _tools = new MemoryTools(_store, access, metrics, new FakePromotionQueue());
         _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), new FakePromotionQueue());
-        _workspace = new WorkspaceTools(workspaces, access, metrics);
-        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics);
+        _workspace = new WorkspaceTools(workspaces, access, metrics, new FakePromotionQueue());
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics,
+            new FakePromotionQueue());
         _promotion = new PromotionTools(new FakePromotionQueue(), access, metrics);
     }
 
@@ -68,7 +69,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var written = await _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken);
 
-        written.Hash.ShouldBe("h1");
+        written.Data!.Hash.ShouldBe("h1");
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.Delete("acme-web", "h1", TestContext.Current.CancellationToken));
@@ -87,8 +88,8 @@ public sealed class MemoryToolsAccessModeTests
         writeEx.Message.ShouldContain("access-denied: memory_write requires mode rw (current ro)");
 
         var results = await _tools.Search("acme-web", "query", cancellationToken: TestContext.Current.CancellationToken);
-        results.Results.Count.ShouldBe(1);
-        results.Results[0].Snippet.ShouldBe("content");
+        results.Data!.Results.Count.ShouldBe(1);
+        results.Data!.Results[0].Snippet.ShouldBe("content");
     }
 
     // Scenario: propose is a read (allowed in ro); promote is a write (denied below rw).
@@ -99,7 +100,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var result = await _share.ShareExtract(["acme-web"], cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.ShouldBeEmpty();
+        result.Data!.Candidates.ShouldBeEmpty();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             _share.ShareExtract(["acme-web"], "promote", cancellationToken: TestContext.Current.CancellationToken));
@@ -119,7 +120,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var result = await _tools.Delete("acme-web", "h1", TestContext.Current.CancellationToken);
 
-        result.Deleted.ShouldBe(1);
+        result.Data!.Deleted.ShouldBe(1);
         _store.DeletedHashes.ShouldContain("h1");
     }
 
@@ -143,7 +144,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var result = await _tools.Write("other-app", "content", cancellationToken: TestContext.Current.CancellationToken);
 
-        result.ShouldNotBeNull();
+        result.Data!.ShouldNotBeNull();
     }
 
     // Scenario 8: the global mode can be tightened to ro.
@@ -171,7 +172,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var result = await _sweep.Sweep("acme-web", cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Candidates.Count.ShouldBe(1);
+        result.Data!.Candidates.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -329,7 +330,7 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "ro");
 
         var list = await _promotion.List("acme-web", cancellationToken: TestContext.Current.CancellationToken);
-        list.Rows.ShouldBeEmpty();
+        list.Data!.Rows.ShouldBeEmpty();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));

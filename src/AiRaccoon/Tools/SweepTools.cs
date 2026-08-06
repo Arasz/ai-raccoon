@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Infrastructure.Degradation;
@@ -17,7 +19,8 @@ public sealed class SweepTools(
     SweepService sweeper,
     ForgettingPolicyService knobs,
     IMemoryAccessGuard access,
-    ToolCallMetrics observability)
+    ToolCallMetrics observability,
+    IPromotionQueue queue)
 {
     private const string TnMemorySweep = "memory_sweep";
 
@@ -36,7 +39,7 @@ public sealed class SweepTools(
     [McpServerTool(Name = TnMemorySweep)]
     [Description(
         "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than their per-entry TTL. Shared entries are never swept.")]
-    public async Task<SweepResult> Sweep(
+    public async Task<ApiEnvelope<SweepResult>> Sweep(
         [Description("The project id.")] string projectId,
         [Description("When true (default), report candidates without deleting.")]
         bool dryRun = true,
@@ -52,7 +55,7 @@ public sealed class SweepTools(
             var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -60,6 +63,9 @@ public sealed class SweepTools(
             throw;
         }
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SweepResult(IReadOnlyList<SweepCandidate> Candidates, IReadOnlyList<string> Deleted);

@@ -88,7 +88,7 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService(),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new MemoryAccessGuard(store), metrics);
+            new MemoryAccessGuard(store), metrics, new FakePromotionQueue());
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             tools.Sync("acme", TestContext.Current.CancellationToken));
@@ -140,7 +140,7 @@ public class MemoryToolsInstrumentationTests
         SimpleFakeStore store,
         ToolCallMetrics metrics)
     {
-        return new MemoryTools(store, new MemoryAccessGuard(store), metrics);
+        return new MemoryTools(store, new MemoryAccessGuard(store), metrics, new FakePromotionQueue());
     }
 
     // ── Minimal fake implementations ──

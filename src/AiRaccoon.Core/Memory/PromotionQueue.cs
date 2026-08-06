@@ -39,8 +39,3 @@ public sealed record PromoteOutcome(
     int SkippedDuplicates,
     IReadOnlyDictionary<string, int> RemainingByProject);
 
-/// <summary>What the envelope's meta tells the agent: how much is waiting and for how long.</summary>
-public sealed record QueueMeta(
-    int WaitingPromotionsCount,
-    double? PromotionsWaitTimeSeconds,
-    IReadOnlyDictionary<string, int>? WaitingByProject);

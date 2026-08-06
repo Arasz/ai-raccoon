@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using AiRaccoon.Access;
+using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Observability;
@@ -35,7 +36,7 @@ public sealed class PromotionTools(
     [McpServerTool(Name = TnMemoryPromotionList)]
     [Description(
         "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard.")]
-    public async Task<PromotionListResult> List(
+    public async Task<ApiEnvelope<PromotionListResult>> List(
         [Description("The project id; omit to see every project's queue.")]
         string? projectId = null,
         [Description("Maximum rows (default 50).")]
@@ -54,7 +55,7 @@ public sealed class PromotionTools(
             var rows = await queue.ListAsync(projectId, limit, cancellationToken);
             var result = new PromotionListResult(rows);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -66,7 +67,7 @@ public sealed class PromotionTools(
     [McpServerTool(Name = TnMemoryPromotionDiscard)]
     [Description(
         "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue.")]
-    public async Task<PromotionDiscardResult> Discard(
+    public async Task<ApiEnvelope<PromotionDiscardResult>> Discard(
         [Description("The project id.")] string projectId,
         [Description("The queued hash to drop; omit to clear the project's whole queue.")]
         string? hash = null,
@@ -81,7 +82,7 @@ public sealed class PromotionTools(
             var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
             var result = new PromotionDiscardResult(discarded);
             activity.RecordInvocation();
-            return result;
+            return await WrapAsync(result, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -89,6 +90,9 @@ public sealed class PromotionTools(
             throw;
         }
     }
+
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false), OperationStatus.Ok);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRow> Rows);

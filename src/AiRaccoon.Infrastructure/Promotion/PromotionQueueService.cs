@@ -1,3 +1,4 @@
+using AiRaccoon.Core;
 using AiRaccoon.Core.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -107,10 +108,10 @@ public sealed partial class PromotionQueueService(
         (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
         .Take(limit).ToList();
 
-    public async Task<QueueMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {
         var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
-        return new QueueMeta(stats.TotalCount, stats.AvgWaitSeconds,
+        return new ResponseMeta(stats.TotalCount, stats.AvgWaitSeconds,
             stats.PerProject.Count > 0 ? stats.PerProject : null);
     }
 
