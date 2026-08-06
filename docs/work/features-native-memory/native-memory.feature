@@ -35,12 +35,11 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I call memory_write for project "acme-web"
             Then the tool errors with access-denied
             And memory_search for project "acme-web" still returns results
-        @ignore
         Scenario: full mode allows removal
             Given project "acme-web" is in mode full
+            And an entry exists in project "acme-web"
             When I call memory_delete with a known hash
             Then the entry is deleted
-        @ignore
         Scenario: full mode allows workspace discard
             Given project "acme-web" is in mode full
             And workspace "ws-1" exists for project "acme-web"
@@ -71,12 +70,13 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: The store emits metrics and tracing for its own operations
     # Part 2: metrics and tracing so the knowledge about the memory is complete.
 
-    @FR-NM-3 @AC-3 @ignore
+    @FR-NM-3 @AC-3
     Rule: Embeddings are pluggable; the default engine is the small in-process model bundled with the tool
         Scenario: The default engine embeds locally without a sidecar
             Given the small model ships inside the tool package
             When I call memory_configure with provider "local"
-            Then writes are embedded with the local engine
+            And I write "embedded content" to project "acme-web"
+            Then the write is embedded with the local engine
             And no external server process or download is required
         Scenario: A custom model path overrides the bundled model
             Given a custom model file exists
@@ -98,13 +98,13 @@ Feature: Native memory store (ai-raccoon MCP server)
             And the entry is searchable
         Scenario: Changing the engine re-embeds the bank
             Given project "acme-web" has embedded entries
-            When I call memory_configure with a different provider
+            When I call memory_configure with a different engine
             Then every embedded entry is re-embedded with the new engine
 
     @FR-NM-4 @AC-4
     Rule: Hybrid search fuses FTS5 and vectors with reciprocal rank fusion
-        @ignore
         Scenario: Search returns ranked results with the preserved contract
+            Given project "acme-web" contains "project knowledge about the codebase"
             When I search for "project knowledge" in project "acme-web"
             Then results carry hash, seq, ranking, path and snippet
             And ranking is normalized into 0..1
@@ -121,36 +121,27 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I search for that fact with scope "shared"
             Then no results are returned
 
-    @FR-NM-5 @AC-5 @ignore
-    Rule: The swap is gated by a golden-retrieval harness
-        Scenario: The harness passes before the pinned extension is removed
-            Given a fixed corpus and a graded query set exist
-            When I run the retrieval parity harness
-            Then nDCG parity with the reference extension is within 0.02
-            And degenerate queries show no regression
-            And p95 latency stays within budget
+    # FR-NM-5: the golden-retrieval harness gate was removed with the pinned extension —
+    # the swap is done and retrieval parity is enforced by the permanent regression
+    # suite (tests/AiRaccoon.Tests/Unit/Retrieval) instead.
 
     @FR-NM-6 @AC-6
     Rule: Workspaces are first-class entities with structural isolation
-        @ignore
         Scenario: A new workspace is an Active row in the bank
             When I call memory_workspace_begin for project "acme-web"
             Then a workspace id is returned
             And its workspaces row has status "Active"
-        @ignore
         Scenario: A write is either committed or in exactly one workspace
             Given workspace "ws-1" exists for project "acme-web"
             When I write "draft finding" to project "acme-web" with workspace "ws-1"
             Then the entry row has workspace_id "ws-1"
             And the schema forbids a row that has both a workspace_id and a committed scope
-        @ignore
         Scenario: Consolidation promotes, discards and closes in one transaction
             Given workspace "ws-1" contains entries "h1" and "h2"
             When I call memory_workspace_consolidate with keep=["h1"]
             Then "h1" is committed to project "acme-web"
             And "h2" is deleted
             And the workspace row has status "Closed"
-        @ignore
         Scenario: Sync and sweep structurally exclude workspace rows
             Given workspace "ws-1" contains an entry
             When I call memory_sync
@@ -163,19 +154,17 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: Identical content is written once
             When I write the same content twice to project "acme-web"
             Then memory_stats reports one entry
-        @ignore
         Scenario: Sharing creates a real row under a distinct path
             Given an entry with hash "h1" exists in project "acme-web"
             When I call memory_share with hash "h1"
             Then a row with path "shared/<path>" exists in the shared scope
             And its hash differs from "h1"
-        @ignore
         Scenario: Consolidation preserves the logical path
             Given workspace "ws-1" contains an entry with path "docs/note.md"
             When I call memory_workspace_consolidate with keep=["all"]
             Then the committed entry keeps path "docs/note.md"
 
-    @FR-NM-8 @AC-8 @ignore
+    @FR-NM-8 @AC-8
     Rule: Sync transports one snapshot file to S3-compatible storage and merges rows
         Scenario: Sync without credentials errors cleanly
             When I call memory_sync without sync credentials
@@ -231,7 +220,5 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I ingest it
             Then no chunk boundary falls inside the fence
 
-    @ignore
-    Rule: File watching is a separate part-2 feature
-        Scenario: Watcher tools exist
-# Part 2: memory_watch_add / memory_watch_status / memory_watch_remove with a persisted watches table.
+    # File watching is its own shipped feature: docs/features/file-watcher/file-watcher.feature
+    # (memory_watch_add / memory_watch_status / memory_watch_remove, persisted watches table).
