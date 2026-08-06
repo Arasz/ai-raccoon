@@ -19,12 +19,27 @@ internal static class MemorySql
                                           WHERE id = @id
                                           """;
 
-    public const string SelectSourceByHashAndProject = """
+    public const string SelectSourceByHashAndProject = """"
                                                         SELECT path AS Path, value AS Value
                                                        FROM entries
                                                        WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
                                                        LIMIT 1
-                                                       """;
+                                                       """";
+
+    public const string SelectExtractionCandidates = """"
+                                                      SELECT hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile,
+                                                             rating AS Rating, access_count AS AccessCount, created_at AS CreatedAt,
+                                                             ttl_days AS TtlDays
+                                                      FROM entries
+                                                      WHERE scope = 'project' AND project_id = @projectId AND embed_state = 'embedded'
+                                                        AND (@includeTtlRows = 1 OR ttl_days IS NULL)
+                                                      """";
+
+    public const string SelectSharedIndex = """"
+                                             SELECT path AS Path, value AS Value
+                                             FROM entries
+                                             WHERE scope = 'shared'
+                                             """";
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.

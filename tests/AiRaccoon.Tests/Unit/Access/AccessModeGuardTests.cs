@@ -154,6 +154,13 @@ public sealed class AccessModeGuardTests
 
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
+
+    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        bool includeTtlRows, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));

@@ -62,6 +62,7 @@ public static partial class Dependencies
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
+            services.AddSingleton<SharedExtractionService>();
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
                 sp.GetRequiredService<IMemoryStore>()));
