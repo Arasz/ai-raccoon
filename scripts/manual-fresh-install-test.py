@@ -29,6 +29,11 @@ Exit 0 = all green on first install attempt, zero manual repair.
 import json, os, re, shutil, subprocess, sys, tempfile, time, uuid
 
 VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.6")
+# NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
+# this script, scripts/verify-tool-package.sh, and scripts/download-embedding-model.sh.
+# After every model swap (or republish of a new bundle), re-derive the hashes from
+# verify-tool-package.sh and sync all three files; a forgotten sync fails loudly here
+# (sha mismatch = FAIL), never silently.
 
 FAIL = []
 def check(name, cond, detail=""):
@@ -49,6 +54,8 @@ NUGET_PKGS = os.path.join(BASE, "nuget")
 os.makedirs(TOOLPATH); os.makedirs(NUGET_PKGS)
 PROJECT = f"manual-test-{int(time.time())}"
 CONTENT = f"fresh install verification payload {PROJECT} — the quick brown raccoon vaults over the lazy badger"
+import atexit
+atexit.register(lambda: shutil.rmtree(BASE, ignore_errors=True))  # cleanup even on unexpected errors
 
 print(f"== step 0: env preconditions (base {BASE}) ==")
 r = run(["dotnet", "--list-runtimes"])
@@ -56,10 +63,10 @@ rts = r.stdout
 check("net10 runtime present", "Microsoft.NETCore.App 10.0" in rts, rts.splitlines()[0] if rts else "none")
 check("aspnet runtime present", "Microsoft.AspNetCore.App 10.0" in rts)
 check("host is arm64", subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip() == "arm64")
-os.environ.pop("AIRACCOON_DB_PASSPHRASE", None)
+had_passphrase = os.environ.pop("AIRACCOON_DB_PASSPHRASE", None)
 os.environ["NUGET_PACKAGES"] = NUGET_PKGS
 env = dict(os.environ)
-check("AIRACCOON_DB_PASSPHRASE unset", "AIRACCOON_DB_PASSPHRASE" not in os.environ)
+check("no inherited AIRACCOON_DB_PASSPHRASE", had_passphrase is None, f"inherited={had_passphrase!r}")
 
 print("== step 1: fresh install from nuget.org ==")
 t0 = time.time()
@@ -140,6 +147,10 @@ class MCP:
         self.proc.stdin.close()
     def wait(self, timeout=15):
         return self.proc.wait(timeout=timeout)
+    def join_reader(self, timeout=5):
+        if self.reader:
+            self.reader.join(timeout=timeout)
+        return "".join(self.stderr_lines)
 
 print("== steps 6-9: MCP stdio round trip (fresh bank) ==")
 mcp = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT)
@@ -184,15 +195,14 @@ stats = json.dumps(unwrap(stres.get("result", {})))
 check("stats entries >= 1", re.search(r'"entries"\s*:\s*[1-9]', stats) is not None, stats[:200])
 check("stats pending == 0", re.search(r'"pending"\s*:\s*0', stats) is not None, stats[:200])
 
-print("== step 10: stderr assertions (no silent repair) ==")
+print("== step 10: early stderr signal (no silent repair so far) ==")
 time.sleep(1)
-stderr_all = "".join(mcp.stderr_lines)
-check("no 'Bundled embedding model unavailable'", "Bundled embedding model unavailable" not in stderr_all)
-check("no 'Downloading bundled model asset'", "Downloading bundled model asset" not in stderr_all)
-check("no 'Failed to download'", "Failed to download bundled model asset" not in stderr_all)
-print("    stderr tail:", stderr_all.strip().splitlines()[-3:] if stderr_all.strip() else "(empty)")
+stderr_early = "".join(mcp.stderr_lines)
+check("early: no 'Bundled embedding model unavailable'", "Bundled embedding model unavailable" not in stderr_early)
+check("early: no 'Downloading bundled model asset'", "Downloading bundled model asset" not in stderr_early)
+check("early: no 'Failed to download'", "Failed to download bundled model asset" not in stderr_early)
 
-print("== step 11: dual-instance concurrent initialize ==")
+print("== step 11: dual-instance overlap (2nd server, fresh DATAROOT, 1st still alive) ==")
 mcp2 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT2)
 i2 = mcp2.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "manual-test-2", "version": "1.0"}})
 init2 = mcp2.read_response(i2, timeout=15)
@@ -200,11 +210,15 @@ check("2nd instance initialize no error", "error" not in init2, json.dumps(init2
 si2 = init2.get("result", {}).get("serverInfo", {})
 check("2nd instance serverInfo ok", si2.get("name") == "AiRaccoon" and str(si2.get("version", "")).startswith(VERSION), str(si2))
 
-print("== step 12: graceful shutdown ==")
+print("== step 12: graceful shutdown + final stderr (deterministic) ==")
 mcp.close_stdin(); mcp2.close_stdin()
 rc1 = mcp.wait(timeout=15); rc2 = mcp2.wait(timeout=15)
 check("instance 1 exits 0 on stdin close", rc1 == 0, f"rc={rc1}")
 check("instance 2 exits 0 on stdin close", rc2 == 0, f"rc={rc2}")
+stderr_final = mcp.join_reader() + mcp2.join_reader()
+check("final: no 'Bundled embedding model unavailable'", "Bundled embedding model unavailable" not in stderr_final)
+check("final: no 'Downloading bundled model asset'", "Downloading bundled model asset" not in stderr_final)
+check("final: no 'Failed to download'", "Failed to download bundled model asset" not in stderr_final)
 
 print("== step 13: zero-config probe (informational) ==")
 mcp0 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT0)
