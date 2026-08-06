@@ -18,6 +18,8 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
   consolidated.
 - **Shared promotion tier.** Plain writes land in the project. `memory_share`
   promotes a hash into the flat `shared` context — cross-project, curated, and exempt from degradation sweeps.
+  `memory_share_extract` proposes or promotes shared-worthy candidates per project, and the background
+  `extract` loop (HTTP/S hosts only, off by default) does the same on an interval.
 - **Hybrid search.** `memory_search` combines FTS5 keyword and vec0 vector retrieval, fused with Reciprocal Rank Fusion
   (default k=60, 1:1 weights). Tunable via `rrfK`,
   `ftsWeight`, and `vectorWeight`. Scoped by `scope=all|project|shared` and optional workspace. Degrades to FTS5-only
@@ -31,10 +33,10 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
   single snapshot to cloud object storage — S3-compatible endpoints (R2, S3, MinIO) or Azure Blob — using VACUUM INTO +
   If-Match CAS + row merge.
 
-## Tools (19) and prompts (2)
+## Tools (20) and prompts (2)
 
 `memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
-`memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
+`memory_share_extract`, `memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
 `memory_embed_pending`, `memory_workspace_begin`,
 `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
 `memory_sweep`, `memory_sync` — plus the file-watcher trio `memory_watch_add`,
@@ -96,8 +98,10 @@ ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
 
-# extract: background shared-extraction (checks each project's memories and
-# extracts the shared-worthy ones; propose logs candidates, promote shares them)
+# extract: background shared-extraction (HTTP/S hosts only — a stdio process is
+# per-connection and recycled before the loop can fire; default interval 30 min;
+# config changes apply live, no server restart needed; propose logs the ranked
+# candidates — path, preview, reasons — to the server log)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
@@ -207,6 +211,15 @@ one surviving variable.
 - `stdio` (default) — MCP clients launch the server as a subprocess.
 - `http` — Streamable HTTP at `/mcp`, selected via `--transport http`
   (stateless per the 2026-07-28 spec revision).
+- `serve` — the HTTP mode as a verb: `ai-raccoon serve` forces http, arms a 4h
+  idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0` disables), prints the bound
+  URL to stdout, and stays in the foreground (`ai-raccoon serve > serve.log
+  2>&1 &` to background, POSIX). If the port already hosts an ai-raccoon
+  server, `serve` attaches and exits 0 — the owner keeps the watchdog, the
+  attached run never touches the bank; a foreign listener on the port fails
+  fast with exit code 3 and a `--port 0` hint. `serve --mcp-entry
+  [--format hermes|claude|all]` prints the client config entry for the bound
+  URL (keep stderr out: `> entry.json 2> serve.log`).
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 

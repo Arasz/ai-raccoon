@@ -4,11 +4,15 @@ using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Serve;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
@@ -154,8 +158,106 @@ public class McpServerSetupHostTests : IDisposable
         toolNames.ShouldContain("memory_watch_remove");
     }
 
-    private ServerConfig Config(McpTransport transport, int port = 7721) =>
-        new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+    [Fact]
+    public void StdioOnlyHost_DoesNotRegisterTheIdleWatchdog()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is IdleWatchdog);
+    }
+
+    [Fact]
+    public void StdioOnlyHost_WithIdleTimeout_StillDoesNotRegisterTheIdleWatchdog()
+    {
+        // Watchdog gating is host shape first, timeout second: a stdio-only host never
+        // gets it even when a timeout is configured (it is recycled in minutes anyway).
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, idleTimeout: TimeSpan.FromHours(4)));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is IdleWatchdog);
+    }
+
+    [Fact]
+    public void HttpHost_WithIdleTimeout_RegistersWatchdogAndSignaler_AsOneInstance()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort(), TimeSpan.FromHours(4)));
+
+        // R1: three registrations, one instance — the middleware's signaler must be the
+        // very instance the hosted service runs, or production signals the wrong object.
+        var watchdogs = host.Services.GetServices<IHostedService>().OfType<IdleWatchdog>().ToList();
+        watchdogs.Count.ShouldBe(1);
+        var signaler = host.Services.GetRequiredService<IActivitySignaler>();
+        ReferenceEquals(signaler, watchdogs[0]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HttpHost_WithoutIdleTimeout_DoesNotRegisterTheWatchdog()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is IdleWatchdog);
+        host.Services.GetService<IActivitySignaler>().ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task HttpHost_WithFakeClock_ToolCallResetsTheWatchdog_ThenTheHostShutsDown()
+    {
+        var port = FreePort();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 6, 12, 0, 0, TimeSpan.Zero));
+        var host = McpServerSetup.CreateServerHost(
+            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
+        var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken); // watchdog timer registers
+            time.Advance(TimeSpan.FromSeconds(1)); // past the first tick, before the deadline
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+
+            using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+            var transport = new HttpClientTransport(
+                new HttpClientTransportOptions
+                {
+                    Name = "idle-watchdog-test",
+                    Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
+                    TransportMode = HttpTransportMode.StreamableHttp
+                },
+                httpClient,
+                NullLoggerFactory.Instance,
+                true);
+            await using var client = await McpClient.CreateAsync(transport,
+                cancellationToken: TestContext.Current.CancellationToken);
+            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            // The /mcp traffic reset the deadline to t0+1s: the original deadline (t0+2s)
+            // is now past but the reset deadline is not — no shutdown yet.
+            time.Advance(TimeSpan.FromSeconds(1.5));
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            lifetime.ApplicationStopping.IsCancellationRequested.ShouldBeFalse();
+
+            time.Advance(TimeSpan.FromSeconds(1)); // t0+3.5s: 2.5s past the reset
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            lifetime.ApplicationStopping.IsCancellationRequested.ShouldBeTrue();
+
+            // The runner's shutdown signal: WaitForShutdownAsync (what ServeRunner
+            // awaits) returns, then the runner stops the host and it stops cleanly.
+            await host.WaitForShutdownAsync(TestContext.Current.CancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await host.StopAsync(TestContext.Current.CancellationToken);
+            lifetime.ApplicationStopped.WaitHandle.WaitOne(TimeSpan.FromSeconds(5)).ShouldBeTrue();
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private ServerConfig Config(McpTransport transport, int port = 7721, TimeSpan idleTimeout = default) =>
+        new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
     private static int FreePort()
     {

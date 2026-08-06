@@ -12,7 +12,7 @@ public sealed class GoldenFileTests
     /// <summary>
     ///     Gate: a fresh reference run must reproduce the committed golden top-k exactly (same
     ///     hashes in the same order, rankings within 1e-6). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
-    ///     (or run scripts/regenerate-retrieval-golden.sh) to rewrite the golden file.
+    ///     (or run scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
     /// </summary>
     [Fact]
     public async Task GoldenFile_MatchesFreshReferenceRun()
@@ -34,7 +34,7 @@ public sealed class GoldenFileTests
 
         var differences = golden.Differences(run);
         differences.ShouldBeEmpty(
-            "the committed golden reference is stale; regenerate with scripts/regenerate-retrieval-golden.sh");
+            "the committed golden reference is stale; regenerate with scripts/regenerate-retrieval-golden.py");
     }
 
     [Fact]

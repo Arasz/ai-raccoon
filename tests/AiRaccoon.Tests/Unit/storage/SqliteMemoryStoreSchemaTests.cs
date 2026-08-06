@@ -164,6 +164,161 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         ftsRows.ShouldBeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task OpenBank_CreatesUniqueBucketIndexes()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var names = (await connection.QueryAsync<string>(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'uq_entries_%'",
+                TestContext.Current.CancellationToken))
+            .ToList();
+
+        names.ShouldContain("uq_entries_shared_bucket");
+        names.ShouldContain("uq_entries_committed_bucket");
+    }
+
+    [Fact]
+    public async Task OpenBank_MigrationCollapsesSharedDuplicates_KeepingEarliestRow()
+    {
+        await SeedDuplicateBucketsAsync(("h1", "shared/a.md", "shared", "acme", null),
+            ("h1", "shared/a.md", "shared", "beta", null));
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(long Id, string ProjectId)>(
+                "SELECT id AS Id, project_id AS ProjectId FROM entries WHERE scope = 'shared'",
+                TestContext.Current.CancellationToken))
+            .ToList();
+        rows.ShouldHaveSingleItem();
+        rows[0].ProjectId.ShouldBe("acme"); // MIN(id) survivor keeps the earliest promoter
+    }
+
+    [Fact]
+    public async Task OpenBank_MigrationCollapsesProjectDuplicates_WithNullContextLabel()
+    {
+        await SeedDuplicateBucketsAsync(("h1", "p1.md", "project", "acme", null),
+            ("h1", "p1.md", "project", "acme", null));
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE scope = 'project'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task OpenBank_MigrationLeavesWorkspaceRowsUntouched()
+    {
+        await SeedDuplicateBucketsAsync(("w1", "ws.md", null, "acme", "ws-1"),
+            ("w1", "ws.md", null, "acme", "ws-1"));
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE workspace_id IS NOT NULL",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(2); // workspace scope is unconstrained by design
+    }
+
+    [Fact]
+    public async Task UniqueIndex_RejectsDuplicateBucketInsert()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
+            "VALUES ('h1', 'shared/a.md', 'x', 'shared', 'acme', 1, 1)",
+            TestContext.Current.CancellationToken);
+
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
+            "VALUES ('h1', 'shared/a.md', 'x', 'shared', 'beta', 2, 2)",
+            TestContext.Current.CancellationToken));
+
+        ex.SqliteErrorCode.ShouldBe(19); // SQLITE_CONSTRAINT
+    }
+
+    [Fact]
+    public async Task UniqueIndex_AllowsSamePathDifferentHash_AndWorkspaceDuplicates()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        // Chunk rows: same path, different hash must stay legal.
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
+            "VALUES ('h1', 'doc.md', 'chunk one', 'project', 'acme', 1, 1)",
+            TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
+            "VALUES ('h2', 'doc.md', 'chunk two', 'project', 'acme', 1, 1)",
+            TestContext.Current.CancellationToken);
+
+        // Workspace rows: same bucket key twice stays legal (scope NULL escapes the partials).
+        await connection.ExecuteAsync(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)",
+            TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
+            "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
+            TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
+            "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
+            TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
+        count.ShouldBe(4);
+    }
+
+    [Fact]
+    public async Task OpenBank_MigrationIsIdempotent_OnAlreadyIndexedBank()
+    {
+        await SeedDuplicateBucketsAsync(("h1", "shared/a.md", "shared", "acme", null),
+            ("h1", "shared/a.md", "shared", "beta", null));
+
+        await using (var first = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            // First open heals.
+        }
+
+        await using var reopened = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await reopened.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE scope = 'shared'",
+            TestContext.Current.CancellationToken);
+        count.ShouldBe(1, "the dedupe must not run again once the indexes exist");
+    }
+
+    /// <summary>
+    ///     Opens a fresh bank, drops the unique bucket indexes (so duplicate rows can be
+    ///     seeded), inserts the given raw rows, and closes — leaving a bank that the next
+    ///     open must heal. Mirrors the real production bank shape: current DDL, no indexes.
+    /// </summary>
+    private async Task SeedDuplicateBucketsAsync(params (string Hash, string Path, string? Scope, string ProjectId, string? WorkspaceId)[] rows)
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                "DROP INDEX IF EXISTS uq_entries_shared_bucket; DROP INDEX IF EXISTS uq_entries_committed_bucket;",
+                TestContext.Current.CancellationToken);
+            foreach (var (hash, path, scope, projectId, workspaceId) in rows)
+            {
+                if (workspaceId is not null)
+                {
+                    await connection.ExecuteAsync(
+                        "INSERT OR IGNORE INTO workspaces (id, project_id, status, created_at) VALUES (@workspaceId, @projectId, 'Active', 1)",
+                        new { workspaceId, projectId });
+                }
+
+                await connection.ExecuteAsync(
+                    "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
+                    "VALUES (@hash, @path, 'dup', @scope, @projectId, @workspaceId, 1, 1)",
+                    new { hash, path, scope, projectId, workspaceId });
+            }
+        }
+    }
+
     private async Task CreateLegacyBankAsync()
     {
         var bankPath = Path.Combine(_dataRoot, "memory.db");

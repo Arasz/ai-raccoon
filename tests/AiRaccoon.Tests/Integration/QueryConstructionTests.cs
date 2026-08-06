@@ -36,7 +36,7 @@ public sealed class QueryConstructionTests : IDisposable
     public QueryConstructionTests(ITestOutputHelper output)
     {
         _output = output;
-        _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+        _dataRoot = TestData.CreateTempRoot();
 
         var bundledDb = ResolveBundledDbPath();
         var dbPath = Path.Combine(_dataRoot, "memory.db");

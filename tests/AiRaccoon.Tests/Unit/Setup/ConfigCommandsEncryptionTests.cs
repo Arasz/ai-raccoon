@@ -1,4 +1,3 @@
-using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
@@ -36,7 +35,9 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with CliCommandRunnerTests
     // via TestData.EnvVarGate (the env var is process-global).
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot();
+
+    private FakeLogger? _lastLogger;
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
@@ -48,8 +49,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private void WriteSidecar(string source, string projectId, string secretId) =>
         new EncryptionSourceSidecar(BankPath()).Write(new EncryptionData(source) { ProjectId = projectId, SecretId = secretId });
-
-    private FakeLogger? _lastLogger;
 
     private async Task<(int Exit, string Out, string Err, SqliteConnectionFactory Bank)> Run(string[] args,
         FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
@@ -227,7 +226,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 2 && r.Level == LogLevel.Information
-                                                                && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
+                                                                             && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
         await using (var reopened = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
@@ -607,5 +606,4 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             return _result!;
         }
     }
-
 }

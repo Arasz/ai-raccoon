@@ -164,6 +164,11 @@ against. Consequences:
   in `task_tracker.py subagent`. (Hermes state.db DOES hold per-delegation tokens:
   `async_delegations.result_json` → `results[].tokens.{input,output}` — query it when the
   tracker's `--delegation` lookup says "no token record".)
+- **No delegation model pinning on this machine:** `~/.hermes/config.yaml` `delegation:` has
+  only `max_iterations` — subagents inherit the session's model. "Lane: opus/sonnet" in
+  delegation.md is aspirational routing, not a model guarantee; judge a task run's model-mix
+  accordingly (the task skill's hermes extension says exactly this: lanes are purpose, not
+  model).
 - `process(action=wait)` cannot wait on a delegation: delegate_task ids are not terminal
   sessions (returns not_found). Results re-enter the conversation as a message — continue
   other work and let it arrive; never poll the live transcript in a loop.

@@ -15,6 +15,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class RetrievalBaselineTests : IDisposable
 {
+    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Wave 0 corpus-exclusion markers (plan C step 5; see docs/plans/retrieval-improvement-c.md §0): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
@@ -23,16 +24,14 @@ public sealed class RetrievalBaselineTests : IDisposable
     private static readonly string[] ExcludedContentMarkers =
     [
         "docs/work/", "docs/state.json", "docs/now.md",
-        ".ai-badger/state.json", ".remember/now.md",
+        ".ai-badger/state.json", ".remember/now.md"
     ];
 
-    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
-
     private readonly string _dataRoot;
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly SqliteConnectionFactory _factory;
-    private readonly SqliteMemoryStore _store;
+    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public RetrievalBaselineTests(ITestOutputHelper output)
     {
@@ -240,7 +239,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             .Select(r => $"{r.Path}: stored {r.Hash[..12]}… != ContentHash.Of {ContentHash.Of(r.Path, r.Value)[..12]}…")
             .ToList();
         mismatches.ShouldBeEmpty("every stored entry hash must satisfy ContentHash.Of(path, value); "
-            + string.Join("; ", mismatches.Take(3)));
+                                 + string.Join("; ", mismatches.Take(3)));
     }
 
     [Fact]
@@ -264,7 +263,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         var mismatches = rows.Count(r =>
         {
             var hasSectionKey = keysByHash.TryGetValue(r.Hash, out var keys)
-                && keys.Any(k => k.Contains('#'));
+                                && keys.Any(k => k.Contains('#'));
             return hasSectionKey != !string.IsNullOrWhiteSpace(r.Section);
         });
         mismatches.ShouldBe(0, "section column must mirror the hash-map '#section' structured-path part");
@@ -309,11 +308,11 @@ public sealed class RetrievalBaselineTests : IDisposable
         {
             var rank = index + 1;
             var isExact = query.ExpectedSource is not null
-                && hashMap.TryGetValue(query.ExpectedSource, out var expectedHash)
-                && string.Equals(result.Hash, expectedHash, StringComparison.Ordinal);
+                          && hashMap.TryGetValue(query.ExpectedSource, out var expectedHash)
+                          && string.Equals(result.Hash, expectedHash, StringComparison.Ordinal);
             var isFile = query.ExpectedSource is not null
-                && fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var fileSet)
-                && fileSet.Contains(result.Hash);
+                         && fileHashes.TryGetValue(FileKey(query.ExpectedSource), out var fileSet)
+                         && fileSet.Contains(result.Hash);
 
             if (isExact)
             {
@@ -456,7 +455,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         return AppContext.BaseDirectory;
     }
 
-    private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot();
 
     public sealed record BaselineQuery(
         string Id,

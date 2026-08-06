@@ -1,5 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup.Serve;
 
 namespace AiRaccoon.Setup.Cli;
 
@@ -12,7 +13,32 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"];
+
+    /// <summary>The root launch --port (shared with the bare launch root); serve reads it
+    /// instance-based as its fallback when serve's own --port is absent (R7/R12).</summary>
+    internal static readonly Option<int> LaunchPortOption = new("--port")
+    {
+        Description = "HTTP port to bind; 0 picks a random free port",
+        HelpName = "port",
+        DefaultValueFactory = _ => 7721
+    };
+
+    internal static readonly Option<int> ServePortOption = new("--port")
+    {
+        Description = "HTTP port to bind; 0 picks a random free port",
+        HelpName = "port",
+        DefaultValueFactory = _ => 7721
+    };
+
+    internal static readonly Option<string> ServeIdleTimeoutOption = CreateIdleTimeoutOption();
+
+    internal static readonly Option<bool> ServeMcpEntryOption = new("--mcp-entry")
+    {
+        Description = "Print the MCP client config entry for the bound URL"
+    };
+
+    internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
@@ -27,6 +53,7 @@ internal static class CliCommandTree
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
+        root.Add(ServeCommand());
         return root;
     }
 
@@ -46,9 +73,7 @@ internal static class CliCommandTree
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
         root.Add(new Option<int>("--port") { Description = "HTTP port to bind; 0 picks a random free port", HelpName = "port", DefaultValueFactory = _ => 7721 });
         root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: info logs off (Warning+ only); the caller emits its own status cues" });
-        // WebApplicationFactory bootstraps the entry point with these host-config flags;
-        // declared hidden so the E2E host builds — values are intentionally never consumed
-        // (CreateBuilder([]) drops generic host flags by design).
+        root.Add(LaunchPortOption);
         root.Add(new Option<string>("--environment") { Hidden = true });
         root.Add(new Option<string>("--contentRoot") { Hidden = true });
         root.Add(new Option<string>("--applicationName") { Hidden = true });
@@ -189,10 +214,60 @@ internal static class CliCommandTree
                 { new Argument<bool>("enabled") { HelpName = "true|false" } },
             new Command("mode", "Sets the extraction mode: propose (default, logs ranked candidates) or promote (shares the top candidates into the shared tier)")
                 { new Argument<string>("mode") { HelpName = "propose|promote" } },
-            new Command("interval", "Sets the extraction pass interval in minutes (positive integer; default 60)")
+            new Command("interval", "Sets the extraction pass interval in minutes (positive integer; default 30)")
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
         };
         return extract;
+    }
+
+    private static Option<string> CreateFormatOption()
+    {
+        var option = new Option<string>("--format")
+        {
+            Description = "Entry format: hermes|claude|all",
+            HelpName = "format",
+            DefaultValueFactory = _ => "hermes"
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && value is not ("hermes" or "claude" or "all"))
+            {
+                result.AddError($"Cannot parse argument '{value}' as an entry format: expected hermes|claude|all.");
+            }
+        });
+        return option;
+    }
+
+    private static Option<string> CreateIdleTimeoutOption()
+    {
+        var option = new Option<string>("--idle-timeout")
+        {
+            Description = "Idle shutdown span: 90s/30m/4h/1d; 0 disables",
+            HelpName = "span"
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && !IdleTimeoutParser.TryParse(value, out _))
+            {
+                result.AddError($"Cannot parse argument '{value}' as an idle timeout: expected 90s/30m/4h/1d or 0 (disabled).");
+            }
+        });
+        return option;
+    }
+
+    private static Command ServeCommand()
+    {
+        var serve = new Command("serve",
+            "Serves the MCP endpoint over HTTP (always HTTP). Background it: ai-raccoon serve > serve.log 2>&1 &")
+        {
+            ServePortOption,
+            ServeIdleTimeoutOption,
+            ServeMcpEntryOption,
+            ServeFormatOption
+        };
+        return serve;
     }
 }

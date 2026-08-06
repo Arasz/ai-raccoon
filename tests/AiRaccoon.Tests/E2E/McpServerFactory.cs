@@ -26,7 +26,10 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
     private readonly InstallScope _scope;
     private bool _disposed;
 
-    public McpServerFactory(InstallScope scope = InstallScope.User) => _scope = scope;
+    public McpServerFactory(InstallScope scope = InstallScope.User)
+    {
+        _scope = scope;
+    }
 
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
@@ -95,5 +98,5 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         }
     }
 
-    private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot();
 }

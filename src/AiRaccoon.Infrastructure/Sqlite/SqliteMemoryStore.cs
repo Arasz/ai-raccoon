@@ -82,14 +82,31 @@ public sealed class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        var id = await connection.ExecuteScalarAsync<long>(
-                Def("SELECT last_insert_rowid()", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        await EmbedIfConfiguredAsync(connection, id, request.Content, cancellationToken).ConfigureAwait(false);
-        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
-                Def(MemorySql.SelectEntryById, new { id }, cancellationToken))
-            .ConfigureAwait(false);
-        return ToEntry(row ?? throw new InvalidOperationException($"Insert stored no row for context '{context}'."));
+        // Bucket-key re-read, not last_insert_rowid: a concurrent same-bucket insert may have
+        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids (F3).
+        var row = bucket.Scope == "shared"
+            ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                    Def(MemorySql.SelectSharedEntryByPathAndHash,
+                        new { path, hash }, cancellationToken))
+                .ConfigureAwait(false)
+            : await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                    Def(MemorySql.SelectEntryByPathInBucket,
+                        new
+                        {
+                            path,
+                            scope = bucket.Scope,
+                            projectId = bucket.ProjectId,
+                            contextLabel = bucket.ContextLabel,
+                            workspaceId = bucket.WorkspaceId
+                        }, cancellationToken))
+                .ConfigureAwait(false);
+        if (row is null)
+        {
+            throw new InvalidOperationException($"Insert stored no row for context '{context}'.");
+        }
+
+        await EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
+        return ToEntry(row);
     }
 
     public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
@@ -530,9 +547,14 @@ public sealed class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        var inserted = await connection.QueryFirstOrDefaultAsync<EntryRow>(
-                Def(MemorySql.SelectEntryByPathInBucket, bucketParams, cancellationToken))
-            .ConfigureAwait(false);
+        var inserted = bucket.Scope == "shared"
+            ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                    Def(MemorySql.SelectSharedEntryByPathAndHash,
+                        new { path, hash }, cancellationToken))
+                .ConfigureAwait(false)
+            : await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                    Def(MemorySql.SelectEntryByPathInBucket, bucketParams, cancellationToken))
+                .ConfigureAwait(false);
         if (inserted is null)
         {
             throw new InvalidOperationException(
@@ -916,10 +938,26 @@ public sealed class SqliteMemoryStore(
                         },
                         cancellationToken))
                 .ConfigureAwait(false);
-            var chunkId = await connection.ExecuteScalarAsync<long>(
-                    Def("SELECT last_insert_rowid()", cancellationToken: cancellationToken))
+            // Re-select by bucket key: a concurrent same-file ingest may have won this chunk's
+            // insert (ON CONFLICT DO NOTHING), and last_insert_rowid is stale on a lost race (F3).
+            var chunkId = await connection.ExecuteScalarAsync<long?>(
+                    Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
+                        new
+                        {
+                            hash,
+                            path,
+                            scope = bucket.Scope,
+                            projectId = bucket.ProjectId,
+                            contextLabel = bucket.ContextLabel,
+                            workspaceId = bucket.WorkspaceId
+                        }, cancellationToken))
                 .ConfigureAwait(false);
-            await EmbedIfConfiguredAsync(connection, chunkId, chunk, cancellationToken).ConfigureAwait(false);
+            if (chunkId is null)
+            {
+                continue;
+            }
+
+            await EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken).ConfigureAwait(false);
             inserted++;
         }
 

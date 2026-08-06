@@ -19,7 +19,7 @@ public sealed class BundledModelGateTests
         var result = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
 
         result.Errors.ShouldBeEmpty(
-            "bundled embedding model missing or mismatched; run scripts/download-embedding-model.sh " +
+            "bundled embedding model missing or mismatched; run scripts/download-embedding-model.py " +
             "with network access or place a verified copy in src/AiRaccoon/Models/");
 
         var modelPath = BundledModel.ResolveModelPath();

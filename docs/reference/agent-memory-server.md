@@ -179,6 +179,25 @@ runs the server.
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | any port; `0` = random free port | `7721` |
 
+### Serve mode
+
+`ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
+transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
+disables), prints the bound URL to stdout, and stays in the foreground —
+background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). If the port
+already hosts an ai-raccoon server, `serve` attaches to it and exits 0; the
+owning process keeps the watchdog, and the attached run never touches the bank.
+A busy port held by a foreign listener fails fast with exit code 3 and a
+`--port 0` hint.
+
+`serve --mcp-entry [--format hermes|claude|all]` prints the client config entry
+for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
+http://127.0.0.1:7721/mcp`) or Claude Code (`.mcp.json` `type: http` entry).
+Keep stderr out of the entry file: `ai-raccoon serve --mcp-entry > entry.json
+2> serve.log &`. One long-lived HTTP server avoids the ~5-minute stdio
+recycle of per-connection processes and lets the background extraction hosted
+service actually fire.
+
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):
 
@@ -228,7 +247,8 @@ ai-raccoon encryption unset
 
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
-# config changes apply live, no server restart needed)
+# config changes apply live, no server restart needed; propose logs the ranked
+# candidates — path, preview, reasons — to the server log)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
@@ -372,7 +392,7 @@ process or download. The binary is gitignored and fetched once by the pinned scr
 (SHA-256 verified); the tests FAIL (never skip) when it is missing:
 
 ```bash
-scripts/download-embedding-model.sh          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
+scripts/download-embedding-model.py          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
 ```
 
 A custom ONNX model path overrides the bundled model via

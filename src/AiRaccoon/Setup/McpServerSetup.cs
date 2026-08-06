@@ -1,6 +1,8 @@
 using System.Net;
 using AiRaccoon.Prompts;
+using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tools;
+using DotNext.Collections.Generic;
 
 namespace AiRaccoon.Setup;
 
@@ -29,56 +31,79 @@ internal static partial class McpServerSetup
     ///     Creates the server host for transport set: stdio-only launches on a plain app
     ///     host with no web server; any HTTP/S presence uses a web host bound to the
     ///     configured port (never the ASP.NET default 5000), with stdio attached when both
-    ///     are selected.
+    ///     are selected. The optional timeProvider is a test seam for the fake-clock
+    ///     watchdog tests; null keeps TimeProvider.System.
     /// </summary>
-    internal static IHost CreateServerHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports)
+    internal static IHost CreateServerHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
+        TimeProvider? timeProvider = null)
     {
         if (transports.Count == 1 && transports.Contains(McpTransport.Stdio))
         {
             return CreateAppHost(config);
         }
 
-        return CreateWebHost(config, transports);
+        return CreateWebHost(config, transports, timeProvider);
     }
 
     private static IHost CreateAppHost(ServerConfig config)
     {
         var builder = Host.CreateApplicationBuilder();
-        builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        builder.Services.RegisterMemoryServices(config.Options, registerExtractionHostedService: false);
+        builder.Configuration.Sources.Clear();
+        var mcpTransport = IReadOnlyList<McpTransport>.Singleton(McpTransport.Stdio);
+        builder.Services.RegisterMemoryServices(config.Options, mcpTransport);
         builder.Services
             .AddMcpServer()
-            .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging, quietInfo: config.Options.Quiet)
+            .ConfigureMcpTransport(mcpTransport, builder.Logging)
             .WithTools<MemoryTools>()
             .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
         return builder.Build();
     }
 
-    private static IHost CreateWebHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports)
+    private static IHost CreateWebHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
+        TimeProvider? timeProvider = null)
     {
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        builder.Services.RegisterMemoryServices(config.Options);
+        builder.Services.RegisterMemoryServices(config.Options, transports);
+        builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
         if (config.Options.Quiet)
         {
             builder.Logging.SetMinimumLevel(LogLevel.Warning);
         }
-        // Explicit endpoint: bind the configured port (7721 default, 0 = random) instead
-        // of the ASP.NET default 5000, which collides with other listeners on the host.
+
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
-        builder.ConfigureMcpServer(transports, quietInfo: config.Options.Quiet);
-        return builder.Build().ConfigureMcpEndpoints(transports);
+        if (config.IdleTimeout > TimeSpan.Zero)
+        {
+            // R1: three registrations, one instance — AddHostedService<T> registers only
+            // IHostedService→T, so the middleware's GetRequiredService<IdleWatchdog>()
+            // would throw on the first request without the singleton registrations.
+            // The TimeSpan registration feeds the type-based AddSingleton<IdleWatchdog>().
+            builder.Services.AddSingleton(typeof(TimeSpan), config.IdleTimeout);
+            builder.Services.AddSingleton<IdleWatchdog>();
+            builder.Services.AddSingleton<IActivitySignaler>(sp => sp.GetRequiredService<IdleWatchdog>());
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleWatchdog>());
+        }
+
+        builder.ConfigureMcpServer(transports);
+        return builder.Build().ConfigureMcpEndpoints(transports, armWatchdog: config.IdleTimeout > TimeSpan.Zero);
     }
 
     extension(WebApplication webApplication)
     {
-        private WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports)
+        private WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports, bool armWatchdog)
         {
             if (transports.Contains(McpTransport.Https))
             {
                 Log.HttpsTransportNotSupported(webApplication.Logger);
+            }
+
+            if (armWatchdog)
+            {
+                // Spliced between routing and endpoints (.NET 10): wraps /mcp and
+                // path-checks inside, so 404s on other paths never signal (R4).
+                webApplication.UseMiddleware<McpActivityMiddleware>();
             }
 
             if (transports.Contains(McpTransport.Http))

@@ -211,8 +211,10 @@ internal static class MemorySchema
                     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        if (ftsSql is not null && ftsSql.Contains("source_file", StringComparison.Ordinal)
-                               && ftsSql.Contains("section", StringComparison.Ordinal))
+        var ftsNeedsRebuild = ftsSql is null
+                              || !ftsSql.Contains("source_file", StringComparison.Ordinal)
+                              || !ftsSql.Contains("section", StringComparison.Ordinal);
+        if (!ftsNeedsRebuild)
         {
             // New shape in place; verify it is not an empty shell left by a crash between the
             // DROP/CREATE and the repopulate — the triggers keep it in sync only from here on.
@@ -222,17 +224,19 @@ internal static class MemorySchema
             var entryRows = await connection.ExecuteScalarAsync<long>(
                     new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            if (ftsRows == entryRows)
+            if (ftsRows != entryRows)
             {
-                return;
+                ftsNeedsRebuild = true;
             }
         }
 
-        // The old index cannot host weighted source/section columns: drop it with its
-        // triggers, recreate in the new shape, and repopulate from the content table.
-        // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
-        // (or with an empty shell) that never heals on reopen.
-        await connection.ExecuteAsync(
+        if (ftsNeedsRebuild)
+        {
+            // The old index cannot host weighted source/section columns: drop it with its
+            // triggers, recreate in the new shape, and repopulate from the content table.
+            // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
+            // (or with an empty shell) that never heals on reopen.
+            await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         try
@@ -285,6 +289,84 @@ internal static class MemorySchema
                     new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             throw;
+        }
+        }
+
+        // Bucket-uniqueness indexes (F3; see docs/work/2026-08-06-extraction-followups-plan.md):
+        // one row per (path, hash) in the global shared tier, and per (path, hash, project,
+        // scope, context-label bucket) in the committed tiers. A violating legacy bank (the
+        // audited 14.2% duplicates) is deduped before the indexes are created, so creation
+        // can never fail on a real bank; if the dedupe itself fails the bank stays open
+        // (degraded — duplicates remain, indexes arrive on the next open). Deliberately
+        // softer than the FTS rebuild above, which rethrows: a bank must never fail to open.
+        var hasSharedIndex = await connection.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_shared_bucket'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false) is not null;
+        var hasCommittedIndex = await connection.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_committed_bucket'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false) is not null;
+        if (!hasSharedIndex || !hasCommittedIndex)
+        {
+            try
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                try
+                {
+                    // Dedupe first (survivor = earliest row; content is identical within a
+                    // group by construction — hash = SHA-256(path ‖ value)), then index.
+                    // The GROUP BY mirrors the index expressions exactly (COALESCE included);
+                    // NULL path/hash are guarded because GROUP BY equates them while the
+                    // UNIQUE indexes treat them as distinct.
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(
+                                """
+                                DELETE FROM entries
+                                WHERE scope = 'shared'
+                                  AND path IS NOT NULL AND hash IS NOT NULL
+                                  AND id NOT IN (SELECT MIN(id) FROM entries
+                                                 WHERE scope = 'shared'
+                                                 GROUP BY path, hash);
+
+                                DELETE FROM entries
+                                WHERE scope IN ('project', 'custom')
+                                  AND path IS NOT NULL AND hash IS NOT NULL
+                                  AND id NOT IN (SELECT MIN(id) FROM entries
+                                                 WHERE scope IN ('project', 'custom')
+                                                 GROUP BY path, hash, project_id, scope,
+                                                          COALESCE(context_label, ''));
+
+                                CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_shared_bucket
+                                    ON entries(path, hash)
+                                    WHERE scope = 'shared';
+
+                                CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
+                                    ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                                    WHERE scope IN ('project', 'custom');
+                                """,
+                                cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                    await connection.ExecuteAsync(
+                            new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                    await connection.ExecuteAsync(
+                            new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                    throw;
+                }
+            }
+            catch
+            {
+                // Degraded but open; the next open retries the dedupe + index creation.
+            }
         }
     }
 }
