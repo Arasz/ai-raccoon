@@ -154,9 +154,9 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 
 Only one environment variable is read:
 
-| Variable                  | Purpose                                                                                                         |
-|---------------------------|-----------------------------------------------------------------------------------------------------------------|
-| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (AES-256-CBC page-level via SQLite3MC, SQLite3MC.PCLRaw bundle; unset = plaintext) |
+| Variable                  | Purpose                                                                                                                             |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (page-level via SQLite3MC, SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet; unset = plaintext) |
 
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
@@ -430,8 +430,8 @@ the schema on first open with `IF NOT EXISTS` on every DDL statement — idempot
 safe to run on every bank open. No download-on-first-run provisioning, no per-RID
 extension binaries, no external SQLite modules.
 
-**Encryption at rest.** When `AIRACCOON_DB_PASSPHRASE` is set, the connection opens
-with `Password` in the connection string, enabling transparent AES-256-CBC per-page encryption via the bundled SQLite3MC engine. FTS5, vec0, and all SQL operations
+**Encryption at rest.** When `AIRACCOON_DB_PASSPHRASE` is set, the connection opens with `Password` in the connection string, enabling transparent page-level encryption via the bundled SQLite3MC engine (default cipher chacha20, sqleet
+ChaCha20-Poly1305 scheme; the scheme is stored per-database and auto-detected on open). FTS5, vec0, and all SQL operations
 work unchanged — encryption is at the page level, invisible to queries. Without
 the passphrase the bank is plaintext (backward compatible).
 

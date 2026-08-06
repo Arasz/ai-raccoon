@@ -41,7 +41,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
 | Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled)                                                                                                     | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
-| SQLite encryption (opt-in) | Transparent AES-256-CBC page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle) when `AIRACCOON_DB_PASSPHRASE` is set; FTS5 and vec0 work unchanged                               | Passphrase from environment variable          |
+| SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet) when `AIRACCOON_DB_PASSPHRASE` is set; FTS5 and vec0 work unchanged           | Passphrase from environment variable          |
 
 **The dangerous direction is the client that launches the process.** A stdio MCP server
 inherits the privileges of whatever starts it and trusts the protocol messages it reads —

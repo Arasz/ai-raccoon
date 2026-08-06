@@ -60,7 +60,7 @@ project-scope one. Projects partition the bank via context (`project:<id>`).
 | Rating and degradation        | search hits raise an entry's retrieval rating; sweeps remove old, low-rated project entries (`shared` is protected)                                                                                     |
 | Cloud sync (optional)         | `memory_sync` pushes/pulls VACUUM snapshots to S3 or Azure Blob with If-Match conflict detection                                                                                                        |
 | Access modes                  | `ro` (read-only), `rw` (read-write, default), `full` (adds destructive operations); per-project settings override the global default                                                                    |
-| Encryption at rest (optional) | set `AIRACCOON_DB_PASSPHRASE` for AES-256-CBC page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle); FTS5 and vec0 work unchanged                                                               |
+| Encryption at rest (optional) | set `AIRACCOON_DB_PASSPHRASE` for page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                           |
 
 The full contract (20 tools: 17 memory + 3 file-watcher, 2 prompts, parameters,
 error shapes) is in [docs/reference/agent-memory-server.md](docs/reference/agent-memory-server.md).
