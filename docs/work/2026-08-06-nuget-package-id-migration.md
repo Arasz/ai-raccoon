@@ -1,6 +1,6 @@
 # NuGet package id migration: arasz.ai-raccoon -> ai-raccoon
 
-Date: 2026-08-06. Task: ai-raccoon-package-id. PR: (this task's PR).
+Date: 2026-08-06. Task: ai-raccoon-package-id. PR: #53 (this task).
 
 ## Context
 
