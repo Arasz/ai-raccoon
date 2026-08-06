@@ -36,7 +36,7 @@ public class MemoryToolsTests
         _tools = new MemoryTools(_store, _sync, workspaces, sweeper, new MemoryAccessGuard(_store),
             new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
-            new ToolCallMetrics());
+            new ToolCallMetrics(), new SharedExtractionService());
     }
 
     private void SeedSyncSettings(string? objectKey = null)
@@ -57,6 +57,73 @@ public class MemoryToolsTests
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.Write("", "content", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("project_id");
+    }
+
+    [Fact]
+    public async Task ShareExtract_Propose_ReturnsCandidates_WithoutSharing()
+    {
+        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
+            "organic fact about job-search-ai-assistant", null, 0.5, 0,
+            DateTimeOffset.UtcNow.AddDays(-5), null));
+
+        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Candidates.ShouldHaveSingleItem();
+        result.Candidates[0].Hash.ShouldBe("h1");
+        result.Candidates[0].Reasons.ShouldContain("organic-write");
+        result.PromotedHashes.ShouldBeEmpty();
+        _store.Shared.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ShareExtract_Promote_SharesTheTopCandidates()
+    {
+        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
+            "organic fact about job-search-ai-assistant", null, 0.5, 0,
+            DateTimeOffset.UtcNow.AddDays(-5), null));
+
+        var result = await _tools.ShareExtract(["acme"], mode: "promote",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.PromotedHashes.ShouldBe(["h1"]);
+        _store.Shared.ShouldBe(("acme", "h1"));
+    }
+
+    [Fact]
+    public async Task ShareExtract_AlreadySharedValue_IsExcluded()
+    {
+        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md", "same fact", null, 0.5, 0,
+            DateTimeOffset.UtcNow.AddDays(-5), null));
+        _store.Index = new SharedIndex(["samefact"], []);
+
+        var result = await _tools.ShareExtract(["acme"], cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Candidates.ShouldBeEmpty();
+        _store.Shared.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ShareExtract_InvalidProjectIds_ThrowsTyped()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract([], cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("invalid-params");
+    }
+
+    [Fact]
+    public async Task ShareExtract_InvalidMode_ThrowsTyped()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract(["acme"], mode: "auto", cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("invalid-params");
+    }
+
+    [Fact]
+    public async Task ShareExtract_InvalidLimit_ThrowsTyped()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract(["acme"], limit: 0, cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("invalid-params");
     }
 
     [Fact]
@@ -314,6 +381,17 @@ public class MemoryToolsTests
             Shared = (projectId, hash);
             return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
         }
+
+        public List<ExtractionCandidateRow> Candidates { get; } = [];
+
+        public SharedIndex Index { get; set; } = new([], []);
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>(Candidates);
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Index);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
 

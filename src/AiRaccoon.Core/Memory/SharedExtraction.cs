@@ -32,3 +32,6 @@ public sealed record ShareCandidate(
 public sealed record ShareExtractResult(
     IReadOnlyList<ShareCandidate> Candidates,
     IReadOnlyList<string> PromotedHashes);
+
+/// <summary>Dedup index over the existing shared tier.</summary>
+public sealed record SharedIndex(IReadOnlyList<string> Values, IReadOnlyList<string> Paths);

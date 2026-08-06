@@ -37,7 +37,7 @@ public sealed class MemoryToolsAccessModeTests
         _tools = new MemoryTools(_store, new FakeSyncService(), workspaces, sweeper,
             new MemoryAccessGuard(_store), new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
-            new ToolCallMetrics());
+            new ToolCallMetrics(), new SharedExtractionService());
     }
 
     private void SetMode(string? global = null, string? perProject = null)
@@ -82,6 +82,21 @@ public sealed class MemoryToolsAccessModeTests
         var results = await _tools.Search("acme-web", "query", cancellationToken: TestContext.Current.CancellationToken);
         results.Results.Count.ShouldBe(1);
         results.Results[0].Snippet.ShouldBe("content");
+    }
+
+    // Scenario: propose is a read (allowed in ro); promote is a write (denied below rw).
+    [Fact]
+    public async Task RoMode_ShareExtractProposeAllowed_PromoteDenied()
+    {
+        SetMode(perProject: "ro");
+
+        var result = await _tools.ShareExtract(["acme-web"], cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Candidates.ShouldBeEmpty();
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.ShareExtract(["acme-web"], mode: "promote", cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("access-denied");
     }
 
     // Scenario 3: full allows removal.
@@ -202,6 +217,13 @@ public sealed class MemoryToolsAccessModeTests
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>([]);
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SharedIndex([], []));
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
 
