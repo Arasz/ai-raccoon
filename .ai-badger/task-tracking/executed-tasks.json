@@ -917,11 +917,12 @@
       "branch": "task/improve-sqlite",
       "risk": false,
       "startedAt": "2026-08-06T19:13:33.821047+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+        "finishedAt": "2026-08-06T19:46:42.127934+00:00",
+        "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_210525_3b6e27",
-      "resumeAttempts": []
+        "resumeAttempts": [],
+        "stateJsonUpdated": true
     }
   ]
 }
