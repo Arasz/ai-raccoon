@@ -254,7 +254,7 @@ public class ConfigCommandsAccessModelTests
         {
             Settings =
             {
-                ["embedding.baseUrl"] = "https://old.example.com",
+                ["embedding.baseUrl"] = "https://stdin, TestContext.Current.CancellationToken.example.com",
                 ["embedding.apiKey"] = "k"
             }
         };

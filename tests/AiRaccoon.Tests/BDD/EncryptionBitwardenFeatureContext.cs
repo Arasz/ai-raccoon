@@ -90,7 +90,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
     }
 
-    /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
+    /// <summary>Directory hCancellationToken.None,
+            encryptionCommands: encryptionCommandsing the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
     public string FakeBwsDir { get; }
 
     /// <summary>

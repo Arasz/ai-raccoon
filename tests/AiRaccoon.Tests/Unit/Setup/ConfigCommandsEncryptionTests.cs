@@ -542,7 +542,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_NullEncryptionState_ThrowsArgumentNullException()
+    public void Constructor_NullSidecar_ThrowsArgumentNullException()
     {
         Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),

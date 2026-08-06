@@ -26,8 +26,9 @@ namespace AiRaccoon.Setup.Cli.Commands;
 internal static class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
-        IEncryptionCommands? encryptionCommands = null, IWatchStore? watchStore = null)
+        TextWriter stdout, TextWriter stderr, TextReader stdin,
+        IEncryptionCommands? encryptionCommands = null, IWatchStore? watchStore = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
