@@ -30,6 +30,15 @@
     },
     {
       "category": "uncategorized",
+      "name": "dotnet-bdd-testing",
+      "sourceHash": "6310a1e0f100fc5eac1894f9beda4906f29f895473b2dc5cc55b05c3b8c1a786",
+      "sourcePath": "software-development/dotnet-bdd-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:45Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-bdd-testing"
+    },
+    {
+      "category": "uncategorized",
       "name": "dotnet-domain-modeling",
       "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
       "sourcePath": "software-development/dotnet-domain-modeling",
@@ -63,6 +72,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T11:12:36Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "git-worktree-isolation",
+      "sourceHash": "22478618d371437213b272e5fb35699f08a2389ebbae72b0bf0a0d75c26d2656",
+      "sourcePath": "git-worktree-isolation",
+      "status": "synced",
+      "syncedAt": "2026-08-06T11:49:02Z",
+      "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
     },
     {
       "category": "uncategorized",
