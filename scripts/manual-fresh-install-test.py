@@ -4,8 +4,12 @@
 Proves a clean install from nuget.org works perfectly first try: all deps present,
 no missing models, no silent repair. Post-publish complement to scripts/verify-tool-package.sh
 (the pre-publish gate). Run from anywhere; everything happens in temp dirs and never touches
-~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.7 (pin must be
-bumped after each republish — NuGet versions are immutable).
+~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.8 (pin must be
+bumped after each republish — NuGet versions are immutable). Source override:
+AI_RACCOON_SOURCE=local installs from the repo's .nupkg-local (pre-publish dress
+rehearsal of the same shell+payload nuget.org receives); default nuget fetches from
+nuget.org. In local mode, first build the worktree with DOTNET_ENV=local (the
+DeployToLocalSource target packs host-RID into .nupkg-local).
 
 Protocol (revised per architect plan review deleg_98028a5e):
   0. env preconditions: runtimes, uname, NUGET_PACKAGES isolated, unset AIRACCOON_DB_PASSPHRASE
@@ -37,6 +41,8 @@ import time
 import uuid
 
 VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.8")
+SOURCE = os.environ.get("AI_RACCOON_SOURCE", "nuget")  # "nuget" | "local" (.nupkg-local)
+LOCAL_SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".nupkg-local"))
 # NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
 # this script, scripts/verify-tool-package.sh, and scripts/download-embedding-model.sh.
 # After every model swap (or republish of a new bundle), re-derive the hashes from
@@ -81,9 +87,15 @@ shutil.rmtree(http_cache, ignore_errors=True)
 env = dict(os.environ)
 check("no inherited AIRACCOON_DB_PASSPHRASE", had_passphrase is None, f"inherited={had_passphrase!r}")
 
-print("== step 1: fresh install from nuget.org ==")
+print("== step 1: fresh install" + (" from nuget.org" if SOURCE == "nuget" else " from .nupkg-local") + " ==")
 t0 = time.time()
-r = run(["dotnet", "tool", "install", "--tool-path", TOOLPATH, "--version", VERSION, "arasz.ai-raccoon"], env=env, timeout=300)
+install_cmd = ["dotnet", "tool", "install", "--tool-path", TOOLPATH, "--version", VERSION, "arasz.ai-raccoon"]
+if SOURCE == "local":
+    if not os.path.isdir(LOCAL_SOURCE_DIR):
+        print(f"FAIL: AI_RACCOON_SOURCE=local but {LOCAL_SOURCE_DIR} missing — build with DOTNET_ENV=local first", file=sys.stderr)
+        sys.exit(1)
+    install_cmd += ["--add-source", LOCAL_SOURCE_DIR]
+r = run(install_cmd, env=env, timeout=300)
 install_ok = r.returncode == 0
 check("dotnet tool install exits 0", install_ok, r.stderr.strip()[-300:] if not install_ok else "")
 print(f"    install took {time.time()-t0:.1f}s")

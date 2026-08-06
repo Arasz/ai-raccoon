@@ -6,10 +6,11 @@ Status: Accepted
 
 ## Context
 
-Before this ADR, AiRaccoon had no observability surface. The 17-tool MCP server
-exposed no metrics, no tracing, and no structured telemetry — every call into
-`MemoryTools` was a black box. Operators had no way to answer basic questions:
-how many calls per tool, how long do they take, which tools fail most often.
+Before this ADR, AiRaccoon had no observability surface. The 19-tool MCP server
+(16 `memory_*` + 3 `watch_*`) exposed no metrics, no tracing, and no structured
+telemetry — every call into `MemoryTools` was a black box. Operators had no way
+to answer basic questions: how many calls per tool, how long do they take,
+which tools fail most often.
 
 The .NET BCL ships a production-grade observability foundation —
 `System.Diagnostics.Metrics` and `System.Diagnostics.ActivitySource` — that
@@ -58,6 +59,7 @@ tool call. Tags attached to the span:
 | `tool` | MCP tool name |
 | `project_id` | Project identifier from the call |
 | `result` | `"success"` or `"error"` |
+| `error_type` | Exception type name when `result` is `"error"`; absent on success |
 
 The `Activity` wraps the tool body in a `try`/`catch`: `SetStatus(Error)` on
 failure, `SetStatus(Ok)` on success. This gives `dotnet-trace` and OTel
@@ -65,26 +67,31 @@ collectors a clean error/success signal per span.
 
 ### Instrumentation pattern
 
-Instrumentation is inlined in each `MemoryTools` method — 3–5 lines wrapping
-the existing body. No decorator class, no interceptor, no AOP. Each tool gets:
+Instrumentation is centralized in the `ToolExecutionActivity` helper: one object
+per tool call that starts the `Activity` (ctor: `tool` + `project_id` tags),
+times the call, and records the invocation metric on success or error. Each
+tool method is 3–5 lines:
 
 ```csharp
-var activity = _metrics.ActivitySource.StartActivity();
-var started = Stopwatch.GetTimestamp();
+using var activity = new ToolExecutionActivity(observability, TnMemoryWrite, projectId);
 try
 {
-    return await DoTheWork(...);
+    // ... tool body ...
+    activity.RecordInvocation();
+    return result;
 }
 catch (Exception ex)
 {
-    activity?.SetStatus(ActivityStatusCode.Error);
-    _metrics.Record(tool, "error", ex.GetType().Name, Elapsed(started));
+    activity.RecordError(ex);
     throw;
 }
-activity?.SetStatus(ActivityStatusCode.Ok);
-`_metrics.Record(tool, "success", null, sw.Elapsed);`
-return result;
 ```
+
+`RecordInvocation()` marks the activity `Ok` + `result=success` and records the
+metric; `RecordError(ex)` marks it `Error` + `error_type`/`result=error` and
+records the error metric; `Dispose()` stops the activity. No decorator class, no
+interceptor, no AOP — the helper is the single place the tags/status/metrics
+contract lives, so the 19 tools cannot drift apart.
 
 ### ToolCallMetrics class
 
@@ -122,10 +129,10 @@ EventPipe — no exporter, no collector, no configuration.
 - **The meter name is discoverable**: `dotnet-counters list` shows
   `AiRaccoon.MemoryTools` by name, and the OTel SDK's `.AddMeter(...)` call
   takes the same string.
-- **Inlining means copy-paste risk**: 17 tools × 5 lines = ~85 lines of
-  boilerplate. A future ADR may extract a helper to reduce repetition, but
-  Wave 0 keeps it explicit so every tool's instrumentation is visible in one
-  place.
+- **The helper centralizes the contract**: `ToolExecutionActivity` is the single
+  place tags/status/metrics are set (extracted 2026-08-06 from the inline
+  pattern below), so the 19 tools cannot drift apart and adding a 20th tool is
+  the same 3–5 lines.
 
 ## Non-Goals (explicit)
 
@@ -161,9 +168,9 @@ implementation:
    value so no project identifier appears in plain text in an external
    collector.
 
-4. **Helper extraction**: after 17 tools are instrumented, evaluate whether a
-   shared helper (e.g., `InstrumentedCall`) reduces boilerplate without hiding
-   behavior. This is a refactoring decision, not an architecture one.
+4. **Helper extraction**: done 2026-08-06 — `ToolExecutionActivity` (see
+   *Instrumentation pattern* above) is the shared helper; the 19 tools use it
+   uniformly.
 
 ## Alternatives considered
 
