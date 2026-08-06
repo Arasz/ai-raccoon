@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using FluentValidation;
+using JetBrains.Annotations;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -46,6 +47,12 @@ public sealed class MemoryTools(
     private const string TnMemorySweep = "memory_sweep";
     private const string TnMemorySync = "memory_sync";
 
+    private const string ToolActivityTag = "tool";
+    private const string ProjectIdActivityTag = "project_id";
+    private static readonly SearchQuery.Validator SearchQueryValidator = new();
+    private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
+
+
     private static void RequireProjectId(string? projectId)
     {
         if (string.IsNullOrWhiteSpace(projectId))
@@ -79,8 +86,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryWrite);
-        activity?.SetTag("tool", TnMemoryWrite);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryWrite);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -88,7 +95,7 @@ public sealed class MemoryTools(
             await RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
 
             var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
-            new MemoryWriteRequest.Validator().ValidateAndThrow(request);
+            await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
@@ -128,8 +135,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemorySearch);
-        activity?.SetTag("tool", TnMemorySearch);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemorySearch);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -146,7 +153,8 @@ public sealed class MemoryTools(
 
             var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
                 rrfK, ftsWeight, vectorWeight, contextLabel);
-            new SearchQuery.Validator().ValidateAndThrow(searchQuery);
+
+            await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
@@ -168,8 +176,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryList);
-        activity?.SetTag("tool", TnMemoryList);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryList);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -195,8 +203,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryStats);
-        activity?.SetTag("tool", TnMemoryStats);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryStats);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -225,8 +233,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryShare);
-        activity?.SetTag("tool", TnMemoryShare);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryShare);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -256,8 +264,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryDelete);
-        activity?.SetTag("tool", TnMemoryDelete);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryDelete);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -287,8 +295,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryDeleteContext);
-        activity?.SetTag("tool", TnMemoryDeleteContext);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryDeleteContext);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -320,8 +328,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestFile);
-        activity?.SetTag("tool", TnMemoryIngestFile);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryIngestFile);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -353,8 +361,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestDirectory);
-        activity?.SetTag("tool", TnMemoryIngestDirectory);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryIngestDirectory);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -385,8 +393,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryEmbedPending);
-        activity?.SetTag("tool", TnMemoryEmbedPending);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryEmbedPending);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -418,8 +426,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceBegin);
-        activity?.SetTag("tool", TnMemoryWorkspaceBegin);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceBegin);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -447,8 +455,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceStatus);
-        activity?.SetTag("tool", TnMemoryWorkspaceStatus);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceStatus);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -480,8 +488,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceConsolidate);
-        activity?.SetTag("tool", TnMemoryWorkspaceConsolidate);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceConsolidate);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -511,8 +519,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceDiscard);
-        activity?.SetTag("tool", TnMemoryWorkspaceDiscard);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemoryWorkspaceDiscard);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -543,8 +551,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemorySweep);
-        activity?.SetTag("tool", TnMemorySweep);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemorySweep);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -576,8 +584,8 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TnMemorySync);
-        activity?.SetTag("tool", TnMemorySync);
-        activity?.SetTag("project_id", projectId);
+        activity?.SetTag(ToolActivityTag, TnMemorySync);
+        activity?.SetTag(ProjectIdActivityTag, projectId);
         var sw = Stopwatch.StartNew();
         try
         {
@@ -654,35 +662,51 @@ public sealed class MemoryTools(
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record StatsResult(int Entries, int Pending, IReadOnlyList<string> Contexts);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ShareResult(bool Shared, string Context);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record DeletedResult(int Deleted);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record DeletedContextResult(int Deleted);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WorkspaceDiscardResult(int Discarded);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record IngestResult(int Indexed);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ScannedResult(int Scanned);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record EmbedResult(int Processed, int Pending);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WorkspaceBeginResult(string WorkspaceId, string Context);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WorkspaceStatusResult(IReadOnlyList<MemoryEntry> Entries, int Count);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ConsolidationToolResult(int Promoted, int Discarded);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SweepResult(IReadOnlyList<SweepCandidate> Candidates, IReadOnlyList<string> Deleted);
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SyncToolResult(int Sent, int Received, int Reindexed);
 }

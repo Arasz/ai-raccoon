@@ -32,15 +32,15 @@ public class SearchQueryTests
         query.RrfK.ShouldBe(60);
         query.FtsWeight.ShouldBe(1);
         query.VectorWeight.ShouldBe(1);
-        query.CandidateWindow.ShouldBe(CandidateWindowMode.Max3x100);
+        query.CandidateWindow.ShouldBe(CandidateWindowMode.Max3X100);
     }
 
     [Fact]
     public void Constructor_WithCandidateWindow_KeepsIt()
     {
-        var query = new SearchQuery("acme", "search", CandidateWindow: CandidateWindowMode.Max5x50);
+        var query = new SearchQuery("acme", "search", CandidateWindow: CandidateWindowMode.Max5X50);
 
-        query.CandidateWindow.ShouldBe(CandidateWindowMode.Max5x50);
+        query.CandidateWindow.ShouldBe(CandidateWindowMode.Max5X50);
     }
 
     [Fact]

@@ -27,27 +27,27 @@ workspace's isolated context.
 no longer an MCP tool — the CLI verbs are the single config channel (see
 [Command-line options](#command-line-options)).
 
-| Tool | Parameters | Returns |
-|---|---|---|
-| `memory_write` | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?` | `{hash, path, context, createdAt}` |
-| `memory_search` | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
-| `memory_list` | `projectId` | `{files: <json tree>}` |
-| `memory_stats` | `projectId` | `{entries, pending, contexts}` |
-| `memory_share` | `projectId`, `hash` | `{shared: true, context: "shared"}` |
-| `memory_delete` | `projectId`, `hash` | `{deleted: 0\|1}` |
-| `memory_delete_context` | `projectId`, `context` | `{deleted: n}` |
-| `memory_ingest_file` | `projectId`, `path`, `context?` | `{indexed: 0\|1}` |
-| `memory_ingest_directory` | `projectId`, `path`, `context?` | `{scanned: n}` |
-| `memory_embed_pending` | `projectId`, `limit?` | `{processed, pending}` |
-| `memory_watch_add` | `projectId`, `path` | `{projectId, path}` |
-| `memory_watch_status` | `projectId` | `{watches: [{projectId, path, state, lastError?, lastSync?}]}` |
-| `memory_watch_remove` | `projectId`, `path` | `{projectId, path}` |
-| `memory_workspace_begin` | `projectId`, `agentId?`, `name?` | `{workspaceId, context}` |
-| `memory_workspace_status` | `projectId`, `workspaceId` | `{entries, count}` |
-| `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep` | `{promoted, discarded}` |
-| `memory_workspace_discard` | `projectId`, `workspaceId` | `{discarded}` |
-| `memory_sweep` | `projectId`, `dryRun=true` | `{candidates, deleted}` |
-| `memory_sync` | `projectId` | `{sent, received, reindexed}` |
+| Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
+|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
+| `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
+| `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
+| `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
+| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
+| `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
+| `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
+| `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
+| `memory_embed_pending`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
+| `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
+| `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
+| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count}`                                                                                 |
+| `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
+| `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
+| `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
+| `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
 
 ### Notes on the less obvious tools
 
