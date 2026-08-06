@@ -3901,6 +3901,22 @@
           "delegationId": "deleg_031be5c1",
           "model": "deepseek-v4-flash",
           "apiCalls": 41
+        },
+        {
+          "description": "WP2: idle watchdog",
+          "at": "2026-08-06T16:12:10.577954+00:00",
+          "totalTokens": 16114956,
+          "delegationId": "deleg_efef0b2f",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 97
+        },
+        {
+          "description": "WP3: serve runtime + attach",
+          "at": "2026-08-06T16:12:10.750269+00:00",
+          "totalTokens": 23157926,
+          "delegationId": "deleg_c49d8752",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 122
         }
       ],
       "grade": null,
@@ -3956,7 +3972,7 @@
         "cacheReadTokens": 0,
         "cacheCreationTokens": 0,
         "cacheEfficiency": null,
-        "subagentTokens": 14050705,
+        "subagentTokens": 53323587,
         "contextTokensAtStart": 0,
         "contextTokensAtFinish": 0,
         "contextGrowth": 0,

@@ -220,10 +220,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-mcp-server",
-      "sourceHash": "dbf38121f5b95508e47623d762605251ab551795dafc22589cd8e620889acfe3",
+      "sourceHash": "a4185049cd32f9fea5378d852a9f3bb8d50e873549fd9161eec080459cc9da75",
       "sourcePath": "software-development/dotnet-mcp-server",
       "status": "synced",
-      "syncedAt": "2026-08-06T15:28:55Z",
+      "syncedAt": "2026-08-06T16:15:59Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-mcp-server"
     },
     {
@@ -378,6 +378,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T15:43:06Z",
       "target": ".ai-badger/skills/learned/uncategorized/review-gate-diff-verification"
+    },
+    {
+      "category": "uncategorized",
+      "name": "scripts-tooling-refactor",
+      "sourceHash": "dc66532f9965e0ad6f8f8d9c2704623c0126744e1c9491c0c7673d31f2ba456f",
+      "sourcePath": "software-development/scripts-tooling-refactor",
+      "status": "synced",
+      "syncedAt": "2026-08-06T16:17:40Z",
+      "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
     },
     {
       "category": "uncategorized",
