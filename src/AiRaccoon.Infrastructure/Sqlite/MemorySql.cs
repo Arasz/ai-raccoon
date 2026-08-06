@@ -4,11 +4,15 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class MemorySql
 {
     // embed_state defaults to 'pending': every write lands deferred until the embed pipeline runs.
+    // ON CONFLICT DO NOTHING (bare — expression/partial unique indexes cannot be conflict targets)
+    // makes concurrent same-bucket inserts converge: the loser returns the winner's row via the
+    // post-insert bucket-key re-read (F3; see docs/work/2026-08-06-extraction-followups-plan.md).
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                            workspace_id, agent_id, created_at, updated_at)
                                       VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
                                               @workspaceId, @agentId, @createdAt, @updatedAt)
+                                      ON CONFLICT DO NOTHING
                                       """;
 
     public const string SelectEntryById = """
@@ -66,6 +70,26 @@ internal static class MemorySql
                                                       AND context_label IS @contextLabel AND workspace_id IS @workspaceId
                                                     LIMIT 1
                                                     """;
+
+    // The shared tier is cross-project (uq_entries_shared_bucket is global): the loser of a
+    // concurrent cross-project promote must find the winner's row without a project filter (F3).
+    public const string SelectSharedEntryByPathAndHash = """
+                                                         SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                                project_id AS ProjectId, context_label AS ContextLabel,
+                                                                workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                         FROM entries
+                                                         WHERE path = @path AND hash = @hash AND scope = 'shared'
+                                                           AND workspace_id IS NULL
+                                                         LIMIT 1
+                                                         """;
+
+    public const string SelectChunkIdByPathAndHashInBucket = """
+                                                             SELECT id FROM entries
+                                                             WHERE path = @path AND hash = @hash
+                                                               AND scope IS @scope AND project_id = @projectId
+                                                               AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                             LIMIT 1
+                                                             """;
 
     public const string EntryExistsByPathAndHashInBucket = """
                                                            SELECT 1 FROM entries

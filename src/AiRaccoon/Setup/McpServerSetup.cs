@@ -1,6 +1,7 @@
 using System.Net;
 using AiRaccoon.Prompts;
 using AiRaccoon.Tools;
+using DotNext.Collections.Generic;
 
 namespace AiRaccoon.Setup;
 
@@ -44,11 +45,12 @@ internal static partial class McpServerSetup
     private static IHost CreateAppHost(ServerConfig config)
     {
         var builder = Host.CreateApplicationBuilder();
-        builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        builder.Services.RegisterMemoryServices(config.Options, registerExtractionHostedService: false);
+        builder.Configuration.Sources.Clear();
+        var mcpTransport = IReadOnlyList<McpTransport>.Singleton(McpTransport.Stdio);
+        builder.Services.RegisterMemoryServices(config.Options, mcpTransport);
         builder.Services
             .AddMcpServer()
-            .ConfigureMcpTransport([McpTransport.Stdio], builder.Logging)
+            .ConfigureMcpTransport(mcpTransport, builder.Logging)
             .WithTools<MemoryTools>()
             .WithTools<WatchTools>()
             .WithPrompts<MemoryPrompts>();
@@ -57,12 +59,10 @@ internal static partial class McpServerSetup
 
     private static IHost CreateWebHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports)
     {
-        var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
-        builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        builder.Services.RegisterMemoryServices(config.Options);
+        var builder = WebApplication.CreateBuilder([]);
+        builder.Configuration.Sources.Clear();
+        builder.Services.RegisterMemoryServices(config.Options, transports);
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        // Explicit endpoint: bind the configured port (7721 default, 0 = random) instead
-        // of the ASP.NET default 5000, which collides with other listeners on the host.
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
         builder.ConfigureMcpServer(transports);
         return builder.Build().ConfigureMcpEndpoints(transports);

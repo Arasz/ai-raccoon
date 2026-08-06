@@ -90,6 +90,23 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task ShareExtract_DefaultLimit_MatchesSharedConstant()
+    {
+        // 25 eligible rows: the default limit must bind at the shared constant, not a literal.
+        for (var i = 0; i < 25; i++)
+        {
+            _store.Candidates.Add(new ExtractionCandidateRow($"h{i:00}", $"h{i:00}.md",
+                $"organic fact number {i}", null, 0.5, 0,
+                DateTimeOffset.UtcNow.AddDays(-5), null));
+        }
+
+        var result = await _tools.ShareExtract(["acme"],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Candidates.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
+    }
+
+    [Fact]
     public async Task ShareExtract_AlreadySharedValue_IsExcluded()
     {
         _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md", "same fact", null, 0.5, 0,

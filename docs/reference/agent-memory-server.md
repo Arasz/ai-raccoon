@@ -228,7 +228,8 @@ ai-raccoon encryption unset
 
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
-# config changes apply live, no server restart needed)
+# config changes apply live, no server restart needed; propose logs the ranked
+# candidates — path, preview, reasons — to the server log)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}

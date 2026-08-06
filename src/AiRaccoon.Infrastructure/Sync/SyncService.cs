@@ -233,6 +233,9 @@ public partial class SyncService(
                 var received = 0;
 
                 // Merge entries: content-addressed near-union (skip duplicates).
+                // OR IGNORE also absorbs the F3 unique-bucket constraints: a replica pushing a
+                // row the local bank already has (same path/hash bucket) is silently skipped and
+                // converges on the next write (see docs/work/2026-08-06-extraction-followups-plan.md).
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     mergeEntries.CommandText = """

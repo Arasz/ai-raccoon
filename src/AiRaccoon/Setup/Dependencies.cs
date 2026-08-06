@@ -26,8 +26,7 @@ public static partial class Dependencies
 {
     extension(IServiceCollection services)
     {
-        public void RegisterMemoryServices(InfrastructureOptions options,
-            bool registerExtractionHostedService = true)
+        public void RegisterMemoryServices(InfrastructureOptions options, IReadOnlyCollection<McpTransport> mcpTransport)
         {
             services.AddSingleton(options);
             services.AddSingleton(TimeProvider.System);
@@ -65,20 +64,28 @@ public static partial class Dependencies
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
             services.AddSingleton<SharedExtractionService>();
-            if (registerExtractionHostedService)
-            {
-                // HTTP/S hosts only: a pure-stdio process is per-connection (clients recycle
-                // it in minutes), so its 30-60 min extraction loop can never fire.
-                services.AddHostedService<ExtractionHostedService>();
-            }
+
+
             services.AddSingleton<ForgettingPolicyService>();
-            services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
-                sp.GetRequiredService<IMemoryStore>()));
+            services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(sp.GetRequiredService<IMemoryStore>()));
             services.AddSingleton<ToolCallMetrics>();
 
-            // Watch services resolve the same MemoryExtensionHost-decorated IMemoryStore, so
-            // extension hooks (OnSourceChangedAsync) observe watcher digests. The hosted
-            // service + catch-up/event-source registrations land in S5 (next wave).
+            services.RegisterWatchServices();
+
+            services.RegisterExtractionBackgroundService(mcpTransport);
+            services.RegisterWatchSyncBackgroundService();
+        }
+
+        private void RegisterExtractionBackgroundService(IReadOnlyCollection<McpTransport> mcpTransport)
+        {
+            if (mcpTransport.Contains(McpTransport.Http) || mcpTransport.Contains(McpTransport.Https))
+            {
+                services.AddHostedService<ExtractionHostedService>();
+            }
+        }
+
+        private void RegisterWatchServices()
+        {
             services.AddSingleton<WatchStore>();
             services.AddSingleton<IWatchStore>(sp => sp.GetRequiredService<WatchStore>());
             services.AddSingleton<WatchRetryPolicy>();
@@ -86,10 +93,10 @@ public static partial class Dependencies
             services.AddSingleton<WatchScheduler>();
             services.AddSingleton<WatchPipeline>();
             services.AddSingleton<IWatchService, WatchService>();
+        }
 
-            // S5 watcher lifecycle: catch-up scans, the FileSystemWatcher adapter (adapter
-            // failures surface as synthetic WatchEventError events — logged, never thrown),
-            // and the hosted re-watch loop that starts/stops watchers on a poll.
+        private void RegisterWatchSyncBackgroundService()
+        {
             services.AddSingleton<WatchCatchUp>();
             services.AddSingleton(sp =>
             {

@@ -11,7 +11,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     private const string NotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot();
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 

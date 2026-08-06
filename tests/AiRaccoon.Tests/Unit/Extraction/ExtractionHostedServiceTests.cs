@@ -1,7 +1,9 @@
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -143,12 +145,15 @@ public sealed class ExtractionHostedServiceTests
             throw new NotImplementedException();
     }
 
-    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service) NewStack()
+    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service) NewStack() =>
+        NewStack(NullLogger<ExtractionHostedService>.Instance);
+
+    private static (FakeStore Store, FakeTimeProvider Time, ExtractionHostedService Service) NewStack(
+        ILogger<ExtractionHostedService> logger)
     {
         var store = new FakeStore();
         var time = new FakeTimeProvider(FixedNow);
-        var service = new ExtractionHostedService(store, new SharedExtractionService(), time,
-            NullLogger<ExtractionHostedService>.Instance);
+        var service = new ExtractionHostedService(store, new SharedExtractionService(), time, logger);
         return (store, time, service);
     }
 
@@ -198,6 +203,21 @@ public sealed class ExtractionHostedServiceTests
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
         store.Shared.ShouldBe([("acme", "h1")]);
+    }
+
+    [Fact]
+    public async Task RunOnce_PromoteMode_CapsAtSharedDefault()
+    {
+        var (store, _, service) = NewStack();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = Enumerable.Range(0, 25)
+            .Select(i => Row($"h{i:00}", sourceFile: null, value: $"organic fact number {i}"))
+            .ToList();
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Shared.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
     }
 
     [Fact]
@@ -296,5 +316,86 @@ public sealed class ExtractionHostedServiceTests
 
         await cts.CancelAsync();
         await run;
+    }
+
+    [Fact]
+    public async Task RunOnce_Cancelled_PropagatesOperationCanceled_WithoutProjectFailedLog()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", sourceFile: null, value: "organic fact about beta")];
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        store.ExtractionError = new OperationCanceledException(); // BARE — no token attached
+
+        await Should.ThrowAsync<OperationCanceledException>(() => service.RunOnceAsync(cts.Token));
+
+        store.ExtractionCalls.ShouldBe(1); // aborts at acme; beta never scanned
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 503);
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task RunOnce_UncancelledOce_IsTolerated_OthersStillProcessed()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["beta"] = [Row("h9", sourceFile: null, value: "organic fact about acme")];
+        using var cts = new CancellationTokenSource(); // NOT cancelled
+        store.ExtractionError = new OperationCanceledException("boom");
+
+        await Should.NotThrowAsync(() => service.RunOnceAsync(cts.Token));
+
+        store.Shared.ShouldBe([("beta", "h9")]);
+        logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 503 && r.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task RunOnce_ProposeMode_LogsRankedCandidateDetails()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Candidates["acme"] =
+        [
+            Row("h1", sourceFile: null, value: "organic fact about beta"),   // organic-write + cross-project
+            Row("h2", sourceFile: null, value: "another organic fact"),       // organic-write only
+            Row("h3", sourceFile: "docs/x.md", value: "plain fact")           // below floor → excluded
+        ];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var records = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 507).ToList();
+        records.Count.ShouldBe(2);
+        records.ShouldAllBe(r => r.Level == LogLevel.Information);
+        records[0].Message.ShouldContain("#1");
+        records[0].Message.ShouldContain("acme");
+        records[0].Message.ShouldContain("h1.md");
+        records[0].Message.ShouldContain("organic-write");
+        records[0].Message.ShouldContain("cross-project");
+        records[0].Message.ShouldContain("organic fact about beta");
+        // Rank ordering: #1 before #2 in emission order (the list is pre-sorted by score).
+        records[1].Message.ShouldContain("#2");
+        // Counts line still emitted alongside the details.
+        logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 502);
+    }
+
+    [Fact]
+    public async Task RunOnce_PromoteMode_LogsCountsOnly_NoCandidateDetails()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", sourceFile: null, value: "organic fact about beta")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 502);       // pass ran
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 507);    // no candidate details
     }
 }

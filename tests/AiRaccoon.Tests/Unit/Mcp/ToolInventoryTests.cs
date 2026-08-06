@@ -54,8 +54,7 @@ public class ToolInventoryTests
         var constValues = new Dictionary<string, string>();
         foreach (var f in constFields)
         {
-            var val = f.GetRawConstantValue() as string;
-            if (val is not null)
+            if (f.GetRawConstantValue() is string val)
             {
                 constValues[val] = f.Name;
             }

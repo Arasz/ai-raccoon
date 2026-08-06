@@ -7,6 +7,9 @@ namespace AiRaccoon.Core.Memory;
 /// </summary>
 public sealed class SharedExtractionService
 {
+    /// <summary>Per-pass candidate cap, shared by the hosted loop and the MCP tool default (single source; see docs/work/2026-08-06-extraction-followups-plan.md S10).</summary>
+    public const int DefaultCandidateLimit = 20;
+
     private const int PreviewLength = 300;
     private const double CandidateFloor = 1.0;
 

@@ -4,6 +4,8 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Application">
+    <PackageVersion Include="DotNext" Version="6.6.0" />
+    <PackageVersion Include="DotNext.Threading" Version="6.6.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <PackageVersion Include="ModelContextProtocol" Version="2.1.0" />

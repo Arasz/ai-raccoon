@@ -176,7 +176,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         reembedded.Item1.EmbedState.ShouldBe("embedded");
         reembedded.Item2.EmbedState.ShouldBe("embedded");
         EmbeddingBlob.ToFloats(reembedded.Item1.Embedding)[0].ShouldBe(
-            FakeEmbeddingEndpoint.VectorFor("fact one for engine switch", 0)[0]);
+            FakeEmbeddingEndpoint.VectorFor("fact one for engine switch")[0]);
         EmbeddingBlob.ToFloats(reembedded.Item2.Embedding)[0].ShouldBe(
             FakeEmbeddingEndpoint.VectorFor("fact two for engine switch", 1)[0]);
         (await CountVecRowsAsync()).ShouldBe(2);
@@ -233,8 +233,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("ai-raccoon-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot();
 
     private sealed class EntryRow
     {
