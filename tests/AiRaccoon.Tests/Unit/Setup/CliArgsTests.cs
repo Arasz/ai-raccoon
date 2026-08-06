@@ -38,6 +38,31 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_ParsesQuietFlag()
+    {
+        CliArgs.TryParse(["--quiet"], out var parsed);
+
+        parsed.Options.ShouldNotBeNull();
+        parsed.Options.Quiet.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Parse_NoQuietFlag_DefaultsToFalse()
+    {
+        CliArgs.TryParse([], out var parsed);
+
+        parsed.Options.Quiet.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Parse_QuietExplicitFalse_StaysFalse()
+    {
+        CliArgs.TryParse(["--quiet=false"], out var parsed);
+
+        parsed.Options.Quiet.ShouldBeFalse();
+    }
+
+    [Fact]
     public void Parse_PortOnly_DoesNotShortcutToNullOptions()
     {
         CliArgs.TryParse(["--port", "0"], out var parsed);

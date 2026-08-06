@@ -68,6 +68,11 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(config.Options, transports);
         builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        if (config.Options.Quiet)
+        {
+            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        }
+
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
         if (config.IdleTimeout > TimeSpan.Zero)
         {
@@ -112,33 +117,42 @@ internal static partial class McpServerSetup
 
     extension(WebApplicationBuilder webApplicationBuilder)
     {
-        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports) =>
+        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports, bool quietInfo = false) =>
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
-                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging)
+                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo: quietInfo)
                 .WithTools<MemoryTools>()
                 .WithTools<WatchTools>()
                 .WithPrompts<MemoryPrompts>();
     }
 
-    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder) => loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder, bool quietInfo = false)
+    {
+        loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        if (quietInfo)
+        {
+            // Quiet mode: the caller (e.g. the Hermes provider) emits its own status cues;
+            // warnings and errors still surface.
+            loggingBuilder.SetMinimumLevel(LogLevel.Warning);
+        }
+    }
 
     extension(IMcpServerBuilder mcpServerBuilder)
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
-            ILoggingBuilder loggingBuilder)
+            ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
             if (selectedTransports.Count == 0)
             {
-                return mcpServerBuilder.HandleStdioTransport(loggingBuilder);
+                return mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo);
             }
 
             foreach (var selectedTransport in selectedTransports)
             {
                 mcpServerBuilder = selectedTransport switch
                 {
-                    McpTransport.Stdio => mcpServerBuilder.HandleStdioTransport(loggingBuilder),
+                    McpTransport.Stdio => mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo),
                     McpTransport.Http => mcpServerBuilder.HandleHttpTransport(),
                     McpTransport.Https => mcpServerBuilder.HandleHttpsTransport(),
                     _ => mcpServerBuilder
@@ -148,9 +162,9 @@ internal static partial class McpServerSetup
             return mcpServerBuilder;
         }
 
-        private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder)
+        private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
-            AddStderrConsoleLogging(loggingBuilder);
+            AddStderrConsoleLogging(loggingBuilder, quietInfo: quietInfo);
             return mcpServerBuilder.WithStdioServerTransport();
         }
 
@@ -172,9 +186,6 @@ internal static partial class McpServerSetup
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "ai-raccoon: https transport is not supported")]
         public static partial void HttpsTransportNotSupported(ILogger logger);
-
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ai-raccoon: http transport listening on {Urls}")]
-        public static partial void HttpTransportListening(ILogger logger, string urls);
     }
 }
 

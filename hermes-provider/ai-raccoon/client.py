@@ -187,11 +187,19 @@ class HttpClient(_MCPClient):
 
 
 def create_client(config: dict) -> _MCPClient:
-    """Build a client for the plugin config (transport: stdio | http)."""
+    """Build a client for the plugin config (transport: stdio | http).
+
+    stdio spawns carry ``--quiet`` by default so the child server prints
+    no info logs (the provider emits its own status cues); set
+    ``quiet: false`` in the plugin config for full server logs.
+    """
     transport = config.get("transport", "stdio")
     if transport == "http":
         return HttpClient(config.get("url", DEFAULT_HTTP_URL))
-    return StdioClient(config.get("binary", "ai-raccoon"), config.get("binary_args") or [])
+    args = list(config.get("binary_args") or [])
+    if config.get("quiet", True):
+        args.append("--quiet")
+    return StdioClient(config.get("binary", "ai-raccoon"), args)
 
 
 def _text(result: Any) -> Any:
