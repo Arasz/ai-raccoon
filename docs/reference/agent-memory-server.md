@@ -22,7 +22,7 @@ Every tool requires `projectId` (camelCase — all parameters are camelCase). Wr
 land in `project:<id>` by default; naming a `workspaceId` routes them into that
 workspace's isolated context.
 
-16 memory tools plus 3 file-watcher tools. `memory_configure` and
+17 memory tools plus 3 file-watcher tools. `memory_configure` and
 `memory_set_structure_alpha` were removed by the CLI-config refactor: configuration is
 no longer an MCP tool — the CLI verbs are the single config channel (see
 [Command-line options](#command-line-options)).
@@ -231,6 +231,7 @@ ai-raccoon encryption unset
 # config changes apply live, no server restart needed)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
+ai-raccoon extract interval {minutes}
 ai-raccoon extract list
 ```
 

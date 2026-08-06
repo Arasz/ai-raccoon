@@ -6,7 +6,7 @@ packaging metadata. Filenames are bare nouns.
 ## Contents
 
 - [`agent-memory-server.md`](agent-memory-server.md) — the MCP server's complete
-  agent-facing contract: 19 tools, 2 prompts, contexts, env vars, error shapes,
+  agent-facing contract: 20 tools, 2 prompts, contexts, env vars, error shapes,
   native-extension versions.
 - [`embedding-benchmark.md`](embedding-benchmark.md) — measured retrieval
   quality and latency per embedding model (small local GGUF vs LM Studio

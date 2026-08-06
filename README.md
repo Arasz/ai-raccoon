@@ -61,7 +61,7 @@ project-scope one. Projects partition the bank via context (`project:<id>`).
 | Access modes | `ro` (read-only), `rw` (read-write, default), `full` (adds destructive operations); per-project settings override the global default |
 | Encryption at rest (optional) | set `AIRACCOON_DB_PASSPHRASE` for AES-256-CBC page-level encryption via e_sqlite3mc; FTS5 and vec0 work unchanged |
 
-The full contract (19 tools: 16 memory + 3 file-watcher, 2 prompts, parameters,
+The full contract (20 tools: 17 memory + 3 file-watcher, 2 prompts, parameters,
 error shapes) is in [docs/reference/agent-memory-server.md](docs/reference/agent-memory-server.md).
 
 ## Configuration

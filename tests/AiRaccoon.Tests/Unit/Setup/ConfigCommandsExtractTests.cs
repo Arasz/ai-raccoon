@@ -87,6 +87,42 @@ public class ConfigCommandsExtractTests
     }
 
     [Fact]
+    public async Task ExtractIntervalSet_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["extract", "interval", "30"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.IntervalMinutesGlobal].ShouldBe("30");
+        outp.ShouldContain("interval: 30 min");
+    }
+
+    [Fact]
+    public async Task ExtractIntervalInvalid_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["extract", "interval", "0"], store);
+
+        exit.ShouldBe(1);
+        err.ShouldContain("interval must be a positive number of minutes");
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
+    }
+
+    [Fact]
+    public async Task ExtractIntervalNonNumeric_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["extract", "interval", "often"], store);
+
+        exit.ShouldBe(1);
+        err.ShouldContain("interval must be a positive number of minutes");
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
+    }
+
+    [Fact]
     public async Task ExtractList_ShowsDefaults_WhenUnset()
     {
         var store = new FakeConfigStore();

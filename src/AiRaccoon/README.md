@@ -95,6 +95,13 @@ ai-raccoon watch remove {project-id|*}
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
+
+# extract: background shared-extraction (checks each project's memories and
+# extracts the shared-worthy ones; propose logs candidates, promote shares them)
+ai-raccoon extract enable {true|false}
+ai-raccoon extract mode {propose|promote}
+ai-raccoon extract interval {minutes}
+ai-raccoon extract list
 ```
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table,
