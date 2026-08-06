@@ -62,6 +62,10 @@ would also double every release surface and show two identical package pages.
 4. **Verify the published tool**: `python3 scripts/manual-fresh-install-test.py`
    (defaults to `AI_RACCOON_VERSION=1.0.8`, installs from nuget.org into an
    isolated tool-path).
+5. **Merge the article update** (arasz-home-page PR #210, prepared with this
+   task): install lines + the "why not the clean id" resolution story. Do this
+   before or with the release so the published article never points at the
+   deprecated id.
 
 ### Existing users
 
