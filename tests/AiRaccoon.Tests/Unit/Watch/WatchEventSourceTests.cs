@@ -164,4 +164,145 @@ public sealed class WatchEventSourceTests
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
         source.IsWatching(Project, other.Path).ShouldBeFalse();
     }
+
+    // ── File-path watches (issue #44 / audit F7) ────────────────────────────
+    // A FILE registration must watch its parent directory and translate events
+    // for that file only — FileSystemWatcher itself requires a directory.
+
+    [Fact]
+    public void Start_OnFilePath_IsWatching_AndNoErrorEvent()
+    {
+        using var dir = TempDir.New("source-file-start");
+        var file = dir.File("watch-me.md");
+        File.WriteAllText(file, "x");
+        var errors = new List<WatchEventError>();
+        var source = NewSource([], errors);
+
+        Should.NotThrow(() => source.Start(Project, file));
+
+        source.IsWatching(Project, file).ShouldBeTrue();
+        errors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Start_OnMissingFile_WithExistingParent_IsWatching_AndNoErrorEvent()
+    {
+        using var dir = TempDir.New("source-file-missing");
+        var file = dir.File("not-yet.md");
+        var errors = new List<WatchEventError>();
+        var source = NewSource([], errors);
+
+        Should.NotThrow(() => source.Start(Project, file));
+
+        source.IsWatching(Project, file).ShouldBeTrue();
+        errors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void FileWatch_CreatedAndChanged_FireForTargetFile_NotForSiblings()
+    {
+        using var dir = TempDir.New("source-file-created");
+        var file = dir.File("watch-me.md");
+        File.WriteAllText(file, "v1");
+        var events = new List<WatchEvent>();
+        var source = NewSource(events, []);
+
+        source.Start(Project, file);
+        WaitFor(() => source.IsWatching(Project, file), "watcher start");
+
+        File.WriteAllText(file, "v2");
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Changed && e.Path == file), "changed event for target");
+
+        // A sibling's creation must NOT produce an event for this watch.
+        File.WriteAllText(dir.File("sibling.md"), "noise");
+        Thread.Sleep(300);
+        events.ShouldNotContain(e => e.Path == dir.File("sibling.md"));
+    }
+
+    [Fact]
+    public void FileWatch_Deleted_FiresForTargetFile()
+    {
+        using var dir = TempDir.New("source-file-deleted");
+        var file = dir.File("watch-me.md");
+        File.WriteAllText(file, "x");
+        var events = new List<WatchEvent>();
+        var source = NewSource(events, []);
+
+        source.Start(Project, file);
+        WaitFor(() => source.IsWatching(Project, file), "watcher start");
+
+        File.Delete(file);
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Deleted && e.Path == file), "deleted event for target");
+    }
+
+    [Fact]
+    public void FileWatch_Recreate_FiresCreatedForTargetFile()
+    {
+        using var dir = TempDir.New("source-file-recreate");
+        var file = dir.File("watch-me.md");
+        var events = new List<WatchEvent>();
+        var source = NewSource(events, []);
+
+        source.Start(Project, file);
+        WaitFor(() => source.IsWatching(Project, file), "watcher start");
+
+        File.WriteAllText(file, "v2");
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Changed && e.Path == file), "changed event for target");
+
+        File.Delete(file);
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Deleted && e.Path == file), "deleted event for target");
+        File.WriteAllText(file, "v3");
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Created && e.Path == file), "created event for target");
+    }
+
+    [Fact]
+    public void FileWatch_RenameAway_EmitsDeletedForRegisteredPath()
+    {
+        using var dir = TempDir.New("source-file-rename-away");
+        var file = dir.File("watch-me.md");
+        File.WriteAllText(file, "x");
+        var events = new List<WatchEvent>();
+        var source = NewSource(events, []);
+
+        source.Start(Project, file);
+        WaitFor(() => source.IsWatching(Project, file), "watcher start");
+
+        File.Move(file, dir.File("watch-me.md.bak"));
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Deleted && e.Path == file), "deleted event for target");
+        events.ShouldNotContain(e => e.Kind == WatchEventKind.Renamed);
+    }
+
+    [Fact]
+    public void FileWatch_RenameInto_EmitsRenamedWithOldPath()
+    {
+        using var dir = TempDir.New("source-file-rename-in");
+        var file = dir.File("watch-me.md");
+        var tmp = dir.File("tmp-upload");
+        File.WriteAllText(tmp, "x");
+        var events = new List<WatchEvent>();
+        var source = NewSource(events, []);
+
+        source.Start(Project, file);
+        WaitFor(() => source.IsWatching(Project, file), "watcher start");
+
+        File.Move(tmp, file);
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Renamed && e.Path == file && e.OldPath == tmp),
+            "renamed event for target");
+    }
+
+    private static void WaitFor(Func<bool> condition, string what, int timeoutMs = 3000)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            Thread.Sleep(25);
+        }
+
+        throw new Xunit.Sdk.XunitException($"Timed out after {timeoutMs} ms waiting for {what}.");
+    }
 }

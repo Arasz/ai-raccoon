@@ -79,3 +79,57 @@ The Hermes-bridge server (AiRaccoon 1.0.7.0) answers `memory_stats` and `memory_
 - **Claude Code usage:** no `host=claude` lines — cannot distinguish "never searches" from "hook doesn't fire there".
 - **Structure vectors absent:** whether the current ingest pipeline populates `structure_embedding` at all, or whether the live corpora simply predate Wave 6, is not checked in code.
 - **Growth question:** with 5 organic writes and ~4 organic searches in the measured window, the data is too thin to project feature demand; the shared tier being empty means the promotion feature has no production evidence either way.
+
+---
+
+## Fix cycle (2026-08-06, issue #44) — measured before/after
+
+Owner directive after v1: report the findings as an issue (filed as #44), then plan → review → implement → QA → manual check → v2. The plan (`docs/plans/memory-audit-fixes.md`) was reviewed by the architect persona (APPROVE-WITH-NITS; all findings folded in). Code fixes shipped as PR #47 (3 commits, TDD); data operations ran against the live bank.
+
+### F12 — File-path watches now work; the mcp-tools.json watch no longer throws at Start [MEASURED]
+
+`WatchEventSource` previously ran `new FileSystemWatcher(registeredPath)` — a file path throws `ArgumentException` (56 occurrences in the bridge log before the fix). File registrations now watch the parent directory filtered to the file name; sibling events are dropped; a rename-away surfaces as Deleted. 7 new unit tests cover start-on-file, missing-file-with-parent, create/change/delete/recreate, rename-away, rename-in, sibling isolation. **The running bridge server still executes the pre-fix build** (installed tool 1.0.7) — the log-error count stops growing only after a build with PR #47 is installed; the fix is proven by the unit tests and the suite, not yet by the live log.
+
+**Evidence:** PR #47 commit 55bdc28; `WatchEventSourceTests` 17/17 pass; `grep -c "Watch event source error" ~/.hermes/logs/mcp-stderr.log` = 56 (pre-fix baseline, live build unchanged); `watch list` shows the file registration intact.
+
+### F13 — Zero pending rows bank-wide; watch digests retry-embed [MEASURED]
+
+Before: 2 pending rows (watcher ingests from 10:13, never embedded). Now: `embed_state` counts show **2,696 embedded / 0 pending** (embed backfill via `memory_embed_pending(ai-badger)` → `{processed: 2, pending: 0}`), and `WatchDigestExecutor` triggers a best-effort `EmbedPendingAsync` after every successful digest so a failed inline embed is retried instead of left pending (hash-skip and delete paths don't embed — covered by tests, including a tolerant-embed-failure test).
+
+**Evidence:** `SELECT embed_state, COUNT(*) FROM entries GROUP BY 1` = 2696/0; PR #47 commit 9e5f5f6; `WatchDigestExecutorTests` 11/11 pass (incl. `Digest_EmbedFailure_IsTolerated_DigestStillCompletes`).
+
+### F14 — jsaa corpus re-ingested; the provenance contract now holds [MEASURED]
+
+Before: 762 rows, `source_file` NULL ×762, `section` NULL ×762, `agent_id` = structured path ×762 (pre-Wave-2 provenance). After the re-ingest (fixed script, reset = `project:job-search-ai-assistant` delete, pinned jsaa HEAD 9397bbef): **761 rows, 761 with `source_file`, 672 with `section`, 0 with `agent_id`**, all embedded. Chunk count 772 (global dedup → 761 rows, the documented contract). Hash map regenerated (`scripts/chunk-hash-map.json`, committed); live spot-checks all green (incl. the Cosmos partition-key query that missed in the rehearsal — ranked 3rd on the live bank). Rehearsal on a scratch root first: same shape (761 rows, 0 agent_id, all embedded) — the script is reproducible.
+
+**Evidence:** live-bank SQL (`SELECT project_id, COUNT(*), COUNT(source_file), COUNT(section), COUNT(agent_id) FROM entries GROUP BY 1`); `/tmp/real-ingest.log` (exit 0, 104.6 s, all spot-checks ✓); `/tmp/rehearsal-ingest.log`; PR #47 commit 15b05d4 + 16253d7.
+
+### F15 — Ghost config and test residue removed [MEASURED]
+
+Before: `watch.enabled.CLAUDE.md=true` (shell-glob ghost, no registration), `watch.enabled.tool-test-20260806=false`, 3 tool-test `watch_files` rows, 2 closed tool-test workspaces. After: settings table has no `CLAUDE.md`/`tool-test` rows (`ai-raccoon watch remove` ×2 → "removed watch config for …"), `watch_files` = 112 (tool-test 0), `workspaces` = 3 (the pre-audit `acme` feature-test rows, left by design). `watch list` no longer shows the ghost targets.
+
+**Evidence:** settings/watches/watch_files/workspaces SQL before and after; `ai-raccoon watch remove` CLI output; the CLI contract (ConfigCommands.cs:214-228 — removes enabled/scope/concurrency rows only, which is why the SQL cleanup was separate).
+
+### F16 — QA gate: full suite 1,142 passed / 0 failed / 43 skipped [MEASURED]
+
+The complete suite (incl. the 11 new/extended watch tests) ran in the PR worktree: `Passed! - Failed: 0, Passed: 1142, Skipped: 43`. Script gates: `grep -rn memory_configure scripts/` = 0 hits; `py_compile` clean; `--dry-run` enumerates 198 files at the re-pinned commit.
+
+**Evidence:** `/tmp/full-suite.log` tail; static gate output; dry-run output.
+
+## Adoption levers (f: 2026-08-06) — how to grow shared-memory usage and organic search
+
+The measured window shows 5 organic writes and ~4 organic searches; the 2 graded organic searches scored 4/5 and 5/5 — when agents search, they get value. The gap is therefore trigger/habit, not quality. Levers, in priority order [INFERRED — reasoned from the measured usage data and the skill/hook mechanics]:
+
+1. **One-call memory brief** — a session-start surface (or skill ritual) returning top recent + project-relevant entries in a single call, removing the 2–3 call cost of "search first" [INFERRED].
+2. **Seed the shared tier** — promote the genuinely cross-project organic facts that exist (the 1.0.4 multi-RID tool-fix fact, the watch-tools MCP regression note) so a `scope=shared` search returns value from any project; promotion only pays once consumption exists (cold-start/network effect) [INFERRED].
+3. **Memory into the default loop** — a "check project memory" step in the task skill's Phase 0 and the mcp-index per-turn hook, instead of optional `.hermes.md` prose [INFERRED — the scaffolding exists (jsaa `.mcp.json` + global Hermes config), usage doesn't].
+4. **Keep the retrieval ceiling high** — the F6/F8/F14 fixes (pending rows, provenance, script) remove friction that would otherwise cap hit rate as usage grows [MEASURED — F13/F14].
+5. **KPI** — search count and share count per window are the growth metrics; the grade hook stays the quality loop (2/11 graded in v1; the ask-after-search loop is the feedback mechanism) [MEASURED — quality-log parse].
+
+## Still open (updated)
+
+- The live watch-error count (F7/F12) can only be re-measured after a build containing PR #47 is installed as the bridge tool — the 56-error baseline is the pre-fix number.
+- `structure_embedding`/`heading_path` remain 0 bank-wide: the tool surface (`MemoryWriteRequest`) carries no heading field — recorded as an explicit out-of-scope decision (review F8); a follow-up task would extend the write contract.
+- `access_count` semantics still not fully settled (MemorySql.cs:225 increments it, but the wp7 probe row showed 0 — see v1 Still open).
+- The `acme` workspaces predate the audit (feature-test artifacts) — left untouched; owner can remove.
+- Adoption levers 1–3 are proposals, not shipped changes.

@@ -8,12 +8,12 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     ConfigVerbRunner: the one-shot config-verb path shares the server's bank resolution
+///     CliCommandRunner: the one-shot config-verb path shares the server's bank resolution
 ///     (--data-root/--install-scope) and wires the real bank, watch store, and encryption resolver.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ConfigVerbRunnerTests : IDisposable
+public sealed class CliCommandRunnerTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-config-verb-runner");
 

@@ -16,7 +16,7 @@ internal sealed class WatchTestStack
     public WatchTestStack()
     {
         var host = new MemoryExtensionHost(Memory, [Extension]);
-        Executor = new WatchDigestExecutor(host, Store, host, Time);
+        Executor = new WatchDigestExecutor(host, Store, host, Time, NullLogger<WatchDigestExecutor>.Instance);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time,
             NullLogger<WatchPipeline>.Instance);
@@ -158,6 +158,12 @@ internal sealed class FakeMemoryStore : IMemoryStore
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
     public Exception? IngestError { get; set; }
 
+    /// <summary>When set, EmbedPendingAsync throws it (best-effort embed failure injection).</summary>
+    public Exception? EmbedError { get; set; }
+
+    /// <summary>Project ids passed to EmbedPendingAsync, in call order.</summary>
+    public List<string> EmbedCalls { get; } = [];
+
     /// <summary>Runs after a successful ingest records content — TCS gating for in-flight digests.</summary>
     public Func<string, Task>? OnIngest { get; set; }
 
@@ -249,8 +255,20 @@ internal sealed class FakeMemoryStore : IMemoryStore
         throw new NotImplementedException();
 
     public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        CancellationToken cancellationToken = default)
+    {
+        lock (_sync)
+        {
+            EmbedCalls.Add(projectId);
+        }
+
+        if (EmbedError is not null)
+        {
+            throw EmbedError;
+        }
+
+        return Task.FromResult(new EmbedPendingResult(0, 0));
+    }
 
     public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
         CancellationToken cancellationToken = default) =>

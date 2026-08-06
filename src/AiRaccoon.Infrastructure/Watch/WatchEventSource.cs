@@ -21,6 +21,12 @@ public sealed partial class WatchEventSource(
     private readonly Dictionary<(string ProjectId, string Path), FileSystemWatcher> _watchers =
         new(WatchKeyComparer.Instance);
 
+    // File-mode registrations: (projectId, registeredPath) → the watched file. The
+    // underlying watcher watches the PARENT directory (FileSystemWatcher requires a
+    // directory); Translate filters events to this target file.
+    private readonly Dictionary<(string ProjectId, string Path), string> _fileTargets =
+        new(WatchKeyComparer.Instance);
+
     public void Dispose() => StopAll();
 
     /// <summary>Creates + enables the watcher for (projectId, path); idempotent; failures become error events.</summary>
@@ -39,14 +45,43 @@ public sealed partial class WatchEventSource(
                 return;
             }
 
+            // A registered FILE path (or a missing path whose parent exists) cannot be
+            // watched directly — FileSystemWatcher requires a directory. Watch the parent
+            // filtered to the file name and translate only events for that file
+            // (audit F7 / issue #44). A missing path with no existing parent still errors.
+            var watchDirectory = normalized;
+            string? filter = null;
+            var includeSubdirectories = true;
+            string? fileTarget = null;
+            if (!Directory.Exists(normalized))
+            {
+                var parent = Path.GetDirectoryName(normalized);
+                if (parent is null || !Directory.Exists(parent))
+                {
+                    ReportError(projectId, normalized,
+                        new ArgumentException($"Watch path '{path}' is not a valid path."));
+                    return;
+                }
+
+                watchDirectory = parent;
+                filter = Path.GetFileName(normalized);
+                includeSubdirectories = false;
+                fileTarget = normalized;
+            }
+
             FileSystemWatcher? watcher = null;
             try
             {
-                watcher = new FileSystemWatcher(normalized)
+                watcher = new FileSystemWatcher(watchDirectory)
                 {
-                    IncludeSubdirectories = true,
+                    IncludeSubdirectories = includeSubdirectories,
                     NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite
                 };
+                if (filter is not null)
+                {
+                    watcher.Filter = filter;
+                }
+
                 watcher.Created += (_, e) => HandleCreated(projectId, normalized, e);
                 watcher.Changed += (_, e) => HandleChanged(projectId, normalized, e);
                 watcher.Deleted += (_, e) => HandleDeleted(projectId, normalized, e);
@@ -54,6 +89,10 @@ public sealed partial class WatchEventSource(
                 watcher.Error += (_, e) => HandleError(projectId, normalized, e);
                 watcher.EnableRaisingEvents = true;
                 _watchers[(projectId, normalized)] = watcher;
+                if (fileTarget is not null)
+                {
+                    _fileTargets[(projectId, normalized)] = fileTarget;
+                }
             }
             catch (Exception ex)
             {
@@ -72,6 +111,7 @@ public sealed partial class WatchEventSource(
 
         lock (_gate)
         {
+            _fileTargets.Remove((projectId, normalized));
             if (_watchers.Remove((projectId, normalized), out var watcher))
             {
                 watcher.Dispose();
@@ -89,6 +129,7 @@ public sealed partial class WatchEventSource(
             }
 
             _watchers.Clear();
+            _fileTargets.Clear();
         }
     }
 
@@ -119,6 +160,42 @@ public sealed partial class WatchEventSource(
     {
         try
         {
+            // File-mode watch: the underlying watcher sits on the parent directory, so
+            // sibling events arrive too — translate only the registered file's events.
+            string? fileTarget;
+            lock (_gate)
+            {
+                fileTarget = _fileTargets.GetValueOrDefault((projectId, watchPath));
+            }
+
+            if (fileTarget is not null)
+            {
+                var normalizedFull = WatchPath.Normalize(fullPath);
+                if (kind == WatchEventKind.Renamed && oldPath is not null)
+                {
+                    var normalizedOld = WatchPath.Normalize(oldPath);
+                    if (WatchPath.PathComparer.Equals(normalizedOld, fileTarget) &&
+                        !WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                    {
+                        // Rename-away: the watched file left its registered name — the
+                        // registration is now gone, so surface a Deleted for the target
+                        // (a Renamed would make DigestAsync ingest the new name).
+                        onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Deleted, null));
+                    }
+                    else if (WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                    {
+                        onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Renamed, normalizedOld));
+                    }
+
+                    return;
+                }
+
+                if (!WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                {
+                    return; // sibling event under the watched parent — not ours
+                }
+            }
+
             onEvent(new WatchEvent(projectId, WatchPath.Normalize(fullPath), kind,
                 oldPath is null ? null : WatchPath.Normalize(oldPath)));
         }

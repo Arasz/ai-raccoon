@@ -186,7 +186,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         WatchStore = new WatchStore(Factory);
         Host = new MemoryExtensionHost(Store, []);
         Pipeline = new WatchPipeline(new WatchScheduler(),
-            new WatchDigestExecutor(Host, WatchStore, Host, TimeProvider), new WatchRetryPolicy(), Host,
+            new WatchDigestExecutor(Host, WatchStore, Host, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Host,
             TimeProvider, NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
         CatchUp = new WatchCatchUp(Pipeline, WatchStore, NullLogger<WatchCatchUp>.Instance);
