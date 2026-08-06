@@ -203,7 +203,7 @@ internal static partial class ConfigCommands
             {
             }
 
-            var envPassphrase = env.GetPassphrase(new EncryptionData("env")).Value;
+            var envPassphrase = env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
             if (!string.IsNullOrEmpty(envPassphrase))
             {
                 // Rows first — the store still opens with the bitwarden key at this point.
