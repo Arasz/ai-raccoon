@@ -11,11 +11,21 @@ cloud sync to S3 or Azure Blob. Built on the
 
 ## Quick start
 
-Install the tool (package id `arasz.ai-raccoon`, command `ai-raccoon`):
+Install the tool (package id `ai-raccoon`, command `ai-raccoon`):
 
 ```bash
-dotnet tool install -g arasz.ai-raccoon
+dotnet tool install -g ai-raccoon
 ```
+
+> **Migrating from `arasz.ai-raccoon`?** The package moved to the raw `ai-raccoon`
+> id (NuGet assigned it to this project). The two share the same command shim, so
+> install the new id *after* removing the old one — your bank under `~/.ai-raccoon`
+> is untouched:
+>
+> ```bash
+> dotnet tool uninstall -g arasz.ai-raccoon
+> dotnet tool install -g ai-raccoon
+> ```
 
 Run the server:
 

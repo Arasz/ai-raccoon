@@ -237,8 +237,13 @@ size-sensitive deployment needs it (D5).
 ## Install
 
 ```bash
-dotnet tool install -g arasz.ai-raccoon
+dotnet tool install -g ai-raccoon
 ```
+
+> Migrating from `arasz.ai-raccoon` (the pre-1.0.8 package id): uninstall the old
+> id first — both share the `ai-raccoon` command shim, so they cannot be installed
+> side by side. The memory bank under `~/.ai-raccoon` is keyed to the install scope,
+> not the package id, so it survives the switch untouched.
 
 The global-tool install directory is `~/.dotnet/tools` on macOS/Linux (`%USERPROFILE%\.dotnet\tools` on Windows). If
 `ai-raccoon` is not found after install, add it to `PATH`:
