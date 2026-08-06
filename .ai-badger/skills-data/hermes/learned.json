@@ -112,10 +112,10 @@
     {
       "category": "uncategorized",
       "name": "ai-badger-contribution",
-      "sourceHash": "e9fa418f82d3590a2bc15d1436eeaac4ee06612cf200e3e71cb23ca589ba1960",
+        "sourceHash": "1c0f728f8e55c9cd44da3cebda1af666889cbfd389516d9d9d9bf5fb800397b8",
       "sourcePath": "software-development/ai-badger-contribution",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:24:59Z",
+        "syncedAt": "2026-08-06T20:54:59Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-contribution"
     },
     {
@@ -272,12 +272,21 @@
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
     },
     {
+        "category": "uncategorized",
+        "name": "framework-development",
+        "sourceHash": "1f52ffe450ee01f6fdece39f128d068af1d06c366aeb4c4f1a94412c34cbd118",
+        "sourcePath": "ai-badger/framework-development",
+        "status": "synced",
+        "syncedAt": "2026-08-06T21:09:12Z",
+        "target": ".ai-badger/skills/learned/uncategorized/framework-development"
+    },
+      {
       "category": "uncategorized",
       "name": "git-worktree-isolation",
-        "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
+          "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
       "sourcePath": "git-worktree-isolation",
       "status": "synced",
-        "syncedAt": "2026-08-06T16:51:43Z",
+          "syncedAt": "2026-08-06T16:51:43Z",
       "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
     },
     {

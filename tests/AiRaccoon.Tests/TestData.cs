@@ -1,3 +1,5 @@
+using AiRaccoon.Core;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -53,4 +55,48 @@ public static class TestData
 
         return dot;
     }
+}
+
+/// <summary>Recording fake for the propose tier — tool/hosted-service unit tests that must not touch a bank.</summary>
+public sealed class FakePromotionQueue : IPromotionQueue
+{
+    public string? LastProject { get; private set; }
+    public IReadOnlyList<QueueCandidate>? LastCandidates { get; private set; }
+    public IReadOnlyList<string>? LastPromoteProjects { get; private set; }
+    public List<IReadOnlyList<string>> PromoteCalls { get; } = [];
+    public int? LastLimit { get; private set; }
+    public PromoteOutcome PromoteOutcome { get; set; } = new([], 0, new Dictionary<string, int>());
+    public Exception? PromoteError { get; set; }
+
+    public Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
+        CancellationToken cancellationToken = default)
+    {
+        LastProject = projectId;
+        LastCandidates = candidates;
+        return Task.FromResult(new ProposeOutcome(candidates.Count, []));
+    }
+
+    public Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
+        CancellationToken cancellationToken = default)
+    {
+        LastPromoteProjects = projectIds;
+        PromoteCalls.Add(projectIds);
+        LastLimit = limit;
+        if (PromoteError is not null)
+        {
+            throw PromoteError;
+        }
+
+        return Task.FromResult(PromoteOutcome);
+    }
+
+    public Task<int> DiscardAsync(string projectId, string? hash,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+
+    public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
+
+    public Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ResponseMeta(0, null, null));
 }

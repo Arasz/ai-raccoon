@@ -24,7 +24,7 @@ public sealed class MemoryPrompts
                 - Plain writes (memory_write without a workspace_id) land in the project's committed memory (project:<id>).
                 - When a workspace is active, write with its workspace_id so notes stay in the isolated workspace outbox; consolidate when you finish.
                 - Promote durable, cross-project knowledge with memory_share — shared entries are curated and never swept. Nothing is shared without an explicit promotion.
-                - Shared tier empty or unsure what to promote? Run memory_share_extract (project_id(s), propose) to see ranked candidates with reasons; review, then promote the keepers explicitly (mode=promote). autoPromote exists but stays OFF by default and requires confirm=true — it shares data between projects.
+                - Proposals wait in the propose tier: memory_share_extract (project_id(s), propose) ranks candidates and QUEUES them; memory_promotion_list shows what is waiting (the queue is capacity-capped — over it, the weakest candidate of the biggest occupier is evicted). Review the queue, promote the keepers with memory_share_extract (mode=promote, drains the queue), drop the rest with memory_promotion_discard. autoPromote exists but stays OFF by default and requires confirm=true — it shares data between projects.
                 - Search with scope=all (default) to see shared + project memory; scope=project narrows to the project; scope=shared searches only the promotion tier.
                 - Write durable facts, not raw chatter: one entry per fact, source included, so entries stay verifiable.
                 - Degradation (memory_sweep) removes old, low-rated project entries; shared entries are exempt.

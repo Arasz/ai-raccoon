@@ -1,0 +1,22 @@
+2026-08-06T20:43:55.356958+00:00 Starting Claude limit poller (dynamic interval: 2h, 30m, 15m, then 5m while limited; 5m otherwise). Stops at the 12h cap, or once no unfinished task remains.
+2026-08-06T20:43:55.356958+00:00 Starting Claude limit poller (dynamic interval: 2h, 30m, 15m, then 5m while limited; 5m otherwise). Stops at the 12h cap, or once no unfinished task remains.
+2026-08-06T20:43:57.299629+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:43:57.299629+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:44:37.599242+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:44:37.599242+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:44:57.419599+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:44:57.419599+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:45:10.510222+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:45:10.510222+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:49:01.680449+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:49:01.680449+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:54:06.072640+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:54:06.072640+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:59:09.854006+00:00 poll_limit.py is already running; exiting
+2026-08-06T20:59:09.854006+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:04:13.245805+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:04:13.245805+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:09:16.676448+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:09:16.676448+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:14:20.519169+00:00 poll_limit.py is already running; exiting
+2026-08-06T21:14:20.519169+00:00 poll_limit.py is already running; exiting

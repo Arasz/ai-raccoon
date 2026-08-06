@@ -24,7 +24,8 @@ public sealed class WatchToolsAccessModeTests
 
     public WatchToolsAccessModeTests()
     {
-        _tools = new WatchTools(new FakeWatchService(), new MemoryAccessGuard(_store), new ToolCallMetrics());
+        _tools = new WatchTools(new FakeWatchService(), new MemoryAccessGuard(_store), new ToolCallMetrics(),
+            new FakePromotionQueue());
     }
 
     private void SetMode(string? global = null, string? perProject = null)
@@ -69,7 +70,7 @@ public sealed class WatchToolsAccessModeTests
 
         var result = await _tools.Status("acme-web", TestContext.Current.CancellationToken);
 
-        result.Watches.ShouldBeEmpty();
+        result.Data!.Watches.ShouldBeEmpty();
     }
 
     [Fact]

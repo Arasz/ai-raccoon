@@ -143,11 +143,31 @@ internal static class MemorySchema
                                    PRIMARY KEY (project_id, path)
                                );
 
+                               -- Propose tier: candidates waiting for promotion review. Separate from
+                               -- entries by design — queue rows are never searchable and never counted
+                               -- by memory_stats; capacity/eviction lives on this table only (shared
+                               -- tier stays curated and sweep-exempt).
+                               CREATE TABLE IF NOT EXISTS promotion_queue (
+                                   id          INTEGER PRIMARY KEY,
+                                   project_id  TEXT NOT NULL,
+                                   hash        TEXT NOT NULL,
+                                   path        TEXT NULL,
+                                   value       TEXT NOT NULL,
+                                   source_file TEXT NULL,
+                                   score       REAL NOT NULL,
+                                   reasons     TEXT NOT NULL DEFAULT '[]',
+                                   created_at  INTEGER NOT NULL,
+                                   updated_at  INTEGER NOT NULL,
+                                   UNIQUE (project_id, hash)
+                               );
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
                                CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
+                               CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
+                               CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
                                """;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)

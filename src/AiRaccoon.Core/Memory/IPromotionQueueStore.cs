@@ -1,0 +1,29 @@
+namespace AiRaccoon.Core.Memory;
+
+/// <summary>
+///     The propose tier's persistence port: waiting-for-promotion candidates, upserted by
+///     (project, hash), listed for review, drained by discard, and evicted per project when
+///     the queue is over capacity. The eviction victim *project* is chosen by IEvictionPolicy;
+///     this port executes the victim-row query within one project (lowest score, oldest first).
+/// </summary>
+public interface IPromotionQueueStore
+{
+    /// <summary>Upsert by (project_id, hash): inserts keep the first created_at; re-propose refreshes score/value/reasons/updated_at. Returns the affected row count.</summary>
+    Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Queued rows, score DESC then created_at ASC (stable review order); all projects when projectId is null.</summary>
+    Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Removes one row (hash given) or the whole project's queue (hash null); returns the removed count.</summary>
+    Task<int> DiscardAsync(string projectId, string? hash,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Total count, per-project counts, and average wait age (now − created_at) over the queue.</summary>
+    Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The victim row of one project — lowest score, oldest created_at — removed; null when the project's queue is empty.</summary>
+    Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
+        CancellationToken cancellationToken = default);
+}

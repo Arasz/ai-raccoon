@@ -16,7 +16,7 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 20 tools,
+///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 22 tools,
 ///     and every tool not already round-tripped by <see cref="McpServerE2ETests"/> answers a
 ///     minimal call over the wire.
 /// </summary>
@@ -29,7 +29,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
     private static readonly string[] ExpectedToolNames =
     [
-        // 17 memory_* tools
+        // 19 memory_* tools
         "memory_write",
         "memory_search",
         "memory_list",
@@ -47,6 +47,8 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         "memory_workspace_discard",
         "memory_sweep",
         "memory_sync",
+        "memory_promotion_list",
+        "memory_promotion_discard",
         // 3 watch_* tools
         "memory_watch_add",
         "memory_watch_status",
@@ -73,7 +75,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ToolsList_SurfacesAllTwentyTools()
+    public async Task ToolsList_SurfacesAllTwentyTwoTools()
     {
         var tools = await _client.ListToolsAsync((RequestOptions?)null, TestContext.Current.CancellationToken);
         var names = tools.Select(t => t.Name).ToArray();
@@ -90,15 +92,15 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
         // memory_delete: write a row, then delete it by its hash.
         var write = await CallAsync("memory_write", ("projectId", ProjectId), ("content", "surface parity fact"));
-        var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("hash").GetString();
+        var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("data").GetProperty("hash").GetString();
         hash.ShouldNotBeNullOrWhiteSpace();
         var delete = await CallAsync("memory_delete", ("projectId", ProjectId), ("hash", hash));
-        JsonDocument.Parse(Text(delete)).RootElement.GetProperty("deleted").GetInt32().ShouldBe(1);
+        JsonDocument.Parse(Text(delete)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
         // memory_delete_context: write a row, then purge its context.
         await CallAsync("memory_write", ("projectId", ProjectId), ("content", "context purge me"));
         var deleteContext = await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
-        JsonDocument.Parse(Text(deleteContext)).RootElement.GetProperty("deleted").GetInt32().ShouldBe(1);
+        JsonDocument.Parse(Text(deleteContext)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
         // memory_ingest_file: index one temp file.
         var file = Path.Combine(Path.GetTempPath(), $"ai-raccoon-surface-{Guid.NewGuid():N}.txt");
@@ -106,7 +108,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         try
         {
             var ingest = await CallAsync("memory_ingest_file", ("projectId", ProjectId), ("path", file));
-            JsonDocument.Parse(Text(ingest)).RootElement.GetProperty("indexed").GetInt32().ShouldBe(1);
+            JsonDocument.Parse(Text(ingest)).RootElement.GetProperty("data").GetProperty("indexed").GetInt32().ShouldBe(1);
         }
         finally
         {
@@ -119,7 +121,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         try
         {
             var scanned = await CallAsync("memory_ingest_directory", ("projectId", ProjectId), ("path", dir.FullName));
-            JsonDocument.Parse(Text(scanned)).RootElement.GetProperty("scanned").GetInt32().ShouldBe(1);
+            JsonDocument.Parse(Text(scanned)).RootElement.GetProperty("data").GetProperty("scanned").GetInt32().ShouldBe(1);
         }
         finally
         {
@@ -129,15 +131,23 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         // memory_sweep: dry-run (default) reports the {candidates, deleted} shape.
         var sweep = await CallAsync("memory_sweep", ("projectId", ProjectId));
         using var sweepDoc = JsonDocument.Parse(Text(sweep));
-        sweepDoc.RootElement.GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
-        sweepDoc.RootElement.GetProperty("deleted").ValueKind.ShouldBe(JsonValueKind.Array);
+        sweepDoc.RootElement.GetProperty("data").GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
+        sweepDoc.RootElement.GetProperty("data").GetProperty("deleted").ValueKind.ShouldBe(JsonValueKind.Array);
 
         // memory_share_extract: propose mode returns {candidates, promotedHashes} without sharing.
         var extract = await CallAsync("memory_share_extract",
             ("projectIds", new[] { ProjectId }), ("mode", "propose"));
         using var extractDoc = JsonDocument.Parse(Text(extract));
-        extractDoc.RootElement.GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
-        extractDoc.RootElement.GetProperty("promotedHashes").ValueKind.ShouldBe(JsonValueKind.Array);
+        extractDoc.RootElement.GetProperty("data").GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
+        extractDoc.RootElement.GetProperty("data").GetProperty("promotedHashes").ValueKind.ShouldBe(JsonValueKind.Array);
+
+        // memory_promotion_list/discard: the propose tier on a fresh project is empty.
+        var promotionList = await CallAsync("memory_promotion_list", ("projectId", ProjectId));
+        using var promotionDoc = JsonDocument.Parse(Text(promotionList));
+        promotionDoc.RootElement.GetProperty("data").GetProperty("rows").ValueKind.ShouldBe(JsonValueKind.Array);
+        var promotionDiscard = await CallAsync("memory_promotion_discard", ("projectId", ProjectId));
+        JsonDocument.Parse(Text(promotionDiscard)).RootElement.GetProperty("data").GetProperty("discarded").GetInt32()
+            .ShouldBe(0);
 
         // watch trio: enabled + scoped via settings, then add -> status -> remove.
         var watchDir = Directory.CreateTempSubdirectory("ai-raccoon-surface-watch-");
@@ -151,7 +161,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
             var status = await CallAsync("memory_watch_status", ("projectId", ProjectId));
             using var statusDoc = JsonDocument.Parse(Text(status));
-            var watches = statusDoc.RootElement.GetProperty("watches");
+            var watches = statusDoc.RootElement.GetProperty("data").GetProperty("watches");
             var watch = watches.EnumerateArray()
                 .First(w => w.GetProperty("path").GetString() == watchDir.FullName);
             var state = watch.GetProperty("state").GetString()?.ToLowerInvariant();
