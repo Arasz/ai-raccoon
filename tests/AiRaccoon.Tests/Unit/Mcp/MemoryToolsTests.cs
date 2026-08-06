@@ -469,7 +469,7 @@ public class MemoryToolsTests
             Task.FromResult(new EmbedPendingResult(0, 0));
 
         public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-            CancellationToken cancellationToken = default) =>
+            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1));
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,

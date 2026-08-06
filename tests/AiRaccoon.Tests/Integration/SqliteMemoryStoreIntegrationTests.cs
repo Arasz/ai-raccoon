@@ -97,6 +97,59 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ShareAsync_CarriesSourceFileAndSection_IntoTheSharedRow()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross project convention", SourceFile: "docs/guide.md",
+                Section: "decision"),
+            TestContext.Current.CancellationToken);
+
+        await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "cross project convention", Scope: SearchScope.Shared),
+            TestContext.Current.CancellationToken);
+        results.ShouldContain(r => r.SourceFile == "docs/guide.md");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var section = await connection.QueryFirstOrDefaultAsync<string?>(
+            "SELECT section FROM entries WHERE scope = 'shared' AND value = @value",
+            new { value = "cross project convention" });
+        section.ShouldBe("decision");
+    }
+
+    [Fact]
+    public async Task ExtractCandidates_ExcludesConfiguredSourceFilePrefixes()
+    {
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "hermes session scratch", SourceFile: "hermes/session-1"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "docs fact", SourceFile: "docs/a.md"),
+            TestContext.Current.CancellationToken);
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "organic fact"),
+            TestContext.Current.CancellationToken);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync("UPDATE entries SET embed_state = 'embedded'");
+        }
+
+        var before = await _store.ExtractCandidatesAsync("acme", includeTtlRows: false,
+            TestContext.Current.CancellationToken);
+        before.Count.ShouldBe(3);
+
+        await _store.SetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, "hermes/",
+            TestContext.Current.CancellationToken);
+
+        var after = await _store.ExtractCandidatesAsync("acme", includeTtlRows: false,
+            TestContext.Current.CancellationToken);
+        after.Count.ShouldBe(2);
+        after.ShouldNotContain(c => c.SourceFile == "hermes/session-1");
+        after.ShouldContain(c => c.SourceFile == "docs/a.md");
+        after.ShouldContain(c => c.SourceFile == null);
+    }
+
+    [Fact]
     public async Task DeleteAsync_RemovesEntry()
     {
         var entry = await _store.WriteAsync(

@@ -104,10 +104,10 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var identical = await _store.AddContentAsync("acme", "a.md",
             "semantic memory retrieval system", ContextNaming.ProjectContext("acme"),
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
         var unrelated = await _store.AddContentAsync("acme", "b.md",
             "raspberry cheesecake recipe", ContextNaming.ProjectContext("acme"),
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "semantic memory retrieval system", SearchScope.Project,
@@ -129,17 +129,17 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // is FTS-only (rank 1 by exact restatement); c and x embed, and x is vec-rank 2.
         var a = await _store.AddContentAsync("acme", "a.md",
             "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var c = await _store.AddContentAsync("acme", "c.md",
             "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"),
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
         var x = await _store.AddContentAsync("acme", "x.md",
             "lazy dog sleeps on the warm rug", ContextNaming.ProjectContext("acme"),
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "the quick brown fox jumps over the lazy dog", SearchScope.Project,

@@ -66,6 +66,9 @@ internal static class ConfigCommands
                 ["extract", "mode"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetModeAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["extract", "interval"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["extract", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ListAsync(store, stdout, cancellationToken),
+                ["extract", "exclude", "add"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeAddAsync(parseResult, store, stdout, cancellationToken),
+                ["extract", "exclude", "remove"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeRemoveAsync(parseResult, store, stdout, cancellationToken),
+                ["extract", "exclude", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeListAsync(store, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")

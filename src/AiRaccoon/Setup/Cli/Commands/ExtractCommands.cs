@@ -70,4 +70,67 @@ public sealed class ExtractCommands : IExtractCommands
             $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min");
         return 0;
     }
+
+    public async Task<int> ExcludeAddAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        var prefix = parseResult.GetValue<string>("prefix");
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        var prefixes = ExtractionConfigKeys.ParseExcludePrefixes(
+                await store.GetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, cancellationToken))
+            .ToList();
+        if (!prefixes.Contains(prefix, StringComparer.Ordinal))
+        {
+            prefixes.Add(prefix);
+            await store.SetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, string.Join(",", prefixes),
+                cancellationToken);
+        }
+
+        await stdout.WriteLineAsync($"excluded source prefixes: {string.Join(", ", prefixes)}");
+        return 0;
+    }
+
+    public async Task<int> ExcludeRemoveAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        var prefix = parseResult.GetValue<string>("prefix");
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        var prefixes = ExtractionConfigKeys.ParseExcludePrefixes(
+                await store.GetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, cancellationToken))
+            .ToList();
+        if (prefixes.Remove(prefix))
+        {
+            if (prefixes.Count == 0)
+            {
+                await store.DeleteSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, cancellationToken);
+            }
+            else
+            {
+                await store.SetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, string.Join(",", prefixes),
+                    cancellationToken);
+            }
+        }
+
+        await stdout.WriteLineAsync($"excluded source prefixes: {string.Join(", ", prefixes)}");
+        return 0;
+    }
+
+    public async Task<int> ExcludeListAsync(IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        var prefixes = ExtractionConfigKeys.ParseExcludePrefixes(
+            await store.GetSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, cancellationToken));
+        if (prefixes.Count == 0)
+        {
+            await stdout.WriteLineAsync("excluded source prefixes: none");
+            return 0;
+        }
+
+        foreach (var prefix in prefixes)
+        {
+            await stdout.WriteLineAsync(prefix);
+        }
+
+        return 0;
+    }
 }

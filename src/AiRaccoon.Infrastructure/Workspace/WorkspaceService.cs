@@ -58,7 +58,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
             // would skip content that already exists in the workspace context.
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             promoted++;
         }
 

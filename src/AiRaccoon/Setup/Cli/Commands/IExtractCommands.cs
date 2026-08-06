@@ -16,4 +16,12 @@ public interface IExtractCommands
         TextWriter stderr, CancellationToken cancellationToken);
 
     Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken);
+
+    Task<int> ExcludeAddAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken);
+
+    Task<int> ExcludeRemoveAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken);
+
+    Task<int> ExcludeListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken);
 }

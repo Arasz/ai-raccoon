@@ -149,4 +149,77 @@ public class ConfigCommandsExtractTests
         outp.ShouldContain("mode: promote");
         outp.ShouldContain("interval: 30 min");
     }
+
+    [Fact]
+    public async Task ExtractExcludeAdd_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["extract", "exclude", "add", "hermes/"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("hermes/");
+        outp.ShouldContain("hermes/");
+    }
+
+    [Fact]
+    public async Task ExtractExcludeAdd_DedupesExistingPrefix()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
+
+        var (exit, _, _) = await Run(["extract", "exclude", "add", "hermes/"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("hermes/,docs/");
+    }
+
+    [Fact]
+    public async Task ExtractExcludeRemove_DeletesPrefix()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
+
+        var (exit, outp, _) = await Run(["extract", "exclude", "remove", "hermes/"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("docs/");
+        outp.ShouldContain("docs/");
+    }
+
+    [Fact]
+    public async Task ExtractExcludeRemove_LastPrefix_DeletesTheSettingRow()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/";
+
+        var (exit, _, _) = await Run(["extract", "exclude", "remove", "hermes/"], store);
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.ExcludePrefixesGlobal);
+    }
+
+    [Fact]
+    public async Task ExtractExcludeList_ShowsNone_WhenUnset()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["extract", "exclude", "list"], store);
+
+        exit.ShouldBe(0);
+        outp.ShouldContain("none");
+    }
+
+    [Fact]
+    public async Task ExtractExcludeList_ShowsConfiguredPrefixes()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
+
+        var (exit, outp, _) = await Run(["extract", "exclude", "list"], store);
+
+        exit.ShouldBe(0);
+        outp.ShouldContain("hermes/");
+        outp.ShouldContain("docs/");
+    }
 }

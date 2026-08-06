@@ -89,7 +89,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         foreach (var (content, path) in rows)
         {
             await scratch.Store.AddContentAsync(projectId, path, content,
-                ContextNaming.ProjectContext(projectId), CancellationToken.None);
+                ContextNaming.ProjectContext(projectId), cancellationToken: CancellationToken.None);
         }
 
         var snapshotPath = Path.GetTempFileName();
@@ -601,7 +601,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
             CancellationToken.None);
         await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}",
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
     }
 
@@ -1268,7 +1268,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenContentWrittenWithContext(string content, string context)
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await _store.AddContentAsync(projectId, "note.md", content, context, CancellationToken.None);
+        await _store.AddContentAsync(projectId, "note.md", content, context, cancellationToken: CancellationToken.None);
     }
 
     [When(@"I search for ""(.*)"" restricted to context ""(.*)""")]

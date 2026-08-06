@@ -3,9 +3,12 @@
 
 Installs ``hermes-provider/ai-raccoon`` into ``$HERMES_HOME/plugins/``,
 probes it through Hermes' memory-plugin discovery (spawning a real
-server against a TEMP ``--data-root`` bank, so the real bank is never
-touched), and activates it with ``hermes config set memory.provider
-ai-raccoon``.
+server against a TEMP ``--data-root`` bank, so the probe never touches
+the real bank), activates it with ``hermes config set memory.provider
+ai-raccoon``, and excludes the ``hermes/`` source prefix from shared
+extraction (``ai-raccoon extract exclude add hermes/`` — a settings
+write against the default bank, which is created on first open if
+absent).
 
 Usage:
     python3 scripts/hermes-provider-setup.py [--source DIR] [--python PY] [--check]
@@ -27,6 +30,9 @@ from pathlib import Path
 
 PLUGIN_NAME = "ai-raccoon"
 PROBE_MARKER = "hermes-provider-setup-probe:"
+# Operator config applied at setup time (config channel, not code): shared extraction
+# never promotes hermes' own session-scratch rows (source_file 'hermes/<session>').
+EXCLUDE_PREFIX = "hermes/"
 
 PROBE_CODE = r"""
 import sys
@@ -158,6 +164,29 @@ def activate(home: Path) -> None:
     print(f"[activate] memory.provider = {PLUGIN_NAME} ({home / 'config.yaml'})")
 
 
+def wire_exclude_prefix() -> None:
+    """Exclude 'hermes/' source_file prefixes from shared extraction (best-effort).
+
+    Runs the config CLI against the default bank (~/.ai-raccoon); the bank is
+    created on first open if it does not exist yet. Failure only warns: extraction
+    is off by default and the operator can add the prefix later with
+    'ai-raccoon extract exclude add hermes/'.
+    """
+    binary = shutil.which("ai-raccoon")
+    if not binary:
+        print(f"[exclude] WARNING: ai-raccoon CLI not found; run manually: "
+              f"ai-raccoon extract exclude add {EXCLUDE_PREFIX}")
+        return
+    result = subprocess.run(
+        ["ai-raccoon", "extract", "exclude", "add", EXCLUDE_PREFIX],
+        capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        print(f"[exclude] WARNING: extract exclude add failed ({result.returncode}): "
+              f"{result.stderr.strip() or result.stdout.strip()}")
+        return
+    print(f"[exclude] source prefix '{EXCLUDE_PREFIX}' excluded from shared extraction")
+
+
 def check(home: Path, source: Path) -> int:
     plugins_dir = home / "plugins"
     installed = (plugins_dir / PLUGIN_NAME / "__init__.py").exists()
@@ -203,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
+
+    wire_exclude_prefix()
 
     print()
     print("Done. The provider activates on your NEXT hermes session.")
