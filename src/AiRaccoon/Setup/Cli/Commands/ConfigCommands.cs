@@ -58,14 +58,12 @@ internal static class ConfigCommands
                 ["watch", "list"] => await WatchListAsync(store, stdout, cancellationToken),
                 ["watch", "registered"] => await WatchRegisteredAsync(parseResult, watchStore, stdout, cancellationToken),
                 ["watch", "remove"] => await WatchRemoveAsync(parseResult, store, stdout, cancellationToken),
-                // The encryptionCommands! suppressions are correct: these switch arms are
-                // unreachable without a configured IEncryptionCommands — the caller (CliCommandRunner)
-                // creates and passes one. An NRE here IS the correct failure for a wiring gap
-                // (fail fast rather than silently skip). Guard.IsNotNull is not an alternative
-                // because encryptionCommands is genuinely optional for the 22 non-encryption verbs.
-                ["encryption", "bitwarden"] => await encryptionCommands!.BitwardenAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
-                ["encryption", "show"] => await encryptionCommands!.ShowAsync(store, stdout, cancellationToken),
-                ["encryption", "unset"] => await encryptionCommands!.UnsetAsync(store, stdout, stderr, cancellationToken),
+                // encryptionCommands is genuinely optional for non-encryption verbs;
+                // the ThrowHelper makes wiring gaps loud at the dispatch site rather than
+                // producing a downstream NRE inside the handler.
+                ["encryption", "bitwarden"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).BitwardenAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
+                ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
+                ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }
