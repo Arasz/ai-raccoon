@@ -32,45 +32,46 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private string SidecarPath() => EncryptionState.PathFor(BankPath());
 
-    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) => new(env, runner);
+    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) =>
+        new(new EncryptionState(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
 
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 
     [Fact]
-    public void GetPassphrase_NoSidecar_ReturnsEnvValue()
+    public void Resolve_NoSidecar_ReturnsEnvValue()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        resolver.GetPassphrase().ShouldBe("env-pass");
+        resolver.Resolve().Passphrase.ShouldBe("env-pass");
     }
 
     [Fact]
-    public void GetPassphrase_NoSidecar_EnvNull_ReturnsNull()
+    public void Resolve_NoSidecar_EnvNull_ReturnsNull()
     {
         var resolver = Resolver(new StubEnvProvider(null), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        resolver.GetPassphrase().ShouldBeNull();
+        resolver.Resolve().Passphrase.ShouldBeNull();
     }
 
     [Fact]
-    public void GetPassphrase_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
+    public void Resolve_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
     {
         WriteSidecar("""{"source":"env"}""");
         var runner = new FakeBwsRunner(new BwsInvocationException("bws must not run"));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
-        resolver.GetPassphrase().ShouldBe("env-pass");
+        resolver.Resolve().Passphrase.ShouldBe("env-pass");
         runner.Args.ShouldBeNull();
     }
 
     [Fact]
-    public void GetPassphrase_SidecarBitwarden_FetchesSecretAndDerives()
+    public void Resolve_SidecarBitwarden_FetchesSecretAndDerives()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
-        var passphrase = resolver.GetPassphrase();
+        var passphrase = resolver.Resolve().Passphrase;
 
         passphrase.ShouldBe(DerivedRawKey);
         runner.Args.ShouldBe(["secret", "get", "s-1"]);
@@ -78,40 +79,39 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     }
 
     [Fact]
-    public void GetPassphrase_SidecarCorrupt_ThrowsLoudNamingThePath()
+    public void Resolve_SidecarCorrupt_ThrowsLoudNamingThePath()
     {
         WriteSidecar("{not json");
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var ex = Should.Throw<EncryptionSourceException>(() => resolver.GetPassphrase());
+        var ex = Should.Throw<EncryptionSourceException>(() => resolver.Resolve());
 
         ex.Message.ShouldContain(SidecarPath());
         ex.Message.ShouldContain("corrupt");
     }
 
     [Fact]
-    public void GetPassphrase_SidecarBitwardenWithoutSecretId_ThrowsLoud()
+    public void Resolve_SidecarBitwardenWithoutSecretId_ThrowsArgumentException()
     {
         WriteSidecar("""{"source":"bitwarden"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var ex = Should.Throw<EncryptionSourceException>(() => resolver.GetPassphrase());
+        var ex = Should.Throw<ArgumentException>(() => resolver.Resolve());
 
-        ex.Message.ShouldContain(SidecarPath());
-        ex.Message.ShouldContain("secretId");
+        ex.ParamName.ShouldBe("secretId");
     }
 
     [Fact]
-    public void GetPassphrase_ReadsSidecarFreshOnEveryCall()
+    public void Resolve_ReadsSidecarFreshOnEveryCall()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"),
             new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")));
 
-        resolver.GetPassphrase().ShouldBe("env-pass");
+        resolver.Resolve().Passphrase.ShouldBe("env-pass");
 
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
 
-        resolver.GetPassphrase().ShouldBe(DerivedRawKey);
+        resolver.Resolve().Passphrase.ShouldBe(DerivedRawKey);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
         var resolved = resolver.Resolve();
 
-        resolved.SourceName.ShouldBe(EncryptionSettingsKeys.SourceEnv);
+        resolved.SourceName.ShouldBe("env");
         resolved.Passphrase.ShouldBe("env-pass");
     }
 
@@ -134,13 +134,17 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
         var resolved = resolver.Resolve();
 
-        resolved.SourceName.ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
+        resolved.SourceName.ShouldBe("bitwarden");
         resolved.Passphrase.ShouldBe(DerivedRawKey);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {
-        public string? GetPassphrase() => passphrase;
+        public string Source => "env";
+
+        public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
+
+        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
     }
 
     private sealed class FakeBwsRunner : ICliSecretManager
