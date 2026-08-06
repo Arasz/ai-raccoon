@@ -61,7 +61,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     [Given("an entry exists in project \"(.*)\"")]
     public async Task GivenEntryExistsInProject(string projectId) =>
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "test content"),
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "test content"),
             CancellationToken.None);
 
     [When("I query the entries table")]
@@ -219,7 +219,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var wsId = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT workspace_id FROM entries WHERE hash = @hash",
-            new { _lastWrite!.Hash });
+            new { hash = _lastWrite!.Hash });
         wsId.ShouldBe(expectedWsId);
     }
 
@@ -280,9 +280,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenWorkspaceRemoved()
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        var count = await conn.QueryFirstOrDefaultAsync<int>(
-            "SELECT COUNT(*) FROM workspaces WHERE id = 'ws-1'");
-        count.ShouldBe(0);
+        var status = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT status FROM workspaces WHERE id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
+        status.ShouldBe("Closed");
+        var entries = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE workspace_id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
+        entries.ShouldBe(0);
     }
 
     // ── FR-NM-7: Content identity ──
@@ -681,7 +684,14 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("the entry is deleted")]
-    public void ThenEntryDeleted2() { }
+    public async Task ThenEntryDeleted2()
+    {
+        _lastWrite.ShouldNotBeNull();
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash", new { hash = _lastWrite!.Hash });
+        count.ShouldBe(0);
+    }
 
     [Then("the forgetting policy is unchanged")]
     public void ThenForgettingPolicyUnchanged() { }

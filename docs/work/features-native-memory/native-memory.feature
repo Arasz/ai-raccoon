@@ -35,12 +35,11 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I call memory_write for project "acme-web"
             Then the tool errors with access-denied
             And memory_search for project "acme-web" still returns results
-        @ignore
         Scenario: full mode allows removal
             Given project "acme-web" is in mode full
+            And an entry exists in project "acme-web"
             When I call memory_delete with a known hash
             Then the entry is deleted
-        @ignore
         Scenario: full mode allows workspace discard
             Given project "acme-web" is in mode full
             And workspace "ws-1" exists for project "acme-web"
