@@ -10,7 +10,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 ///     Extract-config commands pin the settings-key contract the background extraction
 ///     service reads: extract.enabled.global ("true"/"false", default off),
 ///     extract.mode.global (propose|promote, default propose),
-///     extract.interval-minutes.global (default 60).
+///     extract.interval-minutes.global (default 30).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -96,7 +96,7 @@ public class ConfigCommandsExtractTests
         exit.ShouldBe(0);
         outp.ShouldContain("enabled: False");
         outp.ShouldContain("mode: propose");
-        outp.ShouldContain("interval: 60 min");
+        outp.ShouldContain("interval: 30 min");
     }
 
     [Fact]

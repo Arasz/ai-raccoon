@@ -1,11 +1,13 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using Shouldly;
@@ -87,6 +89,36 @@ public class McpServerSetupHostTests : IDisposable
         host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public void StdioOnlyHost_DoesNotRegisterTheExtractionHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is ExtractionHostedService);
+    }
+
+    [Fact]
+    public void HttpHost_RegistersTheExtractionHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is ExtractionHostedService);
+    }
+
+    [Fact]
+    public void BothTransportsHost_RegistersTheExtractionHostedService()
+    {
+        // HTTP/S presence means the process can live long enough for the extraction
+        // loop to matter; a pure-stdio process is per-connection and recycled.
+        var host = McpServerSetup.CreateServerHost(
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is ExtractionHostedService);
     }
 
     [Fact]
