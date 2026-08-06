@@ -90,6 +90,13 @@ public sealed partial class ExtractionHostedService : BackgroundService
                     await _store.ShareAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
                 }
 
+                // Refresh per project: a promotion changes the shared tier, and the next
+                // project's dedup must see it (cross-project duplicate rows within one pass).
+                if (result.PromotedHashes.Count > 0)
+                {
+                    sharedIndex = await _store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 promotedTotal += result.PromotedHashes.Count;
                 Log.Pass(_logger, projectId, mode, result.Candidates.Count, result.PromotedHashes.Count);
             }
