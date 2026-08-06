@@ -67,10 +67,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-nuget-publish",
-      "sourceHash": "6066fa09ab6c12d28e8207371f540ae598f02aabc6a535a89aa9de57d288df27",
+      "sourceHash": "b66b2ea0c76c5cdb1ce5e90d5c423d7ebce1f74aeb4b2f654d3062915a710691",
       "sourcePath": "software-development/dotnet-nuget-publish",
       "status": "synced",
-      "syncedAt": "2026-08-06T10:51:03Z",
+      "syncedAt": "2026-08-06T12:01:50Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
     },
     {
