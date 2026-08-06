@@ -118,6 +118,10 @@ public sealed partial class ExtractionHostedService : BackgroundService
                 promotedTotal += result.PromotedHashes.Count;
                 Log.Pass(_logger, projectId, mode, result.Candidates.Count, result.PromotedHashes.Count);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw; // shutdown: no per-project failure noise, no doomed round-trips (S5)
+            }
             catch (Exception ex)
             {
                 Log.ProjectFailed(_logger, projectId, ex);
