@@ -22,11 +22,29 @@
     {
       "category": "uncategorized",
       "name": "documentation-drift-audit",
-      "sourceHash": "5d9069dd73ebb278f18838201fe5fd654e8dbd8c7d4be755503c42f98a24b14c",
+      "sourceHash": "e5a66f2e9f6979b7e4d2764a751f54273616cef15215f9cb23c1a62384cbdd0d",
       "sourcePath": "documentation/documentation-drift-audit",
       "status": "synced",
-      "syncedAt": "2026-08-06T09:24:47Z",
+      "syncedAt": "2026-08-06T10:50:32Z",
       "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-flaky-test-diagnosis",
+      "sourceHash": "6f1739979eab003e4f1951d338332a04ac0a0dbb6295e3501293a67ed63495ae",
+      "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
+      "status": "synced",
+      "syncedAt": "2026-08-06T10:55:47Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-nuget-publish",
+      "sourceHash": "6066fa09ab6c12d28e8207371f540ae598f02aabc6a535a89aa9de57d288df27",
+      "sourcePath": "software-development/dotnet-nuget-publish",
+      "status": "synced",
+      "syncedAt": "2026-08-06T10:51:03Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
     },
     {
       "category": "uncategorized",

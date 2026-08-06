@@ -698,6 +698,36 @@
       "resumeCommand": "hermes --resume 20260806_111438_61b45c",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "integration-review-1-0-8",
+      "title": "Integration review of latest code changes + docs refresh + bump 1.0.8",
+      "sessionId": "20260806_122858_7a3ede",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/integration-review-1-0-8",
+      "risk": false,
+      "startedAt": "2026-08-06T10:31:29.055390+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_122858_7a3ede",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "ai-raccoon-package-id",
+      "title": "Migrate NuGet package id arasz.ai-raccoon -> ai-raccoon (ID assigned by NuGet support)",
+      "sessionId": "20260806_125148_ca8d27",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/ai-raccoon-package-id",
+      "risk": false,
+      "startedAt": "2026-08-06T10:58:10.308624+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_125148_ca8d27",
+      "resumeAttempts": []
     }
   ]
 }

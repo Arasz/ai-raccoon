@@ -3402,6 +3402,88 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "integration-review-1-0-8",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_122858_7a3ede",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T10:31:29.054919+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T10:31:29.054919+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
+    },
+    {
+      "taskId": "ai-raccoon-package-id",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_125148_ca8d27",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T10:58:10.307311+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 13,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 76383,
+              "outputTokens": 14670,
+              "cacheReadTokens": 826752,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 14
+            }
+          },
+          "cumulative": {
+            "inputTokens": 76060,
+            "outputTokens": 14609,
+            "cacheReadTokens": 826496,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T10:58:10.307311+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 13,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 76383,
+              "outputTokens": 14670,
+              "cacheReadTokens": 826752,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 14
+            }
+          },
+          "cumulative": {
+            "inputTokens": 76060,
+            "outputTokens": 14609,
+            "cacheReadTokens": 826496,
+            "cacheCreationTokens": 0
+          }
+        }
+      }
     }
   ]
 }
