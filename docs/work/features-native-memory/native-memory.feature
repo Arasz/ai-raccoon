@@ -127,25 +127,21 @@ Feature: Native memory store (ai-raccoon MCP server)
 
     @FR-NM-6 @AC-6
     Rule: Workspaces are first-class entities with structural isolation
-        @ignore
         Scenario: A new workspace is an Active row in the bank
             When I call memory_workspace_begin for project "acme-web"
             Then a workspace id is returned
             And its workspaces row has status "Active"
-        @ignore
         Scenario: A write is either committed or in exactly one workspace
             Given workspace "ws-1" exists for project "acme-web"
             When I write "draft finding" to project "acme-web" with workspace "ws-1"
             Then the entry row has workspace_id "ws-1"
             And the schema forbids a row that has both a workspace_id and a committed scope
-        @ignore
         Scenario: Consolidation promotes, discards and closes in one transaction
             Given workspace "ws-1" contains entries "h1" and "h2"
             When I call memory_workspace_consolidate with keep=["h1"]
             Then "h1" is committed to project "acme-web"
             And "h2" is deleted
             And the workspace row has status "Closed"
-        @ignore
         Scenario: Sync and sweep structurally exclude workspace rows
             Given workspace "ws-1" contains an entry
             When I call memory_sync
@@ -158,13 +154,11 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: Identical content is written once
             When I write the same content twice to project "acme-web"
             Then memory_stats reports one entry
-        @ignore
         Scenario: Sharing creates a real row under a distinct path
             Given an entry with hash "h1" exists in project "acme-web"
             When I call memory_share with hash "h1"
             Then a row with path "shared/<path>" exists in the shared scope
             And its hash differs from "h1"
-        @ignore
         Scenario: Consolidation preserves the logical path
             Given workspace "ws-1" contains an entry with path "docs/note.md"
             When I call memory_workspace_consolidate with keep=["all"]

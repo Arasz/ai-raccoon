@@ -444,7 +444,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var sql = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries'");
         sql.ShouldNotBeNull();
-        sql.ShouldContain("workspace_id IS NULL OR scope = 'workspace'");
+        sql.ShouldContain("(workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL)");
     }
 
     [When(@"I call memory_workspace_consolidate with keep=\[""([^""]*)""\]")]
@@ -453,31 +453,44 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var wsId = (string)scenarioContext["WorkspaceId"];
         var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory), _ctx.TimeProvider);
-        var result = await ws.ConsolidateAsync(projectId, wsId,
-            keep == "all" ? ["all"] : keep.Split(',', StringSplitOptions.TrimEntries),
-            CancellationToken.None);
+        var keepHashes = keep == "all"
+            ? (IReadOnlyList<string>)["all"]
+            : keep.Split(',', StringSplitOptions.TrimEntries).Select(k => (string)scenarioContext[k]).ToList();
+        var result = await ws.ConsolidateAsync(projectId, wsId, keepHashes, CancellationToken.None);
         scenarioContext["ConsolidateResult"] = result;
     }
 
     [Then(@"""(.*)"" is committed to project ""(.*)""")]
-    public void ThenEntryCommittedToProject(string hash, string projectId)
+    public async Task ThenEntryCommittedToProject(string hashKey, string projectId)
     {
-        // The consolidator already verified; no extra assertion needed
+        var hash = (string)scenarioContext[hashKey];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var scope = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT scope FROM entries WHERE hash = @hash", new { hash });
+        scope.ShouldBe("project");
+        var wsId = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT workspace_id FROM entries WHERE hash = @hash", new { hash });
+        wsId.ShouldBeNull();
     }
 
     [Then(@"""(.*)"" is deleted")]
-    public void ThenEntryDeleted(string hash)
+    public async Task ThenEntryDeleted(string hashKey)
     {
-        // Workspace entries are cleaned up by consolidation
+        var hash = (string)scenarioContext[hashKey];
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM entries WHERE hash = @hash", new { hash });
+        count.ShouldBe(0);
     }
 
     [Then(@"the workspace row has status ""(.*)""")]
+    [Then(@"its workspaces row has status ""(.*)""")]
     public async Task ThenWorkspaceRowHasStatus(string status)
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var wsStatus = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT status FROM workspaces WHERE id = @id",
-            new { id = scenarioContext["WorkspaceId"] });
+            new { id = (string)scenarioContext["WorkspaceId"] });
         wsStatus.ShouldBe(status);
     }
 
@@ -551,19 +564,23 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenRowWithPathInSharedScope(string expectedPath)
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        var scope = await conn.QueryFirstOrDefaultAsync<string>(
-            "SELECT scope FROM entries WHERE path = @path",
-            new { path = expectedPath });
-        scope.ShouldBe("shared");
+        var paths = (await conn.QueryAsync<string>(
+            "SELECT path FROM entries WHERE scope = 'shared'")).ToList();
+        // The feature's "shared/<path>" is a template: the shared row lives under shared/.
+        paths.ShouldContain(p => p.StartsWith("shared/", StringComparison.Ordinal));
     }
 
     [Then(@"its hash differs from ""(.*)""")]
     public async Task ThenHashDiffers(string originalHash)
     {
+        var sourceHash = scenarioContext.ContainsKey("ShareHash")
+            ? (string)scenarioContext["ShareHash"]
+            : originalHash;
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var sharedHash = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT hash FROM entries WHERE scope = 'shared'");
-        sharedHash.ShouldNotBe(originalHash);
+        sharedHash.ShouldNotBeNull();
+        sharedHash.ShouldNotBe(sourceHash);
     }
 
     [Given(@"workspace ""(.*)"" contains an entry with path ""(.*)""")]
@@ -573,9 +590,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
             CancellationToken.None);
-        await _store.WriteAsync(
-            new MemoryWriteRequest(projectId, "workspace content", $"workspace:{wsId}", WorkspaceId: wsId),
+        await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}",
             CancellationToken.None);
+        scenarioContext["WorkspaceId"] = wsId;
     }
 
     [Then(@"the committed entry keeps path ""(.*)""")]
@@ -872,7 +889,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenChunksRespectTokens() { }
 
     [Then("it was never a sweep candidate")]
-    public void ThenNeverSweepCandidate() { }
+    public async Task ThenNeverSweepCandidate()
+    {
+        var candidates = ((SweepOutcome)scenarioContext["SweepOutcome"]).Candidates
+            .Select(c => c.Hash).ToHashSet(StringComparer.Ordinal);
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var wsHash = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT hash FROM entries WHERE workspace_id = @id",
+            new { id = (string)scenarioContext["WorkspaceId"] });
+        wsHash.ShouldNotBeNull();
+        candidates.ShouldNotContain(wsHash);
+    }
 
     [Then("keyword results are returned above the minimum score")]
     public void ThenKeywordResultsAboveMinScore() { }
@@ -966,8 +993,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISweepDryRunFalse()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        await conn.ExecuteAsync("DELETE FROM entries WHERE rating < 0.3 AND project_id = @pid", new { pid = projectId });
+        var sweeper = new SweepService(_store, _ctx.TimeProvider);
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: true,
+            CancellationToken.None);
+        await sweeper.SweepAsync(projectId, 0.3, dryRun: false, CancellationToken.None);
     }
 
     [When("I call memory_sync")]
@@ -997,9 +1026,11 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "e1", WorkspaceId: wsId), CancellationToken.None);
-        await _store.WriteAsync(new MemoryWriteRequest(projectId, "e2", WorkspaceId: wsId), CancellationToken.None);
+        var e1 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e1", WorkspaceId: wsId), CancellationToken.None);
+        var e2 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e2", WorkspaceId: wsId), CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
+        scenarioContext["h1"] = e1.Hash;
+        scenarioContext["h2"] = e2.Hash;
     }
 
     [Then(@"workspace ""(.*)"" no longer lists ""(.*)"" or ""(.*)""")]
@@ -1135,6 +1166,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
         await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
         await _store.WriteAsync(new MemoryWriteRequest(projectId, "entry-content", WorkspaceId: wsId), CancellationToken.None);
+    }
+
+    [Given(@"workspace ""(.*)"" contains an entry")]
+    public async Task GivenWorkspaceContainsAnEntry(string wsId)
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var ws = new SqliteWorkspaceStore(_ctx.Factory);
+        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await _store.WriteAsync(new MemoryWriteRequest(projectId, "workspace entry", WorkspaceId: wsId),
+            CancellationToken.None);
+        scenarioContext["WorkspaceId"] = wsId;
     }
 
     [Given(@"a workspace ""(.*)"" exists for project ""(.*)""")]
