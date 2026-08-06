@@ -942,19 +942,18 @@
       },
       {
           "taskId": "fix-missing-data-in-promotion",
-          "title": "fix-missing-data-in-promotion (record recovery after tracker clobber)",
-          "sessionId": "20260806_215718_fd7f66",
+          "title": "Promotion carries provenance (source_file/section) + extraction skips hermes turn-chatter; cleanup bank to repo-only",
+          "sessionId": "20260806_221408_da0975",
           "transcriptPath": null,
           "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
           "branch": "task/fix-missing-data-in-promotion",
           "risk": false,
-          "startedAt": "2026-08-06T21:22:35.383809+00:00",
-          "finishedAt": "2026-08-06T21:22:50.814822+00:00",
-          "state": "FINISHED",
+          "startedAt": "2026-08-06T20:23:39.079643+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
           "trackingSource": "hermes",
-          "resumeCommand": "hermes --resume 20260806_215718_fd7f66",
-          "resumeAttempts": [],
-          "stateJsonUpdated": true
+          "resumeCommand": "hermes --resume 20260806_221408_da0975",
+          "resumeAttempts": []
     }
   ]
 }
