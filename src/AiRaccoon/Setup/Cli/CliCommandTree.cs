@@ -1,5 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup.Serve;
 
 namespace AiRaccoon.Setup.Cli;
 
@@ -12,7 +13,28 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"];
+
+    internal static readonly Option<int> ServePortOption = new("--port")
+    {
+        Description = "HTTP port to bind; 0 picks a random free port",
+        HelpName = "port",
+        DefaultValueFactory = _ => 7721
+    };
+
+    internal static readonly Option<string> ServeIdleTimeoutOption = CreateIdleTimeoutOption();
+
+    internal static readonly Option<bool> ServeMcpEntryOption = new("--mcp-entry")
+    {
+        Description = "Print the MCP client config entry for the bound URL"
+    };
+
+    internal static readonly Option<string> ServeFormatOption = new("--format")
+    {
+        Description = "Entry format: hermes|claude|all",
+        HelpName = "format",
+        DefaultValueFactory = _ => "hermes"
+    };
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
@@ -27,6 +49,7 @@ internal static class CliCommandTree
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
+        root.Add(ServeCommand());
         return root;
     }
 
@@ -193,5 +216,36 @@ internal static class CliCommandTree
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
         };
         return extract;
+    }
+
+    private static Option<string> CreateIdleTimeoutOption()
+    {
+        var option = new Option<string>("--idle-timeout")
+        {
+            Description = "Idle shutdown span: 90s/30m/4h/1d; 0 disables",
+            HelpName = "span"
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && !IdleTimeoutParser.TryParse(value, out _))
+            {
+                result.AddError($"Cannot parse argument '{value}' as an idle timeout: expected 90s/30m/4h/1d or 0 (disabled).");
+            }
+        });
+        return option;
+    }
+
+    private static Command ServeCommand()
+    {
+        var serve = new Command("serve",
+            "Serves the MCP endpoint over HTTP (always HTTP). Background it: ai-raccoon serve > serve.log 2>&1 &")
+        {
+            ServePortOption,
+            ServeIdleTimeoutOption,
+            ServeMcpEntryOption,
+            ServeFormatOption
+        };
+        return serve;
     }
 }

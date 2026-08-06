@@ -75,6 +75,28 @@ public class ServerConfigTests
         Cli().ToServerConfig().Options.Scope.ShouldBe(InstallScope.User);
     }
 
+    [Fact]
+    public void ServerConfig_IdleTimeout_DefaultsToZero()
+    {
+        var config = new ServerConfig(7721, McpTransport.Stdio, new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User });
+
+        config.IdleTimeout.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public void ToServerConfig_DoesNotSetIdleTimeout()
+    {
+        // R3: the 4h watchdog default is serve-only; bare launches keep Zero (watchdog off).
+        Cli().ToServerConfig().IdleTimeout.ShouldBe(TimeSpan.Zero);
+        Cli(transport: "http").ToServerConfig().IdleTimeout.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public void DefaultOptions_IdleTimeout_IsFourHours()
+    {
+        DefaultOptions.IdleTimeout.ShouldBe(TimeSpan.FromHours(4));
+    }
+
     private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
         int port = DefaultOptions.Port, bool isPortExplicit = false) =>
         new()

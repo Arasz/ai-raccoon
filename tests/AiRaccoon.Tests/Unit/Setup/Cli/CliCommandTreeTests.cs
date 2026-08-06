@@ -20,8 +20,20 @@ public class CliCommandTreeTests
         var root = CliCommandTree.BuildFullRootCommand();
 
         root.Children.OfType<Command>().Select(c => c.Name)
-            .ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"]);
-        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract"]);
+            .ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"]);
+        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"]);
+    }
+
+    [Fact]
+    public void ServeCommand_ExposesServeOptions()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+        serve.Children.OfType<Option>().ShouldContain(CliCommandTree.ServePortOption);
+        serve.Children.OfType<Option>().ShouldContain(CliCommandTree.ServeIdleTimeoutOption);
+        serve.Children.OfType<Option>().ShouldContain(CliCommandTree.ServeMcpEntryOption);
+        serve.Children.OfType<Option>().ShouldContain(CliCommandTree.ServeFormatOption);
     }
 
     [Fact]
