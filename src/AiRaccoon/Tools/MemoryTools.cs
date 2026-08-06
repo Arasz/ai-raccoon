@@ -242,8 +242,8 @@ public sealed class MemoryTools(
         string[] projectIds,
         [Description("propose (default) lists ranked candidates; promote shares the top candidates.")]
         string mode = "propose",
-        [Description("Maximum candidates to return or promote (1..50).")]
-        int? limit = 20,
+        [Description("Maximum candidates to return or promote (1..50; default 20).")]
+        int? limit = null,
         [Description("Include rows with a TTL (ephemeral by design; promoting makes them sweep-exempt forever).")]
         bool includeTtlRows = false,
         [Description("Promote the top candidates in this call. Disabled by default: it shares data between projects.")]
@@ -267,7 +267,7 @@ public sealed class MemoryTools(
                 "promote" => ExtractMode.Promote,
                 _ => throw new McpException("invalid-params: mode must be 'propose' or 'promote'")
             };
-            var resolvedLimit = limit ?? 20;
+            var resolvedLimit = limit ?? SharedExtractionService.DefaultCandidateLimit;
             if (resolvedLimit is < 1 or > 50)
             {
                 throw new McpException("invalid-params: limit must be between 1 and 50");

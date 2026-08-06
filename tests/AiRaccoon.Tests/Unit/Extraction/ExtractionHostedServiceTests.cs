@@ -206,6 +206,21 @@ public sealed class ExtractionHostedServiceTests
     }
 
     [Fact]
+    public async Task RunOnce_PromoteMode_CapsAtSharedDefault()
+    {
+        var (store, _, service) = NewStack();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = Enumerable.Range(0, 25)
+            .Select(i => Row($"h{i:00}", sourceFile: null, value: $"organic fact number {i}"))
+            .ToList();
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Shared.Count.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
+    }
+
+    [Fact]
     public async Task RunOnce_PromoteMode_DedupsIdenticalContentAcrossProjectsInOnePass()
     {
         var (store, _, service) = NewStack();

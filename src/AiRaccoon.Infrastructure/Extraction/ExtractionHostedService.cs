@@ -17,7 +17,6 @@ public sealed partial class ExtractionHostedService : BackgroundService
     private readonly SharedExtractionService _extraction;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExtractionHostedService> _logger;
-    private const int CandidateLimit = 20;
 
     public ExtractionHostedService(IMemoryStore store, SharedExtractionService extraction,
         TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
@@ -101,7 +100,8 @@ public sealed partial class ExtractionHostedService : BackgroundService
                 var rows = await _store.ExtractCandidatesAsync(projectId, includeTtlRows: false, cancellationToken)
                     .ConfigureAwait(false);
                 var result = _extraction.Run(mode, projectId, projects, rows,
-                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false, CandidateLimit,
+                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false,
+                    SharedExtractionService.DefaultCandidateLimit,
                     _timeProvider.GetUtcNow());
                 foreach (var hash in result.PromotedHashes)
                 {
