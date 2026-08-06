@@ -12,6 +12,9 @@ Date: 2026-08-06. Task: ai-raccoon-package-id. PR: (this task's PR).
   ToolCommandName stayed `ai-raccoon`.
 - Owner emailed support@nuget.org (2026-08-05). NuGet support responded: the
   `ai-raccoon` id was assigned to the account.
+- Version split: main's release lane shipped `arasz.ai-raccoon` 1.0.8 on
+  2026-08-06 (the integration-review session's bump), so the raw `ai-raccoon`
+  id's first release is **1.0.9** (owner f: 2026-08-06).
 
 ## Q1: can we deploy both ids? — NuGet rules (verified against source docs)
 
@@ -25,7 +28,7 @@ Date: 2026-08-06. Task: ai-raccoon-package-id. PR: (this task's PR).
 **Verdict: legal, but operationally impossible for this package — measured:**
 
 ```
-$ dotnet tool install --tool-path /tmp/shims --add-source /tmp/feed ai-raccoon --version 1.0.8
+$ dotnet tool install --tool-path /tmp/shims --add-source /tmp/feed ai-raccoon --version 1.0.9
   (with arasz.ai-raccoon 1.0.7 already installed in the same tool-path)
 Tool 'ai-raccoon' failed to update due to the following:
 Failed to create shell shim for tool 'ai-raccoon': Command 'ai-raccoon'
@@ -41,7 +44,7 @@ would also double every release surface and show two identical package pages.
 
 ### This PR (merged code changes)
 
-- `PackageId` -> `ai-raccoon`, version 1.0.8 (csproj + `.mcp/server.json`
+- `PackageId` -> `ai-raccoon`, version 1.0.9 (csproj + `.mcp/server.json`
   identifier/version; VersionContractTests RED first, TDD).
 - publish.yml: patch-tool-shell target + shell/payload find patterns.
 - scripts: verify-tool-package.sh nupkg name, manual-fresh-install-test.py id +
@@ -54,13 +57,13 @@ would also double every release surface and show two identical package pages.
    `ai-raccoon`, or simply trust the first push).
 2. **Dispatch publish.yml** (manual approval on the `production` environment).
    Trusted publishing already covers the new id — owner-scoped policy, no change.
-   This lands `ai-raccoon` 1.0.8 shell + 6 RID payloads, the first packages
+   This lands `ai-raccoon` 1.0.9 shell + 6 RID payloads, the first packages
    under the raw id.
 3. **Deprecate `arasz.ai-raccoon`** on nuget.org: message "renamed to
    `ai-raccoon`" + alternate package `ai-raccoon`. Old versions stay listed
    (NuGet does not delete); deprecation is the supported retirement signal.
 4. **Verify the published tool**: `python3 scripts/manual-fresh-install-test.py`
-   (defaults to `AI_RACCOON_VERSION=1.0.8`, installs from nuget.org into an
+   (defaults to `AI_RACCOON_VERSION=1.0.9`, installs from nuget.org into an
    isolated tool-path).
 5. **Merge the article update** (arasz-home-page PR #210, prepared with this
    task): install lines + the "why not the clean id" resolution story. Do this
@@ -81,6 +84,6 @@ would also double every release surface and show two identical package pages.
   gallery 404 — nothing published under the raw id yet (assignment is
   account-side, invisible to read APIs until the first push).
 - Shim conflict: measured locally with two packs from this branch
-  (arasz.ai-raccoon 1.0.7 + ai-raccoon 1.0.8, osx-arm64, same `--tool-path`).
+  (arasz.ai-raccoon 1.0.7 + ai-raccoon 1.0.9, osx-arm64, same `--tool-path`).
 - Packed payload naming under the new id: `ai-raccoon.<rid>.<version>.nupkg`
-  (verified: `ai-raccoon.osx-arm64.1.0.8.nupkg`), matching the reserved prefix.
+  (verified: `ai-raccoon.osx-arm64.1.0.9.nupkg`), matching the reserved prefix.
