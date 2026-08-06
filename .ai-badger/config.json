@@ -8,7 +8,8 @@
   },
   "stacks": [
     "dotnet",
-    "mcp"
+    "mcp",
+    "python"
   ],
   "agents": [
     "claude",
