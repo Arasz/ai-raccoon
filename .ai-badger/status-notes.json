@@ -48,8 +48,8 @@
     "method": "20-min window, 10x2min samples: read-only SQL on ~/.ai-raccoon/memory.db, mcp-stderr.log banner analysis, grade log, live MCP probes, code reads; MoE 3 lanes (deleg_9787c2d3, 3.0M tokens)",
     "fixes_hold": "watch errors flat 76/76; 0 pending; jsaa 761/761/672/0; ghosts gone; window error-clean",
     "corrections": "error growth = pre-fix stdio per-start retries (bridge stderr uncaptured); 43/10min = one ingest, not a rate; 1.0.9+5a61b5c contains #55 (branch tip == squash tree)",
-    "new_findings": "extract enabled/promote/60min live in stdio servers (first pass ~13:45Z unobserved); 14.2% dup rows (multi-watcher race + zombie w6 PID 11882 writing live bank pre-dedup); self-correction impossible (0 TTLs, sweep no-op); stale custom row 4376 permanent; ~1.4GB RSS vs 41MB bank",
+    "new_findings": "extract enabled/promote/60min ARMED but not executing (no running process has #55 binary; post-swap instance exited; zero pass logs); 14.2% dup rows (multi-watcher race + zombie w6 PID 11882 writing live bank pre-dedup); self-correction impossible (0 TTLs, sweep no-op); stale custom row 4376 permanent; ~1.4GB RSS vs 41MB bank",
     "owner_actions": "kill 11882 + 78436; restart 5094 bridge on 1.0.9 + capture stderr; UNIQUE index or single-ingester; per-entry TTLs + scheduled sweep; delete row 4376; verify first auto-promote pass",
-    "open": "auto-promote pass unobserved; bridge skew limits replace-by-path/dedup guarantees"
+    "open": "auto-promote pass impossible until next post-swap server lives 60min; bridge skew limits replace-by-path/dedup guarantees"
   }
 }
