@@ -29,12 +29,11 @@ internal static class ConfigVerbRunner
         });
         var logger = loggerFactory.CreateLogger("ConfigCommands");
 
-        var encryptionState = new EncryptionState(SqliteConnectionFactory.BankPathFor(config.Options));
+        var bankPath = SqliteConnectionFactory.BankPathFor(config.Options);
         var bws = new BitwardenCliSecretManager();
-        var none = new NoneEncryptionKeyProvider();
+        var resolver = EncryptionKeyResolver.Create(bankPath, bws);
+        var encryptionState = new EncryptionState(bankPath);
         var env = new EnvEncryptionKeyProvider();
-        var resolver = new EncryptionKeyResolver(encryptionState,
-            [none, env, new BitwardenEncryptionKeyProvider(bws)]);
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
 

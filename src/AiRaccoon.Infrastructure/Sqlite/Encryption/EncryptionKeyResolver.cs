@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Encryption;
+using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 
@@ -21,6 +22,15 @@ public sealed class EncryptionKeyResolver(IEncryptionState encryptionState, IRea
             .FirstOrDefault() ?? ThrowHelper.ThrowArgumentNullException<Passphrase>();
 
         return new ResolvedKey(resolvedPassphrase.Value, resolvedPassphrase.Source);
+    }
+
+    /// <summary>Creates a resolver with the standard three-provider chain for one-shot paths (config verbs).</summary>
+    public static EncryptionKeyResolver Create(string bankPath, ICliSecretManager? bws = null)
+    {
+        var sidecar = new EncryptionState(bankPath);
+        bws ??= new BitwardenCliSecretManager();
+        return new EncryptionKeyResolver(sidecar,
+            [new NoneEncryptionKeyProvider(), new EnvEncryptionKeyProvider(), new BitwardenEncryptionKeyProvider(bws)]);
     }
 }
 
