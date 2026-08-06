@@ -117,6 +117,16 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
                 promotedTotal += result.PromotedHashes.Count;
                 Log.Pass(_logger, projectId, mode, result.Candidates.Count, result.PromotedHashes.Count);
+                if (mode == ExtractMode.Propose)
+                {
+                    // The loop's review surface: ranked candidates, one log line each (S4).
+                    for (var i = 0; i < result.Candidates.Count; i++)
+                    {
+                        var candidate = result.Candidates[i];
+                        Log.Candidate(_logger, i + 1, projectId, candidate.Path,
+                            string.Join(", ", candidate.Reasons), candidate.ValuePreview);
+                    }
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -155,6 +165,11 @@ public sealed partial class ExtractionHostedService : BackgroundService
         [LoggerMessage(EventId = 503, Level = LogLevel.Warning,
             Message = "Extraction pass failed for {ProjectId}")]
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
+
+        [LoggerMessage(EventId = 507, Level = LogLevel.Information,
+            Message = "Extraction candidate #{Rank} for {ProjectId}: {Path} ({Reasons}) — {Preview}")]
+        public static partial void Candidate(ILogger logger, int rank, string projectId,
+            string path, string reasons, string preview);
 
         [LoggerMessage(EventId = 504, Level = LogLevel.Information,
             Message = "Extraction pass complete: {Projects} projects, {Promoted} promoted")]
