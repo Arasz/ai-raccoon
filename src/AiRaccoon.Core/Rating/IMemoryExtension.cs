@@ -27,8 +27,7 @@ public interface IMemoryExtension
     Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken);
 
     /// <summary>Observes one processed source change (watch mirror); extensions that do not care inherit a no-op.</summary>
-    Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed record WriteContext(

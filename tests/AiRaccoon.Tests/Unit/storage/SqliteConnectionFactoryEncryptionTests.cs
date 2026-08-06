@@ -3,6 +3,8 @@ using System.Text;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -200,7 +202,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // Sidecar points at bitwarden; the fake bws secret derives a key that is NOT bank-key-A.
         File.WriteAllText(bankFactory.BankPath + ".source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var resolver = new EncryptionKeyResolver(options, new StubEncryptionKeyProvider(null), new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")));
+        var resolver = new EncryptionKeyResolver(new StubEncryptionKeyProvider(null), new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")));
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
 
         var ex = await Should.ThrowAsync<SqliteException>(async () =>
@@ -281,7 +283,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         stream.Write(value);
     }
 
-    private sealed class FakeBwsRunner(BwsResult result) : IBwsProcessRunner
+    private sealed class FakeBwsRunner(BwsResult result) : ICliSecretManager
     {
         public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => result;
     }

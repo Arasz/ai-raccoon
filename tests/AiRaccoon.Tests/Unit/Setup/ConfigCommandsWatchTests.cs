@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
@@ -20,7 +21,7 @@ public class ConfigCommandsWatchTests
 {
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store, FakeWatchStore? watchStore = null)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 

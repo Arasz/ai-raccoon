@@ -1,16 +1,11 @@
+using System.Net;
 using AiRaccoon.Prompts;
 using AiRaccoon.Tools;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System.Net;
 
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     Wires the MCP server for a resolved transport set: a plain app host for stdio-only
+///     Wires the MCP server for resolved transport set: a plain app host for stdio-only
 ///     (no web server, no HTTP bind), a web host for HTTP/S, and a web host with stdio
 ///     attached for a combined set. https is declared but unsupported (warning only).
 /// </summary>
@@ -28,11 +23,10 @@ internal static partial class McpServerSetup
             : DefaultTransport;
 
     /// <summary>Creates the server host for the config's single transport.</summary>
-    internal static IHost CreateServerHost(ServerConfig config) =>
-        CreateServerHost(config, [config.Transport]);
+    internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport]);
 
     /// <summary>
-    ///     Creates the server host for a transport set: stdio-only launches on a plain app
+    ///     Creates the server host for transport set: stdio-only launches on a plain app
     ///     host with no web server; any HTTP/S presence uses a web host bound to the
     ///     configured port (never the ASP.NET default 5000), with stdio attached when both
     ///     are selected.
@@ -73,29 +67,9 @@ internal static partial class McpServerSetup
         return builder.Build().ConfigureMcpEndpoints(transports);
     }
 
-    extension(IHost host)
-    {
-        /// <summary>
-        ///     Runs the server host: start, report the bound http URL (only knowable after
-        ///     start; 0 = random), then wait for shutdown. The http transport's only
-        ///     discoverability channel for a random port.
-        /// </summary>
-        public async Task RunAsync(ServerConfig config, CancellationToken cancellationToken = default)
-        {
-            await host.StartAsync(cancellationToken);
-            if (config.Transport == McpTransport.Http && host is WebApplication web)
-            {
-                var urls = string.Join(", ", web.Urls.Select(url => $"{url.TrimEnd('/')}/mcp"));
-                Log.HttpTransportListening(web.Logger, urls);
-            }
-
-            await host.WaitForShutdownAsync(cancellationToken);
-        }
-    }
-
     extension(WebApplication webApplication)
     {
-        public WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports)
+        private WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports)
         {
             if (transports.Contains(McpTransport.Https))
             {
@@ -113,21 +87,16 @@ internal static partial class McpServerSetup
 
     extension(WebApplicationBuilder webApplicationBuilder)
     {
-        public WebApplicationBuilder ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports)
-        {
+        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports) =>
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
                 .ConfigureMcpTransport(transports, webApplicationBuilder.Logging)
                 .WithTools<MemoryTools>()
                 .WithPrompts<MemoryPrompts>();
-
-            return webApplicationBuilder;
-        }
     }
 
-    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder) =>
-        loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder) => loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
     extension(IMcpServerBuilder mcpServerBuilder)
     {

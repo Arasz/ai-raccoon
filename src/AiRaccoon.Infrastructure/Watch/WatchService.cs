@@ -31,7 +31,7 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan (D1).
-        await store.AddWatchAsync(projectId, normalized, now, lastChangeTs: 0, cancellationToken)
+        await store.AddWatchAsync(projectId, normalized, now, 0, cancellationToken)
             .ConfigureAwait(false);
         pipeline.RegisterWatch(projectId, normalized);
     }
@@ -63,8 +63,7 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
         return result;
     }
 
-    public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) =>
-        (await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false)).Enabled;
+    public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => (await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false)).Enabled;
 
     public async Task<bool> IsPathAllowedAsync(string projectId, string path,
         CancellationToken cancellationToken = default)

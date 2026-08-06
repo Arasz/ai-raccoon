@@ -91,8 +91,7 @@ public sealed class WatchTools(
     [Description(
         "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error and last sync; empty list when none. Available in every access tier.")]
     public async Task<WatchStatusResult> Status(
-        [Description("The project id.")]
-        string projectId,
+        [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
         using var activity = observability.ActivitySource.StartActivity(TN_WatchStatus);
@@ -119,8 +118,7 @@ public sealed class WatchTools(
     [McpServerTool(Name = TN_WatchRemove)]
     [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op.")]
     public async Task<WatchRemoveResult> Remove(
-        [Description("The project id.")]
-        string projectId,
+        [Description("The project id.")] string projectId,
         [Description("Absolute path of the watched file or directory.")]
         string path,
         CancellationToken cancellationToken = default)

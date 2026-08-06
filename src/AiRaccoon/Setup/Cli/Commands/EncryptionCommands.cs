@@ -3,10 +3,12 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Data.Sqlite;
 
-namespace AiRaccoon.Setup;
+namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
 ///     encryption bitwarden/show/unset handlers (plan §S3): bws presence check, interactive id
@@ -17,8 +19,6 @@ internal static partial class ConfigCommands
 {
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
-    private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
 
     private const string RotationWarning =
         "ai-raccoon: warning: rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — rotate the secret and rekey the bank together";
@@ -26,18 +26,19 @@ internal static partial class ConfigCommands
     private const string MismatchText =
         "ai-raccoon: encryption mismatch: the bank cannot be opened with the bitwarden key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption bitwarden')";
 
+    private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
+
     private static async Task<int> EncryptionBitwardenAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, SqliteConnectionFactory? bank,
-        IBwsProcessRunner? bws, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
+        ICliSecretManager? bws, IEncryptionKeyProvider? env, CancellationToken cancellationToken)
     {
         Guard.IsNotNull(bank);
-        bws ??= new BwsProcessRunner();
+        bws ??= new BitwardenCliSecretManager();
 
-        // (a) Presence check FIRST: only FileNotFound means missing (a non-zero --version
-        // exit still passes — plan §7 unknown 4); nothing is changed on failure.
         try
         {
-            bws.Run(["--version"], token: null, PresenceTimeout);
+            bws.Run(["--version"], null, PresenceTimeout);
         }
         catch (BwsInvocationException ex)
         {
@@ -116,9 +117,9 @@ internal static partial class ConfigCommands
             {
                 // Amendment 1 (unset crash window): rekey-back landed but the sidecar was never
                 // deleted. The env key opens the bank → report and leave the sidecar consistent.
-                var sidecar = new EncryptionSourceSidecar(bankPath);
+                var sidecar = new EncryptionState(bankPath);
                 var envPassphrase = (env ?? new EnvEncryptionKeyProvider()).GetPassphrase();
-                if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
+                if (File.Exists(EncryptionState.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(bank, envPassphrase, cancellationToken))
                 {
                     sidecar.Delete();
@@ -133,7 +134,7 @@ internal static partial class ConfigCommands
 
         // (f) Persist: sidecar FIRST (the resolver reads it pre-open), then the settings
         // mirror — the store's opens now resolve the bitwarden key because the sidecar is set.
-        new EncryptionSourceSidecar(bankPath).Write(new EncryptionSourceConfig(
+        new EncryptionState(bankPath).Write(new EncryptionData(
             EncryptionSettingsKeys.SourceBitwarden, projectId, secretId));
         await store.SetSettingAsync(EncryptionSettingsKeys.Source, EncryptionSettingsKeys.SourceBitwarden, cancellationToken);
         await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
@@ -153,7 +154,7 @@ internal static partial class ConfigCommands
         }
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        var sidecar = bank is not null ? new EncryptionSourceSidecar(bank.BankPath).Read() : null;
+        var sidecar = bank is not null ? new EncryptionState(bank.BankPath).Read() : null;
         if (sourceRow == EncryptionSettingsKeys.SourceBitwarden || sidecar?.Source == EncryptionSettingsKeys.SourceBitwarden)
         {
             // Settings first, sidecar fallback (crash-window self-description, plan §4).
@@ -176,7 +177,7 @@ internal static partial class ConfigCommands
     {
         Guard.IsNotNull(bank);
         var bankPath = bank.BankPath;
-        var sidecar = new EncryptionSourceSidecar(bankPath);
+        var sidecar = new EncryptionState(bankPath);
         var bankExists = File.Exists(bankPath);
 
         if (bankExists)

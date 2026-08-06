@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -11,62 +12,29 @@ public sealed record BundledModelResult(bool AllPresent, IReadOnlyList<string> E
 ///     pinned SHA-256, resolved from AppContext.BaseDirectory/Models (or the repo source dir during tests).
 ///     A custom model path comes from the embedding.model settings row via 'ai-raccoon model set local'.
 /// </summary>
-public static class BundledModel
+public sealed class BundledModel(ILogger<BundledModel> logger, IHttpClientFactory httpClientFactory) : IBundledModel
 {
     public const string ModelFileName = "model_qint8_arm64.onnx";
-    public const string VocabFileName = "vocab.txt";
+    private const string VocabFileName = "vocab.txt";
 
     // Pinned after the first verified download (2026-08-03) — the script and the gate test
     // share these so a tampered or drifted model fails loudly instead of degrading retrieval.
     public const string ModelSha256 = "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474";
     public const string VocabSha256 = "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3";
 
-    public const string ModelUrl =
+    private const string ModelUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx";
 
-    public const string VocabUrl =
+    private const string VocabUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt";
 
-    /// <summary>
-    ///     The ONNX model to embed with: the settings row embedding.model (written by
-    ///     'ai-raccoon model set local &lt;path&gt;', null-or-whitespace = unset), else the bundled copy next
-    ///     to the running tool, else the repo source copy during tests.
-    /// </summary>
-    public static string ResolveModelPath() => ResolveModelPath(null);
-
-    public static string ResolveModelPath(string? configuredPath)
-    {
-        if (!string.IsNullOrWhiteSpace(configuredPath))
-        {
-            return Path.GetFullPath(configuredPath);
-        }
-
-        return ResolveBundled(ModelFileName)
-            ?? throw new InvalidOperationException(MissingBundledModelMessage(ModelFileName));
-    }
-
-    /// <summary>Actionable message for a missing bundled asset; points at 'ai-raccoon model set local' (see docs/work/features-native-memory/native-memory.feature).</summary>
-    internal static string MissingBundledModelMessage(string fileName) =>
-        $"Bundled embedding model '{fileName}' not found next to the tool. Run " +
-        "'ai-raccoon model set local' to restore it, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.";
-
-    public static string ResolveVocabPath() =>
-        ResolveBundled(VocabFileName)
-        ?? throw new InvalidOperationException(
-            $"Bundled BERT vocab '{VocabFileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.");
-
-    public static string Sha256Of(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
-    }
 
     /// <summary>
     ///     Verifies both bundled files (sha256) and, when missing, downloads the pinned copies
     ///     into the repo's src/AiRaccoon/Models so the next build packs them. Download failures
     ///     become error entries — a missing asset is a hard failure for the gate test, not a skip.
     /// </summary>
-    public static async Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default)
+    public async Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default)
     {
         var model = LocateVerified(ModelFileName, ModelSha256);
         var vocab = LocateVerified(VocabFileName, VocabSha256);
@@ -76,50 +44,75 @@ public static class BundledModel
         }
 
         var targetDir = RepoModelsDirectory() ?? Path.Combine(AppContext.BaseDirectory, "Models");
-        using var http = new HttpClient();
-        return await EnsureDownloadsAsync(http, targetDir, cancellationToken).ConfigureAwait(false);
+        return await EnsureDownloadsAsync(targetDir, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Downloads both bundled assets into targetDirectory when no verified copy sits there; download failures become error entries (see docs/work/features-native-memory/native-memory.feature).</summary>
-    internal static async Task<BundledModelResult> EnsureDownloadsAsync(HttpClient http, string targetDirectory,
-        CancellationToken cancellationToken)
+    /// <summary>
+    ///     Downloads both bundled assets into targetDirectory when no verified copy sits there; download failures become
+    ///     error entries (see docs/work/features-native-memory/native-memory.feature).
+    /// </summary>
+    public async Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken)
     {
         var errors = new List<string>();
         Directory.CreateDirectory(targetDirectory);
-
-        if (!IsVerifiedIn(targetDirectory, ModelFileName, ModelSha256))
-        {
-            var error = await DownloadAsync(http, ModelUrl, Path.Combine(targetDirectory, ModelFileName), ModelSha256,
-                cancellationToken).ConfigureAwait(false);
-            if (error is not null)
-            {
-                errors.Add(error);
-            }
-        }
-
-        if (!IsVerifiedIn(targetDirectory, VocabFileName, VocabSha256))
-        {
-            var error = await DownloadAsync(http, VocabUrl, Path.Combine(targetDirectory, VocabFileName), VocabSha256,
-                cancellationToken).ConfigureAwait(false);
-            if (error is not null)
-            {
-                errors.Add(error);
-            }
-        }
-
+        var httpClient = httpClientFactory.CreateClient();
+        errors.AddRange(await DownloadResources(httpClient, new BundledResource(targetDirectory, ModelFileName, ModelUrl, ModelSha256), cancellationToken));
+        errors.AddRange(await DownloadResources(httpClient, new BundledResource(targetDirectory, VocabFileName, VocabUrl, VocabSha256), cancellationToken));
         return new BundledModelResult(errors.Count == 0, errors);
     }
 
-    private static bool IsVerifiedIn(string directory, string fileName, string expectedSha)
+    /// <summary>
+    ///     The ONNX model to embed with: the settings row embedding.model (written by
+    ///     'ai-raccoon model set local &lt;path&gt;', null-or-whitespace = unset), else the bundled copy next
+    ///     to the running tool, else the repo source copy during tests.
+    /// </summary>
+    public static string ResolveModelPath() => ResolveModelPath(null);
+
+    private static string ResolveModelPath(string? configuredPath)
     {
-        var path = Path.Combine(directory, fileName);
-        return File.Exists(path) && Sha256Of(path).Equals(expectedSha, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.GetFullPath(configuredPath);
+        }
+
+        return ResolveBundled(ModelFileName)
+               ?? throw new InvalidOperationException(MissingBundledModelMessage(ModelFileName));
     }
+
+    /// <summary>
+    ///     Actionable message for a missing bundled asset; points at 'ai-raccoon model set local' (see
+    ///     docs/work/features-native-memory/native-memory.feature).
+    /// </summary>
+    internal static string MissingBundledModelMessage(string fileName) =>
+        $"Bundled embedding model '{fileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.";
+
+    public static string ResolveVocabPath() =>
+        ResolveBundled(VocabFileName)
+        ?? throw new InvalidOperationException(
+            $"Bundled BERT vocab '{VocabFileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.");
+
+    private static async Task<List<string>> DownloadResources(HttpClient httpClient, BundledResource resource, CancellationToken cancellationToken)
+    {
+        List<string> errors = [];
+        if (resource.IsVerified())
+        {
+            return errors;
+        }
+
+        var error = await DownloadAsync(httpClient, resource.Url, resource.ResourcePath, resource.Sha256, cancellationToken).ConfigureAwait(false);
+        if (error is not null)
+        {
+            errors.Add(error);
+        }
+
+        return errors;
+    }
+
 
     private static string? LocateVerified(string fileName, string expectedSha)
     {
         var path = ResolveBundled(fileName);
-        return path is not null && Sha256Of(path).Equals(expectedSha, StringComparison.OrdinalIgnoreCase)
+        return path is not null && BundledResource.Sha256Of(path).Equals(expectedSha, StringComparison.OrdinalIgnoreCase)
             ? path
             : null;
     }
@@ -172,5 +165,18 @@ public static class BundledModel
         {
             return $"{Path.GetFileName(target)}: download failed ({ex.GetType().Name}: {ex.Message})";
         }
+    }
+}
+
+public sealed record BundledResource(string Directory, string Name, string Url, string Sha256)
+{
+    public string ResourcePath => Path.Combine(Directory, Name);
+
+    public bool IsVerified() => File.Exists(ResourcePath) && Sha256Of(ResourcePath).Equals(Sha256, StringComparison.OrdinalIgnoreCase);
+
+    public static string Sha256Of(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 }

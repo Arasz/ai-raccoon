@@ -2,7 +2,8 @@ using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
-using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tools;
 using Dapper;
 using ModelContextProtocol;
@@ -74,7 +75,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     /// </summary>
     private async Task<string> RunCliAsync(params string[] args)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         // A step that does not parse is a broken contract (e.g. a missing bool argument):
         // fail the scenario loudly instead of dispatching with defaults.
         if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)

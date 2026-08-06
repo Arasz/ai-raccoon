@@ -1,6 +1,6 @@
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using Shouldly;
+using AiRaccoon.Setup.Cli;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
@@ -67,10 +67,7 @@ public class ServerConfigTests
     }
 
     [Fact]
-    public void Build_DefaultPort_WhenNoFlag()
-    {
-        ServerConfig.Build(null).Port.ShouldBe(7721);
-    }
+    public void Build_DefaultPort_WhenNoFlag() => ServerConfig.Build(null).Port.ShouldBe(7721);
 
     [Fact]
     public void Build_InstallScopeFromFlag()

@@ -1,7 +1,7 @@
 using System.Data;
 using AiRaccoon.Core.Encryption;
-using AiRaccoon.Infrastructure.Encryption;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Reqnroll;
@@ -22,38 +22,36 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 {
     private readonly ScenarioContext _scenarioContext = scenarioContext;
 
+    private string? _capturedProjectId;
+
+    private string? _capturedSecretId;
+
     /// <summary>
     ///     Resolved lazily: Reqnroll instantiates binding classes before BeforeScenario hooks run,
     ///     so an eager resolve would auto-construct a second context and break Hooks' registration.
     /// </summary>
     private EncryptionBitwardenFeatureContext? _ctx;
 
-    private EncryptionBitwardenFeatureContext Ctx => _ctx ??= _scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>();
+    private string? _derivedKey;
+
+    private string? _fixtureSecretId;
 
     private EncryptionBitwardenFeatureContext.CliRun _lastCli = new(0, string.Empty, string.Empty);
 
-    private string? _lastStartError;
-
     private Exception? _lastProviderError;
+
+    private string? _lastStartError;
 
     private string? _pendingPem;
 
-    private string? _derivedKey;
-
-    private string? _capturedProjectId;
-
-    private string? _capturedSecretId;
-
-    private string? _fixtureSecretId;
+    private EncryptionBitwardenFeatureContext Ctx => _ctx ??= _scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>();
 
     // ── Rule: The env variable remains the default key source ──
 
     [Given("^no encryption source configured$")]
-    public void GivenNoEncryptionSource()
-    {
+    public void GivenNoEncryptionSource() =>
         // A fresh scenario has no sidecar — the env source is the implicit default.
         File.Exists(Ctx.SidecarPath).ShouldBeFalse();
-    }
 
     [Given("^AIRACCOON_DB_PASSPHRASE is set$")]
     public void GivenEnvPassphraseSet()
@@ -69,21 +67,17 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     public void GivenBwsInstalled() => Ctx.InstallFakeBws();
 
     [Given("^bws is not installed$")]
-    public void GivenBwsNotInstalled()
-    {
+    public void GivenBwsNotInstalled() =>
         // An absolute path that never exists → the runner surfaces the install guidance.
         Ctx.BwsExecutable = Path.Combine(Ctx.DataRoot, "fake-bws-missing", "bws");
-    }
 
     [Given("^a bank encrypted with the env passphrase$")]
     public Task GivenBankEncryptedWithEnvPassphrase() => Ctx.CreateEnvKeyedBankAsync();
 
     [Given("^an unencrypted ed25519 private key with seed <seed>$")]
-    public void GivenEd25519KeyWithVectorSeed()
-    {
+    public void GivenEd25519KeyWithVectorSeed() =>
         // The literal "<seed>" is the §5.1 vector: the synthetic seed 00 01 … 1e 1f.
         _pendingPem = Ctx.BuildVectorPem();
-    }
 
     [Given("^an encrypted ed25519 private key$")]
     public void GivenEncryptedEd25519Key()
@@ -115,8 +109,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     }
 
     [When("^the user runs encryption bitwarden with -t <token>$")]
-    public Task WhenUserRunsEncryptionBitwardenWithToken() =>
-        RunCliAsync("\n\n", "encryption", "bitwarden", "-t", EncryptionBitwardenFeatureContext.KnownToken);
+    public Task WhenUserRunsEncryptionBitwardenWithToken() => RunCliAsync("\n\n", "encryption", "bitwarden", "-t", EncryptionBitwardenFeatureContext.KnownToken);
 
     [When("^the user runs encryption bitwarden with an unreachable secret id$")]
     public Task WhenUserRunsEncryptionBitwardenUnreachable() =>
@@ -148,10 +141,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     }
 
     [When("^the raw key is derived$")]
-    public void WhenRawKeyDerived()
-    {
-        _derivedKey = SshKeyDerivation.DeriveRawKey(OpenSshPrivateKeyParser.ParseSeed(_pendingPem!));
-    }
+    public void WhenRawKeyDerived() => _derivedKey = SshKeyDerivation.DeriveRawKey(OpenSshPrivateKeyParser.ParseSeed(_pendingPem!));
 
     [When("^the provider reads the secret$")]
     public void WhenProviderReadsTheSecret()
@@ -205,7 +195,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
             .ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
-        var sidecar = new EncryptionSourceSidecar(Ctx.BankPath).Read();
+        var sidecar = new EncryptionState(Ctx.BankPath).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
     }
@@ -215,7 +205,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     {
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.ProjectId)).ShouldBe(_capturedProjectId);
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.SecretId)).ShouldBe(_capturedSecretId);
-        var sidecar = new EncryptionSourceSidecar(Ctx.BankPath).Read();
+        var sidecar = new EncryptionState(Ctx.BankPath).Read();
         sidecar.ShouldNotBeNull();
         sidecar.ProjectId.ShouldBe(_capturedProjectId);
         sidecar.SecretId.ShouldBe(_capturedSecretId);
@@ -319,8 +309,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     }
 
     [Then("^the output warns that rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank$")]
-    public void ThenOutputWarnsAboutRotationTrap() =>
-        _lastCli.Err.ShouldContain("without PRAGMA rekey bricks the bank");
+    public void ThenOutputWarnsAboutRotationTrap() => _lastCli.Err.ShouldContain("without PRAGMA rekey bricks the bank");
 
     [Then("^it prints bitwarden with the secret id$")]
     public void ThenShowPrintsBitwardenWithSecretId()
@@ -347,10 +336,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 
     // ── Shared machinery ──
 
-    private async Task RunCliAsync(string stdin, params string[] args)
-    {
-        _lastCli = await Ctx.RunCliAsync(stdin, args);
-    }
+    private async Task RunCliAsync(string stdin, params string[] args) => _lastCli = await Ctx.RunCliAsync(stdin, args);
 
     /// <summary>Runs the eager-start open once per scenario; later Thens reuse the result.</summary>
     private async Task EnsureServerStartedAsync()

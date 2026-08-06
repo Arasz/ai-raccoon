@@ -22,6 +22,5 @@ public sealed class RetrievalRatingExtension : IMemoryExtension
         OnSweepAsync(SweepContext context, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
 
-    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }

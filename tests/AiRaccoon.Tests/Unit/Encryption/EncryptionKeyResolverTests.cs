@@ -3,6 +3,8 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Shouldly;
 using Xunit;
 
@@ -28,9 +30,9 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
+    private string SidecarPath() => EncryptionState.PathFor(BankPath());
 
-    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) => new(Options(), env, runner);
+    private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) => new(env, runner);
 
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 
@@ -141,7 +143,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
         public string? GetPassphrase() => passphrase;
     }
 
-    private sealed class FakeBwsRunner : IBwsProcessRunner
+    private sealed class FakeBwsRunner : ICliSecretManager
     {
         private readonly BwsInvocationException? _exception;
         private readonly BwsResult? _result;

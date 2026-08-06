@@ -23,7 +23,7 @@ internal static class SnippetFallback
 
         var maxStart = value.Length - WindowChars;
         var start = (int)(BitConverter.ToUInt64(SHA256.HashData(Encoding.UTF8.GetBytes(hash)), 0)
-            % (uint)(maxStart + 1));
+                          % (uint)(maxStart + 1));
 
         // Slide to word boundaries so the window opens and closes on whole words when possible.
         var nextSpace = value.IndexOf(' ', start);

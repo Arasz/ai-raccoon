@@ -12,11 +12,8 @@ public sealed class WatchRetryPolicy
 
     private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
 
-    private sealed record Entry(int ConsecutiveFailures, DateTimeOffset? NextAttemptAt);
-
     /// <summary>Backoff after failure #n: 1s, 2s, 4s, 8s (exponential).</summary>
-    public static TimeSpan BackoffFor(int consecutiveFailures) =>
-        TimeSpan.FromSeconds(1L << (consecutiveFailures - 1));
+    public static TimeSpan BackoffFor(int consecutiveFailures) => TimeSpan.FromSeconds(1L << consecutiveFailures - 1);
 
     /// <summary>True when the watch may attempt a digest now: not stopped and past any backoff.</summary>
     public bool ShouldAttempt(string projectId, string watchPath, DateTimeOffset now)
@@ -29,8 +26,7 @@ public sealed class WatchRetryPolicy
         return entry.ConsecutiveFailures < MaxFailures && entry.NextAttemptAt is { } next && now >= next;
     }
 
-    public bool IsStopped(string projectId, string watchPath) =>
-        _entries.TryGetValue((projectId, watchPath), out var entry) && entry.ConsecutiveFailures >= MaxFailures;
+    public bool IsStopped(string projectId, string watchPath) => _entries.TryGetValue((projectId, watchPath), out var entry) && entry.ConsecutiveFailures >= MaxFailures;
 
     /// <summary>Records a failed digest; returns the watch state after this failure.</summary>
     public WatchState RecordFailure(string projectId, string watchPath, DateTimeOffset now)
@@ -46,9 +42,9 @@ public sealed class WatchRetryPolicy
     }
 
     /// <summary>Resets the counter — checking continues with a clean slate.</summary>
-    public void RecordSuccess(string projectId, string watchPath) =>
-        _entries.Remove((projectId, watchPath));
+    public void RecordSuccess(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
 
-    public void Forget(string projectId, string watchPath) =>
-        _entries.Remove((projectId, watchPath));
+    public void Forget(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
+
+    private sealed record Entry(int ConsecutiveFailures, DateTimeOffset? NextAttemptAt);
 }

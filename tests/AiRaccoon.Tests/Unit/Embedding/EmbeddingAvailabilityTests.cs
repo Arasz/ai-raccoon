@@ -8,15 +8,14 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 /// <summary>The startup bootstrap warns (never fails) when the bundled model is unavailable (see docs/work/features-native-memory/native-memory.feature).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class EmbeddingBootstrapTests
+public sealed class EmbeddingAvailabilityTests
 {
     [Fact]
     public async Task EmbeddingBootstrap_OnMissingAssets_WritesActionableWarning()
     {
         var stderr = new StringWriter();
 
-        await EmbeddingBootstrap.EnsureAtStartupAsync(stderr,
-            _ => Task.FromResult(new BundledModelResult(false, ["e1"])),
+        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => Task.FromResult(new BundledModelResult(false, ["e1"])),
             TestContext.Current.CancellationToken);
 
         stderr.ToString().ShouldContain("model set local");
@@ -28,8 +27,7 @@ public sealed class EmbeddingBootstrapTests
     {
         var stderr = new StringWriter();
 
-        await EmbeddingBootstrap.EnsureAtStartupAsync(stderr,
-            _ => Task.FromResult(new BundledModelResult(true, [])),
+        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => Task.FromResult(new BundledModelResult(true, [])),
             TestContext.Current.CancellationToken);
 
         stderr.ToString().ShouldBeEmpty();
@@ -42,8 +40,7 @@ public sealed class EmbeddingBootstrapTests
         // the boot must continue with a warning, never a throw.
         var stderr = new StringWriter();
 
-        await EmbeddingBootstrap.EnsureAtStartupAsync(stderr,
-            _ => throw new InvalidOperationException("boom"),
+        await EmbeddingAvailability.EnsureEmbeddingAvailabilityAsync(_ => throw new InvalidOperationException("boom"),
             TestContext.Current.CancellationToken);
 
         stderr.ToString().ShouldContain("model set local");

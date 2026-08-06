@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
-using System.IO;
 
 namespace AiRaccoon.Setup.Cli;
 
@@ -57,8 +55,8 @@ internal static class CliRendering
 
         var cwdHits = unrecognized.Count(token => cwdEntries.Contains(token));
         var expanded =
-            (cwdHits >= 1 && cwdHits >= unrecognized.Count - 1) ||
-            (typedToken is not null && cwdEntries.Contains(typedToken) && unrecognized.Count >= 1);
+            cwdHits >= 1 && cwdHits >= unrecognized.Count - 1 ||
+            typedToken is not null && cwdEntries.Contains(typedToken) && unrecognized.Count >= 1;
         if (!expanded)
         {
             return null;
@@ -67,7 +65,8 @@ internal static class CliRendering
         var nonCwdTokens = unrecognized.Where(token => !cwdEntries.Contains(token)).ToArray();
         if (result.CommandPath.Length >= 1 && nonCwdTokens.Length == 1)
         {
-            return $"Hint: '*' was expanded by your shell into the files of this directory — quote it to target all projects, e.g.:\n  ai-raccoon {string.Join(' ', result.CommandPath)} '*' {nonCwdTokens[0]}";
+            return
+                $"Hint: '*' was expanded by your shell into the files of this directory — quote it to target all projects, e.g.:\n  ai-raccoon {string.Join(' ', result.CommandPath)} '*' {nonCwdTokens[0]}";
         }
 
         return "Hint: '*' may have been expanded by your shell into the files of this directory — quote it as '*' to target all projects.";

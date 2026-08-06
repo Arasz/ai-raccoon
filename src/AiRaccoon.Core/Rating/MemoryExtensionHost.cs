@@ -75,15 +75,6 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         return await inner.DeleteSourcePathAsync(projectId, path, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Dispatches one processed source change to every extension (watch mirror; fired by the digest executor).</summary>
-    public async Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken = default)
-    {
-        foreach (var extension in _extensions)
-        {
-            await extension.OnSourceChangedAsync(context, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => await inner.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
 
     public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
@@ -121,20 +112,26 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         CancellationToken cancellationToken = default) =>
         await inner.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
 
-    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        await inner.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => await inner.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
 
-    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
-        await inner.SetSettingAsync(key, value, cancellationToken).ConfigureAwait(false);
+    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => await inner.SetSettingAsync(key, value, cancellationToken).ConfigureAwait(false);
 
     public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default) =>
         await inner.GetSettingsByPrefixAsync(prefix, cancellationToken).ConfigureAwait(false);
 
-    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        await inner.DeleteSettingAsync(key, cancellationToken).ConfigureAwait(false);
+    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => await inner.DeleteSettingAsync(key, cancellationToken).ConfigureAwait(false);
 
     public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default) =>
         await inner.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Dispatches one processed source change to every extension (watch mirror; fired by the digest executor).</summary>
+    public async Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken = default)
+    {
+        foreach (var extension in _extensions)
+        {
+            await extension.OnSourceChangedAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+    }
 }

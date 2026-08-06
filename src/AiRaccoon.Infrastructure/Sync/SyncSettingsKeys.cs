@@ -5,6 +5,7 @@ public static class SyncSettingsKeys
 {
     /// <summary>Active backend (s3 or azure); absent or unknown rows behave as s3 (ruling R2).</summary>
     public const string Provider = "sync.provider";
+
     public const string Endpoint = "sync.endpoint";
     public const string Bucket = "sync.bucket";
     public const string Region = "sync.region";

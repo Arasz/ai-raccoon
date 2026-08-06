@@ -1,4 +1,3 @@
-using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
@@ -23,7 +22,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_WatchEnableGlobbedArgs_ReconstructsQuotedCommand()
     {
-        var parsed = CliArgs.Parse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"]);
 
         var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
@@ -34,7 +33,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_WatchScopeAddGlobbedArgs_UsesPathAsTrailingValue()
     {
-        var parsed = CliArgs.Parse(["watch", "scope", "add", "CLAUDE.md", "README.md", "docs", "/tmp/x"]);
+        var parsed = CliArgs.TryParse(["watch", "scope", "add", "CLAUDE.md", "README.md", "docs", "/tmp/x"]);
 
         var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
@@ -45,7 +44,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_TwoFilesAndValueToken_StillFiresViaTypedArgument()
     {
-        var parsed = CliArgs.Parse(["watch", "enable", "CLAUDE.md", "README.md", "true"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "true"]);
 
         var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
@@ -56,7 +55,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_WatchConcurrencyInt32Value_StillFiresViaTypedArgument()
     {
-        var parsed = CliArgs.Parse(["watch", "concurrency", "CLAUDE.md", "README.md", "/tmp/x"]);
+        var parsed = CliArgs.TryParse(["watch", "concurrency", "CLAUDE.md", "README.md", "/tmp/x"]);
 
         var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
 
@@ -67,7 +66,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_TokensNotInCurrentDirectory_ReturnsNull()
     {
-        var parsed = CliArgs.Parse(["watch", "enable", "foo", "bar", "baz"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", "foo", "bar", "baz"]);
 
         CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
@@ -75,7 +74,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_UnknownCommand_ReturnsNull()
     {
-        var parsed = CliArgs.Parse(["watch", "bogus"]);
+        var parsed = CliArgs.TryParse(["watch", "bogus"]);
 
         CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
@@ -83,7 +82,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_CleanParse_ReturnsNull()
     {
-        var parsed = CliArgs.Parse(["watch", "enable", "myproject", "true"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", "myproject", "true"]);
 
         CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
@@ -91,7 +90,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void GlobExpansionHint_UnknownOption_ReturnsNull()
     {
-        var parsed = CliArgs.Parse(["--bogus"]);
+        var parsed = CliArgs.TryParse(["--bogus"]);
 
         CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
     }
@@ -106,7 +105,7 @@ public class CliGlobExpansionHintTests
             .Take(3)
             .ToArray();
         names.Length.ShouldBeGreaterThanOrEqualTo(3);
-        var parsed = CliArgs.Parse(["watch", "enable", .. names, "true"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", .. names, "true"]);
 
         var hint = CliRendering.GlobExpansionHint(parsed);
 
@@ -116,7 +115,7 @@ public class CliGlobExpansionHintTests
     [Fact]
     public void Render_GlobExpansion_AppendsHintAfterParseErrors()
     {
-        var parsed = CliArgs.Parse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"]);
+        var parsed = CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"]);
         var stderr = new StringWriter();
 
         var exit = CliArgs.Render(parsed, stderr, CwdEntries);

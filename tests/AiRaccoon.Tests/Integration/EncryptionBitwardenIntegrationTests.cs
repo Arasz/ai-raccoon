@@ -4,6 +4,8 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -76,13 +78,13 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
+    private string SidecarPath() => EncryptionState.PathFor(BankPath());
 
     private void WriteSidecar(string secretId = SecretId) =>
         File.WriteAllText(SidecarPath(),
             $$"""{"source":"bitwarden","projectId":"{{ProjectId}}","secretId":"{{secretId}}"}""");
 
-    private EncryptionKeyResolver Resolver() => new(Options(), new StubEnvProvider("env-passphrase"), new BwsProcessRunner(_fakeBws));
+    private EncryptionKeyResolver Resolver() => new(new StubEnvProvider("env-passphrase"), new BitwardenCliSecretManager(_fakeBws));
 
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
@@ -216,7 +218,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
         {
-            var ex = Should.Throw<BwsInvocationException>(() => new BwsProcessRunner(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
+            var ex = Should.Throw<BwsInvocationException>(() => new BitwardenCliSecretManager(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
 
             ex.Message.ShouldBe("bws timed out after 2s");
             await Task.CompletedTask;
@@ -244,7 +246,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     {
         InstallFakeBws();
 
-        var result = new BwsProcessRunner(_fakeBws)
+        var result = new BitwardenCliSecretManager(_fakeBws)
             .Run(["secret", "get", SecretId], KnownToken, TimeSpan.FromSeconds(15));
 
         result.ExitCode.ShouldBe(0);

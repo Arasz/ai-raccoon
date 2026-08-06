@@ -1,4 +1,5 @@
-using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
 using Xunit;
 
@@ -15,7 +16,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
         TextReader? stdin = null)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 
@@ -143,8 +144,10 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var store = new FakeConfigStore();
 
         var (exit, stdout, stderr) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com",
-                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"], store,
+            [
+                "sync", "add", "s3", "http://s3.example.com",
+                "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"
+            ], store,
             new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
@@ -500,8 +503,10 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var store = new FakeConfigStore();
 
         var (exit, stdout, stderr) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories",
-                "--cli", "--region", "us-east-1", "--object-key", "bank.db"], store);
+        [
+            "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories",
+            "--cli", "--region", "us-east-1", "--object-key", "bank.db"
+        ], store);
 
         exit.ShouldBe(0);
         store.Settings["sync.provider"].ShouldBe("s3");

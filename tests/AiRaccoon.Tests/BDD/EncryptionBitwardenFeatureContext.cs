@@ -5,7 +5,10 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Setup;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Tests.BDD;
@@ -79,7 +82,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         FakeBwsDir = Path.Combine(DataRoot, "fake-bws");
         BwsExecutable = Path.Combine(FakeBwsDir, "bws");
         var runner = new PathSwitchingRunner(() => BwsExecutable);
-        Resolver = new EncryptionKeyResolver(options, new StubEnvProvider(EnvPassphrase), runner);
+        Resolver = new EncryptionKeyResolver(new StubEnvProvider(EnvPassphrase), runner);
         Bank = new SqliteConnectionFactory(options, Resolver);
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
     }
@@ -106,7 +109,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     public string BankPath => Bank.BankPath;
 
-    public string SidecarPath => EncryptionSourceSidecar.PathFor(BankPath);
+    public string SidecarPath => EncryptionState.PathFor(BankPath);
 
     public string CallsLogPath => Path.Combine(FakeBwsDir, "bws-calls.log");
 
@@ -143,7 +146,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     /// <summary>Writes the sidecar as the bitwarden source pointing at the given secret id.</summary>
     public void WriteSidecar(string secretId, string projectId = ProjectId) =>
-        new EncryptionSourceSidecar(BankPath).Write(new EncryptionSourceConfig(
+        new EncryptionState(BankPath).Write(new EncryptionData(
             EncryptionSettingsKeys.SourceBitwarden, projectId, secretId));
 
     /// <summary>
@@ -178,7 +181,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// </summary>
     public async Task<CliRun> RunCliAsync(string stdin, params string[] args)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)
         {
             throw new InvalidOperationException(
@@ -234,7 +237,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         }
     }
 
-    public IBwsProcessRunner NewRunner() => new BwsProcessRunner(BwsExecutable);
+    public ICliSecretManager NewRunner() => new BitwardenCliSecretManager(BwsExecutable);
 
     /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
     private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new OpenSshKeyBuilder().Build(seed, pub);
@@ -242,9 +245,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>Outcome of one in-process CLI run (the same dispatch as Program.cs).</summary>
     public sealed record CliRun(int Exit, string Out, string Err);
 
-    private sealed class PathSwitchingRunner(Func<string> path) : IBwsProcessRunner
+    private sealed class PathSwitchingRunner(Func<string> path) : ICliSecretManager
     {
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => new BwsProcessRunner(path()).Run(args, token, timeout);
+        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => new BitwardenCliSecretManager(path()).Run(args, token, timeout);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider

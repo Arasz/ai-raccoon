@@ -7,7 +7,7 @@ public sealed record BwsResult(int ExitCode, string Stdout, string Stderr);
 ///     Runs the bws CLI. Injectable so callers can substitute a fake runner, and the executable
 ///     path is constructor-injectable so tests can point at an absolute fake-bws path (no PATH mutation).
 /// </summary>
-public interface IBwsProcessRunner
+public interface ICliSecretManager
 {
     /// <summary>
     ///     Runs <c>bws [args]</c>, appending <c>-t &lt;token&gt;</c> when a token is given. The child

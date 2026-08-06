@@ -1,11 +1,10 @@
-using AiRaccoon.Setup;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Shouldly;
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
+using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
@@ -93,8 +92,7 @@ public class McpServerSetupHostTests
         await runTask;
     }
 
-    private static ServerConfig Config(McpTransport transport, int port = 7721) =>
-        ServerConfig.Build(new CliOptions(transport.ToString().ToLowerInvariant(), null, null, port));
+    private static ServerConfig Config(McpTransport transport, int port = 7721) => ServerConfig.Build(new CliOptions(transport.ToString().ToLowerInvariant(), null, null, port));
 
     private static int FreePort()
     {

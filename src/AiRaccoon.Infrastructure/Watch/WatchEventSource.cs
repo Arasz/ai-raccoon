@@ -16,10 +16,12 @@ public sealed partial class WatchEventSource(
     Action<WatchEventError> onError,
     ILogger<WatchEventSource> logger) : IDisposable
 {
+    private readonly object _gate = new();
+
     private readonly Dictionary<(string ProjectId, string Path), FileSystemWatcher> _watchers =
         new(WatchKeyComparer.Instance);
 
-    private readonly object _gate = new();
+    public void Dispose() => StopAll();
 
     /// <summary>Creates + enables the watcher for (projectId, path); idempotent; failures become error events.</summary>
     public void Start(string projectId, string path)
@@ -103,22 +105,15 @@ public sealed partial class WatchEventSource(
         }
     }
 
-    public void Dispose() => StopAll();
+    internal void HandleCreated(string projectId, string watchPath, FileSystemEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Created, null);
 
-    internal void HandleCreated(string projectId, string watchPath, FileSystemEventArgs e) =>
-        Translate(projectId, watchPath, e.FullPath, WatchEventKind.Created, null);
+    internal void HandleChanged(string projectId, string watchPath, FileSystemEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Changed, null);
 
-    internal void HandleChanged(string projectId, string watchPath, FileSystemEventArgs e) =>
-        Translate(projectId, watchPath, e.FullPath, WatchEventKind.Changed, null);
+    internal void HandleDeleted(string projectId, string watchPath, FileSystemEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Deleted, null);
 
-    internal void HandleDeleted(string projectId, string watchPath, FileSystemEventArgs e) =>
-        Translate(projectId, watchPath, e.FullPath, WatchEventKind.Deleted, null);
+    internal void HandleRenamed(string projectId, string watchPath, RenamedEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Renamed, e.OldFullPath);
 
-    internal void HandleRenamed(string projectId, string watchPath, RenamedEventArgs e) =>
-        Translate(projectId, watchPath, e.FullPath, WatchEventKind.Renamed, e.OldFullPath);
-
-    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e) =>
-        ReportError(projectId, watchPath, e.GetException() ?? new IOException("FileSystemWatcher error"));
+    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e) => ReportError(projectId, watchPath, e.GetException() ?? new IOException("FileSystemWatcher error"));
 
     private void Translate(string projectId, string watchPath, string fullPath, WatchEventKind kind, string? oldPath)
     {

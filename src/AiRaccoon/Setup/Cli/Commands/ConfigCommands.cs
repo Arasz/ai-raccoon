@@ -8,11 +8,12 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using CommunityToolkit.Diagnostics;
 
-namespace AiRaccoon.Setup;
+namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
 ///     One-shot config commands (the single runtime config channel): each verb opens the
@@ -24,7 +25,7 @@ internal static partial class ConfigCommands
 {
     public static async Task<int> RunAsync(string[] commandPath, ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default,
-        SqliteConnectionFactory? bank = null, IBwsProcessRunner? bws = null, IEncryptionKeyProvider? env = null,
+        SqliteConnectionFactory? bank = null, ICliSecretManager? bws = null, IEncryptionKeyProvider? env = null,
         IWatchStore? watchStore = null)
     {
         try
@@ -620,8 +621,7 @@ internal static partial class ConfigCommands
         return 0;
     }
 
-    private static string FormatTimestamp(long unixSeconds) =>
-        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+    private static string FormatTimestamp(long unixSeconds) => DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
     private static async Task<int> WatchRemoveAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, CancellationToken cancellationToken)

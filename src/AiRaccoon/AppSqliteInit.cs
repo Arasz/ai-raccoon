@@ -6,8 +6,5 @@ namespace AiRaccoon;
 internal static class AppSqliteInit
 {
     [ModuleInitializer]
-    public static void Initialize()
-    {
-        SqliteEncryptionInit.EnsureInitialized();
-    }
+    public static void Initialize() => SqliteEncryptionInit.EnsureInitialized();
 }

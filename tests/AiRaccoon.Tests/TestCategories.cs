@@ -1,4 +1,4 @@
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 
 namespace AiRaccoon.Tests;
 

@@ -7,7 +7,8 @@ using OpenAI.Embeddings;
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
-///     Resolves the bank's embedding engine from settings (FR-NM-3; see docs/work/features-native-memory/native-memory.feature): provider local → the
+///     Resolves the bank's embedding engine from settings (FR-NM-3; see
+///     docs/work/features-native-memory/native-memory.feature): provider local → the
 ///     bundled int8 ONNX model in-process; provider openai → any OpenAI-compatible endpoint
 ///     (baseUrl override). The engine fingerprint is what `model set` persists so a
 ///     provider/model change triggers a full re-embed.
@@ -16,11 +17,19 @@ public sealed class EmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
-    /// <summary>Maximum input tokens of the bundled all-MiniLM-L6-v2 model (see docs/work/2026-08-03-native-memory-plan.md §8).</summary>
+    /// <summary>
+    ///     Maximum input tokens of the bundled all-MiniLM-L6-v2 model (see docs/work/2026-08-03-native-memory-plan.md
+    ///     §8).
+    /// </summary>
     public const int BundledModelContextTokens = 256;
 
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
     public const int OpenAiEmbeddingContextTokens = 8191;
+
+    // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
+    // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
+    private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
+        new(StringComparer.Ordinal);
 
 
     /// <summary>
@@ -37,11 +46,6 @@ public sealed class EmbeddingService
             _ => BundledModelContextTokens
         };
     }
-
-    // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
-    // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
-    private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
-        new(StringComparer.Ordinal);
 
     /// <summary>Stable engine identity recorded in settings; a change re-embeds the bank.</summary>
     public static string EngineFingerprint(string provider, string? model, string? baseUrl) =>

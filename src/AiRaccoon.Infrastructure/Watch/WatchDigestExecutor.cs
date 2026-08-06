@@ -58,17 +58,17 @@ public sealed class WatchDigestExecutor(
     }
 
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (R5 contract).</summary>
-    public static string ComputeHash(string normalizedPath, string content) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));
+    public static string ComputeHash(string normalizedPath, string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));
 
-    private static SourceChangeKind ToKind(WatchEventKind kind) => kind switch
-    {
-        WatchEventKind.Created => SourceChangeKind.Created,
-        WatchEventKind.Changed => SourceChangeKind.Changed,
-        WatchEventKind.Deleted => SourceChangeKind.Deleted,
-        WatchEventKind.Renamed => SourceChangeKind.Renamed,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-    };
+    private static SourceChangeKind ToKind(WatchEventKind kind) =>
+        kind switch
+        {
+            WatchEventKind.Created => SourceChangeKind.Created,
+            WatchEventKind.Changed => SourceChangeKind.Changed,
+            WatchEventKind.Deleted => SourceChangeKind.Deleted,
+            WatchEventKind.Renamed => SourceChangeKind.Renamed,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+        };
 
     private async Task DeletePathAsync(string projectId, string watchPath, string path,
         CancellationToken cancellationToken)

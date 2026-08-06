@@ -16,6 +16,7 @@
         <PackageReference Include="Microsoft.Extensions.AI.Abstractions"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI"/>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Http"/>
         <PackageReference Include="Microsoft.ML.OnnxRuntime"/>
         <PackageReference Include="Microsoft.ML.Tokenizers"/>
         <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>

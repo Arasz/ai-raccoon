@@ -3,7 +3,9 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Setup;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Unit.Embedding;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -249,7 +251,7 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         // Runs the real config-command pipeline against the factory's bank — the same
         // composition Program.cs uses for `ai-raccoon <verb>`.
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();

@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Encryption;
-using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Shouldly;
 using Xunit;
 
@@ -8,7 +7,7 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class EncryptionSourceSidecarTests : IDisposable
+public sealed class EncryptionStateTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
 
@@ -16,18 +15,15 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
 
     private string BankPath() => Path.Combine(_dataRoot, "memory.db");
 
-    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
+    private string SidecarPath() => EncryptionState.PathFor(BankPath());
 
     [Fact]
-    public void PathFor_AppendsSourceSuffix()
-    {
-        EncryptionSourceSidecar.PathFor("/data/memory.db").ShouldBe("/data/memory.db.source");
-    }
+    public void PathFor_AppendsSourceSuffix() => EncryptionState.PathFor("/data/memory.db").ShouldBe("/data/memory.db.source");
 
     [Fact]
     public void Read_WhenSidecarAbsent_ReturnsNull()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         sidecar.Read().ShouldBeNull();
     }
@@ -35,9 +31,9 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void WriteThenRead_RoundTripsBitwardenConfig()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionSourceConfig("bitwarden", "project-1", "secret-1"));
+        sidecar.Write(new EncryptionData("bitwarden", "project-1", "secret-1"));
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -49,9 +45,9 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void WriteThenRead_RoundTripsEnvConfigWithNullIds()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionSourceConfig("env", null, null));
+        sidecar.Write(new EncryptionData("env", null, null));
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -63,10 +59,10 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void Write_OverwritesExistingSidecar()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionSourceConfig("env", null, null));
-        sidecar.Write(new EncryptionSourceConfig("bitwarden", "p2", "s2"));
+        sidecar.Write(new EncryptionData("env", null, null));
+        sidecar.Write(new EncryptionData("bitwarden", "p2", "s2"));
         var read = sidecar.Read();
 
         read.ShouldNotBeNull();
@@ -78,9 +74,9 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void Write_IsAtomic_LeavesNoTempFilesBehind()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionSourceConfig("bitwarden", "p1", "s1"));
+        sidecar.Write(new EncryptionData("bitwarden", "p1", "s1"));
 
         Directory.GetFiles(_dataRoot).ShouldHaveSingleItem();
         File.ReadAllText(SidecarPath()).ShouldContain("\"source\":\"bitwarden\"");
@@ -94,9 +90,9 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
             return;
         }
 
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        sidecar.Write(new EncryptionSourceConfig("env", null, null));
+        sidecar.Write(new EncryptionData("env", null, null));
 
         File.GetUnixFileMode(SidecarPath()).ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
@@ -104,8 +100,8 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void Delete_RemovesTheSidecar()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
-        sidecar.Write(new EncryptionSourceConfig("bitwarden", "p1", "s1"));
+        var sidecar = new EncryptionState(BankPath());
+        sidecar.Write(new EncryptionData("bitwarden", "p1", "s1"));
 
         sidecar.Delete();
 
@@ -116,7 +112,7 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void Delete_WhenSidecarAbsent_DoesNotThrow()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         sidecar.Delete();
     }
@@ -125,7 +121,7 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     public void Read_CorruptJson_ThrowsNamingThePath()
     {
         File.WriteAllText(SidecarPath(), "{not json");
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         var ex = Should.Throw<EncryptionSourceException>(() => sidecar.Read());
 
@@ -136,7 +132,7 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     public void Read_EmptyFile_Throws()
     {
         File.WriteAllText(SidecarPath(), string.Empty);
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         Should.Throw<EncryptionSourceException>(() => sidecar.Read());
     }
@@ -145,7 +141,7 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     public void Read_UnknownSource_ThrowsNamingThePath()
     {
         File.WriteAllText(SidecarPath(), """{"source":"ssh-key"}""");
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         var ex = Should.Throw<EncryptionSourceException>(() => sidecar.Read());
 
@@ -157,7 +153,7 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     public void Read_IgnoresUnknownExtraFields()
     {
         File.WriteAllText(SidecarPath(), """{"source":"env","extra":1}""");
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
         var read = sidecar.Read();
 
@@ -168,8 +164,8 @@ public sealed class EncryptionSourceSidecarTests : IDisposable
     [Fact]
     public void Write_InvalidSource_Throws()
     {
-        var sidecar = new EncryptionSourceSidecar(BankPath());
+        var sidecar = new EncryptionState(BankPath());
 
-        Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionSourceConfig("ssh-key", null, null)));
+        Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionData("ssh-key", null, null)));
     }
 }

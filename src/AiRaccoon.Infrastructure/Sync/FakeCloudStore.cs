@@ -7,8 +7,6 @@ public sealed class FakeCloudStore : ICloudStore
 {
     private readonly ConcurrentDictionary<string, StoredObject> _store = new();
 
-    private sealed record StoredObject(byte[] Data, string ETag);
-
     public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         if (_store.TryGetValue(objectKey, out var stored))
@@ -35,6 +33,7 @@ public sealed class FakeCloudStore : ICloudStore
     }
 
     /// <summary>Directly set a stored object (for simulating remote changes in tests).</summary>
-    public void Set(string objectKey, byte[] data) =>
-        _store[objectKey] = new StoredObject(data, Guid.NewGuid().ToString("N"));
+    public void Set(string objectKey, byte[] data) => _store[objectKey] = new StoredObject(data, Guid.NewGuid().ToString("N"));
+
+    private sealed record StoredObject(byte[] Data, string ETag);
 }

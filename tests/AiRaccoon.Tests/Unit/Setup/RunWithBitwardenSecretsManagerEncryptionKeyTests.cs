@@ -1,7 +1,7 @@
-using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
 
@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ConfigVerbRunnerTests : IDisposable
+public sealed class RunWithBitwardenSecretsManagerEncryptionKeyTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-config-verb-runner");
 
@@ -21,7 +21,7 @@ public sealed class ConfigVerbRunnerTests : IDisposable
 
     private async Task<(int Exit, string Out, string Err, ServerConfig Config)> Run(string[] args)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 
@@ -36,7 +36,7 @@ public sealed class ConfigVerbRunnerTests : IDisposable
         try
         {
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-            var exit = await ConfigVerbRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
+            var exit = await RunWithBitwardenSecretsManagerEncryptionKey.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
                 TestContext.Current.CancellationToken);
             return (exit, stdout.ToString(), stderr.ToString(), config);
         }

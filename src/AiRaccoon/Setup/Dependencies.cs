@@ -11,6 +11,8 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
@@ -21,70 +23,80 @@ namespace AiRaccoon.Setup;
 
 public static partial class Dependencies
 {
-    public static void RegisterMemoryServices(this IServiceCollection services, InfrastructureOptions options)
+    extension(IServiceCollection services)
     {
-        services.AddSingleton(options);
-        services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IBwsProcessRunner>(_ => new BwsProcessRunner());
-        services.AddSingleton<EncryptionKeyResolver>(sp => new EncryptionKeyResolver(
-            sp.GetRequiredService<InfrastructureOptions>(),
-            new EnvEncryptionKeyProvider(),
-            sp.GetRequiredService<IBwsProcessRunner>()));
-        services.AddSingleton<IEncryptionKeyProvider>(sp => sp.GetRequiredService<EncryptionKeyResolver>());
-        services.AddSingleton(sp => new SqliteConnectionFactory(
-            sp.GetRequiredService<InfrastructureOptions>(),
-            sp.GetRequiredService<IEncryptionKeyProvider>()));
-        services.AddSingleton<SyncCloudStoreFactory>();
-        services.AddSingleton<EmbeddingService>();
-        services.AddSingleton<SqliteMemoryStore>();
-        services.AddSingleton<SqliteWorkspaceStore>();
-        services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
-        services.AddSingleton<IChunker, TokenizerChunker>();
-        services.AddSingleton<MemoryExtensionHost>(sp => new MemoryExtensionHost(
-            sp.GetRequiredService<SqliteMemoryStore>(),
-            [sp.GetRequiredService<RetrievalRatingExtension>()]));
-        services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<MemoryExtensionHost>());
-        services.AddSingleton<RetrievalRatingExtension>();
-        services.AddSingleton(sp => new SyncService(
-            ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
-            async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
-            async (path, ct) =>
-            {
-                var conn = new SqliteConnection($"Data Source={path}");
-                await conn.OpenAsync(ct);
-                return conn;
-            },
-            sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
-        services.AddSingleton<WorkspaceService>();
-        services.AddSingleton<SweepService>();
-        services.AddSingleton<ForgettingPolicyService>();
-        services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
-            sp.GetRequiredService<IMemoryStore>()));
-        services.AddSingleton<ToolCallMetrics>();
-
-        // Watch services resolve the same MemoryExtensionHost-decorated IMemoryStore, so
-        // extension hooks (OnSourceChangedAsync) observe watcher digests. The hosted
-        // service + catch-up/event-source registrations land in S5 (next wave).
-        services.AddSingleton<WatchStore>();
-        services.AddSingleton<IWatchStore>(sp => sp.GetRequiredService<WatchStore>());
-        services.AddSingleton<WatchRetryPolicy>();
-        services.AddSingleton<WatchDigestExecutor>();
-        services.AddSingleton<WatchScheduler>();
-        services.AddSingleton<WatchPipeline>();
-        services.AddSingleton<IWatchService, WatchService>();
-
-        // S5 watcher lifecycle: catch-up scans, the FileSystemWatcher adapter (adapter
-        // failures surface as synthetic WatchEventError events — logged, never thrown),
-        // and the hosted re-watch loop that starts/stops watchers on a poll.
-        services.AddSingleton<WatchCatchUp>();
-        services.AddSingleton(sp =>
+        public void RegisterMemoryServices(InfrastructureOptions options)
         {
-            var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();
-            return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
-                error => Log.WatchEventSourceError(logger, error.ProjectId, error.WatchPath, error.Message), logger);
-        });
-        services.AddHostedService<WatchHostedService>();
+            services.AddSingleton(options);
+            services.AddSingleton(TimeProvider.System);
+            services.RegisterEncryptionServices(options);
+            services.AddSingleton(sp => new SqliteConnectionFactory(
+                sp.GetRequiredService<InfrastructureOptions>(),
+                sp.GetRequiredService<IEncryptionKeyResolver>()));
+            services.AddSingleton<SyncCloudStoreFactory>();
+            services.AddSingleton<IBundledModel, BundledModel>();
+            services.AddSingleton<EmbeddingAvailability>();
+            services.AddSingleton<EmbeddingService>();
+            services.AddSingleton<SqliteMemoryStore>();
+            services.AddSingleton<SqliteWorkspaceStore>();
+            services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
+            services.AddSingleton<IChunker, TokenizerChunker>();
+            services.AddSingleton<MemoryExtensionHost>(sp => new MemoryExtensionHost(
+                sp.GetRequiredService<SqliteMemoryStore>(),
+                [sp.GetRequiredService<RetrievalRatingExtension>()]));
+            services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<MemoryExtensionHost>());
+            services.AddSingleton<RetrievalRatingExtension>();
+            services.AddSingleton(sp => new SyncService(
+                ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
+                async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
+                async (path, ct) =>
+                {
+                    var conn = new SqliteConnection($"Data Source={path}");
+                    await conn.OpenAsync(ct);
+                    return conn;
+                },
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
+            services.AddSingleton<WorkspaceService>();
+            services.AddSingleton<SweepService>();
+            services.AddSingleton<ForgettingPolicyService>();
+            services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
+                sp.GetRequiredService<IMemoryStore>()));
+            services.AddSingleton<ToolCallMetrics>();
+
+            // Watch services resolve the same MemoryExtensionHost-decorated IMemoryStore, so
+            // extension hooks (OnSourceChangedAsync) observe watcher digests. The hosted
+            // service + catch-up/event-source registrations land in S5 (next wave).
+            services.AddSingleton<WatchStore>();
+            services.AddSingleton<IWatchStore>(sp => sp.GetRequiredService<WatchStore>());
+            services.AddSingleton<WatchRetryPolicy>();
+            services.AddSingleton<WatchDigestExecutor>();
+            services.AddSingleton<WatchScheduler>();
+            services.AddSingleton<WatchPipeline>();
+            services.AddSingleton<IWatchService, WatchService>();
+
+            // S5 watcher lifecycle: catch-up scans, the FileSystemWatcher adapter (adapter
+            // failures surface as synthetic WatchEventError events — logged, never thrown),
+            // and the hosted re-watch loop that starts/stops watchers on a poll.
+            services.AddSingleton<WatchCatchUp>();
+            services.AddSingleton(sp =>
+            {
+                var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();
+                return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
+                    error => Log.WatchEventSourceError(logger, error.ProjectId, error.WatchPath, error.Message), logger);
+            });
+            services.AddHostedService<WatchHostedService>();
+        }
+
+        private void RegisterEncryptionServices(InfrastructureOptions options)
+        {
+            services.AddSingleton<ICliSecretManager>(_ => new BitwardenCliSecretManager());
+            services.AddSingleton<IEncryptionState>(_ => new EncryptionState(SqliteConnectionFactory.BankPathFor(options)));
+            services.AddSingleton<IEncryptionKeyProvider, NoneEncryptionKeyProvider>();
+            services.AddSingleton<IEncryptionKeyProvider, EnvEncryptionKeyProvider>();
+            services.AddSingleton<IEncryptionKeyProvider, BitwardenEncryptionKeyProvider>();
+            services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionState>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
+        }
     }
 
     private static partial class Log

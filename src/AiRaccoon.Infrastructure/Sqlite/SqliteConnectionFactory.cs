@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -10,7 +11,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
 ///     every table lives in memory.db (FR-NM-1; see docs/work/features-native-memory/native-memory.feature).
 /// </summary>
-public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyProvider keyProvider)
+public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyResolver keyResolver)
 {
     static SqliteConnectionFactory()
     {
@@ -18,6 +19,8 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         // underscores; our schema uses snake_case (created_at, access_count, …).
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
+
+    public string BankPath => BankPathFor(options);
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
     private static string BankDirectoryFor(InfrastructureOptions options) =>
@@ -32,10 +35,8 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
     public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
 
-    public string BankPath => BankPathFor(options);
-
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>
-        await OpenBankWithKeyAsync(keyProvider.GetPassphrase(), cancellationToken).ConfigureAwait(false);
+        await OpenBankWithKeyAsync(keyResolver.Resolve().Passphrase, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
     public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
@@ -62,7 +63,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     {
         Guard.IsNotNullOrWhiteSpace(newKey);
 
-        var currentKey = keyProvider.GetPassphrase();
+        var currentKey = keyResolver.Resolve().Passphrase;
         SqliteConnection.ClearPool(new SqliteConnection(BuildConnectionString(currentKey)));
 
         await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))

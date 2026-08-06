@@ -8,14 +8,14 @@ namespace AiRaccoon.Infrastructure.Encryption;
 public sealed class BwsInvocationException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>Runs the bws CLI with redirected output and a hard timeout.</summary>
-public sealed class BwsProcessRunner : IBwsProcessRunner
+public sealed class BitwardenCliSecretManager : ICliSecretManager
 {
     private const string NotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
     private readonly string _executable;
 
-    public BwsProcessRunner(string executable = "bws")
+    public BitwardenCliSecretManager(string executable = "bws")
     {
         Guard.IsNotNullOrWhiteSpace(executable);
         _executable = executable;
@@ -31,7 +31,7 @@ public sealed class BwsProcessRunner : IBwsProcessRunner
             FileName = _executable,
             UseShellExecute = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = true
         };
         foreach (var arg in args)
         {

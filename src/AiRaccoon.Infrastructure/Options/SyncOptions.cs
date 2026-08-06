@@ -11,7 +11,7 @@ public enum SyncProvider
 public static class SyncProviderParser
 {
     public static SyncProvider Parse(string? value) =>
-        Enum.TryParse<SyncProvider>(value, ignoreCase: true, out var provider) && Enum.IsDefined(provider)
+        Enum.TryParse<SyncProvider>(value, true, out var provider) && Enum.IsDefined(provider)
             ? provider
             : SyncProvider.S3;
 }
@@ -40,12 +40,13 @@ public sealed record SyncOptions
     ///     (manual settings edits) the tie-break is deterministic: connection string wins for
     ///     azure, persisted keys win for s3 — documented, not an error.
     /// </summary>
-    public bool IsConfigured => Provider switch
-    {
-        SyncProvider.Azure => (!string.IsNullOrWhiteSpace(ConnectionString) || !string.IsNullOrWhiteSpace(Account))
-            && !string.IsNullOrWhiteSpace(Container),
-        _ => !string.IsNullOrWhiteSpace(Endpoint)
-            && !string.IsNullOrWhiteSpace(Bucket)
-            && ((!string.IsNullOrWhiteSpace(AccessKey) && !string.IsNullOrWhiteSpace(SecretKey)) || S3Chain)
-    };
+    public bool IsConfigured =>
+        Provider switch
+        {
+            SyncProvider.Azure => (!string.IsNullOrWhiteSpace(ConnectionString) || !string.IsNullOrWhiteSpace(Account))
+                                  && !string.IsNullOrWhiteSpace(Container),
+            _ => !string.IsNullOrWhiteSpace(Endpoint)
+                 && !string.IsNullOrWhiteSpace(Bucket)
+                 && (!string.IsNullOrWhiteSpace(AccessKey) && !string.IsNullOrWhiteSpace(SecretKey) || S3Chain)
+        };
 }

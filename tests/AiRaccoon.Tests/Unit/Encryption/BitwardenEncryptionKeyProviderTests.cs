@@ -1,7 +1,7 @@
 using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Shouldly;
 using Xunit;
 
@@ -111,7 +111,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
         ex.Message.ShouldBe("bws timed out after 15s");
     }
 
-    private sealed class FakeBwsRunner : IBwsProcessRunner
+    private sealed class FakeBwsRunner : ICliSecretManager
     {
         private readonly BwsInvocationException? _exception;
         private readonly BwsResult? _result;

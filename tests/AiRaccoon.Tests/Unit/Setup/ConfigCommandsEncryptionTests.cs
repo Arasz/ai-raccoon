@@ -3,7 +3,10 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Setup;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -38,19 +41,19 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
+    private string SidecarPath() => EncryptionState.PathFor(BankPath());
 
-    private void WriteSidecar(string source, string projectId, string secretId) => new EncryptionSourceSidecar(BankPath()).Write(new EncryptionSourceConfig(source, projectId, secretId));
+    private void WriteSidecar(string source, string projectId, string secretId) => new EncryptionState(BankPath()).Write(new EncryptionData(source, projectId, secretId));
 
     private async Task<(int Exit, string Out, string Err, SqliteConnectionFactory Bank)> Run(string[] args,
         FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider(envPassphrase), runner));
+            new EncryptionKeyResolver(new StubEnvProvider(envPassphrase), runner));
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
@@ -114,7 +117,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
         store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe(DefaultProjectId);
         store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(DefaultSecretId);
-        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
+        var sidecar = new EncryptionState(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
         sidecar.ProjectId.ShouldBe(DefaultProjectId);
@@ -137,7 +140,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe("p-111");
         store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe("s-222");
-        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
+        var sidecar = new EncryptionState(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.ProjectId.ShouldBe("p-111");
         sidecar.SecretId.ShouldBe("s-222");
@@ -197,7 +200,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider("env-pass"), runner));
+            new EncryptionKeyResolver(new StubEnvProvider("env-pass"), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
@@ -207,7 +210,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
-        var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
+        var sidecar = new EncryptionState(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe(EncryptionSettingsKeys.SourceBitwarden);
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
@@ -228,7 +231,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider("env-pass"), runner));
+            new EncryptionKeyResolver(new StubEnvProvider("env-pass"), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
@@ -252,7 +255,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider(null), runner));
+            new EncryptionKeyResolver(new StubEnvProvider(null), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
@@ -277,7 +280,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider(null), runner));
+            new EncryptionKeyResolver(new StubEnvProvider(null), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
@@ -387,7 +390,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider(null), runner));
+            new EncryptionKeyResolver(new StubEnvProvider(null), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
@@ -424,7 +427,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider(null), runner));
+            new EncryptionKeyResolver(new StubEnvProvider(null), runner));
         await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
@@ -463,7 +466,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
         WriteSidecar(EncryptionSettingsKeys.SourceBitwarden, DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
-            new EncryptionKeyResolver(Options(), new StubEnvProvider("env-pass"), runner));
+            new EncryptionKeyResolver(new StubEnvProvider("env-pass"), runner));
         await using (var seed = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
@@ -481,7 +484,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         public string? GetPassphrase() => passphrase;
     }
 
-    private sealed class FakeBwsRunner : IBwsProcessRunner
+    private sealed class FakeBwsRunner : ICliSecretManager
     {
         private readonly BwsInvocationException? _exception;
         private readonly BwsResult? _result;

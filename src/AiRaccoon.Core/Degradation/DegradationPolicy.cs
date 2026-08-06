@@ -7,6 +7,5 @@ namespace AiRaccoon.Core.Degradation;
 /// </summary>
 public static class DegradationPolicy
 {
-    public static bool ShouldDegrade(double rating, double ageDays, double threshold, double? ttlDays) =>
-        ttlDays.HasValue && rating < threshold && ageDays > ttlDays.Value;
+    public static bool ShouldDegrade(double rating, double ageDays, double threshold, double? ttlDays) => ttlDays.HasValue && rating < threshold && ageDays > ttlDays.Value;
 }

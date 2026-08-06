@@ -12,31 +12,31 @@ internal static class MemorySql
                                       """;
 
     public const string SelectEntryById = """
-                                           SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
-                                                  project_id AS ProjectId, context_label AS ContextLabel,
-                                                  workspace_id AS WorkspaceId, created_at AS CreatedAt
-                                           FROM entries
-                                           WHERE id = @id
-                                           """;
+                                          SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                 project_id AS ProjectId, context_label AS ContextLabel,
+                                                 workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                          FROM entries
+                                          WHERE id = @id
+                                          """;
 
     public const string SelectSourceByHashAndProject = """
-                                                         SELECT path AS Path, value AS Value
-                                                        FROM entries
-                                                        WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
-                                                        LIMIT 1
-                                                        """;
+                                                        SELECT path AS Path, value AS Value
+                                                       FROM entries
+                                                       WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
+                                                       LIMIT 1
+                                                       """;
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
     public const string SelectCommittedByValue = """
-                                                  SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
-                                                         project_id AS ProjectId, context_label AS ContextLabel,
-                                                         workspace_id AS WorkspaceId, created_at AS CreatedAt
-                                                  FROM entries
-                                                  WHERE value = @value AND workspace_id IS NULL AND project_id = @projectId
-                                                  ORDER BY id
-                                                  LIMIT 1
-                                                  """;
+                                                 SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                        project_id AS ProjectId, context_label AS ContextLabel,
+                                                        workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                 FROM entries
+                                                 WHERE value = @value AND workspace_id IS NULL AND project_id = @projectId
+                                                 ORDER BY id
+                                                 LIMIT 1
+                                                 """;
 
     public const string EntryExistsByPathInBucket = """
                                                     SELECT 1 FROM entries
@@ -87,39 +87,39 @@ internal static class MemorySql
     // C# from the entry value (the FTS list's snippet() payload wins for docs both
     // modalities retrieve). The content list feeds the dual-vector fusion.
     public const string VectorSearchByFilter = """
-                                                SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
-                                                       e.value AS Value,
-                                                       vec_distance_cosine(v.embedding, @queryVector) AS Distance,
-                                                       e.source_file AS SourceFile,
-                                                       CASE WHEN e.source_file IS NULL THEN 0
-                                                            ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
-                                                       CASE WHEN e.source_file IS NULL THEN 0
-                                                            ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
-                                                FROM vec_entries v
-                                                JOIN entries e ON e.id = v.rowid
-                                                WHERE {filter}
-                                                ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
-                                                LIMIT @limit
-                                                """;
+                                               SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
+                                                      e.value AS Value,
+                                                      vec_distance_cosine(v.embedding, @queryVector) AS Distance,
+                                                      e.source_file AS SourceFile,
+                                                      CASE WHEN e.source_file IS NULL THEN 0
+                                                           ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
+                                                      CASE WHEN e.source_file IS NULL THEN 0
+                                                           ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
+                                               FROM vec_entries v
+                                               JOIN entries e ON e.id = v.rowid
+                                               WHERE {filter}
+                                               ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
+                                               LIMIT @limit
+                                               """;
 
     // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
     public const string StructureVectorSearchByFilter = """
-                                                         SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
-                                                                e.value AS Value,
-                                                                vec_distance_cosine(v.embedding, @queryVector) AS Distance,
-                                                                e.source_file AS SourceFile,
-                                                                CASE WHEN e.source_file IS NULL THEN 0
-                                                                     ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
-                                                                CASE WHEN e.source_file IS NULL THEN 0
-                                                                     ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
-                                                         FROM vec_structure v
-                                                         JOIN entries e ON e.id = v.rowid
-                                                         WHERE {filter}
-                                                         ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
-                                                         LIMIT @limit
-                                                         """;
+                                                        SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path,
+                                                               e.value AS Value,
+                                                               vec_distance_cosine(v.embedding, @queryVector) AS Distance,
+                                                               e.source_file AS SourceFile,
+                                                               CASE WHEN e.source_file IS NULL THEN 0
+                                                                    ELSE ROW_NUMBER() OVER (PARTITION BY e.source_file ORDER BY e.id) - 1 END AS ChunkIndex,
+                                                               CASE WHEN e.source_file IS NULL THEN 0
+                                                                    ELSE COUNT(*) OVER (PARTITION BY e.source_file) END AS TotalChunks
+                                                        FROM vec_structure v
+                                                        JOIN entries e ON e.id = v.rowid
+                                                        WHERE {filter}
+                                                        ORDER BY vec_distance_cosine(v.embedding, @queryVector), e.path
+                                                        LIMIT @limit
+                                                        """;
 
     public const string DeleteByHashAndProject =
         "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
@@ -129,10 +129,10 @@ internal static class MemorySql
     // stays), plus the per-path watch fingerprints so a delete-then-recreate cycle cannot
     // hash-skip its way back to stale chunks. The watch registration survives.
     public const string DeleteBySourcePath = """
-                                              DELETE FROM entries
-                                              WHERE project_id = @projectId AND workspace_id IS NULL
-                                                AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
-                                              """;
+                                             DELETE FROM entries
+                                             WHERE project_id = @projectId AND workspace_id IS NULL
+                                               AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
+                                             """;
 
     public const string DeleteWatchFilesByProjectPathCascade = """
                                                                DELETE FROM watch_files
@@ -141,16 +141,16 @@ internal static class MemorySql
                                                                """;
 
     public const string InsertWatchIfAbsent = """
-                                               INSERT INTO watches (project_id, path, created_at, last_change_ts)
-                                               VALUES (@projectId, @path, @createdAt, @lastChangeTs)
-                                               ON CONFLICT(project_id, path) DO NOTHING
-                                               """;
+                                              INSERT INTO watches (project_id, path, created_at, last_change_ts)
+                                              VALUES (@projectId, @path, @createdAt, @lastChangeTs)
+                                              ON CONFLICT(project_id, path) DO NOTHING
+                                              """;
 
     public const string UpdateWatchLastChange = """
-                                                 UPDATE watches
-                                                 SET last_change_ts = @lastChangeTs
-                                                 WHERE project_id = @projectId AND path = @path
-                                                 """;
+                                                UPDATE watches
+                                                SET last_change_ts = @lastChangeTs
+                                                WHERE project_id = @projectId AND path = @path
+                                                """;
 
     public const string DeleteWatch =
         "DELETE FROM watches WHERE project_id = @projectId AND path = @path";

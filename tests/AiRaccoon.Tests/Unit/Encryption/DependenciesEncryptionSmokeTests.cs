@@ -1,6 +1,8 @@
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -27,7 +29,7 @@ public sealed class DependenciesEncryptionSmokeTests
 
         var resolver = provider.GetRequiredService<EncryptionKeyResolver>();
         provider.GetRequiredService<IEncryptionKeyProvider>().ShouldBeSameAs(resolver);
-        provider.GetRequiredService<IBwsProcessRunner>().ShouldNotBeNull();
+        provider.GetRequiredService<ICliSecretManager>().ShouldNotBeNull();
         provider.GetRequiredService<SqliteConnectionFactory>().ShouldNotBeNull();
     }
 }

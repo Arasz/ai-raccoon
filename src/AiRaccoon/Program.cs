@@ -1,70 +1,74 @@
-using AiRaccoon.Core.Encryption;
-using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup;
-using Microsoft.Data.Sqlite;
+using AiRaccoon.Setup.Cli;
 
-var parsed = CliArgs.Parse(args);
-if (parsed.Errors.Count > 0 || parsed.ShowHelp || parsed.ShowVersion)
+if (!CliArgs.TryParse(args, out var cliParseResult))
 {
-    // All CLI text goes to stderr; stdout carries only stdio protocol frames.
-    return CliArgs.Render(parsed, Console.Error);
+    return cliParseResult.RenderTo(Console.Error);
 }
 
-var config = ServerConfig.Build(parsed.Options);
+var cancellationTokenSource = new CancellationTokenSource();
 
-if (parsed.CommandPath.Length > 0)
-{
-    return await ConfigVerbRunner.RunAsync(parsed, config, Console.Out, Console.Error, Console.In);
-}
-
-var app = McpServerSetup.CreateServerHost(config);
-
+var serverConfig = cliParseResult.Options.ToServerConfig();
+var app = McpServerSetup.CreateServerHost(serverConfig);
+var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailability>();
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
-var resolver = app.Services.GetRequiredService<EncryptionKeyResolver>();
+var resolver = app.Services.GetRequiredService<IEncryptionKeyResolver>();
+var logger = app.Services.GetRequiredService<ILogger>();
 
-EncryptionKeyResolver.ResolvedKey resolved;
-try
+if (!TryResolveEncryptionKey(logger, resolver, out var encryptionKey))
 {
-    resolved = resolver.Resolve();
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"ai-raccoon: {ex.Message}");
-    return 1;
+    return ExitCode.FailedToResolveEncryptionKey;
 }
 
-try
+if (!await TryProbeBankDecryption(logger, factory, encryptionKey, cancellationTokenSource.Token))
 {
-    await using var probe = await factory.OpenBankWithKeyAsync(resolved.Passphrase);
-}
-catch (SqliteException) when (resolved.SourceName == EncryptionSettingsKeys.SourceBitwarden)
-{
-    Console.Error.WriteLine(
-        "ai-raccoon: encryption mismatch: the bank cannot be opened with the bitwarden key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption bitwarden')");
-    return 1;
-}
-catch (SqliteException ex) when (resolved.Passphrase is null && ex.SqliteErrorCode == 26)
-{
-    Console.Error.WriteLine(
-        "ai-raccoon: bank is encrypted but no encryption source is configured (set AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden')");
-    return 1;
-}
-catch (SqliteException ex) when (resolved.Passphrase is not null && ex.SqliteErrorCode == 26)
-{
-    Console.Error.WriteLine(
-        "ai-raccoon: encryption mismatch: the bank cannot be opened with the configured passphrase — set the correct AIRACCOON_DB_PASSPHRASE or run 'ai-raccoon encryption bitwarden'");
-    return 1;
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"ai-raccoon: {ex.Message}");
-    return 1;
+    return ExitCode.FailedToOpenEncryptedBank;
 }
 
-// Best-effort bundled-model bootstrap (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
-// warn, never fail, when the packaged ONNX is missing.
-await EmbeddingBootstrap.EnsureAtStartupAsync(Console.Error, BundledModel.EnsureAsync, CancellationToken.None);
+await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(cancellationTokenSource.Token);
 
-await app.RunAsync(config);
-return 0;
+return await app.RunAsync(serverConfig, cancellationTokenSource.Token);
+
+static bool TryResolveEncryptionKey(ILogger logger, IEncryptionKeyResolver encryptionKeyResolver, out ResolvedKey resolvedKey)
+{
+    try
+    {
+        resolvedKey = encryptionKeyResolver.Resolve();
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Log.FailedToResolveEncryptionKey(logger, ex);
+        resolvedKey = ResolvedKey.None;
+        return false;
+    }
+}
+
+static async Task<bool> TryProbeBankDecryption(ILogger logger, SqliteConnectionFactory sqliteConnectionFactory, ResolvedKey resolvedKey, CancellationToken cancellationToken)
+{
+    try
+    {
+        await using var probe = await sqliteConnectionFactory.OpenBankWithKeyAsync(resolvedKey.Passphrase, cancellationToken);
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Log.FailedToOpenEncryptedBank(logger, resolvedKey.SourceName, ex);
+        return false;
+    }
+}
+
+namespace AiRaccoon
+{
+    public static partial class Log
+    {
+        [LoggerMessage(EventId = ExitCode.FailedToResolveEncryptionKey, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
+        public static partial void FailedToResolveEncryptionKey(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = ExitCode.FailedToOpenEncryptedBank, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key")]
+        public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, Exception exception);
+    }
+}

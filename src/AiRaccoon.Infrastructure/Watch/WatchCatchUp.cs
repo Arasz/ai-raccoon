@@ -16,11 +16,9 @@ public sealed partial class WatchCatchUp(
     /// <summary>Task of the most recently enqueued scan (tests await it for determinism).</summary>
     internal Task? LastScan { get; private set; }
 
-    public void EnqueueInitialScan(string projectId, string path) =>
-        LastScan = Task.Run(() => ScanCoreAsync(projectId, path, sinceWatermark: null));
+    public void EnqueueInitialScan(string projectId, string path) => LastScan = Task.Run(() => ScanCoreAsync(projectId, path, null));
 
-    public void EnqueueChangedSince(string projectId, string path, long watermark) =>
-        LastScan = Task.Run(() => ScanCoreAsync(projectId, path, sinceWatermark: watermark));
+    public void EnqueueChangedSince(string projectId, string path, long watermark) => LastScan = Task.Run(() => ScanCoreAsync(projectId, path, watermark));
 
     /// <summary>Deterministic core: files under path, optionally filtered by mtime &gt; watermark.
     /// A watched FILE target enumerates itself; a missing target enumerates nothing (catch-up

@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
 using Xunit;
 
@@ -16,7 +17,7 @@ public class ConfigCommandsAccessModelTests
 {
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
-        var parsed = CliArgs.Parse(args);
+        var parsed = CliArgs.TryParse(args);
         parsed.Errors.ShouldBeEmpty();
         parsed.CommandPath.ShouldNotBeEmpty();
 

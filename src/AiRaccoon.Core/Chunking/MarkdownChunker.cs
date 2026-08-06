@@ -16,18 +16,18 @@ public static class MarkdownChunker
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        List<Unit> units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens);
+        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens);
         List<string> chunks = [];
         List<Unit>? previousUnits = null;
-        int cursor = 0;
+        var cursor = 0;
         while (cursor < units.Count)
         {
-            List<Unit> chunkUnits = BuildOverlay(previousUnits, overlayTokens);
-            int tokens = chunkUnits.Sum(unit => unit.TokenCount);
-            int firstNew = cursor;
+            var chunkUnits = BuildOverlay(previousUnits, overlayTokens);
+            var tokens = chunkUnits.Sum(unit => unit.TokenCount);
+            var firstNew = cursor;
             while (cursor < units.Count)
             {
-                Unit next = units[cursor];
+                var next = units[cursor];
                 if (cursor != firstNew && tokens + next.TokenCount > maxTokens)
                 {
                     break;
@@ -53,10 +53,10 @@ public static class MarkdownChunker
             return overlay;
         }
 
-        int used = 0;
-        for (int j = previousUnits.Count - 1; j >= 0; j--)
+        var used = 0;
+        for (var j = previousUnits.Count - 1; j >= 0; j--)
         {
-            Unit unit = previousUnits[j];
+            var unit = previousUnits[j];
             if (used + unit.TokenCount > overlayTokens)
             {
                 break;
@@ -73,7 +73,7 @@ public static class MarkdownChunker
     {
         List<Unit> units = [];
         List<string>? fenceLines = null;
-        foreach (string line in lines)
+        foreach (var line in lines)
         {
             if (IsFenceDelimiter(line))
             {
@@ -108,16 +108,16 @@ public static class MarkdownChunker
 
     private static bool IsFenceDelimiter(string line)
     {
-        string trimmed = line.TrimStart();
+        var trimmed = line.TrimStart();
         return trimmed.StartsWith("```", StringComparison.Ordinal)
-            || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+               || trimmed.StartsWith("~~~", StringComparison.Ordinal);
     }
 
     private static List<string> SplitLines(string text)
     {
         List<string> lines = [];
-        int start = 0;
-        for (int i = 0; i < text.Length; i++)
+        var start = 0;
+        for (var i = 0; i < text.Length; i++)
         {
             if (text[i] != '\n')
             {
@@ -136,8 +136,7 @@ public static class MarkdownChunker
         return lines;
     }
 
-    private static string NormalizeLineEndings(string text) =>
-        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
     private sealed record Unit(List<string> Lines, int TokenCount);
 }
