@@ -1,18 +1,25 @@
 """Slow integration tests: real ai-raccoon server spawned against a temp bank.
 
 Run with --run-slow. Skips when the ai-raccoon binary is not installed.
-The server child inherits the environment with AIRACCOON_DATA_ROOT pointed
-at a temp dir, so the real ~/.ai-raccoon bank is never touched.
+Isolation is real: the server child is spawned with ``--data-root <tmp>``
+(the production CLI resolves the data root ONLY from that flag — the
+AIRACCOON_DATA_ROOT env var is a test-host-only construct), so the real
+~/.ai-raccoon bank is never touched.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import subprocess
+import time
 
 import pytest
 
 pytestmark = pytest.mark.slow
+
+_LISTENING_RE = re.compile(r"http transport listening on (http://\S+)")
 
 
 def _binary() -> str:
@@ -24,10 +31,11 @@ def _binary() -> str:
 
 
 @pytest.fixture
-def real_provider(provider_module, tmp_path, monkeypatch):
-    monkeypatch.setenv("AIRACCOON_DATA_ROOT", str(tmp_path / "bank"))
+def real_provider(provider_module, tmp_path, request):
+    binary = _binary()
     provider = provider_module.AiRaccoonMemoryProvider(
-        config={"transport": "stdio", "binary": _binary()}
+        config={"transport": "stdio", "binary": binary,
+                "binary_args": ["--data-root", str(tmp_path / "bank")]}
     )
     provider.initialize(
         "itest",
@@ -38,7 +46,9 @@ def real_provider(provider_module, tmp_path, monkeypatch):
         agent_workspace="hermes",
     )
     if provider._client is None:
-        pytest.skip("server failed to spawn")
+        # --run-slow was explicitly requested: a broken spawn is a failure,
+        # not a skip. Only the binary-missing case (above) is a skip.
+        pytest.fail(f"server failed to spawn: {binary}")
     yield provider
     provider.shutdown()
 
@@ -83,3 +93,42 @@ def test_shutdown_terminates_child_and_is_idempotent(real_provider):
     real_provider.shutdown()
     assert client._session is None
     assert client._thread is None or not client._thread.is_alive()
+
+
+def test_http_transport_smoke(tmp_path, client_module):
+    """HTTP path: spawn a server on a random port, connect the HttpClient, call stats."""
+    binary = _binary()
+    proc = subprocess.Popen(
+        [binary, "--transport", "http", "--port", "0", "--data-root", str(tmp_path / "httpbank")],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+    )
+    assert proc.stderr is not None
+    url = None
+    deadline = time.monotonic() + 30
+    try:
+        while time.monotonic() < deadline:
+            line = proc.stderr.readline()
+            if not line:
+                if proc.poll() is not None:
+                    pytest.fail(f"server exited early: {proc.returncode}")
+                continue
+            match = _LISTENING_RE.search(line)
+            if match:
+                url = match.group(1)
+                break
+        if not url:
+            pytest.fail("server never reported its listening URL")
+
+        client = client_module.HttpClient(url)
+        client.connect()
+        try:
+            stats = client.stats("smoke")
+            assert "entries" in stats and stats["entries"] == 0
+        finally:
+            client.close()
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

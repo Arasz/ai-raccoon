@@ -46,6 +46,7 @@ plugins:
     transport: stdio      # stdio | http
     url: http://127.0.0.1:7721/mcp   # http mode
     binary: ai-raccoon    # stdio mode (resolved on PATH)
+    binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
     search_limit: 5
     min_score: 0.5
@@ -53,8 +54,10 @@ plugins:
 ```
 
 - **stdio (default):** the provider spawns the installed `ai-raccoon` binary as a child
-  process and speaks MCP over stdio. The child inherits the environment, so
-  `AIRACCOON_DATA_ROOT` (temp bank) flows through for testing. No ports.
+  process and speaks MCP over stdio. No ports. For isolation (tests, scratch banks), pass
+  spawn args via `binary_args` — the production CLI resolves the data root ONLY from the
+  `--data-root` flag, so `binary_args: ["--data-root", "/tmp/bank"]` is the way to point a
+  spawned server at a temp bank.
 - **http:** the provider connects to a running server's Streamable HTTP endpoint —
   useful when one long-running server should serve several clients.
 - `project_id` is derived `hermes-<profile>` unless overridden; every memory operation

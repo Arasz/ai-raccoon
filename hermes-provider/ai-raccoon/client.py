@@ -59,9 +59,13 @@ class _MCPClient:
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
+        future = asyncio.run_coroutine_threadsafe(self._open(), self._loop)
         try:
-            asyncio.run_coroutine_threadsafe(self._open(), self._loop).result(timeout=CONNECT_TIMEOUT_S)
+            future.result(timeout=CONNECT_TIMEOUT_S)
         except Exception:
+            # Never leave the pending _open task behind: a stdio spawn that
+            # completes after the timeout would leak the child process.
+            future.cancel()
             self.close()
             raise
 
@@ -132,15 +136,16 @@ class _MCPClient:
 class StdioClient(_MCPClient):
     """Spawns ``ai-raccoon`` as a child process and speaks MCP over stdio."""
 
-    def __init__(self, binary: str = "ai-raccoon") -> None:
+    def __init__(self, binary: str = "ai-raccoon", args: Optional[list] = None) -> None:
         super().__init__()
         self._binary = binary
+        self._args = list(args or [])
 
     async def _open(self) -> None:
         from mcp import ClientSession
         from mcp.client.stdio import StdioServerParameters, stdio_client
 
-        self._ctx = stdio_client(StdioServerParameters(command=self._binary))
+        self._ctx = stdio_client(StdioServerParameters(command=self._binary, args=self._args))
         read, write = await self._ctx.__aenter__()
         session = ClientSession(read, write)
         self._session = await session.__aenter__()
@@ -186,7 +191,7 @@ def create_client(config: dict) -> _MCPClient:
     transport = config.get("transport", "stdio")
     if transport == "http":
         return HttpClient(config.get("url", DEFAULT_HTTP_URL))
-    return StdioClient(config.get("binary", "ai-raccoon"))
+    return StdioClient(config.get("binary", "ai-raccoon"), config.get("binary_args") or [])
 
 
 def _text(result: Any) -> Any:

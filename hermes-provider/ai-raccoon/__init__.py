@@ -37,6 +37,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_TRANSPORT = "stdio"
 DEFAULT_BINARY = "ai-raccoon"
 
+# Must be >= client.CALL_TIMEOUT_S so an in-flight write drains before the
+# session is torn down (shutdown joins with this bound).
+_SYNC_JOIN_TIMEOUT_S = 15.0
+
 # -- Tool schemas (OpenAI function-calling format; projectId injected by the
 #    provider, so it is deliberately absent from the model-facing schemas).
 #    Descriptions mirror the server's tool descriptions (MCP stays thin).
@@ -167,6 +171,13 @@ class AiRaccoonMemoryProvider(MemoryProvider):
     # -- lifecycle ----------------------------------------------------------
 
     def initialize(self, session_id: str, **kwargs) -> None:
+        # Re-init must not leak the previous session's client/child.
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception as e:
+                logger.debug("ai-raccoon provider re-init close failed: %s", e)
+            self._client = None
         self._session_id = session_id
         self._agent_identity = kwargs.get("agent_identity") or "default"
         self._agent_context = kwargs.get("agent_context")
@@ -248,11 +259,14 @@ class AiRaccoonMemoryProvider(MemoryProvider):
 
         thread = threading.Thread(target=_sync, daemon=True)
         thread.start()
+        # Reap finished threads so a long-lived agent does not accumulate
+        # thousands of dead references (shutdown would join them all).
+        self._sync_threads = [t for t in self._sync_threads if t.is_alive()]
         self._sync_threads.append(thread)
 
     def _join_sync_threads(self) -> None:
         for thread in self._sync_threads:
-            thread.join(timeout=5.0)
+            thread.join(timeout=_SYNC_JOIN_TIMEOUT_S)
         self._sync_threads = []
 
     # -- tool surface -------------------------------------------------------
@@ -308,9 +322,10 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             {"key": "transport", "description": "stdio spawns the ai-raccoon binary; http connects to a running server", "default": "stdio", "choices": ["stdio", "http"]},
             {"key": "url", "description": "Streamable HTTP endpoint (http mode)", "default": "http://127.0.0.1:7721/mcp"},
             {"key": "binary", "description": "ai-raccoon binary to spawn (stdio mode)", "default": "ai-raccoon"},
+            {"key": "binary_args", "description": "Extra args for the spawned binary, e.g. ['--data-root', '/tmp/bank'] (stdio mode)", "default": ""},
             {"key": "project_id", "description": "AiRaccoon project id (empty = derived hermes-<profile>)"},
-            {"key": "search_limit", "description": "Prefetch result limit", "default": "5", "type": "integer"},
-            {"key": "min_score", "description": "Prefetch minimum ranking threshold 0..1", "default": "0.5", "type": "number"},
+            {"key": "search_limit", "description": "Prefetch result limit", "default": 5, "type": "integer"},
+            {"key": "min_score", "description": "Prefetch minimum ranking threshold 0..1", "default": 0.5, "type": "number"},
             {"key": "scope", "description": "Prefetch search scope", "default": "all", "choices": ["all", "project", "shared"]},
         ]
 

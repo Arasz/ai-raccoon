@@ -1,7 +1,7 @@
 # Protocol design: AiRaccoon as a Hermes memory provider plugin
 
 **Date:** 2026-08-06
-**Status:** design for discussion — decisions D1-D5 open, recommendations given
+**Status:** owner-approved 2026-08-06 — all six decisions ratified (D1-D6); implemented in PR #61.
 
 ## Goal
 
@@ -29,7 +29,8 @@ being only a plain MCP tool server (the current setup). The interface contract i
   - `memory_search(projectId, query, scope=all|project|shared, workspaceId?, limit=20,
     minScore=0.7, rrfK, ftsWeight, vectorWeight, contextLabel?)` → result list
   - 18 further tools (list/stats/share/share_extract/delete/delete_context/ingest_file/
-    ingest_directory/embed_pending/workspace_begin|status|consolidate|discard/sweep/sync).
+    ingest_directory/embed_pending/workspace_begin|status|consolidate|discard/sweep/sync/
+    watch_add/watch_status/watch_remove — 20 total).
 - `is_available()` must NOT make network calls (ABC docstring); the real connect happens in
   `initialize()`.
 
@@ -125,13 +126,13 @@ plugin. Non-secret fields persist via `save_config` into `plugins.ai-raccoon` in
 6. **D6**: keep the plain-MCP bridge alongside (recommended) or remove it once the provider
    lands?
 
-## Decision record (filled as decided)
+## Decision record (all ratified by the owner 2026-08-06)
 
 | # | Decision | Chosen |
 |---|---|---|
-| D1 | transport | — |
-| D2 | tool surface | — |
-| D3 | project scoping | — |
-| D4a | sync content | — |
-| D4b | session end | — |
-| D6 | bridge coexistence | — |
+| D1 | transport | stdio child default; HTTP option (both implemented) |
+| D2 | tool surface | curated 4: memory_search / memory_write / memory_stats / memory_share |
+| D3 | project scoping | derived `hermes-<profile>`; config `project_id` override wins |
+| D4a | sync content | assistant final message; `sourceFile=hermes/<session>`, `section=turn` |
+| D4b | session end | no summary in v1 (`on_session_end` no-op) |
+| D6 | bridge coexistence | keep the plain-MCP bridge alongside (documented) |
