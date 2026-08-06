@@ -330,6 +330,29 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Startup_BwsMissing_StillLogsSqliteEngineVersion()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // the child launches a shell-based fake; the PATH override is unix-shaped
+        }
+
+        WriteSidecar();
+        var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
+        Directory.CreateDirectory(emptyPathDir);
+
+        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
+
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        // Diagnostics fire before key resolution, so the engine identity is visible even
+        // when startup fails (engine train was the 2.1.11 → 2.4.0 incident class).
+        stderr.Contains("SQLite engine 3.53", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+        stderr.Contains("SQLite3 Multiple Ciphers 2.4", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+    }
+
+    [Fact]
     public async Task Startup_WrongKey_Exits2WithOpenError()
     {
         if (OperatingSystem.IsWindows())
