@@ -14,9 +14,9 @@ using Microsoft.Extensions.Logging.Console;
 namespace AiRaccoon.Setup;
 
 /// <summary>
-///     The one-shot config-verb path (Program.cs): explicit composition of the bank, watch
-///     store and encryption provider family — no DI container, no host, no key probe/embedding
-///     bootstrap. Logging goes to stderr (the stdio protocol owns stdout).
+///     One-shot composition root for all CLI verbs (Program.cs): explicit composition of the
+///     bank, watch store and encryption provider family — no DI container, no host, no key
+///     probe/embedding bootstrap. Logging goes to stderr (the stdio protocol owns stdout).
 /// </summary>
 internal static class CliCommandRunner
 {
