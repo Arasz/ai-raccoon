@@ -16,7 +16,8 @@ public sealed class ShareTools(
     IMemoryStore store,
     IMemoryAccessGuard access,
     ToolCallMetrics observability,
-    SharedExtractionService extraction)
+    SharedExtractionService extraction,
+    IPromotionQueue queue)
 {
     private const string TnMemoryShare = "memory_share";
     private const string TnMemoryShareExtract = "memory_share_extract";
@@ -63,17 +64,17 @@ public sealed class ShareTools(
 
     [McpServerTool(Name = TnMemoryShareExtract)]
     [Description(
-        "Checks committed project memories and extracts the ones worth sharing. propose (default) returns ranked candidates with the reasons they scored; promote shares the top candidates into the curated, sweep-exempt shared tier. autoPromote (disabled by default) promotes the top candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
+        "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with memory_promotion_list. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
     public async Task<ShareExtractResult> ShareExtract(
         [Description("Project ids to scan (1..8).")]
         string[] projectIds,
-        [Description("propose (default) lists ranked candidates; promote shares the top candidates.")]
+        [Description("propose (default) queues ranked candidates; promote shares the top queued candidates.")]
         string mode = "propose",
-        [Description("Maximum candidates to return or promote (1..50; default 20).")]
+        [Description("Maximum candidates to queue or promote per project (1..50; default 20).")]
         int? limit = null,
         [Description("Include rows with a TTL (ephemeral by design; promoting makes them sweep-exempt forever).")]
         bool includeTtlRows = false,
-        [Description("Promote the top candidates in this call. Disabled by default: it shares data between projects.")]
+        [Description("Promote the top queued candidates in this call. Disabled by default: it shares data between projects.")]
         bool autoPromote = false,
         [Description("Explicit enable gate for autoPromote — acknowledges that candidates become visible to every project.")]
         bool confirm = false,
@@ -116,33 +117,54 @@ public sealed class ShareTools(
                     .ConfigureAwait(false);
             }
 
+            if (promotes)
+            {
+                var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
+                    .ConfigureAwait(false);
+                activity.RecordInvocation();
+                return new ShareExtractResult([], outcome.PromotedHashes);
+            }
+
             var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
             var candidates = new List<ShareCandidate>();
-            var promoted = new List<string>();
             foreach (var projectId in projectIds)
             {
                 var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
                     .ConfigureAwait(false);
-                var result = extraction.Run(promotes ? ExtractMode.Promote : ExtractMode.Propose,
+                var result = extraction.Run(ExtractMode.Propose,
                     projectId, projectIds, rows,
                     sharedIndex.Values, sharedIndex.Paths, includeTtlRows, resolvedLimit,
                     DateTimeOffset.UtcNow);
                 candidates.AddRange(result.Candidates);
-                foreach (var hash in result.PromotedHashes)
+                if (result.Candidates.Count > 0)
                 {
-                    await store.ShareAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
-                    promoted.Add(hash);
+                    await queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates),
+                            cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
 
             activity.RecordInvocation();
-            return new ShareExtractResult(candidates, promoted);
+            return new ShareExtractResult(candidates, []);
         }
         catch (Exception ex)
         {
             activity.RecordError(ex);
             throw;
         }
+    }
+
+    /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
+    /// ShareCandidate is joined back to its source row for those fields.</summary>
+    private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
+        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
+    {
+        var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
+        return candidates
+            .Select(c => byHash.TryGetValue(c.Hash, out var row)
+                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
+                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
+            .ToList();
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

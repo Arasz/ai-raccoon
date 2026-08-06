@@ -15,14 +15,16 @@ public sealed partial class ExtractionHostedService : BackgroundService
 {
     private readonly IMemoryStore _store;
     private readonly SharedExtractionService _extraction;
+    private readonly IPromotionQueue _queue;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExtractionHostedService> _logger;
 
     public ExtractionHostedService(IMemoryStore store, SharedExtractionService extraction,
-        TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
+        IPromotionQueue queue, TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
     {
         _store = store;
         _extraction = extraction;
+        _queue = queue;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -97,36 +99,39 @@ public sealed partial class ExtractionHostedService : BackgroundService
         {
             try
             {
+                if (mode == ExtractMode.Promote)
+                {
+                    // Promote-from-queue: the propose tier is the source of truth.
+                    var outcome = await _queue
+                        .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, cancellationToken)
+                        .ConfigureAwait(false);
+                    promotedTotal += outcome.PromotedHashes.Count;
+                    Log.Pass(_logger, projectId, mode, outcome.PromotedHashes.Count, outcome.PromotedHashes.Count);
+                    continue;
+                }
+
                 var rows = await _store.ExtractCandidatesAsync(projectId, includeTtlRows: false, cancellationToken)
                     .ConfigureAwait(false);
-                var result = _extraction.Run(mode, projectId, projects, rows,
+                var result = _extraction.Run(ExtractMode.Propose, projectId, projects, rows,
                     sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false,
                     SharedExtractionService.DefaultCandidateLimit,
                     _timeProvider.GetUtcNow());
-                foreach (var hash in result.PromotedHashes)
+                if (result.Candidates.Count > 0)
                 {
-                    await _store.ShareAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+                    await _queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates),
+                            cancellationToken)
+                        .ConfigureAwait(false);
                 }
 
-                // Refresh per project: a promotion changes the shared tier, and the next
-                // project's dedup must see it (cross-project duplicate rows within one pass).
-                if (result.PromotedHashes.Count > 0)
+                // The loop's review surface: ranked candidates, one log line each (S4).
+                for (var i = 0; i < result.Candidates.Count; i++)
                 {
-                    sharedIndex = await _store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+                    var candidate = result.Candidates[i];
+                    Log.Candidate(_logger, i + 1, projectId, candidate.Path,
+                        string.Join(", ", candidate.Reasons), candidate.ValuePreview);
                 }
 
-                promotedTotal += result.PromotedHashes.Count;
-                Log.Pass(_logger, projectId, mode, result.Candidates.Count, result.PromotedHashes.Count);
-                if (mode == ExtractMode.Propose)
-                {
-                    // The loop's review surface: ranked candidates, one log line each (S4).
-                    for (var i = 0; i < result.Candidates.Count; i++)
-                    {
-                        var candidate = result.Candidates[i];
-                        Log.Candidate(_logger, i + 1, projectId, candidate.Path,
-                            string.Join(", ", candidate.Reasons), candidate.ValuePreview);
-                    }
-                }
+                Log.Pass(_logger, projectId, mode, result.Candidates.Count, 0);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -139,6 +144,19 @@ public sealed partial class ExtractionHostedService : BackgroundService
         }
 
         Log.RunCompleted(_logger, projects.Count, promotedTotal);
+    }
+
+    /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
+    /// ShareCandidate is joined back to its source row for those fields.</summary>
+    private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
+        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
+    {
+        var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
+        return candidates
+            .Select(c => byHash.TryGetValue(c.Hash, out var row)
+                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
+                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
+            .ToList();
     }
 
     private async Task<TimeSpan> ReadIntervalAsync(CancellationToken cancellationToken)

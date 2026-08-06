@@ -32,6 +32,7 @@ public sealed class MemoryToolsAccessModeTests
     private readonly ShareTools _share;
     private readonly WorkspaceTools _workspace;
     private readonly SweepTools _sweep;
+    private readonly PromotionTools _promotion;
 
     public MemoryToolsAccessModeTests()
     {
@@ -40,9 +41,10 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
         _tools = new MemoryTools(_store, access, metrics);
-        _share = new ShareTools(_store, access, metrics, new SharedExtractionService());
+        _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), new FakePromotionQueue());
         _workspace = new WorkspaceTools(workspaces, access, metrics);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics);
+        _promotion = new PromotionTools(new FakePromotionQueue(), access, metrics);
     }
 
     private void SetMode(string? global = null, string? perProject = null)
@@ -318,5 +320,19 @@ public sealed class MemoryToolsAccessModeTests
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    // Scenario: the propose tier follows the same read/write gate as every other surface.
+    [Fact]
+    public async Task RoMode_PromotionListAllowed_AndDiscardDenied()
+    {
+        SetMode(perProject: "ro");
+
+        var list = await _promotion.List("acme-web", cancellationToken: TestContext.Current.CancellationToken);
+        list.Rows.ShouldBeEmpty();
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("access-denied: memory_promotion_discard requires mode rw (current ro)");
     }
 }

@@ -29,13 +29,13 @@ public class ToolInventoryTests
     }
 
     [Fact]
-    public void ToolsNamespace_ExposesAll20SpecTools()
+    public void ToolsNamespace_ExposesAll22SpecTools()
     {
         var tools = ToolMethods()
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.Count.ShouldBe(20);
+        tools.Count.ShouldBe(22);
         tools.ShouldContain("memory_write");
         tools.ShouldContain("memory_search");
         tools.ShouldContain("memory_list");
@@ -53,6 +53,8 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_workspace_discard");
         tools.ShouldContain("memory_sweep");
         tools.ShouldContain("memory_sync");
+        tools.ShouldContain("memory_promotion_list");
+        tools.ShouldContain("memory_promotion_discard");
         tools.ShouldContain("memory_watch_add");
         tools.ShouldContain("memory_watch_status");
         tools.ShouldContain("memory_watch_remove");

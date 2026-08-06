@@ -27,6 +27,7 @@ public class MemoryToolsTests
 
     private readonly FakeStore _store = new();
     private readonly FakeSyncService _sync = new();
+    private readonly FakePromotionQueue _queue = new();
     private readonly MemoryTools _tools;
     private readonly ShareTools _share;
     private readonly WorkspaceTools _workspace;
@@ -40,7 +41,7 @@ public class MemoryToolsTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
         _tools = new MemoryTools(_store, access, metrics);
-        _share = new ShareTools(_store, access, metrics, new SharedExtractionService());
+        _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), _queue);
         _workspace = new WorkspaceTools(workspaces, access, metrics);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics);
         _syncTools = new SyncTools(_sync,
@@ -86,15 +87,13 @@ public class MemoryToolsTests
     [Fact]
     public async Task ShareExtract_Promote_SharesTheTopCandidates()
     {
-        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
-            "organic fact about job-search-ai-assistant", null, 0.5, 0,
-            DateTimeOffset.UtcNow.AddDays(-5), null));
+        _queue.PromoteOutcome = new PromoteOutcome(["h1"], 0, new Dictionary<string, int>());
 
         var result = await _share.ShareExtract(["acme"], mode: "promote",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.PromotedHashes.ShouldBe(["h1"]);
-        _store.Shared.ShouldBe(("acme", "h1"));
+        _queue.LastPromoteProjects.ShouldBe(["acme"]);
     }
 
     [Fact]
@@ -164,15 +163,13 @@ public class MemoryToolsTests
     [Fact]
     public async Task ShareExtract_AutoPromote_WithConfirm_PromotesInCall()
     {
-        _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
-            "organic fact about job-search-ai-assistant", null, 0.5, 0,
-            DateTimeOffset.UtcNow.AddDays(-5), null));
+        _queue.PromoteOutcome = new PromoteOutcome(["h1"], 0, new Dictionary<string, int>());
 
         var result = await _share.ShareExtract(["acme"], autoPromote: true, confirm: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.PromotedHashes.ShouldBe(["h1"]);
-        _store.Shared.ShouldBe(("acme", "h1"));
+        _queue.LastPromoteProjects.ShouldBe(["acme"]);
     }
 
     [Fact]

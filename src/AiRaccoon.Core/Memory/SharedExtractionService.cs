@@ -80,7 +80,7 @@ public sealed class SharedExtractionService
 
         var candidates = new List<ShareCandidate>();
         var promoted = new List<string>();
-        foreach (var (row, _, reasons) in scored)
+        foreach (var (row, score, reasons) in scored)
         {
             if (IsDuplicate(row, sharedValueSet, sharedPathSet))
             {
@@ -93,7 +93,8 @@ public sealed class SharedExtractionService
             }
 
             candidates.Add(new ShareCandidate(
-                row.Hash, row.Path, Truncate(row.Value), row.Rating, row.AccessCount, row.CreatedAt, reasons));
+                row.Hash, row.Path, Truncate(row.Value), score, row.Rating, row.AccessCount,
+                row.CreatedAt, reasons, row.SourceFile));
             if (mode == ExtractMode.Promote)
             {
                 promoted.Add(row.Hash);

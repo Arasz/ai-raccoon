@@ -246,8 +246,8 @@ public sealed class IdleWatchdogTests
         var lifetime = new FakeLifetime();
         using var watchdog = new IdleWatchdog(time, TimeSpan.FromMinutes(4), lifetime,
             NullLogger<IdleWatchdog>.Instance);
-        using var extraction = new ExtractionHostedService(store, new SharedExtractionService(), time,
-            NullLogger<ExtractionHostedService>.Instance);
+        using var extraction = new ExtractionHostedService(store, new SharedExtractionService(),
+            new FakePromotionQueue(), time, NullLogger<ExtractionHostedService>.Instance);
 
         using var cts = new CancellationTokenSource();
         var watchdogRun = watchdog.StartAsync(cts.Token);
