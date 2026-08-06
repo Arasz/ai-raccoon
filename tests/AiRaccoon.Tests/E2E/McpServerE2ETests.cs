@@ -150,7 +150,7 @@ public class McpServerE2ETests : IAsyncLifetime
         var share = await CallAsync("memory_share", ("projectId", "acme"), ("hash", hash));
         Text(share).ShouldContain("shared");
 
-        // The shared context now hstdin, TestContext.Current.CancellationTokens the promoted row; the project row remains.
+        // The shared context now holds the promoted row; the project row remains.
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         var statsText = Text(stats);
         statsText.ShouldContain("\"entries\":1");
@@ -263,7 +263,7 @@ public class McpServerE2ETests : IAsyncLifetime
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

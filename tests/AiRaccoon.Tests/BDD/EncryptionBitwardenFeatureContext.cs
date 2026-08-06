@@ -11,7 +11,6 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
-using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -90,8 +89,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
     }
 
-    /// <summary>Directory hCancellationToken.None,
-            encryptionCommands: encryptionCommandsing the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
+    /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
     public string FakeBwsDir { get; }
 
     /// <summary>
@@ -143,10 +141,10 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     public string BuildVectorPem() => BuildEd25519Pem(Seed00To1F, PublicKey01To20);
 
     /// <summary>Passphrase-protected (aes256-ctr + bcrypt) ed25519 pem — must be rejected by the parser.</summary>
-    public string BuildEncryptedPem() => new TestOpenSshKeyBuilder().WithEncrypted().Build();
+    public string BuildEncryptedPem() => new OpenSshKeyBuilder().WithEncrypted().Build();
 
     /// <summary>ssh-rsa pem — must be rejected by the parser (only ed25519 is supported).</summary>
-    public string BuildRsaPem() => new TestOpenSshKeyBuilder().WithKeyType("ssh-rsa").Build();
+    public string BuildRsaPem() => new OpenSshKeyBuilder().WithKeyType("ssh-rsa").Build();
 
     /// <summary>Writes the sidecar as the bitwarden source pointing at the given secret id.</summary>
     public void WriteSidecar(string secretId, string projectId = ProjectId) =>
@@ -197,8 +195,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var encryptionState = new EncryptionSourceSidecar(BankPath);
         var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
-            new StringReader(stdin), CancellationToken.None,
-            encryptionCommands: encryptionCommands);
+            new StringReader(stdin), encryptionCommands,
+            cancellationToken: CancellationToken.None);
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -240,7 +238,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     public ICliSecretManager NewRunner() => new BitwardenCliSecretManager(BwsExecutable);
 
     /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
-    private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new TestOpenSshKeyBuilder().Build(seed, pub);
+    private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new OpenSshKeyBuilder().Build(seed, pub);
 
     /// <summary>Outcome of one in-process CLI run (the same dispatch as Program.cs).</summary>
     public sealed record CliRun(int Exit, string Out, string Err);
@@ -264,5 +262,74 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
+    private sealed class OpenSshKeyBuilder
+    {
+        private string _cipherName = "none";
+        private string _kdfName = "none";
+        private string _keyType = "ssh-ed25519";
 
+        public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
+        {
+            _cipherName = cipherName;
+            _kdfName = kdfName;
+            return this;
+        }
+
+        public OpenSshKeyBuilder WithKeyType(string keyType)
+        {
+            _keyType = keyType;
+            return this;
+        }
+
+        public string Build(byte[]? seed = null, byte[]? pub = null)
+        {
+            seed ??= Seed00To1F;
+            pub ??= PublicKey01To20;
+
+            using var body = new MemoryStream();
+            body.Write("openssh-key-v1\0"u8);
+            WriteString(body, _cipherName);
+            WriteString(body, _kdfName);
+            WriteString(body, []);
+            WriteUInt32(body, 1);
+            WriteString(body, BuildPublicKeyBlob(pub));
+            WriteString(body, BuildPrivateSection(seed, pub));
+
+            var base64 = Convert.ToBase64String(body.ToArray());
+            var wrapped = string.Join('\n', Enumerable.Range(0, (base64.Length + 63) / 64)
+                .Select(i => base64.Substring(i * 64, Math.Min(64, base64.Length - i * 64))));
+            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + wrapped + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        }
+
+        private byte[] BuildPublicKeyBlob(byte[] pub)
+        {
+            using var blob = new MemoryStream();
+            WriteString(blob, _keyType);
+            WriteString(blob, pub);
+            return blob.ToArray();
+        }
+
+        private byte[] BuildPrivateSection(byte[] seed, byte[] pub)
+        {
+            using var section = new MemoryStream();
+            WriteUInt32(section, 0x01234567);
+            WriteUInt32(section, 0x01234567);
+            WriteString(section, _keyType);
+            WriteString(section, pub);
+            WriteString(section, [.. seed, .. pub]);
+            WriteString(section, []);
+            section.Write(new byte[8 - (int)section.Length % 8]);
+            return section.ToArray();
+        }
+
+        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+
+        private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
+
+        private static void WriteString(Stream stream, byte[] value)
+        {
+            WriteUInt32(stream, (uint)value.Length);
+            stream.Write(value);
+        }
+    }
 }
