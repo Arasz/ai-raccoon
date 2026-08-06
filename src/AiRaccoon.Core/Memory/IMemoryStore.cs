@@ -56,7 +56,7 @@ public interface IMemoryStore
     ///     consolidation, share).
     /// </summary>
     Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-        CancellationToken cancellationToken = default);
+        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default);
 
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>
     Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,

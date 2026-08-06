@@ -111,8 +111,9 @@ public sealed class MemoryExtensionHost(IMemoryStore inner, IEnumerable<IMemoryE
         await inner.EmbedPendingAsync(projectId, limit, cancellationToken).ConfigureAwait(false);
 
     public async Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-        CancellationToken cancellationToken = default) =>
-        await inner.AddContentAsync(projectId, path, content, context, cancellationToken).ConfigureAwait(false);
+        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+        await inner.AddContentAsync(projectId, path, content, context, sourceFile, section, cancellationToken)
+            .ConfigureAwait(false);
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>

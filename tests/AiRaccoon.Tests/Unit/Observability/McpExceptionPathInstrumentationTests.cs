@@ -173,7 +173,7 @@ public class McpExceptionPathInstrumentationTests
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default) =>
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry("h", path, context ?? "project:test", content, 1));
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);

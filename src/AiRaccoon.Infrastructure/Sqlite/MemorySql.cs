@@ -24,7 +24,7 @@ internal static class MemorySql
                                           """;
 
     public const string SelectSourceByHashAndProject = """"
-                                                        SELECT path AS Path, value AS Value
+                                                        SELECT path AS Path, value AS Value, source_file AS SourceFile, section AS Section
                                                        FROM entries
                                                        WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
                                                        LIMIT 1

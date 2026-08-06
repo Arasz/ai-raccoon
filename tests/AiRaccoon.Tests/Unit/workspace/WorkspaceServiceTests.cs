@@ -190,7 +190,7 @@ public class WorkspaceServiceTests
                 request.Context ?? ContextNaming.ProjectContext(request.ProjectId), request.Content, 1));
 
         public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
-            CancellationToken cancellationToken = default)
+            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default)
         {
             PromotedContent.Add((path, content, context ?? ContextNaming.ProjectContext(projectId)));
             return Task.FromResult(new MemoryEntry("new-hash", path, context ?? ContextNaming.ProjectContext(projectId),

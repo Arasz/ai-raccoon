@@ -296,9 +296,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task AddContent_IsIdempotent_ByPathInBucket()
     {
         var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
         var second = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         second.Hash.ShouldBe(first.Hash);
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
@@ -344,10 +344,10 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         // Consolidation (WorkspaceService) promotes via add_content with the workspace entry's
         // path: the committed row must keep that logical path and its path-scoped hash.
         await _store.AddContentAsync("acme", "docs/note.md", "workspace draft", "workspace:ws-1",
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var committed = await _store.AddContentAsync("acme", "docs/note.md", "workspace draft",
-            ContextNaming.ProjectContext("acme"), TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext("acme"), cancellationToken: TestContext.Current.CancellationToken);
 
         committed.Context.ShouldBe("project:acme");
         committed.Path.ShouldBe("docs/note.md");
@@ -357,8 +357,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task ListFiles_ReturnsJsonTree_FromEntryPaths()
     {
-        await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, TestContext.Current.CancellationToken);
-        await _store.AddContentAsync("acme", "notes.md", "notes", null, TestContext.Current.CancellationToken);
+        await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, cancellationToken: TestContext.Current.CancellationToken);
+        await _store.AddContentAsync("acme", "notes.md", "notes", null, cancellationToken: TestContext.Current.CancellationToken);
 
         var tree = await _store.ListFilesAsync("acme", TestContext.Current.CancellationToken);
 
@@ -655,7 +655,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         {
             barrier.SignalAndWait();
             return await _store.AddContentAsync("acme", "p.md", "identical fact",
-                null, TestContext.Current.CancellationToken);
+                null, cancellationToken: TestContext.Current.CancellationToken);
         })).ToArray();
         var results = await Task.WhenAll(tasks);
 
