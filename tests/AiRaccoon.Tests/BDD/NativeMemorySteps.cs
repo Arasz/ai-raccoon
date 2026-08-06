@@ -148,7 +148,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         _lastSearch!.Count.ShouldBeGreaterThan(0);
         var r = _lastSearch[0];
         r.Hash.ShouldNotBeNullOrWhiteSpace();
-        // ranking in 0..1
+        r.Seq.ShouldBeGreaterThanOrEqualTo(0);
+        r.Path.ShouldNotBeNullOrWhiteSpace();
+        r.Snippet.ShouldNotBeNullOrWhiteSpace();
         r.Ranking.ShouldBeInRange(0.0, 1.0);
     }
 

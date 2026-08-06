@@ -102,8 +102,8 @@ Feature: Native memory store (ai-raccoon MCP server)
 
     @FR-NM-4 @AC-4
     Rule: Hybrid search fuses FTS5 and vectors with reciprocal rank fusion
-        @ignore
         Scenario: Search returns ranked results with the preserved contract
+            Given project "acme-web" contains "project knowledge about the codebase"
             When I search for "project knowledge" in project "acme-web"
             Then results carry hash, seq, ranking, path and snippet
             And ranking is normalized into 0..1
