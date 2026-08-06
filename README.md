@@ -7,7 +7,7 @@ local-first: one SQLite bank per install scope, with hybrid FTS5+vec0 search,
 workspace sandboxes, a curated shared tier, memory degradation, and optional
 cloud sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK
-2.0.0 (net10.0).
+2.1.0 (net10.0).
 
 ## Quick start
 

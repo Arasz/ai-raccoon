@@ -6,7 +6,7 @@ one `memory.db` per install scope, a bundled in-process ONNX embedding model, hy
 reciprocal rank fusion, workspace sandboxes, a curated shared tier, memory degradation, three-tier access control, and
 opt-in cloud sync (S3 or Azure Blob).
 
-Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
+Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
 
 ## What an agent gets
 
