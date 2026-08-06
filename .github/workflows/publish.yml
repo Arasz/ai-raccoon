@@ -84,6 +84,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+      # The publish job runs dotnet nuget push, so the SDK must be installed
+      # explicitly: ubuntu-slim (unlike ubuntu-latest) has no preinstalled dotnet
+      # on PATH. Mirrors the pack job's setup-dotnet step.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
       - name: NuGet login (OIDC -> temp API key)
         uses: NuGet/login@v1
         id: login
