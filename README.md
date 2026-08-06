@@ -56,6 +56,7 @@ project-scope one. Projects partition the bank via context (`project:<id>`).
 | Hybrid search | `memory_search` fuses FTS5 keyword and vec0 semantic ranking with reciprocal rank fusion (RRF), scoped by `scope=all\|project\|shared` and optional workspace |
 | Workspace sandboxes | `memory_workspace_begin` mints an isolated context; entries stay in the outbox until consolidated |
 | Shared promotion tier | `memory_share` promotes a hash into the flat `shared` context, cross-project and exempt from degradation sweeps |
+| Shared extraction | `memory_share_extract` proposes/promotes shared-worthy candidates per project; the `extract` CLI family runs the same loop as a background service (HTTP/S hosts only, off by default, 30-min interval) |
 | Rating and degradation | search hits raise an entry's retrieval rating; sweeps remove old, low-rated project entries (`shared` is protected) |
 | Cloud sync (optional) | `memory_sync` pushes/pulls VACUUM snapshots to S3 or Azure Blob with If-Match conflict detection |
 | Access modes | `ro` (read-only), `rw` (read-write, default), `full` (adds destructive operations); per-project settings override the global default |
