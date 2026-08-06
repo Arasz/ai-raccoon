@@ -23,7 +23,8 @@ public static class CliOptionsExtensions
             var infrastructureOptions = new InfrastructureOptions
             {
                 DataRoot = options.ExpandedDataRoot(),
-                Scope = options.InstallScope
+                Scope = options.InstallScope,
+                Quiet = options.Quiet
             };
 
             return new ServerConfig(options.Port, options.Transport, infrastructureOptions);

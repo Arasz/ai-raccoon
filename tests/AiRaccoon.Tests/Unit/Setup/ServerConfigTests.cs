@@ -75,14 +75,22 @@ public class ServerConfigTests
         Cli().ToServerConfig().Options.Scope.ShouldBe(InstallScope.User);
     }
 
+    [Fact]
+    public void ToServerConfig_CarriesQuietFlag()
+    {
+        Cli(quiet: true).ToServerConfig().Options.Quiet.ShouldBeTrue();
+        Cli().ToServerConfig().Options.Quiet.ShouldBeFalse();
+    }
+
     private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
-        int port = DefaultOptions.Port, bool isPortExplicit = false) =>
+        int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>
         new()
         {
             Transport = transport is null ? DefaultOptions.Transport : Enum.Parse<McpTransport>(transport, ignoreCase: true),
             DataRoot = dataRoot ?? DefaultOptions.DataRoot,
             InstallScope = scope ?? DefaultOptions.InstallScope,
             Port = port,
-            IsPortExplicit = isPortExplicit
+            IsPortExplicit = isPortExplicit,
+            Quiet = quiet
         };
 }

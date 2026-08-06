@@ -89,6 +89,11 @@ def client_module():
     return _load_module("ai_raccoon_client_test", PLUGIN_DIR / "client.py")
 
 
+@pytest.fixture(scope="session")
+def status_module():
+    return _load_module("ai_raccoon_status_test", PLUGIN_DIR / "status.py")
+
+
 @pytest.fixture
 def fake_client():
     return FakeClient()
