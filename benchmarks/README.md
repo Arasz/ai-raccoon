@@ -43,7 +43,7 @@ context handle, so `LocalGgufEmbedder` wraps the working
 
 ```bash
 # 1. local GGUF model (once):
-scripts/download-embedding-model.sh all-minilm
+scripts/download-embedding-model.py all-minilm
 
 # 2. quality comparison, real-world corpus (default):
 AIRACCOON_TEST_GGUF=$HOME/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf \

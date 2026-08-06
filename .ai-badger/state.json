@@ -1,8 +1,35 @@
 {
-  "lastUpdated": "2026-08-06T17:50:00Z",
+  "lastUpdated": "2026-08-06T18:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "hermes-provider-status-words",
+      "title": "Status-words + memory operation log (provider-side, per owner f:) + server --quiet",
+      "summary": "Owner-corrected design (f: 2026-08-06): the MCP server cannot attribute calls to a client, so status words AND the memory operation log live in the Hermes PROVIDER. hermes-provider/ai-raccoon/status.py (status_word map 20 tools + prefix fallback + drift-guard test; MemoryOperationLog locked JSONL appender); provider emits one-word stderr cues per call as it starts (prefetch->searching, sync_turn/on_memory_write->remembering, dispatch->tool word; status_words default true) and appends AIRACCOON_MEMORY_LOG JSONL rows {ts, tool, project_id, status, error_type?, duration_ms, agent_id, session_id} — caller attribution the server cannot know (blank env = unset). Server: --quiet flag (both hosts, info->Warning+), URL line promoted to Warning so --port 0 discovery survives quiet; dead duplicate logger removed. Gates: full dotnet suite 1241 passed/0 failed/4 spec skips; pytest 50/50 (unit + slow, integration pins quiet:false until the flag ships); full-stack E2E measured (provider words remembering/searching/counting + 3 JSONL rows with agent_id/session_id; server stderr clean); review round 2 APPROVE (no MUST-FIX; 2 SHOULD-FIX + NITs folded: QuietLoggingTests pin the suppression, URL line Warning). PR #65 CLOSED by owner without merge (reopen blocked by GitHub API error; branch task/hermes-provider-status-words @ bfdb971 intact; comment posted) — owner decision pending: merge vs changes. Deploy sequencing documented: merge -> release (has --quiet) -> reinstall plugin.",
+      "pr": 65,
+      "date": "2026-08-06"
+    },
+    {
+      "id": "scripts-refactor",
+      "title": "Scripts refactor: python-only scripts/ with src+tests layout, dead scripts removed (PR #66)",
+      "summary": "Owner spec: src+tests dirs in scripts, all logic to src, TDD tests-first, all non-python converted to python, old/unused removed. Architect plan docs/plans/scripts-refactor.md; 2 parallel impl waves (P1/P3+P4/P5, then P2/P7/P6) + P8 removals + P9 reference sweep, 9 commits. Layout: scripts/src/ (12 modules) + scripts/tests/ (9 pytest files, 137 tests) + thin entrypoints (paths stable for CI/docs/owner gates); root pyproject.toml pytest config. Conversions: download-embedding-model.sh (publish.yml now python3), verify-tool-package.sh, regenerate-retrieval-golden.sh -> python; zipfile replaces the unzip SIGPIPE-race class. Splits: ingest-jsaa-docs.py 1133ln -> jsaa_config/chunking/sources/hash_map/mcp_client/pipeline; patch-tool-shell -> tool_shell; generate-benchmark-corpus -> benchmark_corpus; manual-fresh-install-test helpers -> fresh_install. bundle.py = single source of model/vocab SHA-256 pins (was hand-synced across 3 scripts). Removed (no live consumers, superseded by C# baseline gates): run-baseline-queries.py, scoring-form.html, + tracked baseline-results.json (plan premise corrected by review). chunk-hash-map.json + baseline-queries.json stay (C# tests hardcode paths). Gates: pytest 137/137 hermetic; dotnet build 0 warnings; dotnet test 1235/0/4 (pre-existing deferred BDD skips); hash contract --chunk-only byte-identical 772/772; P2 e2e real pack byte-identical; P9 grep zero live .sh refs. Code-reviewer gate APPROVE (0 blocker/0 should-fix, 4 nits: P4 self-gate placement, P7 --help addition, P8 tracking correction, download traceback vs curl message). PR #66 merged by owner (squash bda2091) minutes after opening.",
+      "pr": [
+        66
+      ],
+      "date": "2026-08-06"
+    },
+    {
+      "id": "switch-from-stdio-to-http",
+      "title": "HTTP serve mode: serve verb + --mcp-entry + 4h idle watchdog + idempotent attach",
+      "summary": "Full design->MoE->plan->impl->QA cycle (user process). Design by architect (docs/work/2026-08-06-http-serve-design.md), MoE review = 4 parallel lanes (code-reviewer/test-engineer/dotnet-engineer/protocol-switch; reports docs/work/2026-08-06-http-serve-moe-*.md), rulings R1-R17 folded into design + plan (docs/plans/2026-08-06-http-serve-mode-plan.md). Key rulings: R1 watchdog DI triple (AddHostedService registers IHostedService only), R2 tick=min(60s,timeout/4), R3 4h watchdog serve-only by construction (ServerConfig.IdleTimeout defaults Zero), R4 any-/mcp request = activity (path-branched middleware), R14 idempotent attach (probe POST /mcp Accept json/event-stream, recognized iff 400/405/406 AND body has jsonrpc; bind-race re-probe once; attached = exit 0, no watchdog, no bank), R15 protocol-switch banner DEFERRED (no MCP standard; ~110-line SDK stdio_client fork; attach+url-config covers it), R16 ai-badger .mcp.json stays stdio (serve never answers JSON-RPC). 4 WPs TDD: WP1 serve verb+IdleTimeoutParser+config (5fa54f5), WP2 watchdog (5343e59), WP3 ServeRunner+attach+renderer+Program.cs routing (c65ee7e), WP4 docs (2ebdea9). Gates: build 0 warnings; targeted 94/94+27/27; Unit 899/899; live smoke (mcp-entry golden JSON byte-exact, attach exit 0+ownership GET 405, initialize round trip 200); full suite 1282-1283 passed, only recorded watch flakes (Class-B DeletedDirectory passes isolated; BDD rename tolerated, 139/139 isolated). Code-reviewer gate APPROVE-WITH-CHANGES 0 MUST-FIX (F1 flake-hardened 5s smoke, F6/F7 folded; docs/work/2026-08-06-http-serve-code-review-gate.md). PR #62 (docs) merged by owner early at docs-only state; implementation re-opened as PR #67 (rebased onto current main incl. #63/#64). Cross-repo extension: ai-badger PR #316 (0.82.0 release-shaped: meta.json package id arasz.ai-raccoon->ai-raccoon drift fix + install line + HTTP-mode description, server.md HTTP-mode guidance within 15-line budget, re-scaffolded 7 agent files, package-id contract test; gates: pytest 3209 green, validate.py, freshness guard, pre-push quality gate). Hermes switch (user action): hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp after 'ai-raccoon serve > serve.log 2>&1 &'.",
+      "pr": [
+        62,
+        67,
+        316
+      ],
+      "date": "2026-08-06"
+    },
     {
       "id": "continue-improv",
       "title": "Extraction follow-ups: S4 propose candidate logs, S5 OCE filter, S10 shared limit constant, F3 unique-bucket indexes (PR #64)",

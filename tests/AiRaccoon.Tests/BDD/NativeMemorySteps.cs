@@ -24,15 +24,15 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
     private readonly IMemoryStore _store = scenarioContext.ScenarioContainer.Resolve<IMemoryStore>();
+    private string? _customModelPath;
     private Exception? _lastError;
     private IReadOnlyList<MemorySearchResult>? _lastSearch;
-    private string? _customModelPath;
 
     private MemoryEntry? _lastWrite;
 
-    private string ObjectKeyFor(string projectId) => $"memory-{projectId}.db";
-
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
+
+    private string ObjectKeyFor(string projectId) => $"memory-{projectId}.db";
 
     /// <summary>A real copy of the bundled ONNX model under a distinct path (engine fingerprint change).</summary>
     private string EnsureCustomModelCopy()
@@ -202,20 +202,16 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void GivenCustomModelFileExists() => File.Exists(EnsureCustomModelCopy()).ShouldBeTrue();
 
     [When(@"^I call memory_configure with provider ""([^""]*)""$")]
-    public async Task WhenIConfigureProvider(string provider) =>
-        await _store.ConfigureEmbeddingAsync(provider, null, null, CancellationToken.None);
+    public async Task WhenIConfigureProvider(string provider) => await _store.ConfigureEmbeddingAsync(provider, null, null, CancellationToken.None);
 
     [When(@"^I call memory_configure with provider ""([^""]*)"" and a model path$")]
-    public async Task WhenIConfigureProviderWithModelPath(string provider) =>
-        await _store.ConfigureEmbeddingAsync(provider, EnsureCustomModelCopy(), null, CancellationToken.None);
+    public async Task WhenIConfigureProviderWithModelPath(string provider) => await _store.ConfigureEmbeddingAsync(provider, EnsureCustomModelCopy(), null, CancellationToken.None);
 
     [When("I call memory_configure with a different engine")]
-    public async Task WhenIConfigureDifferentEngine() =>
-        await _store.ConfigureEmbeddingAsync("local", EnsureCustomModelCopy(), null, CancellationToken.None);
+    public async Task WhenIConfigureDifferentEngine() => await _store.ConfigureEmbeddingAsync("local", EnsureCustomModelCopy(), null, CancellationToken.None);
 
     [When(@"^I call memory_configure with provider ""([^""]*)"", baseUrl ""([^""]*)"" and model ""([^""]*)""$")]
-    public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) =>
-        await _store.ConfigureEmbeddingAsync(provider, model, baseUrl, CancellationToken.None);
+    public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) => await _store.ConfigureEmbeddingAsync(provider, model, baseUrl, CancellationToken.None);
 
     [Given(@"project ""(.*)"" has no embedding model configured")]
     public void GivenNoEmbeddingModelConfigured(string projectId) { }
@@ -234,8 +230,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [When("I call memory_embed_pending")]
-    public async Task WhenIEmbedPending() =>
-        await _store.EmbedPendingAsync((string)scenarioContext["ProjectId"], null, CancellationToken.None);
+    public async Task WhenIEmbedPending() => await _store.EmbedPendingAsync((string)scenarioContext["ProjectId"], null, CancellationToken.None);
 
     [Then("the write is embedded with the local engine")]
     public async Task ThenWriteEmbeddedWithLocalEngine()
@@ -308,7 +303,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var results = await _store.SearchAsync(
-            new SearchQuery(projectId, "deferred note", SearchScope.All), CancellationToken.None);
+            new SearchQuery(projectId, "deferred note"), CancellationToken.None);
         results.Count.ShouldBeGreaterThan(0);
     }
 
@@ -329,7 +324,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [When(@"I search for ""(.*)"" in project ""([^""]*)""(?! with)")]
     public async Task WhenISearchForInProject(string query, string projectId) =>
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, query, SearchScope.All),
+            new SearchQuery(projectId, query),
             CancellationToken.None);
 
     [When(@"I search for ""(.*)"" in project ""(.*)"" with scope ""(.*)""")]
@@ -785,7 +780,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             "SELECT embed_state FROM entries WHERE value = 'merged fresh fact'");
         state.ShouldBe("embedded");
         var results = await _store.SearchAsync(
-            new SearchQuery(projectId, "merged fresh fact", SearchScope.All), CancellationToken.None);
+            new SearchQuery(projectId, "merged fresh fact"), CancellationToken.None);
         results.Count.ShouldBeGreaterThan(0);
     }
 
@@ -863,7 +858,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenMemorySearchStillReturnsResults(string projectId)
     {
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, "content", SearchScope.All),
+            new SearchQuery(projectId, "content"),
             CancellationToken.None);
         // In Reqnroll context this is a no-op; access mode enforced at tool level
         _lastSearch.ShouldNotBeNull();
@@ -1166,7 +1161,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, "query", SearchScope.All, null, 20, 0.7, 30, 2, 1),
+            new SearchQuery(projectId, "query", SearchScope.All, null, 20, 0.7, 30, 2),
             CancellationToken.None);
     }
 
@@ -1175,9 +1170,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var sweeper = new SweepService(_store, _ctx.TimeProvider);
-        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: true,
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, true,
             CancellationToken.None);
-        await sweeper.SweepAsync(projectId, 0.3, dryRun: false, CancellationToken.None);
+        await sweeper.SweepAsync(projectId, 0.3, false, CancellationToken.None);
     }
 
     [When("I scan the bank and extension directories")]
@@ -1188,7 +1183,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, "specific-keyword-match", SearchScope.All),
+            new SearchQuery(projectId, "specific-keyword-match"),
             CancellationToken.None);
     }
 
@@ -1227,7 +1222,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         // Consolidation promotes via add_content: the kept content lands as a fresh
         // project-scoped row (the workspace hash itself is deleted).
         var results = await _store.SearchAsync(
-            new SearchQuery(projectId, content, Scope: SearchScope.Project), CancellationToken.None);
+            new SearchQuery(projectId, content, SearchScope.Project), CancellationToken.None);
         results.Count.ShouldBe(1);
     }
 
@@ -1271,14 +1266,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, query, Scope: SearchScope.All, ContextLabel: context),
+            new SearchQuery(projectId, query, SearchScope.All, ContextLabel: context),
             CancellationToken.None);
     }
 
     // "And when I search ..." parses as a Then step; StepDefinition matches any keyword.
     [StepDefinition(@"when I search for ""(.*)"" restricted to context ""(.*)""")]
-    public async Task WhenISearchRestrictedToContextAnd(string query, string context) =>
-        await WhenISearchRestrictedToContext(query, context);
+    public async Task WhenISearchRestrictedToContextAnd(string query, string context) => await WhenISearchRestrictedToContext(query, context);
 
     [Given("an entry rated below threshold and older than the TTL exists")]
     public async Task GivenLowRatedAgedEntryExists()
@@ -1305,7 +1299,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var sweeper = new SweepService(_store, _ctx.TimeProvider);
-        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: true,
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, true,
             CancellationToken.None);
     }
 
@@ -1328,7 +1322,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var sweeper = new SweepService(_store, _ctx.TimeProvider);
-        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, dryRun: false,
+        scenarioContext["SweepOutcome"] = await sweeper.SweepAsync(projectId, 0.3, false,
             CancellationToken.None);
     }
 
@@ -1424,7 +1418,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["ColdHash"] = cold.Hash;
         for (var i = 0; i < 2; i++)
         {
-            await _store.SearchAsync(new SearchQuery(projectId, "blorptastic", Scope: SearchScope.All),
+            await _store.SearchAsync(new SearchQuery(projectId, "blorptastic", SearchScope.All),
                 CancellationToken.None);
         }
     }
@@ -1452,11 +1446,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── FR-MEM-1.16/1.22: A local-only install syncs committed contexts to the cloud ──
     [Given("the tool is installed in project scope with no user-scope instance")]
-    public void GivenProjectScopeOnlyInstall()
-    {
+    public void GivenProjectScopeOnlyInstall() =>
         // The project-scope install carries its own cloud credentials for the sync.
         scenarioContext[CloudStoreKey] = new FakeCloudStore();
-    }
 
     [Given("a shared entry exists in the local bank")]
     public async Task GivenSharedEntryExistsInLocalBank()
@@ -1527,7 +1519,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
-            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
 
         public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }

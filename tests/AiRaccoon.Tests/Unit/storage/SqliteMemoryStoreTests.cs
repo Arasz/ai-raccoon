@@ -64,7 +64,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         sharedEntry.Context.ShouldBe(ContextNaming.SharedContext);
 
         // A workspace-scope row must NOT surface either.
-        await EnsureWorkspaceAsync("ws-1", "acme");
+        await EnsureWorkspaceAsync("ws-1");
 
         var projects = await _store.GetProjectIdsAsync(TestContext.Current.CancellationToken);
 

@@ -3,6 +3,7 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Tools;
+using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Shouldly;
@@ -19,7 +20,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchToolsInventoryTests : IDisposable
 {
-    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot();
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
@@ -50,8 +51,7 @@ public sealed class WatchToolsInventoryTests : IDisposable
         var constValues = new Dictionary<string, string>();
         foreach (var f in constFields)
         {
-            var val = f.GetRawConstantValue() as string;
-            if (val is not null)
+            if (f.GetRawConstantValue() is string val)
             {
                 constValues[val] = f.Name;
             }
@@ -83,14 +83,12 @@ public sealed class WatchToolsInventoryTests : IDisposable
     public void RegisterMemoryServices_ResolvesIWatchService()
     {
         var services = new ServiceCollection();
-        // Mirror the host: WebApplication.CreateBuilder registers logging before
-        // RegisterMemoryServices runs (WatchPipeline takes ILogger<WatchPipeline>).
         services.AddLogging();
         services.RegisterMemoryServices(new InfrastructureOptions
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        });
+        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
 
         using var provider = services.BuildServiceProvider();
 

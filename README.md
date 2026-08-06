@@ -90,6 +90,24 @@ Launch flags (startup-scoped only):
 
 Diagnostics go to stderr; stdout carries only MCP protocol frames.
 
+### Serve mode (HTTP)
+
+`ai-raccoon serve` runs the same HTTP endpoint with an idle watchdog — after 4
+hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
+disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
+server, `serve` attaches to it and exits 0 (the first process owns the
+watchdog). Background it and point a client at the URL:
+
+```bash
+ai-raccoon serve > serve.log 2>&1 &            # POSIX
+hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
+```
+
+`serve --mcp-entry` prints the client config entry for the bound URL
+(`--format hermes|claude|all`; keep stderr out of the entry file:
+`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`). `serve --port 0`
+picks a random free port and reports it.
+
 ## Embeddings
 
 Two engines, set per bank with `ai-raccoon model`:

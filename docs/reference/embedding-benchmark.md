@@ -95,7 +95,7 @@ trade-off is:
   37–90 ms per query, ~21 MB on disk vs 334–639 MB, no server process, no
   network dependency, works offline.
 
-**Recommendation:** start with the local model (`scripts/download-embedding-model.sh
+**Recommendation:** start with the local model (`scripts/download-embedding-model.py
 all-minilm`). Only move to a served model if retrieval quality — especially
 nDCG — proves insufficient on your own corpus: the served models are 4–10×
 slower per query and 15–30× heavier, for a quality gain visible only in the
@@ -104,7 +104,7 @@ top-10 ranking, not in whether the right memory is found first.
 ## How to reproduce
 
 ```bash
-scripts/download-embedding-model.sh all-minilm
+scripts/download-embedding-model.py all-minilm
 AIRACCOON_TEST_GGUF=$HOME/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf \
 LMSTUDIO_BASE_URL=http://localhost:1234 \
 LMSTUDIO_MODELS="text-embedding-qwen3-embedding-0.6b,text-embedding-embeddinggemma-300m" \

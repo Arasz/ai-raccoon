@@ -789,11 +789,12 @@
       "branch": "task/switch-from-stdio-to-http",
       "risk": false,
       "startedAt": "2026-08-06T14:52:30.994140+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-06T16:39:26.612456+00:00",
+      "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_164327_13b8a9",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "hermes-ai-raccoon-memory-provider",
@@ -856,6 +857,21 @@
       "state": "STARTED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_171739_6038fc",
+      "resumeAttempts": []
+    },
+    {
+      "taskId": "scripts-refactor",
+      "title": "Scripts refactor: src/tests layout, python-only, drop dead scripts",
+      "sessionId": "20260806_174951_0317b5",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/scripts-refactor",
+      "risk": false,
+      "startedAt": "2026-08-06T16:00:26.653331+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_174951_0317b5",
       "resumeAttempts": []
     }
   ]

@@ -1,0 +1,289 @@
+{
+  "projectId": "job-search-ai-assistant",
+  "ingestedAt": "2026-08-04T09:48:37.728221+00:00",
+  "queryCount": 35,
+  "queriesWithResults": 0,
+  "expectedSourceMatchesAtTop3": 0,
+  "queryResults": {
+    "A1": {
+      "query": "Why was shadcn/ui chosen over gluestack.io?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0011-frontend-chassis-stack.md#decision",
+      "expectedKnowledge": "ADR-0011 Decision section \u2014 gluestack v5 is Expo-Router-first, no Vite guide, lacks Table/Tabs/Badge/Progress primitives",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A2": {
+      "query": "What ADR governs UUID choice?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0004-uuid-version7-for-identifiers.md#decision",
+      "expectedKnowledge": "ADR-0004 \u2014 UUID version 7 for generated identifiers",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A3": {
+      "query": "How does the project handle offer-page fetching security?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0006-client-side-offer-page-fetch.md#decision",
+      "expectedKnowledge": "ADR-0006 \u2014 Client-side fetch; backend never dereferences user-supplied URLs",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A4": {
+      "query": "What happened to the MCP server?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0060-delete-the-mcp-server.md#decision",
+      "expectedKnowledge": "ADR-0060 \u2014 MCP server deleted, not deprecated",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A5": {
+      "query": "What replaced the LLM cost NFR?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0046-retire-nfr-1-llm-cost-protection.md#decision",
+      "expectedKnowledge": "ADR-0046 \u2014 retired NFR-1, superseded ADR-0022",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A6": {
+      "query": "How does the project handle data erasure?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0067-registry-driven-erasure-with-runtime-verification.md#decision",
+      "expectedKnowledge": "ADR-0067 + ADR-0068 \u2014 registry-driven fan-out, with explicit what-erasure-does-not-erase",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "A7": {
+      "query": "What is ADR-0070 about?",
+      "category": "Architecture Decisions (ADR)",
+      "expectedSource": "docs:adr:0070-documentation-structure-and-trust-model.md#decision",
+      "expectedKnowledge": "Documentation structure and trust model \u2014 distinguishes living docs from work records",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B1": {
+      "query": "What are the core architectural principles?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": "API is only Cosmos writer, Domain is pure C# (no infra deps)",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B2": {
+      "query": "What Azure services does the project use?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": "Cosmos DB serverless, Blob Storage, Azure Functions (isolated), Static Web Apps, Key Vault, Application Insights via OTel",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B3": {
+      "query": "How does local development work?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": ".NET Aspire AppHost orchestrates Cosmos emulator + Azurite + Functions + Bun frontend; one dotnet run command",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B4": {
+      "query": "What is the Cosmos partition key strategy?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": "All containers partitioned by /userId",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B5": {
+      "query": "What are the extension points?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": "IPipelineStep, IRanker, ITailoringRule, IProfileSink, IChannelMonitor, ISignalClassifier, ISignalEnricher, ISignalCorrelator",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "B6": {
+      "query": "How does authentication work?",
+      "category": "System Architecture & Knowledge",
+      "expectedSource": null,
+      "expectedKnowledge": "Easy Auth v2 (GitHub OAuth) on the API, SPA calls with credentials: include, local dev short-circuits via IsLocal()",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C1": {
+      "query": "Is TDD required?",
+      "category": "Invariants & Conventions",
+      "expectedSource": "ai-badger:invariants/tdd-mandatory.md",
+      "expectedKnowledge": "Yes \u2014 Write a failing, behavior-focused test before any production code change",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C2": {
+      "query": "What is the screaming architecture rule?",
+      "category": "Invariants & Conventions",
+      "expectedSource": "ai-badger:invariants/screaming-architecture.md",
+      "expectedKnowledge": "Organize folders by domain concept, not technical bucket. Avoid Services/, Controllers/, Utils/",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C3": {
+      "query": "How should NuGet packages be managed?",
+      "category": "Invariants & Conventions",
+      "expectedSource": null,
+      "expectedKnowledge": "Centralized in Directory.Packages.props, never pin Version on individual PackageReference",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C4": {
+      "query": "What logging pattern is required?",
+      "category": "Invariants & Conventions",
+      "expectedSource": null,
+      "expectedKnowledge": "Source-generated [LoggerMessage] methods, not direct ILogger calls",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C5": {
+      "query": "Are hardcoded secrets allowed?",
+      "category": "Invariants & Conventions",
+      "expectedSource": "ai-badger:invariants/no-hardcoded-secrets.md",
+      "expectedKnowledge": "No \u2014 No hardcoded secrets. Every credential lives in user secrets, environment variables, or Key Vault",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "C6": {
+      "query": "What error format does the API use?",
+      "category": "Invariants & Conventions",
+      "expectedSource": null,
+      "expectedKnowledge": "RFC 7807 problem details; invalid state transitions return 409; long-running ops return 202 + operationId",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "D1": {
+      "query": "How does the task orchestration skill work?",
+      "category": "Skills & Agent Workflows",
+      "expectedSource": null,
+      "expectedKnowledge": "3-phase workflow: plan\u2192implement\u2192gate, model delegation, config-driven verifiers",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "D2": {
+      "query": "What agents are available?",
+      "category": "Skills & Agent Workflows",
+      "expectedSource": null,
+      "expectedKnowledge": "9 personas: architect, dotnet-engineer, frontend-engineer, api-engineer, cloud-infra-engineer, test-engineer, code-reviewer, delegator, hermes-agent-author",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "D3": {
+      "query": "What model does the architect use?",
+      "category": "Skills & Agent Workflows",
+      "expectedSource": null,
+      "expectedKnowledge": "Opus \u2014 high-reasoning model, read-only, produces blueprints/ADRs",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "D4": {
+      "query": "How do prompt markers work?",
+      "category": "Skills & Agent Workflows",
+      "expectedSource": null,
+      "expectedKnowledge": "marker prefixes (h:, hint:) for context injection",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "E1": {
+      "query": "What is ATS-001?",
+      "category": "Domain Rules (Seed Data)",
+      "expectedSource": null,
+      "expectedKnowledge": "Single-column layout; no tables, graphics, photos, or skill bar charts",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "E2": {
+      "query": "What are the three layers of modern hiring screens?",
+      "category": "Domain Rules (Seed Data)",
+      "expectedSource": null,
+      "expectedKnowledge": "ATS layer \u2192 AI/LLM layer \u2192 Human layer",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "E3": {
+      "query": "What ATS rules govern keyword usage?",
+      "category": "Domain Rules (Seed Data)",
+      "expectedSource": null,
+      "expectedKnowledge": "mirror job description terminology, include acronym+full name, repeat 2-3x, exact job title, cluster technologies",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "F1": {
+      "query": "What major work happened in week of 2026-07-27?",
+      "category": "Project History & Identity",
+      "expectedSource": null,
+      "expectedKnowledge": "Compensation Waves 1-3, Bun/TS port of pre-push verify, ADRs 0049-0053, CI optimization to 7.2k billed-min/mo",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "F2": {
+      "query": "When was the project established?",
+      "category": "Project History & Identity",
+      "expectedSource": null,
+      "expectedKnowledge": "Week of 2026-07-06 \u2014 MVP design, domain model, 18 endpoints, MCP integration",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "F3": {
+      "query": "What identity patterns does the project exhibit?",
+      "category": "Project History & Identity",
+      "expectedSource": null,
+      "expectedKnowledge": "Waves-based delivery + systematic ADR documentation + mutation-driven test coverage",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "G1": {
+      "query": "How is compensation calculated?",
+      "category": "Cross-Cutting (Multi-Context)",
+      "expectedSource": null,
+      "expectedKnowledge": "ADR-0035 (ICountryCompProfile), ADR-0048 (offer-dictated terms), domain-glossary.md (Polish tax terms)",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "G2": {
+      "query": "What is the frontend technology stack?",
+      "category": "Cross-Cutting (Multi-Context)",
+      "expectedSource": null,
+      "expectedKnowledge": "React 19, TypeScript strict, Vite, Bun, TanStack Query, React Hook Form, shadcn/ui, Tailwind, Vitest",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "G3": {
+      "query": "How does channel monitoring work?",
+      "category": "Cross-Cutting (Multi-Context)",
+      "expectedSource": null,
+      "expectedKnowledge": "ADR-0024 (foundation), ADR-0061 (the fold), ADR-0062 (composed pipeline), ADR-0063 (deterministic signal ID)",
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "H1": {
+      "query": "What is in state.json?",
+      "category": "Negative Tests",
+      "expectedSource": null,
+      "expectedKnowledge": null,
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "H2": {
+      "query": "What happened today?",
+      "category": "Negative Tests",
+      "expectedSource": null,
+      "expectedKnowledge": null,
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    },
+    "H3": {
+      "query": "Show me the Aspire config",
+      "category": "Negative Tests",
+      "expectedSource": null,
+      "expectedKnowledge": null,
+      "results": [],
+      "error": "Client error '403 Forbidden' for url 'http://localhost:5000/mcp'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+    }
+  }
+}
