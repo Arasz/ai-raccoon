@@ -26,7 +26,8 @@ public static partial class Dependencies
 {
     extension(IServiceCollection services)
     {
-        public void RegisterMemoryServices(InfrastructureOptions options)
+        public void RegisterMemoryServices(InfrastructureOptions options,
+            bool registerExtractionHostedService = true)
         {
             services.AddSingleton(options);
             services.AddSingleton(TimeProvider.System);
@@ -64,7 +65,12 @@ public static partial class Dependencies
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
             services.AddSingleton<SharedExtractionService>();
-            services.AddHostedService<ExtractionHostedService>();
+            if (registerExtractionHostedService)
+            {
+                // HTTP/S hosts only: a pure-stdio process is per-connection (clients recycle
+                // it in minutes), so its 30-60 min extraction loop can never fire.
+                services.AddHostedService<ExtractionHostedService>();
+            }
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(
                 sp.GetRequiredService<IMemoryStore>()));

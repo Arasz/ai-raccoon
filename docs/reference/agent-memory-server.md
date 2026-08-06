@@ -226,8 +226,9 @@ ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
 
-# extract: background shared-extraction (checks each project's memories and
-# extracts the shared-worthy ones; propose logs candidates, promote shares them)
+# extract: background shared-extraction (HTTP/S hosts only — a stdio process is
+# per-connection and recycled before the loop can fire; default interval 30 min;
+# config changes apply live, no server restart needed)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract list
