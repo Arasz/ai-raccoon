@@ -44,10 +44,10 @@ public class ToolInventoryTests
     [Fact]
     public void McpToolNames_MatchConstStrings()
     {
-        // Gather all TN_* const field values from MemoryTools.
+        // Gather all Tn* const field values from MemoryTools (renamed from TN_* in 212b29e).
         var constFields = typeof(MemoryTools)
             .GetFields(BindingFlags.NonPublic | BindingFlags.Static)
-            .Where(f => f.IsLiteral && f.Name.StartsWith("TN_"))
+            .Where(f => f.IsLiteral && f.Name.StartsWith("Tn"))
             .ToList();
 
         var constValues = new Dictionary<string, string>();
@@ -79,8 +79,8 @@ public class ToolInventoryTests
             constValues.ShouldContainKey(toolName,
                 $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
 
-            // Verify the const field exists and is prefixed with TN_
-            constValues[toolName].ShouldStartWith("TN_");
+            // Verify the const field exists and is prefixed with Tn
+            constValues[toolName].ShouldStartWith("Tn");
         }
     }
 

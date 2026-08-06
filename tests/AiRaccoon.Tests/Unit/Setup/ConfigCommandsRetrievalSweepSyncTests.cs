@@ -23,7 +23,8 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+            stdin ?? TextReader.Null, settings: new SettingsCommands(),
+            cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -109,6 +110,15 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         exit.ShouldBe(1);
         err.ShouldContain("0..1");
+    }
+
+    [Fact]
+    public async Task SweepThresholdSet_InvalidNumber_ReturnsError()
+    {
+        var (exit, _, err) = await Run(["sweep", "threshold", "set", "bogus"], new FakeConfigStore());
+
+        exit.ShouldBe(1);
+        err.ShouldContain("invalid threshold");
     }
 
     [Fact]
