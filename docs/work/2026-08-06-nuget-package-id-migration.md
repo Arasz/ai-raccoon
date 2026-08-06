@@ -2,6 +2,22 @@
 
 Date: 2026-08-06. Task: ai-raccoon-package-id. PR: #53 (this task).
 
+## Release status (completed 2026-08-06)
+
+All owner actions below are DONE: `ai-raccoon` 1.0.9 live (shell + 6 RID
+payloads, first packages under the raw id), `arasz.ai-raccoon` deprecated on
+nuget.org (1.0.1-1.0.6 "critical bugs", 1.0.7-1.0.8 "no longer maintained",
+Suggested Alternatives -> ai-raccoon), fresh-install gate ALL GREEN, article
+PR (arasz-home-page #210) merged.
+
+Pitfall measured during the release: **RID payload registrations lag the push
+by ~15 min.** Right after the publish, the flat container served every payload
+nupkg but registration5-gz-semver2/<id>.<rid> 404'd and search had 0 hits, so
+`dotnet tool install` failed with "Version 1.0.9 of package ai-raccoon.osx-arm64
+is not found" even though the blobs existed. The shell registered immediately;
+payloads took ~10-20 min. Run the fresh-install gate only after the payload
+registration returns 200.
+
 ## Context
 
 - `ai-raccoon` was blocked by an ownerless reserved namespace (prefix reservation
