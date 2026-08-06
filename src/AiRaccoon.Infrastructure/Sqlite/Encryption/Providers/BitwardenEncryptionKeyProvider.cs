@@ -26,7 +26,7 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
 
         if (result.ExitCode != 0)
         {
-            throw new BwsInvocationException($"bws failed (exit {result.ExitCode}): {FirstStderrLine(result.Stderr)}");
+            throw new BwsInvocationException($"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
         }
 
         var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());
@@ -34,11 +34,5 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
         {
             Value = SshKeyDerivation.DeriveRawKey(seed)
         };
-    }
-
-    private static string FirstStderrLine(string stderr)
-    {
-        var line = stderr.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
-        return line ?? "(no stderr)";
     }
 }

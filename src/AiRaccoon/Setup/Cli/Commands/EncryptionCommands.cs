@@ -78,7 +78,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
 
         if (fetched.ExitCode != 0)
         {
-            var errorLine = FirstStderrLine(fetched.Stderr);
+            var errorLine = fetched.FirstErrorLine;
             Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
             await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
             return 1;
@@ -235,12 +235,6 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
         {
             return false;
         }
-    }
-
-    private static string FirstStderrLine(string stderr)
-    {
-        var line = stderr.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
-        return line ?? "(no stderr)";
     }
 
     private static partial class Log
