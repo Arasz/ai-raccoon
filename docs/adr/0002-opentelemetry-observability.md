@@ -131,7 +131,7 @@ EventPipe — no exporter, no collector, no configuration.
   takes the same string.
 - **The helper centralizes the contract**: `ToolExecutionActivity` is the single
   place tags/status/metrics are set (extracted 2026-08-06 from the inline
-  pattern below), so the 19 tools cannot drift apart and adding a 20th tool is
+  pattern below), so the 20 tools cannot drift apart and adding a 21st tool is
   the same 3–5 lines.
 
 ## Non-Goals (explicit)
