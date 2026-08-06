@@ -87,6 +87,10 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     private EncryptionKeyResolver Resolver() => new(new EncryptionState(BankPath()),
         [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
 
+    /// <summary>Resolver pinned to the derived key, independent of the sidecar (the old StubEnvProvider semantics).</summary>
+    private EncryptionKeyResolver DerivedKeyResolver() =>
+        new(new FixedState(), [new StubEnvProvider(DerivedRawKey)]);
+
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
     {
@@ -165,7 +169,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // Bank keyed with the synthetic key (the §5.1 vector).
-            var createFactory = new SqliteConnectionFactory(Options(), Resolver());
+            var createFactory = new SqliteConnectionFactory(Options(), DerivedKeyResolver());
             await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 await using var cmd = connection.CreateCommand();
@@ -278,7 +282,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // Bank keyed with the derived key (as if the config command had completed).
-            var createFactory = new SqliteConnectionFactory(Options(), Resolver());
+            var createFactory = new SqliteConnectionFactory(Options(), DerivedKeyResolver());
             await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 await using var cmd = connection.CreateCommand();
@@ -297,9 +301,10 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
             ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
 
-            // The bank is untouched: it still opens with the derived key (explicit key — the
-            // sidecar now points at bws, so a resolver open would go through the fake).
-            await using var untouched = await createFactory.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken);
+            // The bank is untouched: it still opens with the derived key (the create factory's
+            // env stub resolves it — the sidecar now points at bws, so the shared resolver
+            // would go through the fake).
+            await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
             untouched.State.ShouldBe(ConnectionState.Open);
         });
     }
@@ -353,5 +358,13 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
         public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+    }
+
+    /// <summary>Never sees a sidecar — the resolver behaves like the pre-sidecar env stub.</summary>
+    private sealed class FixedState : IEncryptionState
+    {
+        public EncryptionData Read() => EncryptionData.None;
+        public void Write(EncryptionData config) { }
+        public void Delete() { }
     }
 }

@@ -64,14 +64,18 @@ public class CliArgsTests
     }
 
     [Fact]
-    public void Parse_NoArgs_ReturnsNullOptionsAndNoCommand()
+    public void Parse_NoArgs_ReturnsDefaultOptionsAndNoCommand()
     {
         CliArgs.TryParse([], out var parsed);
 
-        parsed.Options.ShouldBeNull();
         parsed.CommandPath.ShouldBeEmpty();
         parsed.Errors.ShouldBeEmpty();
         parsed.ShowHelp.ShouldBeFalse();
+        parsed.Options.Transport.ShouldBe(DefaultOptions.Transport);
+        parsed.Options.Port.ShouldBe(DefaultOptions.Port);
+        parsed.Options.IsPortExplicit.ShouldBeFalse();
+        parsed.Options.DataRoot.ShouldBe(DefaultOptions.DataRoot);
+        parsed.Options.InstallScope.ShouldBe(DefaultOptions.InstallScope);
     }
 
     [Fact]
@@ -104,7 +108,6 @@ public class CliArgsTests
         {
             CliArgs.TryParse(args, out var parsed);
 
-            parsed.Options.ShouldBeNull();
             parsed.Errors.ShouldNotBeEmpty();
         }
     }
@@ -124,7 +127,6 @@ public class CliArgsTests
         {
             CliArgs.TryParse(args, out var parsed);
 
-            parsed.Options.ShouldBeNull();
             parsed.Errors.ShouldNotBeEmpty();
         }
     }
@@ -502,7 +504,6 @@ public class CliArgsTests
     {
         CliArgs.TryParse(["--bogus"], out var parsed);
 
-        parsed.Options.ShouldBeNull();
         parsed.Errors.ShouldHaveSingleItem().ShouldContain("--bogus");
     }
 
@@ -511,7 +512,6 @@ public class CliArgsTests
     {
         CliArgs.TryParse(["--data-root"], out var parsed);
 
-        parsed.Options.ShouldBeNull();
         parsed.Errors.ShouldHaveSingleItem();
     }
 
@@ -520,7 +520,6 @@ public class CliArgsTests
     {
         CliArgs.TryParse(["--transport", "ftp"], out var parsed);
 
-        parsed.Options.ShouldBeNull();
         parsed.Errors.ShouldHaveSingleItem().ShouldContain("--transport");
     }
 
@@ -542,7 +541,6 @@ public class CliArgsTests
         parsed.ShowVersion.ShouldBeTrue();
         parsed.ShowHelp.ShouldBeFalse();
         parsed.Errors.ShouldBeEmpty();
-        parsed.Options.ShouldBeNull();
     }
 
     [Fact]
@@ -559,7 +557,6 @@ public class CliArgsTests
     {
         CliArgs.TryParse(["--data-root", "/a", "--data-root", "/b"], out var parsed);
 
-        parsed.Options.ShouldBeNull();
         parsed.Errors.ShouldHaveSingleItem().ShouldContain("--data-root");
     }
 
@@ -570,7 +567,6 @@ public class CliArgsTests
             ["--environment=Development", "--contentRoot=/tmp/x", "--applicationName=AiRaccoon"], out var parsed);
 
         parsed.Errors.ShouldBeEmpty();
-        parsed.Options.ShouldBeNull();
         parsed.CommandPath.ShouldBeEmpty();
     }
 

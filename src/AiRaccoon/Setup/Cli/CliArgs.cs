@@ -76,13 +76,32 @@ internal static class CliArgs
         return path.Count <= 1 ? [] : [.. path.Skip(1)];
     }
 
-    private static CliOptions ReadOptions(ParseResult parseResult) =>
-        new()
+    /// <summary>Reads launch options; invalid option VALUES throw inside System.CommandLine's
+    /// GetValueOrDefault, so a failed parse falls back to defaults (errors are reported by
+    /// TryParse's return + Errors list, never by an exception).</summary>
+    private static CliOptions ReadOptions(ParseResult parseResult)
+    {
+        try
         {
-            Transport = parseResult.GetResult("--transport") is OptionResult { Tokens.Count: > 0 } transport ? transport.GetValueOrDefault<McpTransport>() : DefaultOptions.Transport,
-            DataRoot = parseResult.GetResult("--data-root") is OptionResult { Tokens.Count: > 0 } dataRoot ? dataRoot.GetValueOrDefault<string>() : DefaultOptions.DataRoot,
-            InstallScope = parseResult.GetResult("--install-scope") is OptionResult { Tokens.Count: > 0 } scope ? scope.GetValueOrDefault<InstallScope>() : DefaultOptions.InstallScope,
-            Port = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 } port ? port.GetValueOrDefault<int>() : DefaultOptions.Port,
-            IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 }
-        };
+            return new()
+            {
+                Transport = parseResult.GetResult("--transport") is OptionResult { Tokens.Count: > 0 } transport ? transport.GetValueOrDefault<McpTransport>() : DefaultOptions.Transport,
+                DataRoot = parseResult.GetResult("--data-root") is OptionResult { Tokens.Count: > 0 } dataRoot ? dataRoot.GetValueOrDefault<string>() : DefaultOptions.DataRoot,
+                InstallScope = parseResult.GetResult("--install-scope") is OptionResult { Tokens.Count: > 0 } scope ? scope.GetValueOrDefault<InstallScope>() : DefaultOptions.InstallScope,
+                Port = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 } port ? port.GetValueOrDefault<int>() : DefaultOptions.Port,
+                IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 }
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            return new()
+            {
+                Transport = DefaultOptions.Transport,
+                DataRoot = DefaultOptions.DataRoot,
+                InstallScope = DefaultOptions.InstallScope,
+                Port = DefaultOptions.Port,
+                IsPortExplicit = false
+            };
+        }
+    }
 }

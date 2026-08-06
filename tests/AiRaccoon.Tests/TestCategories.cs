@@ -24,15 +24,10 @@ public static class TestCategories
     public const string Slow = "Slow";
 }
 
-/// <summary>Returns null — no encryption. Use for existing unencrypted-DB tests.</summary>
-public sealed class NullKeyProvider : IEncryptionKeyProvider
+/// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>
+public sealed class NullKeyProvider : IEncryptionKeyResolver
 {
-    public string Source => EncryptionData.NoneEncryptedSource;
+    public ResolvedKey Resolve() => ResolvedKey.None;
 
-    public bool IsForSource(string source) => string.IsNullOrWhiteSpace(source) || Source.Equals(source, StringComparison.Ordinal);
-
-    public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source);
-
-    public static IEncryptionKeyResolver Resolver(InfrastructureOptions options) =>
-        new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)), [new NoneEncryptionKeyProvider()]);
+    public static IEncryptionKeyResolver Resolver(InfrastructureOptions options) => new NullKeyProvider();
 }
