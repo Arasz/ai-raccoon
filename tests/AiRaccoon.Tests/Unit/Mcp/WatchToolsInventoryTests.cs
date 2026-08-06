@@ -74,7 +74,7 @@ public sealed class WatchToolsInventoryTests : IDisposable
             var toolName = tm.Attr!.Name!;
             constValues.ShouldContainKey(toolName,
                 $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
-            constValues[toolName].ShouldStartWith("TN_");
+            constValues[toolName].ShouldStartWith("Tn");
         }
     }
 
