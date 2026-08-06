@@ -1,8 +1,15 @@
 {
-    "lastUpdated": "2026-08-06T21:40:00Z",
+    "lastUpdated": "2026-08-06T20:06:43Z",
     "notesRef": ".ai-badger/status-notes.json",
     "historyRef": ".ai-badger/status-history.json",
     "completedTasks": [
+        {
+            "id": "hermes-mem",
+            "title": "Quiet the hermes-side AiRaccoon spawns: flip plugins.ai-raccoon.quiet + bridge --quiet arg",
+            "summary": "Post-1.0.11 sequencing pin was never flipped: ~/.hermes/config.yaml had plugins.ai-raccoon.quiet=false and mcp_servers.ai-raccoon lacked args, so every hermes-spawned ai-raccoon server printed info logs ('Application started', McpServer/StdioServerTransport lines). Measured: installed 1.0.10+6fc3149 binary supports --quiet; 0 log lines with it vs the exact pasted lines without. Fixed via CLI: hermes config set plugins.ai-raccoon.quiet true; hermes mcp add ai-raccoon --args --quiet (overwrite, 20/20 tools). Verified: YAML parses; E2E provider-path spawn (plugin client) handshake + memory_stats on scratch bank PASS. Live sessions keep old spawns until next start. nuget publish of 1.0.11 still pending (owner) + AI_RACCOON_VERSION pin in scripts/manual-fresh-install-test.py.",
+            "pr": "none (hermes-side config only, no repo changes)",
+            "date": "2026-08-06T22:15:00Z"
+        },
         {
             "id": "improve-sqlite",
             "title": "SQLite feature-surface actions: capability contract tests, encrypted-sync fix (real bug), engine diagnostics, doc closure",

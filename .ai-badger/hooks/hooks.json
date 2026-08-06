@@ -58,6 +58,16 @@
             "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/task/scripts/dispatch_gate_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/task/scripts/dispatch_gate_hook.py\"; elif [ -f \".ai-badger/skills/task/scripts/dispatch_gate_hook.py\" ]; then python3 \".ai-badger/skills/task/scripts/dispatch_gate_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/task/scripts/dispatch_gate_hook.py not found - hook skipped\"}'; fi"
           }
         ]
+      },
+      {
+        "matcher": "Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py\"; elif [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py not found - hook skipped\"}'; fi",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

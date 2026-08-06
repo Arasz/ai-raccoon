@@ -923,6 +923,22 @@
       "resumeCommand": "hermes --resume 20260806_210525_3b6e27",
         "resumeAttempts": [],
         "stateJsonUpdated": true
+    },
+      {
+          "taskId": "hermes-mem",
+          "title": "Flip hermes ai-raccoon quiet pin + bridge args so sessions show no server log noise",
+          "sessionId": "20260806_220110_ee48a1",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/hermes-mem",
+          "risk": false,
+          "startedAt": "2026-08-06T20:03:07.362702+00:00",
+          "finishedAt": "2026-08-06T20:06:46.089683+00:00",
+          "state": "FINISHED",
+          "trackingSource": "hermes",
+          "resumeCommand": "hermes --resume 20260806_220110_ee48a1",
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
     }
   ]
 }
