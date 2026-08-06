@@ -15,6 +15,9 @@ public interface IExtractCommands
     Task<int> SetIntervalAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
         TextWriter stderr, CancellationToken cancellationToken);
 
+    Task<int> SetCapacityAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        TextWriter stderr, CancellationToken cancellationToken);
+
     Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken);
 
     Task<int> ExcludeAddAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,

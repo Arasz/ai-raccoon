@@ -13,8 +13,13 @@ def sha(p):
 
 
 def unwrap(result):
-    """MCP SDK wraps tool results as content[0].text containing a JSON string."""
+    """MCP SDK wraps tool results as content[0].text containing a JSON string; since 1.1.0
+    every tool returns the ApiEnvelope — unwrap to the envelope's data payload so checks
+    see the tool's own fields."""
     content = (result or {}).get("content") or []
     if content and content[0].get("type") == "text":
-        return json.loads(content[0]["text"])
+        parsed = json.loads(content[0]["text"])
+        if isinstance(parsed, dict) and "data" in parsed and "meta" in parsed and "result" in parsed:
+            return parsed["data"]
+        return parsed
     return result

@@ -1,6 +1,6 @@
 # Promotion Propose-Tier: persisted waiting queue + fair-share capacity + response envelope
 
-> **Status:** DRAFT (2026-08-06, design pinned with the owner). Implements the `e:` extension to the
+> **Status:** DONE (2026-08-06, shipped as 1.1.0). Implements the `e:` extension to the
 > memory-first-gate task: (1) the propose tier becomes a real persisted queue with fair-share
 > capacity, (2) every MCP response carries a `meta` envelope telling the agent what is waiting.
 
@@ -25,6 +25,8 @@ response is enveloped in a common schema whose `meta` carries `waitingPromotions
 ---
 
 ## Phase 1 — Propose-tier persistence: schema + store (TDD)
+
+**STATUS: DONE.**
 
 ### Task 1.1: Failing schema tests
 **Files:** `tests/AiRaccoon.Tests/Unit/Infrastructure/...` (follow existing store-test layout).
@@ -75,6 +77,8 @@ Run → FAIL (module missing), implement, GREEN. Commit.
 
 ## Phase 2 — Extraction integration: propose persists, promote consumes (TDD)
 
+**STATUS: DONE.**
+
 ### Task 2.1: Failing service tests
 **Files:** extend the extraction service tests (`SharedExtractionService` tests + new
 `PromotionQueueService` tests).
@@ -120,6 +124,8 @@ Run → GREEN. Commit.
 
 ## Phase 3 — Response envelope with waiting meta (TDD)
 
+**STATUS: DONE.**
+
 ### Task 3.1: Failing envelope tests
 **Files:** new `ApiEnvelope` record tests + per-tool response-shape tests (the mcp tool-surface
 test suite asserts result shapes — extend it).
@@ -154,9 +160,25 @@ Run → GREEN. Commit: `feat(api): envelope all responses with waiting-promotion
 
 ## Phase 4 — Release + verification
 
+**STATUS: DONE** — fresh-install gate ALL GREEN (1.1.0, local source), manual propose-tier exercise ALL GREEN, full suite 1363/0/4.
+
 - Full gates: `dotnet test` (no skips beyond the 4 pre-existing spec skips), `dotnet build` 0
   warnings, pytest scripts suite, version bump + changelog, manual fresh-install test
   (`scripts/manual-fresh-install-test.py`).
+- **Manual tests (owner f:)** — beyond the fresh-install gate: drive a real server and
+  exercise the propose tier end-to-end (propose fills → `memory_promotion_list` shows the
+  queue → promote drains → eviction observable at a small cap), plus the envelope shape on
+  a couple of tools.
+- **Full docs swap and update (owner f:)** — everything the feature touches gets refreshed:
+  the new `promotion_queue` schema (memory-bank docs), the new logic flow (propose persists
+  into the propose tier; promote consumes from it — the old "propose returns ephemeral
+  candidates / promote re-extracts" flow is gone), and the new architecture parts
+  (`IPromotionQueue`, `IPromotionQueueStore`, `IEvictionPolicy`, `PromotionCapacityPolicy`,
+  `IPromotionQueueMetrics`, `ApiEnvelope`/`OperationStatus`). Targets: `docs/work/` outcome
+  note, `docs/design/` + `docs/plans/` where they describe extraction, the MCP prompts
+  (`MemoryPrompts.cs` — the usage guide still says "shared entries are curated and never
+  swept", which stays true, but the share_extract wording must describe the propose tier),
+  README/docs index if they list tools (22 tools now), and the changelog.
 - One PR in Arasz/ai-raccoon (one task = one PR; never push to main).
 - Live verification evidence:
   - propose → queue rows persist; `memory_promotion_list` shows them; meta shows

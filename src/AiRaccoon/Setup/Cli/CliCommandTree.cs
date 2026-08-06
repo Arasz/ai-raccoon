@@ -215,7 +215,8 @@ internal static class CliCommandTree
                 { new Argument<string>("mode") { HelpName = "propose|promote" } },
             new Command("interval", "Sets the extraction pass interval in minutes (positive integer; default 30)")
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
-            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)"),
+            new Command("capacity", "Sets the propose-tier queue capacity (positive integer; default 1000) — the total queued candidates across projects, split into per-project reservations")
+                { new Argument<string>("capacity") { HelpName = "capacity" } },
             new Command("exclude", "Excludes source_file prefixes from shared-extraction candidacy (extract.exclude.prefixes; e.g. 'scratch/' keeps agent scratch files out of the shared tier)")
             {
                 new Command("add", "Adds a source_file prefix to the exclusion list (deduped)")
@@ -223,7 +224,8 @@ internal static class CliCommandTree
                 new Command("remove", "Removes a source_file prefix from the exclusion list")
                     { new Argument<string>("prefix") { HelpName = "prefix" } },
                 new Command("list", "Lists the excluded source_file prefixes")
-            }
+            },
+            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
         };
         return extract;
     }

@@ -65,6 +65,7 @@ internal static class ConfigCommands
                 ["extract", "enable"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetEnabledAsync(parseResult, store, stdout, cancellationToken),
                 ["extract", "mode"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetModeAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["extract", "interval"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
+                ["extract", "capacity"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetCapacityAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["extract", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ListAsync(store, stdout, cancellationToken),
                 ["extract", "exclude", "add"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeAddAsync(parseResult, store, stdout, cancellationToken),
                 ["extract", "exclude", "remove"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeRemoveAsync(parseResult, store, stdout, cancellationToken),
