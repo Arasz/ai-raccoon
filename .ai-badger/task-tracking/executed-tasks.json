@@ -746,6 +746,21 @@
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_142455_7cb872",
       "resumeAttempts": []
+    },
+    {
+      "taskId": "2026-08-06-memory-usage-audit",
+      "title": "post-fix-analyze",
+      "sessionId": "20260806_144456_10ee8d",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/memory-usage-audit-post-fix-analyze",
+      "risk": false,
+      "startedAt": "2026-08-06T12:45:58.644904+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_144456_10ee8d",
+      "resumeAttempts": []
     }
   ]
 }
