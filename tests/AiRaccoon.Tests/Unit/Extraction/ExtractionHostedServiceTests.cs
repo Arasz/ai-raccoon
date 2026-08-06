@@ -220,6 +220,9 @@ public sealed class ExtractionHostedServiceTests
         using var cts = new CancellationTokenSource();
         var run = service.StartAsync(cts.Token);
 
+        // Let ExecuteAsync create the PeriodicTimer before advancing the fake clock.
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+
         time.Advance(TimeSpan.FromMinutes(60)); // default interval
         await Task.Delay(100, TestContext.Current.CancellationToken);
         store.Shared.Count.ShouldBe(1);

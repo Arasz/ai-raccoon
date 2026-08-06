@@ -30,7 +30,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        using var timer = new PeriodicTimer(await ReadIntervalAsync(stoppingToken).ConfigureAwait(false),
+            _timeProvider);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
@@ -45,15 +47,8 @@ public sealed partial class ExtractionHostedService : BackgroundService
                 Log.RunFailed(_logger, ex);
             }
 
-            var interval = await ReadIntervalAsync(stoppingToken).ConfigureAwait(false);
-            try
-            {
-                await Task.Delay(interval, _timeProvider, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
+            // Re-read the interval so config changes apply without a restart.
+            timer.Period = await ReadIntervalAsync(stoppingToken).ConfigureAwait(false);
         }
     }
 
