@@ -121,14 +121,9 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I search for that fact with scope "shared"
             Then no results are returned
 
-    @FR-NM-5 @AC-5 @ignore
-    Rule: The swap is gated by a golden-retrieval harness
-        Scenario: The harness passes before the pinned extension is removed
-            Given a fixed corpus and a graded query set exist
-            When I run the retrieval parity harness
-            Then nDCG parity with the reference extension is within 0.02
-            And degenerate queries show no regression
-            And p95 latency stays within budget
+    # FR-NM-5: the golden-retrieval harness gate was removed with the pinned extension —
+    # the swap is done and retrieval parity is enforced by the permanent regression
+    # suite (tests/AiRaccoon.Tests/Unit/Retrieval) instead.
 
     @FR-NM-6 @AC-6
     Rule: Workspaces are first-class entities with structural isolation
@@ -231,7 +226,5 @@ Feature: Native memory store (ai-raccoon MCP server)
             When I ingest it
             Then no chunk boundary falls inside the fence
 
-    @ignore
-    Rule: File watching is a separate part-2 feature
-        Scenario: Watcher tools exist
-# Part 2: memory_watch_add / memory_watch_status / memory_watch_remove with a persisted watches table.
+    # File watching is its own shipped feature: docs/features/file-watcher/file-watcher.feature
+    # (memory_watch_add / memory_watch_status / memory_watch_remove, persisted watches table).
