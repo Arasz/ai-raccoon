@@ -1,0 +1,42 @@
+{
+  "$schema": "../../../schemas/learned-skills.schema.json",
+  "skills": [
+    {
+      "category": "mcp",
+      "name": "mcp-tool-surface-testing",
+      "sourceHash": "308dac2737285c1454f5c7bc585c535d2a5b52eca6138a3ab28302a93d2e1e78",
+      "sourcePath": "mcp/mcp-tool-surface-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T09:22:50Z",
+      "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
+    },
+    {
+      "category": "uncategorized",
+      "name": "ai-badger-project-ops",
+      "sourceHash": "fb1e71521a2fda9e05d620d0681ebf93f6bb7d2c87163427dffac8d900c525a9",
+      "sourcePath": "ai-badger-project-ops",
+      "status": "synced",
+      "syncedAt": "2026-08-06T09:16:04Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
+    },
+    {
+      "category": "uncategorized",
+      "name": "documentation-drift-audit",
+      "sourceHash": "5d9069dd73ebb278f18838201fe5fd654e8dbd8c7d4be755503c42f98a24b14c",
+      "sourcePath": "documentation/documentation-drift-audit",
+      "status": "synced",
+      "syncedAt": "2026-08-06T09:24:47Z",
+      "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
+    },
+    {
+      "category": "uncategorized",
+      "name": "mcp-tool-surface-testing",
+      "sourceHash": "784f392cf2b8b1cbb1efc0efc38dbdc41ef7f20dbfe65b497ac5f403d8030476",
+      "sourcePath": "mcp/mcp-tool-surface-testing",
+      "status": "synced",
+      "syncedAt": "2026-08-06T09:22:57Z",
+      "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
+    }
+  ],
+  "version": 1
+}

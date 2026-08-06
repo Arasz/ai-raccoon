@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Common;
@@ -24,16 +26,14 @@ public class MemoryToolsTests
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly FakeStore _store = new();
-    private readonly SweepService _sweeper;
     private readonly FakeSyncService _sync = new();
     private readonly MemoryTools _tools;
-    private readonly WorkspaceService _workspaces;
 
     public MemoryToolsTests()
     {
-        _workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
-        _sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        _tools = new MemoryTools(_store, _sync, _workspaces, _sweeper, new MemoryAccessGuard(_store),
+        var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
+        var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
+        _tools = new MemoryTools(_store, _sync, workspaces, sweeper, new MemoryAccessGuard(_store),
             new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance),
             new ForgettingPolicyService(_store, new MemoryAccessGuard(_store)),
             new ToolCallMetrics());
@@ -214,6 +214,37 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task List_ReturnsFilesAsJsonObject()
+    {
+        var result = await _tools.List("acme", CancellationToken.None);
+
+        result.Files.ShouldBeOfType<JsonObject>();
+        JsonSerializer.Serialize(result).ShouldContain("\"files\":{\"root\":\"\"}");
+    }
+
+    [Fact]
+    public async Task List_PreservesNestedFileTree()
+    {
+        _store.FilesJson = "{\"a.md\":{},\"dir\":{\"b.md\":{}}}";
+
+        var result = await _tools.List("acme", CancellationToken.None);
+
+        JsonSerializer.Serialize(result).ShouldContain("\"files\":{\"a.md\":{},\"dir\":{\"b.md\":{}}}");
+    }
+
+    [Fact]
+    public async Task WorkspaceDiscard_ReportsDiscardedKey()
+    {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
+
+        var result = await _tools.WorkspaceDiscard("acme", "ws-1", CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result);
+        json.ShouldContain("\"discarded\":");
+        json.ShouldNotContain("\"deleted\":");
+    }
+
+    [Fact]
     public async Task Sweep_DryRunByDefault_ReportsCandidatesWithoutDeleting()
     {
         _store.EntriesByContext["project:acme"] =
@@ -250,6 +281,8 @@ public class MemoryToolsTests
 
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
+        public string FilesJson { get; set; } = "{\"root\":\"\"}";
+
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
@@ -282,7 +315,7 @@ public class MemoryToolsTests
             return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
         }
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
@@ -338,8 +371,8 @@ public class MemoryToolsTests
             Task.CompletedTask;
     }
 
-    private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult((SqliteConnection)null!),
-        (_, _) => Task.FromResult((SqliteConnection)null!), TimeProvider.System, null!)
+    private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),
+        (_, _) => Task.FromResult<SqliteConnection>(null!), TimeProvider.System, null!)
     {
         public SyncResult Result { get; set; } = new(0, 0, 0);
 
@@ -351,12 +384,7 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default)
         {
             LastObjectKey = objectKey;
-            if (Exception is not null)
-            {
-                throw Exception;
-            }
-
-            return Task.FromResult(Result);
+            return Exception is not null ? throw Exception : Task.FromResult(Result);
         }
     }
 

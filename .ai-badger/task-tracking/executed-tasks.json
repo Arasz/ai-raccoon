@@ -666,6 +666,38 @@
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_100353_81f79b",
       "resumeAttempts": []
+    },
+    {
+      "taskId": "rr",
+      "title": "README cleanup: fix MD constructs, compact + redirect to docs, humanize",
+      "sessionId": "20260806_110338_f0a19c",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/rr-readme-cleanup",
+      "risk": false,
+      "startedAt": "2026-08-06T09:06:50.899188+00:00",
+      "finishedAt": "2026-08-06T09:22:03.399069+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_110338_f0a19c",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
+    },
+    {
+      "taskId": "full-test-all-tools-in-ai-raccoon",
+      "title": "Full test of all tools exported by AiRaccoon",
+      "sessionId": "20260806_111438_61b45c",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/full-test-all-tools-in-ai-raccoon",
+      "risk": false,
+      "startedAt": "2026-08-06T09:16:16.357375+00:00",
+      "finishedAt": "2026-08-06T09:19:56.205602+00:00",
+      "state": "FINISHED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_111438_61b45c",
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     }
   ]
 }

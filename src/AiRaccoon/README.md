@@ -6,7 +6,7 @@ one `memory.db` per install scope, a bundled in-process ONNX embedding model, hy
 reciprocal rank fusion, workspace sandboxes, a curated shared tier, memory degradation, three-tier access control, and
 opt-in cloud sync (S3 or Azure Blob).
 
-Built on the ModelContextProtocol C# SDK 2.0.0 (net10.0).
+Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
 
 ## What an agent gets
 
@@ -52,22 +52,49 @@ Runtime configuration lives in the settings table of the install's `memory.db` a
 `ai-raccoon` (with optional launch flags)
 runs the server; a verb runs a config command:
 
-```
-ai-raccoon access default set {ro|rw|full}    ai-raccoon access default show
+```bash
+# access — who may do what per project
+ai-raccoon access default set {ro|rw|full}
+ai-raccoon access default show
 ai-raccoon access set {project-id|*} {ro|rw|full}
-ai-raccoon access unset {project-id|*}        ai-raccoon access list
-ai-raccoon model set local [path]             ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
-ai-raccoon model reset                        ai-raccoon model show
-ai-raccoon retrieval alpha set {0..1}         ai-raccoon retrieval alpha show
-ai-raccoon sweep threshold set {0..1}         ai-raccoon sweep show
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]   # key prompts, or --cli = AWS credential chain
-ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]            # connection-string prompt, or --cli = az login
-ai-raccoon sync remove                        ai-raccoon sync show
-ai-raccoon watch enable|disable {project-id|*} {true|false}
-ai-raccoon watch scope add|remove|list {project-id|*} {path}
+ai-raccoon access unset {project-id|*}
+ai-raccoon access list
+
+# model — embedding engine
+ai-raccoon model set local [path]
+ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
+ai-raccoon model reset
+ai-raccoon model show
+
+# retrieval — hybrid-search blend weight
+ai-raccoon retrieval alpha set {0..1}
+ai-raccoon retrieval alpha show
+
+# sweep — degradation cutoff
+ai-raccoon sweep threshold set {0..1}
+ai-raccoon sweep show
+
+# sync — cloud snapshot sync
+ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]
+ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]
+ai-raccoon sync remove
+ai-raccoon sync show
+
+# watch — file-watcher configuration (registers happen via memory_watch_add)
+ai-raccoon watch enable {project-id|*} {true|false}
+ai-raccoon watch disable {project-id|*} {true|false}
+ai-raccoon watch scope add {project-id|*} {path}
+ai-raccoon watch scope remove {project-id|*} {path}
+ai-raccoon watch scope list {project-id|*}
 ai-raccoon watch concurrency {project-id|*} {1..16}
-ai-raccoon watch list                        ai-raccoon watch registered [{project-id}]
+ai-raccoon watch list
+ai-raccoon watch registered [{project-id}]
 ai-raccoon watch remove {project-id|*}
+
+# encryption — bank key source
+ai-raccoon encryption bitwarden [-t <token>]
+ai-raccoon encryption show
+ai-raccoon encryption unset
 ```
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table,

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
@@ -11,6 +12,8 @@ using AiRaccoon.Observability;
 using FluentValidation;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
+
+// ReSharper disable ExplicitCallerInfoArgument
 
 namespace AiRaccoon.Tools;
 
@@ -26,22 +29,22 @@ public sealed class MemoryTools(
     ToolCallMetrics observability)
 {
     // ── MCP tool name constants ──
-    private const string TN_MEMORY_WRITE = "memory_write";
-    private const string TN_MEMORY_SEARCH = "memory_search";
-    private const string TN_MEMORY_LIST = "memory_list";
-    private const string TN_MEMORY_STATS = "memory_stats";
-    private const string TN_MEMORY_SHARE = "memory_share";
-    private const string TN_MEMORY_DELETE = "memory_delete";
-    private const string TN_MEMORY_DELETE_CONTEXT = "memory_delete_context";
-    private const string TN_MEMORY_INGEST_FILE = "memory_ingest_file";
-    private const string TN_MEMORY_INGEST_DIRECTORY = "memory_ingest_directory";
-    private const string TN_MEMORY_EMBED_PENDING = "memory_embed_pending";
-    private const string TN_MEMORY_WORKSPACE_BEGIN = "memory_workspace_begin";
-    private const string TN_MEMORY_WORKSPACE_STATUS = "memory_workspace_status";
-    private const string TN_MEMORY_WORKSPACE_CONSOLIDATE = "memory_workspace_consolidate";
-    private const string TN_MEMORY_WORKSPACE_DISCARD = "memory_workspace_discard";
-    private const string TN_MEMORY_SWEEP = "memory_sweep";
-    private const string TN_MEMORY_SYNC = "memory_sync";
+    private const string TnMemoryWrite = "memory_write";
+    private const string TnMemorySearch = "memory_search";
+    private const string TnMemoryList = "memory_list";
+    private const string TnMemoryStats = "memory_stats";
+    private const string TnMemoryShare = "memory_share";
+    private const string TnMemoryDelete = "memory_delete";
+    private const string TnMemoryDeleteContext = "memory_delete_context";
+    private const string TnMemoryIngestFile = "memory_ingest_file";
+    private const string TnMemoryIngestDirectory = "memory_ingest_directory";
+    private const string TnMemoryEmbedPending = "memory_embed_pending";
+    private const string TnMemoryWorkspaceBegin = "memory_workspace_begin";
+    private const string TnMemoryWorkspaceStatus = "memory_workspace_status";
+    private const string TnMemoryWorkspaceConsolidate = "memory_workspace_consolidate";
+    private const string TnMemoryWorkspaceDiscard = "memory_workspace_discard";
+    private const string TnMemorySweep = "memory_sweep";
+    private const string TnMemorySync = "memory_sync";
 
     private static void RequireProjectId(string? projectId)
     {
@@ -55,7 +58,7 @@ public sealed class MemoryTools(
         CancellationToken cancellationToken) =>
         await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
-    [McpServerTool(Name = TN_MEMORY_WRITE)]
+    [McpServerTool(Name = TnMemoryWrite)]
     [Description(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. Returns the stored entry.")]
     public async Task<WriteResult> Write(
@@ -75,32 +78,32 @@ public sealed class MemoryTools(
         string? section = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WRITE);
-        activity?.SetTag("tool", TN_MEMORY_WRITE);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryWrite);
+        activity?.SetTag("tool", TnMemoryWrite);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_WRITE, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
 
             var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
             new MemoryWriteRequest.Validator().ValidateAndThrow(request);
 
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
-            observability.RecordInvocation(TN_MEMORY_WRITE, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryWrite, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_WRITE, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryWrite, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_SEARCH)]
+    [McpServerTool(Name = TnMemorySearch)]
     [Description(
         "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only.")]
     public async Task<SearchResultList> Search(
@@ -124,14 +127,14 @@ public sealed class MemoryTools(
         string? contextLabel = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SEARCH);
-        activity?.SetTag("tool", TN_MEMORY_SEARCH);
+        using var activity = observability.ActivitySource.StartActivity(TnMemorySearch);
+        activity?.SetTag("tool", TnMemorySearch);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TN_MEMORY_SEARCH, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
 
             var parsedScope = scope.ToLowerInvariant() switch
             {
@@ -147,72 +150,72 @@ public sealed class MemoryTools(
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
-            observability.RecordInvocation(TN_MEMORY_SEARCH, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemorySearch, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_SEARCH, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemorySearch, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_LIST)]
+    [McpServerTool(Name = TnMemoryList)]
     [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
     public async Task<ListResult> List(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_LIST);
-        activity?.SetTag("tool", TN_MEMORY_LIST);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryList);
+        activity?.SetTag("tool", TnMemoryList);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TN_MEMORY_LIST, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
             var files = await store.ListFilesAsync(projectId, cancellationToken);
-            var result = new ListResult(files);
-            observability.RecordInvocation(TN_MEMORY_LIST, sw.Elapsed, false);
+            var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
+            observability.RecordInvocation(TnMemoryList, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_LIST, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryList, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_STATS)]
+    [McpServerTool(Name = TnMemoryStats)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
     public async Task<StatsResult> Stats(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_STATS);
-        activity?.SetTag("tool", TN_MEMORY_STATS);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryStats);
+        activity?.SetTag("tool", TnMemoryStats);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TN_MEMORY_STATS, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
             var stats = await store.GetStatsAsync(projectId, cancellationToken);
             var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
-            observability.RecordInvocation(TN_MEMORY_STATS, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryStats, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_STATS, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryStats, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_SHARE)]
+    [McpServerTool(Name = TnMemoryShare)]
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
     public async Task<ShareResult> Share(
@@ -221,30 +224,30 @@ public sealed class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SHARE);
-        activity?.SetTag("tool", TN_MEMORY_SHARE);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryShare);
+        activity?.SetTag("tool", TnMemoryShare);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_SHARE, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
-            observability.RecordInvocation(TN_MEMORY_SHARE, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryShare, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_SHARE, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryShare, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_DELETE)]
+    [McpServerTool(Name = TnMemoryDelete)]
     [Description("Deletes a specific memory entry by its content hash.")]
     public async Task<DeletedResult> Delete(
         [Description("The project id.")] string projectId,
@@ -252,30 +255,30 @@ public sealed class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_DELETE);
-        activity?.SetTag("tool", TN_MEMORY_DELETE);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryDelete);
+        activity?.SetTag("tool", TnMemoryDelete);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TN_MEMORY_DELETE, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
             var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
             var result = new DeletedResult(deleted ? 1 : 0);
-            observability.RecordInvocation(TN_MEMORY_DELETE, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryDelete, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_DELETE, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryDelete, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_DELETE_CONTEXT)]
+    [McpServerTool(Name = TnMemoryDeleteContext)]
     [Description("Deletes every entry stored under a context label (e.g. a project or workspace context).")]
     public async Task<DeletedContextResult> DeleteContext(
         [Description("The project id.")] string projectId,
@@ -283,30 +286,30 @@ public sealed class MemoryTools(
         string context,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_DELETE_CONTEXT);
-        activity?.SetTag("tool", TN_MEMORY_DELETE_CONTEXT);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryDeleteContext);
+        activity?.SetTag("tool", TnMemoryDeleteContext);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TN_MEMORY_DELETE_CONTEXT, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
             var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
             var result = new DeletedContextResult(deleted);
-            observability.RecordInvocation(TN_MEMORY_DELETE_CONTEXT, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryDeleteContext, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_DELETE_CONTEXT, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryDeleteContext, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_INGEST_FILE)]
+    [McpServerTool(Name = TnMemoryIngestFile)]
     [Description("Indexes one file from disk into memory.")]
     public async Task<IngestResult> IngestFile(
         [Description("The project id.")] string projectId,
@@ -316,30 +319,30 @@ public sealed class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_INGEST_FILE);
-        activity?.SetTag("tool", TN_MEMORY_INGEST_FILE);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestFile);
+        activity?.SetTag("tool", TnMemoryIngestFile);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_INGEST_FILE, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
             var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
             var result = new IngestResult(indexed);
-            observability.RecordInvocation(TN_MEMORY_INGEST_FILE, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryIngestFile, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_INGEST_FILE, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryIngestFile, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_INGEST_DIRECTORY)]
+    [McpServerTool(Name = TnMemoryIngestDirectory)]
     [Description("Recursively indexes a directory tree into memory, skipping unchanged files.")]
     public async Task<ScannedResult> IngestDirectory(
         [Description("The project id.")] string projectId,
@@ -349,31 +352,31 @@ public sealed class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_INGEST_DIRECTORY);
-        activity?.SetTag("tool", TN_MEMORY_INGEST_DIRECTORY);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryIngestDirectory);
+        activity?.SetTag("tool", TnMemoryIngestDirectory);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_INGEST_DIRECTORY, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
             var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
             var result = new ScannedResult(scanned);
-            observability.RecordInvocation(TN_MEMORY_INGEST_DIRECTORY, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryIngestDirectory, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_INGEST_DIRECTORY, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryIngestDirectory, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
 
-    [McpServerTool(Name = TN_MEMORY_EMBED_PENDING)]
+    [McpServerTool(Name = TnMemoryEmbedPending)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
     public async Task<EmbedResult> EmbedPending(
         [Description("The project id.")] string projectId,
@@ -381,29 +384,29 @@ public sealed class MemoryTools(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_EMBED_PENDING);
-        activity?.SetTag("tool", TN_MEMORY_EMBED_PENDING);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryEmbedPending);
+        activity?.SetTag("tool", TnMemoryEmbedPending);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_EMBED_PENDING, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
 
             var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
             var embedResult = new EmbedResult(result.Processed, result.Pending);
-            observability.RecordInvocation(TN_MEMORY_EMBED_PENDING, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryEmbedPending, sw.Elapsed, false);
             return embedResult;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_EMBED_PENDING, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryEmbedPending, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_WORKSPACE_BEGIN)]
+    [McpServerTool(Name = TnMemoryWorkspaceBegin)]
     [Description(
         "Begins a workspace sandbox: returns a workspace_id whose context is isolated by design. While it is active, write with that workspace_id so notes stay in the outbox.")]
     public async Task<WorkspaceBeginResult> WorkspaceBegin(
@@ -414,59 +417,59 @@ public sealed class MemoryTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WORKSPACE_BEGIN);
-        activity?.SetTag("tool", TN_MEMORY_WORKSPACE_BEGIN);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceBegin);
+        activity?.SetTag("tool", TnMemoryWorkspaceBegin);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_WORKSPACE_BEGIN, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
 
             var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
             var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_BEGIN, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryWorkspaceBegin, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_BEGIN, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryWorkspaceBegin, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_WORKSPACE_STATUS)]
+    [McpServerTool(Name = TnMemoryWorkspaceStatus)]
     [Description("Lists the entries currently in a workspace's outbox.")]
     public async Task<WorkspaceStatusResult> WorkspaceStatus(
         [Description("The project id.")] string projectId,
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WORKSPACE_STATUS);
-        activity?.SetTag("tool", TN_MEMORY_WORKSPACE_STATUS);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceStatus);
+        activity?.SetTag("tool", TnMemoryWorkspaceStatus);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TN_MEMORY_WORKSPACE_STATUS, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
             var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
             var result = new WorkspaceStatusResult(entries, entries.Count);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_STATUS, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryWorkspaceStatus, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_STATUS, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryWorkspaceStatus, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_WORKSPACE_CONSOLIDATE)]
+    [McpServerTool(Name = TnMemoryWorkspaceConsolidate)]
     [Description(
         "Finishes a workspace: promotes the kept hashes (or 'all') from the workspace outbox into the project's committed memory, then removes the workspace context.")]
     public async Task<ConsolidationToolResult> WorkspaceConsolidate(
@@ -476,61 +479,61 @@ public sealed class MemoryTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WORKSPACE_CONSOLIDATE);
-        activity?.SetTag("tool", TN_MEMORY_WORKSPACE_CONSOLIDATE);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceConsolidate);
+        activity?.SetTag("tool", TnMemoryWorkspaceConsolidate);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TN_MEMORY_WORKSPACE_CONSOLIDATE, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceConsolidate, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
             ArgumentNullException.ThrowIfNull(keep);
 
             var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
             var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_CONSOLIDATE, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemoryWorkspaceConsolidate, sw.Elapsed, false);
             return toolResult;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_CONSOLIDATE, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryWorkspaceConsolidate, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_WORKSPACE_DISCARD)]
+    [McpServerTool(Name = TnMemoryWorkspaceDiscard)]
     [Description("Discards a workspace without promoting anything: removes its outbox context and all its entries.")]
-    public async Task<DeletedContextResult> WorkspaceDiscard(
+    public async Task<WorkspaceDiscardResult> WorkspaceDiscard(
         [Description("The project id.")] string projectId,
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_WORKSPACE_DISCARD);
-        activity?.SetTag("tool", TN_MEMORY_WORKSPACE_DISCARD);
+        using var activity = observability.ActivitySource.StartActivity(TnMemoryWorkspaceDiscard);
+        activity?.SetTag("tool", TnMemoryWorkspaceDiscard);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TN_MEMORY_WORKSPACE_DISCARD, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceDiscard, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
             var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
-            var result = new DeletedContextResult(discarded);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_DISCARD, sw.Elapsed, false);
+            var result = new WorkspaceDiscardResult(discarded);
+            observability.RecordInvocation(TnMemoryWorkspaceDiscard, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_WORKSPACE_DISCARD, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemoryWorkspaceDiscard, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_SWEEP)]
+    [McpServerTool(Name = TnMemorySweep)]
     [Description(
         "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than their per-entry TTL. Shared entries are never swept.")]
     public async Task<SweepResult> Sweep(
@@ -539,30 +542,30 @@ public sealed class MemoryTools(
         bool dryRun = true,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SWEEP);
-        activity?.SetTag("tool", TN_MEMORY_SWEEP);
+        using var activity = observability.ActivitySource.StartActivity(TnMemorySweep);
+        activity?.SetTag("tool", TnMemorySweep);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TN_MEMORY_SWEEP, cancellationToken);
+            await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
 
             var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
             var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
-            observability.RecordInvocation(TN_MEMORY_SWEEP, sw.Elapsed, false);
+            observability.RecordInvocation(TnMemorySweep, sw.Elapsed, false);
             return result;
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_SWEEP, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemorySweep, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
 
-    [McpServerTool(Name = TN_MEMORY_SYNC)]
+    [McpServerTool(Name = TnMemorySync)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
         "Configure with `ai-raccoon sync add s3 <url> --bucket <name>` or `ai-raccoon sync add azure " +
@@ -572,14 +575,14 @@ public sealed class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = observability.ActivitySource.StartActivity(TN_MEMORY_SYNC);
-        activity?.SetTag("tool", TN_MEMORY_SYNC);
+        using var activity = observability.ActivitySource.StartActivity(TnMemorySync);
+        activity?.SetTag("tool", TnMemorySync);
         activity?.SetTag("project_id", projectId);
         var sw = Stopwatch.StartNew();
         try
         {
             RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TN_MEMORY_SYNC, cancellationToken);
+            await RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
 
             var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
             if (!syncSettings.IsConfigured)
@@ -587,7 +590,7 @@ public sealed class MemoryTools(
                 var notConfigured = new McpException(
                     "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
                 activity?.SetStatus(ActivityStatusCode.Error, notConfigured.Message);
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(McpException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(McpException));
                 throw notConfigured;
             }
 
@@ -596,14 +599,14 @@ public sealed class MemoryTools(
             {
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
                 var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, false);
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, false);
                 return syncResult;
             }
             catch (SyncNotConfiguredException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.SetTag("error_type", nameof(SyncNotConfiguredException));
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncNotConfiguredException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncNotConfiguredException));
                 throw new McpException(
                     "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
             }
@@ -611,7 +614,7 @@ public sealed class MemoryTools(
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.SetTag("error_type", nameof(SyncAuthFailedException));
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncAuthFailedException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncAuthFailedException));
                 throw new McpException(
                     "sync-auth-failed: run 'az login' (azure --cli) or 'aws configure' / 'aws sso login' (s3 --cli), or verify the keys with 'ai-raccoon sync show'");
             }
@@ -619,7 +622,7 @@ public sealed class MemoryTools(
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.SetTag("error_type", nameof(SyncConflictException));
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncConflictException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncConflictException));
                 throw new McpException(
                     "sync-conflict: remote changed during merge — retry the sync");
             }
@@ -627,14 +630,14 @@ public sealed class MemoryTools(
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.SetTag("error_type", nameof(SyncNetworkException));
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncNetworkException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncNetworkException));
                 throw new McpException($"sync-network: {ex.Message}");
             }
             catch (SyncCorruptFileException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.SetTag("error_type", nameof(SyncCorruptFileException));
-                observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, nameof(SyncCorruptFileException));
+                observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, nameof(SyncCorruptFileException));
                 throw new McpException($"sync-corrupt-file: {ex.Message}");
             }
         }
@@ -646,7 +649,7 @@ public sealed class MemoryTools(
                                    && ex is not McpException)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            observability.RecordInvocation(TN_MEMORY_SYNC, sw.Elapsed, true, ex.GetType().Name);
+            observability.RecordInvocation(TnMemorySync, sw.Elapsed, true, ex.GetType().Name);
             throw;
         }
     }
@@ -655,7 +658,7 @@ public sealed class MemoryTools(
 
     public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);
 
-    public sealed record ListResult(string Files);
+    public sealed record ListResult(JsonNode Files);
 
     public sealed record StatsResult(int Entries, int Pending, IReadOnlyList<string> Contexts);
 
@@ -664,6 +667,8 @@ public sealed class MemoryTools(
     public sealed record DeletedResult(int Deleted);
 
     public sealed record DeletedContextResult(int Deleted);
+
+    public sealed record WorkspaceDiscardResult(int Discarded);
 
     public sealed record IngestResult(int Indexed);
 
