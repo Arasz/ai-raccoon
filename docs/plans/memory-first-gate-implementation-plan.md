@@ -29,6 +29,9 @@ a `memory_search` call, text search passes. Memory-first, never memory-only.
 
 ## Phase 0 — Remove Junie support from ai-badger (ONE commit, per user instruction)
 
+**STATUS (2026-08-06): DONE.** Merged as #317 (squash `70e384e`); version-consistency follow-up as #318 (0.83.0 literals — #317 merged with VERSION 0.82.0 colliding with the existing tag, which failed release_guard + test_changelog_index on
+main; #318 fixes it).
+
 **User spec (2026-08-06):** "remove June [Junie] support from ai-badger, in one commit, remove every file and
 integration + ADR — I don't use junie and we don't have manpower to support more than 3 agents now." Supported agents
 after this commit: `claude`, `copilot`, `hermes` only. The user explicitly overrides the small-commits invariant for
