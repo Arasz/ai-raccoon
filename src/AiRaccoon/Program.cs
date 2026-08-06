@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Serve;
 
 if (!CliArgs.TryParse(args, out var cliParseResult))
 {
@@ -12,6 +13,13 @@ if (!CliArgs.TryParse(args, out var cliParseResult))
 var cancellationTokenSource = new CancellationTokenSource();
 
 var serverConfig = cliParseResult.Options.ToServerConfig();
+if (cliParseResult.CommandPath is ["serve"])
+{
+    // R11: serve routes to ServeRunner BEFORE the generic verb branch — CliCommandRunner's
+    // catch-all must never see serve.
+    return await ServeRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, cancellationTokenSource.Token);
+}
+
 if (cliParseResult.CommandPath.Length > 0)
 {
     return await CliCommandRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, Console.In,

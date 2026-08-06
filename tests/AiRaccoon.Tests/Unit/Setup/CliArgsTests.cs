@@ -509,6 +509,14 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_ServeInvalidFormat_ReturnsError()
+    {
+        CliArgs.TryParse(["serve", "--mcp-entry", "--format", "bogus"], out var parsed);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public void Render_ServeHelp_ListsServeOptionsAndRecipe()
     {
         var writer = new StringWriter();

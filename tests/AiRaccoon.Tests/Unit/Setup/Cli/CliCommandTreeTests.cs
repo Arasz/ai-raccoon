@@ -47,4 +47,12 @@ public class CliCommandTreeTests
         options.ShouldContain("--install-scope");
         root.Children.OfType<Command>().ShouldBeEmpty();
     }
+
+    [Fact]
+    public void LaunchRoot_ExposesTheSharedLaunchPortOption()
+    {
+        var root = CliCommandTree.BuildLaunchRootCommand();
+
+        root.Children.OfType<Option>().ShouldContain(CliCommandTree.LaunchPortOption);
+    }
 }

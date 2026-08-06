@@ -15,6 +15,15 @@ internal static class CliCommandTree
 
     internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"];
 
+    /// <summary>The root launch --port (shared with the bare launch root); serve reads it
+    /// instance-based as its fallback when serve's own --port is absent (R7/R12).</summary>
+    internal static readonly Option<int> LaunchPortOption = new("--port")
+    {
+        Description = "HTTP port to bind; 0 picks a random free port",
+        HelpName = "port",
+        DefaultValueFactory = _ => 7721
+    };
+
     internal static readonly Option<int> ServePortOption = new("--port")
     {
         Description = "HTTP port to bind; 0 picks a random free port",
@@ -29,12 +38,7 @@ internal static class CliCommandTree
         Description = "Print the MCP client config entry for the bound URL"
     };
 
-    internal static readonly Option<string> ServeFormatOption = new("--format")
-    {
-        Description = "Entry format: hermes|claude|all",
-        HelpName = "format",
-        DefaultValueFactory = _ => "hermes"
-    };
+    internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
@@ -67,7 +71,7 @@ internal static class CliCommandTree
         root.Add(new Option<McpTransport>("--transport") { Description = "MCP transport; https unsupported", HelpName = "stdio|http|https" });
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
-        root.Add(new Option<int>("--port") { Description = "HTTP port to bind; 0 picks a random free port", HelpName = "port", DefaultValueFactory = _ => 7721 });
+        root.Add(LaunchPortOption);
         // WebApplicationFactory bootstraps the entry point with these host-config flags;
         // declared hidden so the E2E host builds — values are intentionally never consumed
         // (CreateBuilder([]) drops generic host flags by design).
@@ -216,6 +220,25 @@ internal static class CliCommandTree
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
         };
         return extract;
+    }
+
+    private static Option<string> CreateFormatOption()
+    {
+        var option = new Option<string>("--format")
+        {
+            Description = "Entry format: hermes|claude|all",
+            HelpName = "format",
+            DefaultValueFactory = _ => "hermes"
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && value is not ("hermes" or "claude" or "all"))
+            {
+                result.AddError($"Cannot parse argument '{value}' as an entry format: expected hermes|claude|all.");
+            }
+        });
+        return option;
     }
 
     private static Option<string> CreateIdleTimeoutOption()

@@ -103,4 +103,15 @@ public sealed class CliCommandRunnerTests : IDisposable
         exit.ShouldBe(0);
         stdout.ShouldContain("source: env");
     }
+
+    [Fact]
+    public async Task ServeVerb_IsNotRoutedToConfigCommands()
+    {
+        // A13/R11: Program.cs pre-routes ["serve"] to ServeRunner BEFORE the generic verb
+        // branch; CliCommandRunner's catch-all must never see serve.
+        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "serve"]);
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("unhandled command: serve");
+    }
 }
