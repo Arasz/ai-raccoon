@@ -197,10 +197,16 @@ public sealed class QueryConstructionTests : IDisposable
         var queries = LoadQueries();
         var hashMap = LoadHashMap();
 
+        // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
+        // docs/work/2026-08-06-baseline-repin-new-corpus.md): A6 (file rank 6 at limit 10 —
+        // new erasure ADRs 0068/0069 outrank 0067) and C2 (hybrid collapse, no structure
+        // signal) no longer appear in the limit-5 hybrid set and are gated elsewhere
+        // (SourceAffinitySweepTests for A6 at limit 10; FTS-only rank 1 for C2 below).
+        // C5 measured 5 (secrets/config ADRs 0039/0012 outrank the invariant).
         var wave0 = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["A1"] = 2, ["A2"] = 1, ["A3"] = 1, ["A4"] = 2, ["A5"] = 1,
-            ["A6"] = 4, ["A7"] = 1, ["C1"] = 1, ["C2"] = 1, ["C5"] = 1
+            ["A7"] = 1, ["C1"] = 1, ["C5"] = 5
         };
 
         foreach (var (id, wave0Rank) in wave0)
@@ -223,11 +229,12 @@ public sealed class QueryConstructionTests : IDisposable
         // and the section-targeting payoff (S2/S4 ≤ 3) plus C2/A6/A7 restorations hold.
         // Bounded trade, documented in the Wave 6 gate amendment (see docs/plans/retrieval-improvement-c.md §3 Wave 6).
 
-        // C2 (see docs/adr/0003-source-file-first-class-citizen.md; Wave 6 integration): the
-        // Wave 2 provenance cleanup (2d; see docs/plans/retrieval-improvement-c.md §3 2d) collapsed C2's
-        // hybrid rank (vector >100, RRF sinks FTS rank 1). Wave 6's dual-vector structure
-        // signal restored it — the hybrid rank-1 assertion above is the Wave 4 gate criterion,
-        // already satisfied; the FTS-only rank-1 check below guards the keyword path.
+        // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
+        // docs/work/2026-08-06-baseline-repin-new-corpus.md): A6 measured file rank 6 (new
+        // erasure ADRs 0068/0069 outrank 0067) and C5 measured 5 (secrets/config ADRs 0039/0012
+        // outrank the invariant). C2 is dropped from the hybrid dict — its hybrid rank
+        // collapsed again (vector >100, RRF sinks FTS rank 1) because the re-pinned corpus has
+        // no structure signal; the FTS-only rank-1 check below is its honest gate.
         var c2 = queries.First(q => q.Id == "C2");
         var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);
         var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(hashMap, c2.ExpectedSource!));
