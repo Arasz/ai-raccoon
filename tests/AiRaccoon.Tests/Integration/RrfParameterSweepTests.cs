@@ -153,9 +153,7 @@ public sealed class RrfParameterSweepTests : IDisposable
             item.HybridExactRank.ShouldNotBeNull(
                 $"{item.QueryId}: hybrid must find the expected chunk when a single modality does");
             item.HybridExactRank!.Value.ShouldBeLessThanOrEqualTo(bestSingle.Value,
-                $"{item.QueryId}: hybrid exact rank {item.HybridExactRank} must not exceed the best " +
-                $"single modality's {bestSingle} (fts {item.FtsExactRank?.ToString() ?? "-"}, " +
-                $"vector {item.VectorExactRank?.ToString() ?? "-"})");
+                $"{item.QueryId}: hybrid exact rank {item.HybridExactRank} must not exceed the best single modality's {bestSingle} (fts {item.FtsExactRank?.ToString() ?? "-"}, vector {item.VectorExactRank?.ToString() ?? "-"})");
         }
 
         // Gate (d): measured re-pinned ranks on the new corpus (2026-08-06): A6 6/6 (new
@@ -185,8 +183,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         var holders = rows.Where(HoldsAllGates).ToList();
         holders.Count.ShouldBeGreaterThanOrEqualTo(1, "the chosen point itself must hold every gate");
         holders.Max(row => row.AdrNdcg5).ShouldBe(chosen.AdrNdcg5,
-            $"no gate-holding point may score above the chosen point; holders range up to "
-            + $"{holders.Max(row => row.AdrNdcg5):F3}");
+            $"no gate-holding point may score above the chosen point; holders range up to {holders.Max(row => row.AdrNdcg5):F3}");
         holders.Max(row => row.AdrMrr).ShouldBe(chosen.AdrMrr,
             "the chosen point must be Pareto-optimal on MRR among the gate-holding points");
 
@@ -194,27 +191,19 @@ public sealed class RrfParameterSweepTests : IDisposable
         {
             var violations = GateViolations(beater);
             violations.ShouldNotBeEmpty(
-                $"a point scoring above the chosen point must violate a gate: "
-                + $"{beater.Point} nDCG@5 {beater.AdrNdcg5:F3} violates [{string.Join(", ", violations)}]");
+                $"a point scoring above the chosen point must violate a gate: {beater.Point} nDCG@5 {beater.AdrNdcg5:F3} violates [{string.Join(", ", violations)}]");
         }
 
         _output.WriteLine(
-            $"chosen k={ChosenK} w={ChosenFtsWeight}:{ChosenVectorWeight} minScore={ChosenMinScore} " +
-            $"window={ChosenWindow}: nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3} " +
-            $"C2={chosen.C2ExactRank} exact@3={chosen.ExactAt3Count}/11 " +
-            $"S2={chosen.S2ExactRank} A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} " +
-            $"A1/A4 file={chosen.A1FileRank}/{chosen.A4FileRank} A7 exact={chosen.A7ExactRank}");
+            $"chosen k={ChosenK} w={ChosenFtsWeight}:{ChosenVectorWeight} minScore={ChosenMinScore} window={ChosenWindow}: nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3} C2={chosen.C2ExactRank} exact@3={chosen.ExactAt3Count}/11 S2={chosen.S2ExactRank} A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} A1/A4 file={chosen.A1FileRank}/{chosen.A4FileRank} A7 exact={chosen.A7ExactRank}");
         _output.WriteLine(
-            $"grid-optimality: {holders.Count} gate-holding points, all at nDCG@5 {holders.Max(row => row.AdrNdcg5):F3}; " +
-            $"beaters above it: {rows.Count(row => row.AdrNdcg5 > chosen.AdrNdcg5)} (each violates at least one gate)");
+            $"grid-optimality: {holders.Count} gate-holding points, all at nDCG@5 {holders.Max(row => row.AdrNdcg5):F3}; beaters above it: {rows.Count(row => row.AdrNdcg5 > chosen.AdrNdcg5)} (each violates at least one gate)");
 
         var top = rows.OrderByDescending(r => r.AdrNdcg5).Take(5);
         foreach (var row in top)
         {
             _output.WriteLine(
-                $"  top: k{row.Point.K} w{row.Point.FtsWeight}{row.Point.VectorWeight} " +
-                $"m{row.Point.MinScore:0.0} {row.Point.Window} -> nDCG@5 {row.AdrNdcg5:F3} " +
-                $"MRR {row.AdrMrr:F3} C2 {row.C2ExactRank?.ToString() ?? "-"} exact@3 {row.ExactAt3Count}/11");
+                $"  top: k{row.Point.K} w{row.Point.FtsWeight}{row.Point.VectorWeight} m{row.Point.MinScore:0.0} {row.Point.Window} -> nDCG@5 {row.AdrNdcg5:F3} MRR {row.AdrMrr:F3} C2 {row.C2ExactRank?.ToString() ?? "-"} exact@3 {row.ExactAt3Count}/11");
         }
     }
 
@@ -446,9 +435,8 @@ public sealed class RrfParameterSweepTests : IDisposable
         builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/jsaa-memory.db (752 chunks).");
         builder.AppendLine("Measured by RrfParameterSweepTests (limit 10, Wave 3 source-affinity fixed at λ=0.1, thr=0.1, Max).");
         builder.AppendLine();
-        builder.AppendLine($"**Chosen configuration: k = {ChosenK}, weights = {ChosenFtsWeight}:{ChosenVectorWeight}, " +
-                           $"minScore = {ChosenMinScore.ToString("0.0", invariant)}, candidate window = {ChosenWindow}** " +
-                           "(the SearchQuery defaults — re-confirmed as the grid optimum).");
+        builder.AppendLine(
+            $"**Chosen configuration: k = {ChosenK}, weights = {ChosenFtsWeight}:{ChosenVectorWeight}, minScore = {ChosenMinScore.ToString("0.0", invariant)}, candidate window = {ChosenWindow}** (the SearchQuery defaults — re-confirmed as the grid optimum).");
         builder.AppendLine();
         builder.AppendLine("Gates at the chosen point: C2 hybrid ≤ 3 ✓, no fusion regression (hybrid exact ≤ best single " +
                            "modality per query) ✓, A1/A4 file rank 1 ✓, A6 file ≤ 2 + exact ≤ 2 ✓, S2 decision ≤ 3 ✓, " +
@@ -462,22 +450,12 @@ public sealed class RrfParameterSweepTests : IDisposable
             var isChosen = row.Point == chosen.Point;
             var ndcg = isChosen ? $"**{row.AdrNdcg5.ToString("0.000", invariant)}**" : row.AdrNdcg5.ToString("0.000", invariant);
             builder.AppendLine(
-                $"| {row.Point.K} | {row.Point.FtsWeight}:{row.Point.VectorWeight} | " +
-                $"{row.Point.MinScore.ToString("0.0", invariant)} | {row.Point.Window} | " +
-                $"{row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{row.A7ExactRank?.ToString(invariant) ?? "-"} | {row.ExactAt3Count}/11 | " +
-                $"{ndcg} | {row.AdrMrr.ToString("0.000", invariant)} | " +
-                $"{row.AdrRecall5.ToString("0.000", invariant)} |");
+                $"{$"| {row.Point.K} | {row.Point.FtsWeight}:{row.Point.VectorWeight} | {row.Point.MinScore.ToString("0.0", invariant)} | {row.Point.Window} | {row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | {row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | {row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | {row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | {row.A7ExactRank?.ToString(invariant) ?? "-"} | {row.ExactAt3Count}/11 | {ndcg} | {row.AdrMrr.ToString("0.000", invariant)} | "}{row.AdrRecall5.ToString("0.000", invariant)} |");
         }
 
         builder.AppendLine();
-        builder.AppendLine($"Pre-sweep default point (k=60, 1:1, minScore=0.0, Max3x100): nDCG@5 " +
-                           $"{current.AdrNdcg5.ToString("0.000", invariant)}, MRR {current.AdrMrr.ToString("0.000", invariant)}, " +
-                           $"recall@5 {current.AdrRecall5.ToString("0.000", invariant)} — matches the Wave 3 merged state " +
-                           "(0.722 / 0.929 / 0.617).");
+        builder.AppendLine(
+            $"Pre-sweep default point (k=60, 1:1, minScore=0.0, Max3x100): nDCG@5 {current.AdrNdcg5.ToString("0.000", invariant)}, MRR {current.AdrMrr.ToString("0.000", invariant)}, recall@5 {current.AdrRecall5.ToString("0.000", invariant)} — matches the Wave 3 merged state (0.722 / 0.929 / 0.617).");
         builder.AppendLine();
         builder.AppendLine("### Fusion gate at the chosen point (hybrid vs single modalities)");
         builder.AppendLine();
@@ -486,33 +464,22 @@ public sealed class RrfParameterSweepTests : IDisposable
         foreach (var item in fusion)
         {
             builder.AppendLine(
-                $"| {item.QueryId} | {item.HybridExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{item.FtsExactRank?.ToString(invariant) ?? "-"} | {item.VectorExactRank?.ToString(invariant) ?? "-"} | " +
-                $"{item.HybridFileRank?.ToString(invariant) ?? "-"} | {item.FtsFileRank?.ToString(invariant) ?? "-"} | " +
-                $"{item.VectorFileRank?.ToString(invariant) ?? "-"} | " +
-                $"{item.HybridRecall5.ToString("0.00", invariant)} | {item.FtsRecall5.ToString("0.00", invariant)} | " +
-                $"{item.VectorRecall5.ToString("0.00", invariant)} |");
+                $"{$"| {item.QueryId} | {item.HybridExactRank?.ToString(invariant) ?? "-"} | {item.FtsExactRank?.ToString(invariant) ?? "-"} | {item.VectorExactRank?.ToString(invariant) ?? "-"} | {item.HybridFileRank?.ToString(invariant) ?? "-"} | {item.FtsFileRank?.ToString(invariant) ?? "-"} | {item.VectorFileRank?.ToString(invariant) ?? "-"} | {item.HybridRecall5.ToString("0.00", invariant)} | {item.FtsRecall5.ToString("0.00", invariant)} | "}{item.VectorRecall5.ToString("0.00", invariant)} |");
         }
 
         builder.AppendLine();
         builder.AppendLine("### Why the pre-sweep defaults are the grid optimum (negative result)");
         builder.AppendLine();
-        builder.AppendLine($"- {rows.Count(row => row.AdrNdcg5 > chosen.AdrNdcg5)} points score above 0.722 on ADR nDCG@5; " +
-                           "each violates at least one gate. The best raw point (k=120, 1:1, Max3x100: 0.775 / MRR 0.929 / " +
-                           "recall 0.677) regresses A1 file 1 → 2, A6 exact 2 → 6, and exact-chunk @3 11/11 → 9/11.");
-        builder.AppendLine($"- The FTS-heavy (2:1) weight fixes A6 (file 1, exact 1) and A5's recall, but regresses A1 " +
-                           "file 1 → 2 and exact-chunk @3 → 9/11; the vector-heavy (1:2) regresses A6 (file 4, exact 4). " +
-                           "k=30 kills A1/A6; the Max5x50 window starves A6's exact chunk (candidate depth 50 < 100).");
+        builder.AppendLine(
+            $"- {rows.Count(row => row.AdrNdcg5 > chosen.AdrNdcg5)} points score above 0.722 on ADR nDCG@5; each violates at least one gate. The best raw point (k=120, 1:1, Max3x100: 0.775 / MRR 0.929 / recall 0.677) regresses A1 file 1 → 2, A6 exact 2 → 6, and exact-chunk @3 11/11 → 9/11.");
+        builder.AppendLine(
+            "- The FTS-heavy (2:1) weight fixes A6 (file 1, exact 1) and A5's recall, but regresses A1 file 1 → 2 and exact-chunk @3 → 9/11; the vector-heavy (1:2) regresses A6 (file 4, exact 4). k=30 kills A1/A6; the Max5x50 window starves A6's exact chunk (candidate depth 50 < 100).");
         builder.AppendLine("- minScore is measured inert at the chosen point: at k=60 the four minScore rows are identical " +
                            "for every weight×window combo (24 rows); it trims only at low k (k=10), where it always hurts or ties.");
-        builder.AppendLine($"- Fusion (gate c) holds per query on the exact-chunk rank: the hybrid never ranks the " +
-                           "expected chunk below the best single modality (A6 2 ≤ min(2, miss); S2 3 ≤ min(4, miss); " +
-                           "A5 3 ≤ min(miss, 4)). The Wave 0 recall@5 observation flags A5/A6/S2, but that is a " +
-                           "file-cluster artifact — the hybrid surfaces fewer same-file chunks in the top 5 while " +
-                           "ranking the answer chunk equal-or-better — and no grid point fixes A6's recall@5 either " +
-                           "(2:1 keeps 0.33 < fts 0.67).");
-        builder.AppendLine($"- {queries.Count} expected-source queries evaluated per point (A1-A7, S2, C1, C2, C5); " +
-                           "ADR aggregates over A1-A7 with file-level relevance (nDCG@5 / MRR / recall@5, cutoff 5).");
+        builder.AppendLine(
+            "- Fusion (gate c) holds per query on the exact-chunk rank: the hybrid never ranks the expected chunk below the best single modality (A6 2 ≤ min(2, miss); S2 3 ≤ min(4, miss); A5 3 ≤ min(miss, 4)). The Wave 0 recall@5 observation flags A5/A6/S2, but that is a file-cluster artifact — the hybrid surfaces fewer same-file chunks in the top 5 while ranking the answer chunk equal-or-better — and no grid point fixes A6's recall@5 either (2:1 keeps 0.33 < fts 0.67).");
+        builder.AppendLine(
+            $"- {queries.Count} expected-source queries evaluated per point (A1-A7, S2, C1, C2, C5); ADR aggregates over A1-A7 with file-level relevance (nDCG@5 / MRR / recall@5, cutoff 5).");
 
         var reportPath = Path.Combine(FindProjectRoot(), "docs", "work", "2026-08-04-wave4-rrf-sweep.md");
         Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);

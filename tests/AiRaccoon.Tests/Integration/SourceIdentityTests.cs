@@ -33,8 +33,8 @@ public sealed class SourceIdentityTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot;
-    private readonly SqliteMemoryStore _store;
     private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
 
     public SourceIdentityTests(ITestOutputHelper output)
     {
@@ -106,8 +106,7 @@ public sealed class SourceIdentityTests : IDisposable
         fileRank.ShouldBeInRange(1, 3, "S2 gate: ADR-0011 at rank <= 3 (source-column fix)");
 
         var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[Adr0011Decision]);
-        _output.WriteLine($"S2: Decision-section chunk at hybrid rank " +
-                          $"{(decisionHit is null ? "not found" : decisionRank.ToString())} (Wave 6 target: <= 3)");
+        _output.WriteLine($"S2: Decision-section chunk at hybrid rank {(decisionHit is null ? "not found" : decisionRank.ToString())} (Wave 6 target: <= 3)");
     }
 
     /// <summary>
@@ -122,7 +121,7 @@ public sealed class SourceIdentityTests : IDisposable
         var hashMap = LoadChunkHashMap();
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId, "ADR-0070",
-            SearchScope.Project, Limit: 10, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0),
+                SearchScope.Project, Limit: 10, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
         var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, Adr0070Source, StringComparison.Ordinal));
@@ -130,8 +129,7 @@ public sealed class SourceIdentityTests : IDisposable
         fileRank.ShouldBeInRange(1, 3, "Q2 gate: ADR-0070 at FTS-only rank <= 3 (source-column fix)");
 
         var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[Adr0070Decision]);
-        _output.WriteLine($"Q2: Decision-section chunk at FTS-only rank " +
-                          $"{(decisionHit is null ? "not found" : decisionRank.ToString())}");
+        _output.WriteLine($"Q2: Decision-section chunk at FTS-only rank {(decisionHit is null ? "not found" : decisionRank.ToString())}");
     }
 
     [Fact]
@@ -184,8 +182,8 @@ public sealed class SourceIdentityTests : IDisposable
         var hashMap = LoadChunkHashMap();
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId,
-            "What is the screaming architecture rule?",
-            SearchScope.Project, Limit: 5, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0),
+                "What is the screaming architecture rule?",
+                SearchScope.Project, Limit: 5, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
         var (hit, rank) = FindRank(results, r => r.Hash == hashMap[InvariantScreaming]);

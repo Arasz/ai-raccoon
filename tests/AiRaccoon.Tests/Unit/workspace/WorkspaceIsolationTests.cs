@@ -227,7 +227,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         result.Promoted.ShouldBe(1);
         result.Discarded.ShouldBeGreaterThan(0);
 
-        var promotedRow = (await connection.QueryFirstOrDefaultAsync(
+        _ = (await connection.QueryFirstOrDefaultAsync(
             new CommandDefinition(
                 "SELECT hash FROM entries WHERE hash = @hash AND scope = 'project' AND workspace_id IS NULL",
                 new { hash = e1.Hash },
@@ -268,8 +268,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         workspace[0].Value.ShouldBe("workspace draft");
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("airaccoon-store-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     private sealed class EntryIsolationRow
     {

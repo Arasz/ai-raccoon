@@ -18,7 +18,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     private string FakeBwsPath(string scriptBody)
     {
         var path = Path.Combine(_dataRoot, "bws");
-        File.WriteAllText(path, "#!/bin/sh\n" + scriptBody + "\n");
+        File.WriteAllText(path, $"#!/bin/sh\n{scriptBody}\n");
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

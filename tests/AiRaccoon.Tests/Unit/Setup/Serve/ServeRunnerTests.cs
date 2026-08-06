@@ -1,8 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Logging;
@@ -22,6 +22,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Serve;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServeRunnerTests : IDisposable
 {
+    private static readonly HttpClient HttpClient = new();
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-runner");
     private readonly List<TcpListener> _holders = [];
 
@@ -57,8 +58,7 @@ public sealed class ServeRunnerTests : IDisposable
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", "0"]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal), TestContext.Current.CancellationToken);
         url.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp$");
 
         using var httpClient = new HttpClient();
@@ -120,9 +120,8 @@ public sealed class ServeRunnerTests : IDisposable
             second.Stderr.ToString().ShouldContain("attached");
             second.Stderr.ToString().ShouldNotContain("   at ");
 
-            // The first process still owns the port: it answers, and no second bind happened.
-            using var httpClient = new HttpClient();
-            var response = await httpClient.GetAsync(firstUrl, TestContext.Current.CancellationToken);
+
+            var response = await HttpClient.GetAsync(firstUrl, TestContext.Current.CancellationToken);
             response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
         }
         finally
@@ -274,12 +273,8 @@ public sealed class ServeRunnerTests : IDisposable
             TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
-        // A6 real-time half: the watchdog owns the shutdown (tick = 5s/4 = 1.25s).
-        // 5s (not 2s) leaves the pre-URL bootstrap — bank create + bundled-model
-        // SHA-256 + Kestrel start — clear of the deadline that starts at host
-        // construction (reviewer F1: a loaded CI box could otherwise kill the host
-        // before the URL prints).
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var stopwatch = Stopwatch.StartNew();
         var exit = await run.Exit;
         stopwatch.Stop();
 
@@ -301,17 +296,12 @@ public sealed class ServeRunnerTests : IDisposable
         await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         run.Exit.IsCompleted.ShouldBeFalse();
 
-        using var httpClient = new HttpClient();
-        var response = await httpClient.GetAsync(url, TestContext.Current.CancellationToken);
+        var response = await HttpClient.GetAsync(url, TestContext.Current.CancellationToken);
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
         var exit = await StopAsync(run);
         exit.ShouldBe(ExitCode.Success);
     }
-
-    // ── Helpers ──
-
-    private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
 
     private static ServeRun StartServe(string[] args) => StartServeAsync(args).GetAwaiter().GetResult();
 
@@ -336,7 +326,7 @@ public sealed class ServeRunnerTests : IDisposable
 
     private static async Task<int> StopAsync(ServeRun run)
     {
-        run.Cts.Cancel(); // stop seam: WaitForShutdownAsync(ct) stops the host
+        await run.Cts.CancelAsync();
         return await run.Exit;
     }
 
@@ -368,15 +358,6 @@ public sealed class ServeRunnerTests : IDisposable
         return new EnvRestore(original);
     }
 
-    private sealed class EnvRestore(string? original) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            TestData.EnvVarGate.Release();
-        }
-    }
-
     private TcpListener HoldLoopbackPort(out int port)
     {
         for (var attempt = 0; attempt < 20; attempt++)
@@ -392,7 +373,11 @@ public sealed class ServeRunnerTests : IDisposable
                 holder.Start();
                 port = candidate;
                 _holders.Add(holder);
-                _ = Task.Run(async () =>
+
+                _ = Task.Run(AcceptClientLoop);
+                return holder;
+
+                async Task? AcceptClientLoop()
                 {
                     // Accept and close so probes fail fast instead of timing out; the
                     // LISTENER itself stays open for the whole test (no port race).
@@ -407,8 +392,7 @@ public sealed class ServeRunnerTests : IDisposable
                             return;
                         }
                     }
-                });
-                return holder;
+                }
             }
             catch (SocketException)
             {
@@ -428,11 +412,24 @@ public sealed class ServeRunnerTests : IDisposable
         return port;
     }
 
+    // ── Helpers ──
+
+    private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
+
+    private sealed class EnvRestore(string? original) : IDisposable
+    {
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
+            TestData.EnvVarGate.Release();
+        }
+    }
+
     /// <summary>Thread-safe capture for the runner's stdout/stderr writers.</summary>
     private sealed class LockingWriter : TextWriter
     {
-        private readonly object _lock = new();
         private readonly StringBuilder _buffer = new();
+        private readonly Lock _lock = new();
 
         public override Encoding Encoding => Encoding.UTF8;
 

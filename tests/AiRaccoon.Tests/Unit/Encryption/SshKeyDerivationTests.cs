@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using AiRaccoon.Core.Encryption;
 using Shouldly;
 using Xunit;
@@ -47,8 +46,8 @@ public sealed class SshKeyDerivationTests
     {
         // Pins the stability contract: the label is part of the preimage, so the v1 output
         // must differ from the same seed hashed with any other label.
-        var v2Input = Encoding.UTF8.GetBytes("ai-raccoon-db-key/v2").Concat(Seed00To1F).ToArray();
-        var v2Key = "x'" + Convert.ToHexString(SHA256.HashData(v2Input)).ToLowerInvariant() + "'";
+        var v2Input = "ai-raccoon-db-key/v2"u8.ToArray().Concat(Seed00To1F).ToArray();
+        var v2Key = $"x'{Convert.ToHexString(SHA256.HashData(v2Input)).ToLowerInvariant()}'";
 
         var key = SshKeyDerivation.DeriveRawKey(Seed00To1F);
 

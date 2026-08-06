@@ -26,7 +26,7 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
         var account = await store.GetSettingAsync(SyncSettingsKeys.AzureAccount, cancellationToken).ConfigureAwait(false);
         var s3Chain = bool.TryParse(
             await store.GetSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken).ConfigureAwait(false),
-            out var chain);
+            out _);
         return new SyncOptions
         {
             Provider = SyncProviderParser.Parse(provider),

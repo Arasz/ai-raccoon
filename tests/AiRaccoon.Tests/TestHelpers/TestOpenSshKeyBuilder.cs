@@ -11,15 +11,15 @@ public sealed class TestOpenSshKeyBuilder
     public static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
     public static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
     public static readonly byte[] PublicKey21To40 = [.. Enumerable.Range(33, 32).Select(i => (byte)i)];
-
-    private byte[]? _privatePublicKeyOverride;
     private uint _checkint1 = 0x01234567;
     private uint _checkint2 = 0x01234567;
     private string _cipherName = "none";
+    private bool _invalidBase64;
     private string _kdfName = "none";
     private string _keyType = "ssh-ed25519";
     private string _magic = "openssh-key-v1\0";
-    private bool _invalidBase64;
+
+    private byte[]? _privatePublicKeyOverride;
     private bool _truncateBase64;
 
     public TestOpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
@@ -94,10 +94,10 @@ public sealed class TestOpenSshKeyBuilder
             const int lineLength = 70;
             var wrapped = string.Join('\n', Enumerable.Range(0, (base64.Length + lineLength - 1) / lineLength)
                 .Select(i => base64.Substring(i * lineLength, Math.Min(lineLength, base64.Length - i * lineLength))));
-            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + wrapped + "\n-----END OPENSSH PRIVATE KEY-----\n";
+            return $"-----BEGIN OPENSSH PRIVATE KEY-----\n{wrapped}\n-----END OPENSSH PRIVATE KEY-----\n";
         }
 
-        return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + base64 + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        return $"-----BEGIN OPENSSH PRIVATE KEY-----\n{base64}\n-----END OPENSSH PRIVATE KEY-----\n";
     }
 
     private byte[] BuildPublicKeyBlob(byte[] pub)
@@ -115,17 +115,15 @@ public sealed class TestOpenSshKeyBuilder
         WriteUInt32(section, _checkint2);
         WriteString(section, _keyType);
         WriteString(section, pub);
-        WriteString(section, [.. seed, .. (_privatePublicKeyOverride ?? pub)]);
+        WriteString(section, [.. seed, .. _privatePublicKeyOverride ?? pub]);
         WriteString(section, []);
         section.Write(new byte[8 - (int)section.Length % 8]);
         return section.ToArray();
     }
 
-    private static void WriteUInt32(Stream stream, uint value) =>
-        stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+    private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
 
-    private static void WriteString(Stream stream, string value) =>
-        WriteString(stream, Encoding.ASCII.GetBytes(value));
+    private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
 
     private static void WriteString(Stream stream, byte[] value)
     {

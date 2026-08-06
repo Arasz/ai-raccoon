@@ -24,7 +24,7 @@ public class WorkspaceServiceTests
     public async Task BeginAsync_ReturnsActiveWorkspace_WithWorkspaceContext()
     {
         var store = new FakeStore();
-        var service = Service(store, out var workspaceStore);
+        var service = Service(store, out _);
 
         var workspace = await service.BeginAsync("acme", TestContext.Current.CancellationToken);
 
@@ -81,7 +81,7 @@ public class WorkspaceServiceTests
                 ]
             }
         };
-        var service = Service(store, out var workspaceStore);
+        var service = Service(store, out _);
 
         var result = await service.ConsolidateAsync("acme", "ws-1", ["h1"], TestContext.Current.CancellationToken);
 
@@ -217,15 +217,14 @@ public class WorkspaceServiceTests
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-        bool includeTtlRows, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();

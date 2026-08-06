@@ -896,7 +896,6 @@ public sealed class SqliteMemoryStore(
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        var bucketParams = new { path, scope = bucket.Scope, projectId = bucket.ProjectId, contextLabel = bucket.ContextLabel, workspaceId = bucket.WorkspaceId };
 
         var inserted = 0;
         foreach (var chunk in chunks)
@@ -1176,8 +1175,14 @@ public sealed class SqliteMemoryStore(
     private sealed record SharedRow(string Path, string Value);
 
     private sealed record ExtractionRow(
-        string Hash, string Path, string Value, string? SourceFile, double Rating, long AccessCount,
-        long CreatedAt, long? TtlDays)
+        string Hash,
+        string Path,
+        string Value,
+        string? SourceFile,
+        double Rating,
+        long AccessCount,
+        long CreatedAt,
+        long? TtlDays)
     {
         public ExtractionCandidateRow ToCandidate() =>
             new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,

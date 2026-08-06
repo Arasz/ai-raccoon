@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -121,8 +122,7 @@ public class McpExceptionPathInstrumentationTests
 
     private sealed class AllowAllGuard : IMemoryAccessGuard
     {
-        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(AccessMode.Full);
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(AccessMode.Full);
 
         public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken = default) =>
@@ -131,8 +131,7 @@ public class McpExceptionPathInstrumentationTests
 
     private sealed class DenyWriteGuard : IMemoryAccessGuard
     {
-        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(AccessMode.Ro);
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(AccessMode.Ro);
 
         public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken = default)
@@ -148,19 +147,15 @@ public class McpExceptionPathInstrumentationTests
 
     private sealed class SimpleFakeStore : IMemoryStore
     {
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry("h", "p.md", "project:test", "c", 1));
+        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry("h", "p.md", "project:test", "c", 1));
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{}");
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryStats(0, 0, []));
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "c", 1));
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "c", 1));
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
@@ -176,27 +171,22 @@ public class McpExceptionPathInstrumentationTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingConfig(provider, model ?? "m", provider == "local" ? "local" : "remote"));
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbedPendingResult(0, 0));
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
 
         public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry("h", path, context ?? "project:test", content, 1));
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
 
-        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(null);
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult<EntryMetadata?>(null);
 
         public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId, bool includeTtlRows,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>([]);
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SharedIndex([], []));
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(new SharedIndex([], []));
 
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 
@@ -215,8 +205,9 @@ public class McpExceptionPathInstrumentationTests
     {
         public SimpleFakeSyncService() : base(
             new SimpleFakeCloudStore(),
-            _ => Task.FromResult<Microsoft.Data.Sqlite.SqliteConnection>(null!),
-            (_, _) => Task.FromResult<Microsoft.Data.Sqlite.SqliteConnection>(null!),
+            _ => Task.FromResult<SqliteConnection>(null!),
+            (_, _) => Task.FromResult<SqliteConnection>(null!),
+            (_, _) => Task.FromResult<SqliteConnection>(null!),
             TimeProvider.System,
             null!)
         {
@@ -237,10 +228,12 @@ public class McpExceptionPathInstrumentationTests
     private sealed class FakeWorkspaceStore : IWorkspaceStore
     {
         public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class FakeWatchService : IWatchService

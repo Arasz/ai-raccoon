@@ -7,7 +7,6 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -33,8 +32,8 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
     private readonly SqliteConnectionFactory _bank;
     private readonly ICliSecretManager _bws;
     private readonly IEncryptionKeyProvider _env;
-    private readonly IEncryptionSourceSidecar _sidecar;
     private readonly ILogger _logger;
+    private readonly IEncryptionSourceSidecar _sidecar;
 
     public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
         IEncryptionKeyProvider env, IEncryptionSourceSidecar sidecar, ILogger logger)
@@ -112,7 +111,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
             SqliteException? openError = null;
             try
             {
-                await using (var probe = await _bank.OpenBankAsync(cancellationToken))
+                using (await _bank.OpenBankAsync(cancellationToken))
                 {
                 }
             }
@@ -186,7 +185,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
 
         if (bankExists)
         {
-            await using (var probe = await _bank.OpenBankAsync(cancellationToken))
+            using (await _bank.OpenBankAsync(cancellationToken))
             {
             }
 

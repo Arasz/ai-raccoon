@@ -1,6 +1,7 @@
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
+using System.CommandLine;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
@@ -35,6 +36,32 @@ public class CliArgsTests
         parsed.Options.ShouldNotBeNull();
         parsed.Options.Port.ShouldBe(7721);
         parsed.CommandPath.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void CommandTree_RegistersOptionNamesExactlyOncePerCommand()
+    {
+        // Regression: PR #70 registered a second root --port next to LaunchPortOption;
+        // System.CommandLine 2.0.10 accepts the tree but symbol lookup then fails for the
+        // whole parse result (~125 tests: 112 Setup + 13 E2E host boot).
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var duplicates = new List<string>();
+        void Collect(Command command)
+        {
+            duplicates.AddRange(command.Options
+                .GroupBy(o => o.Name, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key));
+            foreach (var sub in command.Subcommands)
+            {
+                Collect(sub);
+            }
+        }
+
+        Collect(root);
+
+        duplicates.ShouldBeEmpty();
     }
 
     [Fact]

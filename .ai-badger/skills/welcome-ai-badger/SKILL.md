@@ -37,8 +37,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
    ```bash
    python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/detect.py" --target . --root "$AI_BADGER" > /tmp/proposed-config.json
    ```
-   This proposes stacks (with `requires` expanded), detected coding agents
-   (claude/copilot/junie — only those with traces in the repo or user scope), source control,
+   This proposes stacks (with `requires` expanded), detected coding agents (claude/copilot/hermes — only those with traces in the repo or user scope), source control,
    and build/test/lint/run commands.
 
 2. **Author `config.json`.** Read the proposal. Fill in `project.summary` and `project.domain`
@@ -71,8 +70,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
      --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
    ```
    Produces `.ai-badger/` (config.json, manifest.json, CLAUDE.md, agents/, instructions/,
-   invariants/, skills/, agent-instructions/, state.json) and agent-discovery copies for each
-   detected agent (`CLAUDE.md`, `.github/copilot-instructions.md`, `.junie/AGENTS.md`). Note the
+   invariants/, skills/, agent-instructions/, state.json) and agent-discovery copies for each detected agent (`CLAUDE.md`, `.github/copilot-instructions.md`). Note the
    printed plugin-setup commands and run them per the chosen scope (or hand them to the user).
    **Existing hand-authored discovery files are preserved by default** — see the preserve note
    below; on a mature repo the scaffold will report which files it left untouched.
@@ -88,7 +86,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
 
 - **Idempotent:** re-running `scaffold.py` refreshes managed files and the manifest. Safe to
   re-run after editing `config.json`.
-- **Copy-vs-reference:** essential agent files (CLAUDE.md, HERMES.md, copilot-instructions, junie AGENTS.md)
+- **Copy-vs-reference:** essential agent files (CLAUDE.md, HERMES.md, copilot-instructions)
   are *copied* to their conventional locations with a header pointing at `.ai-badger/` as the
   source of truth, because agent CLIs discover them by convention. A thin-proxy (symlink)
   alternative was considered and dropped: symlinks break on Windows, and Copilot does not

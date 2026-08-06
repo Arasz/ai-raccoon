@@ -41,12 +41,8 @@ public class McpServerE2ETests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_client is not null)
-        {
-            await _client.DisposeAsync();
-        }
-
-        _factory?.Dispose();
+        await _client.DisposeAsync();
+        await _factory.DisposeAsync();
         await _openAi.DisposeAsync();
     }
 
@@ -263,7 +259,7 @@ public class McpServerE2ETests : IAsyncLifetime
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            settings: new SettingsCommands(), sync: new SyncCommands(), cancellationToken: CancellationToken.None);
+            new SettingsCommands(), new SyncCommands(), cancellationToken: CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

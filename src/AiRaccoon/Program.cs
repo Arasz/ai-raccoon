@@ -4,6 +4,8 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Serve;
+using Microsoft.Data.Sqlite;
+using SQLitePCL;
 
 if (!CliArgs.TryParse(args, out var cliParseResult))
 {
@@ -31,6 +33,8 @@ var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailabilit
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();
 var resolver = app.Services.GetRequiredService<IEncryptionKeyResolver>();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Program");
+
+LogSqliteEngine(logger);
 
 if (!TryResolveEncryptionKey(logger, resolver, out var encryptionKey))
 {
@@ -61,6 +65,25 @@ static bool TryResolveEncryptionKey(ILogger logger, IEncryptionKeyResolver encry
     }
 }
 
+/// <summary>Logs the bundled SQLite engine identity (lib + SQLite3MC train) before key
+/// resolution, so it is visible even when startup fails. Diagnostics only — a failure to
+/// run the version query must never break startup.</summary>
+static void LogSqliteEngine(ILogger logger)
+{
+    try
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT sqlite3mc_version()";
+        var engineVersion = (string)cmd.ExecuteScalar()!;
+        Log.SqliteEngineVersion(logger, raw.sqlite3_libversion().utf8_to_string(), engineVersion);
+    }
+    catch (SqliteException)
+    {
+    }
+}
+
 static async Task<bool> TryProbeBankDecryption(ILogger logger, SqliteConnectionFactory sqliteConnectionFactory, ResolvedKey resolvedKey, CancellationToken cancellationToken)
 {
     try
@@ -84,5 +107,8 @@ namespace AiRaccoon
 
         [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key: {Error}")]
         public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, string error, Exception exception);
+
+        [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "ai-raccoon: SQLite engine {LibVersion} ({EngineVersion})")]
+        public static partial void SqliteEngineVersion(ILogger logger, string libVersion, string engineVersion);
     }
 }

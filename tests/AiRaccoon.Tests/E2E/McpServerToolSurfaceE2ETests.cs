@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.Unit.Embedding;
+using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
@@ -66,19 +67,15 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_client is not null)
-        {
-            await _client.DisposeAsync();
-        }
-
-        _factory?.Dispose();
+        await _client.DisposeAsync();
+        await _factory.DisposeAsync();
         await _openAi.DisposeAsync();
     }
 
     [Fact]
     public async Task ToolsList_SurfacesAllTwentyTools()
     {
-        var tools = await _client.ListToolsAsync((ModelContextProtocol.RequestOptions?)null, TestContext.Current.CancellationToken);
+        var tools = await _client.ListToolsAsync((RequestOptions?)null, TestContext.Current.CancellationToken);
         var names = tools.Select(t => t.Name).ToArray();
 
         names.OrderBy(n => n).ShouldBe(ExpectedToolNames.OrderBy(n => n));
@@ -105,7 +102,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
         // memory_ingest_file: index one temp file.
         var file = Path.Combine(Path.GetTempPath(), $"ai-raccoon-surface-{Guid.NewGuid():N}.txt");
-        File.WriteAllText(file, "ingested surface fact");
+        await File.WriteAllTextAsync(file, "ingested surface fact", TestContext.Current.CancellationToken);
         try
         {
             var ingest = await CallAsync("memory_ingest_file", ("projectId", ProjectId), ("path", file));
@@ -118,7 +115,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
         // memory_ingest_directory: index one temp directory.
         var dir = Directory.CreateTempSubdirectory("ai-raccoon-surface-");
-        File.WriteAllText(Path.Combine(dir.FullName, "note.md"), "directory surface fact");
+        await File.WriteAllTextAsync(Path.Combine(dir.FullName, "note.md"), "directory surface fact", TestContext.Current.CancellationToken);
         try
         {
             var scanned = await CallAsync("memory_ingest_directory", ("projectId", ProjectId), ("path", dir.FullName));

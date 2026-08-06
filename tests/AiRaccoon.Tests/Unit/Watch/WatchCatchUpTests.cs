@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using static System.IO.File;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
@@ -17,11 +18,9 @@ public sealed class WatchCatchUpTests
 {
     private const string Project = "acme";
 
-    private static WatchCatchUp NewCatchUp(WatchTestStack stack) =>
-        new(stack.Pipeline, stack.Store, NullLogger<WatchCatchUp>.Instance);
+    private static WatchCatchUp NewCatchUp(WatchTestStack stack) => new(stack.Pipeline, stack.Store, NullLogger<WatchCatchUp>.Instance);
 
-    private static void Stamp(string path, DateTimeOffset at) =>
-        File.SetLastWriteTimeUtc(path, at.UtcDateTime);
+    private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
     [Fact]
     public void EnumerateFiles_NoWatermark_ReturnsEveryFile()
@@ -29,10 +28,10 @@ public sealed class WatchCatchUpTests
         using var dir = TempDir.New("catchup-all");
         var a = dir.File("a.md");
         var b = dir.File("b.md");
-        File.WriteAllText(a, "zephyrone");
-        File.WriteAllText(b, "zephyrtwo");
+        WriteAllText(a, "zephyrone");
+        WriteAllText(b, "zephyrtwo");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, sinceWatermark: null).ToList();
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, null).ToList();
 
         files.ShouldContain(a);
         files.ShouldContain(b);
@@ -45,8 +44,8 @@ public sealed class WatchCatchUpTests
         var watermark = new DateTimeOffset(2026, 1, 15, 11, 59, 0, TimeSpan.Zero);
         var older = dir.File("older.md");
         var newer = dir.File("newer.md");
-        File.WriteAllText(older, "zephyrone");
-        File.WriteAllText(newer, "zephyrtwo");
+        WriteAllText(older, "zephyrone");
+        WriteAllText(newer, "zephyrtwo");
         Stamp(older, watermark.AddHours(-1));
         Stamp(newer, watermark.AddHours(1));
 
@@ -62,7 +61,7 @@ public sealed class WatchCatchUpTests
         using var dir = TempDir.New("catchup-equal");
         var watermark = new DateTimeOffset(2026, 1, 15, 11, 59, 0, TimeSpan.Zero);
         var file = dir.File("equal.md");
-        File.WriteAllText(file, "zephyrone");
+        WriteAllText(file, "zephyrone");
         Stamp(file, watermark);
 
         WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds()).ShouldBeEmpty();
@@ -73,10 +72,10 @@ public sealed class WatchCatchUpTests
     {
         using var dir = TempDir.New("catchup-file-target");
         var file = dir.File("a.md");
-        File.WriteAllText(file, "zephyrone");
+        WriteAllText(file, "zephyrone");
         Stamp(file, new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero));
 
-        WatchCatchUp.EnumerateFiles(file, sinceWatermark: null).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(file, null).ShouldContain(file);
         WatchCatchUp.EnumerateFiles(file,
                 new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds())
             .ShouldContain(file);
@@ -90,7 +89,7 @@ public sealed class WatchCatchUpTests
     {
         using var dir = TempDir.New("catchup-single");
         var file = dir.File("a.md");
-        await File.WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
+        await WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
         var stack = new WatchTestStack();
         stack.Enable();
         stack.AllowScope(dir.Path);
@@ -113,8 +112,8 @@ public sealed class WatchCatchUpTests
         using var dir = TempDir.New("catchup-full");
         var a = dir.File("a.md");
         var b = dir.File("b.md");
-        File.WriteAllText(a, "zephyrone");
-        File.WriteAllText(b, "zephyrtwo");
+        await WriteAllTextAsync(a, "zephyrone", TestContext.Current.CancellationToken);
+        await WriteAllTextAsync(b, "zephyrtwo", TestContext.Current.CancellationToken);
         var stack = new WatchTestStack();
         stack.Enable();
         stack.AllowScope(dir.Path);
@@ -145,8 +144,8 @@ public sealed class WatchCatchUpTests
         var watermark = stack.Time.GetUtcNow().ToUnixTimeSeconds();
         var older = dir.File("older.md");
         var newer = dir.File("newer.md");
-        File.WriteAllText(older, "zephyrone");
-        File.WriteAllText(newer, "zephyrtwo");
+        await WriteAllTextAsync(older, "zephyrone", TestContext.Current.CancellationToken);
+        await WriteAllTextAsync(newer, "zephyrtwo", TestContext.Current.CancellationToken);
         Stamp(older, DateTimeOffset.FromUnixTimeSeconds(watermark - 3600));
         Stamp(newer, DateTimeOffset.FromUnixTimeSeconds(watermark + 3600));
         var catchUp = NewCatchUp(stack);
@@ -165,7 +164,7 @@ public sealed class WatchCatchUpTests
         using var dir = TempDir.New("catchup-async");
         for (var i = 0; i < 200; i++)
         {
-            File.WriteAllText(dir.File($"f{i:D3}.md"), $"zephyrword{i}");
+            await WriteAllTextAsync(dir.File($"f{i:D3}.md"), $"zephyrword{i}", TestContext.Current.CancellationToken);
         }
 
         var stack = new WatchTestStack();

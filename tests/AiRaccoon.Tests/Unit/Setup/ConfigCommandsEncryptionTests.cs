@@ -50,8 +50,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private void WriteSidecar(string source, string projectId, string secretId) =>
         new EncryptionSourceSidecar(BankPath()).Write(new EncryptionData(source) { ProjectId = projectId, SecretId = secretId });
 
-    private async Task<(int Exit, string Out, string Err, SqliteConnectionFactory Bank)> Run(string[] args,
-        FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
+    private async Task<RunResult> Run(string[] args, FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
     {
         CliArgs.TryParse(args, out var parsed);
         parsed.Errors.ShouldBeEmpty();
@@ -70,7 +69,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
             stdin ?? TextReader.Null, encryptionCommands: encryptionCommands,
             cancellationToken: TestContext.Current.CancellationToken);
-        return (exit, stdout.ToString(), stderr.ToString(), bank);
+        return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
     private static T WithEnvPassphrase<T>(string? value, Func<T> action)
@@ -170,7 +169,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         runner.Calls[0].Token.ShouldBeNull(); // the presence check never takes the token
         runner.Calls[1].Token.ShouldBe("tok-123");
         store.Settings.Values.ShouldNotContain(v => v.Contains("tok-123"));
-        File.ReadAllText(SidecarPath()).ShouldNotContain("tok-123");
+        (await File.ReadAllTextAsync(SidecarPath(), TestContext.Current.CancellationToken)).ShouldNotContain("tok-123");
     }
 
     [Fact]
@@ -213,7 +212,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
 
@@ -228,7 +227,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 2 && r.Level == LogLevel.Information
                                                                              && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
-        await using (var reopened = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
 
@@ -247,7 +246,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
 
@@ -257,7 +256,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         exit.ShouldBe(0);
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
         File.Exists(SidecarPath()).ShouldBeTrue();
-        await using (var reopened = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
     }
@@ -272,7 +271,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
 
@@ -284,7 +283,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         err.ShouldContain("source was not switched");
         File.Exists(SidecarPath()).ShouldBeFalse();
         store.Settings.ShouldBeEmpty();
-        await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
     }
@@ -298,7 +297,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
 
@@ -309,7 +308,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         err.ShouldContain("encryption mismatch");
         File.Exists(SidecarPath()).ShouldBeTrue();
         store.Settings.ShouldBeEmpty();
-        await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
     }
@@ -409,7 +408,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
 
@@ -419,7 +418,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         stdout.Trim().ShouldBe("encryption source reset to env");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
-        await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
 
@@ -447,11 +446,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
 
-        var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
+        var (exit, _, err, _) = await Run(["encryption", "unset"], store, runner);
 
         exit.ShouldBe(1);
         err.ShouldContain("stays keyed to the bitwarden secret");
@@ -463,7 +462,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         // The sidecar + rows stay (source remains bitwarden) so the documented retry works.
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
         File.Exists(SidecarPath()).ShouldBeTrue();
-        await using (var reopened = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
         {
         }
 
@@ -491,14 +490,14 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
-        await using (var seed = await bank.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
 
-        var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner, envPassphrase: "env-pass");
+        var (exit, _, err, _) = await Run(["encryption", "unset"], store, runner, envPassphrase: "env-pass");
 
         exit.ShouldBe(0, $"stderr: {err}");
-        await using (var reopened = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
+        await using (await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken))
         {
         }
     }
@@ -568,6 +567,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 null!));
         ex.ParamName.ShouldBe("logger");
     }
+
+    private sealed record RunResult(int Exit, string Out, string Err, SqliteConnectionFactory Bank);
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {

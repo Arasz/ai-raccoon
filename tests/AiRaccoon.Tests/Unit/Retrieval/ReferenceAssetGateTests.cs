@@ -50,17 +50,15 @@ public sealed class ReferenceAssetManifestTests
     }
 
     [Fact]
-    public void Manifest_ModelAssetIsPlatformIndependent()
-    {
-        ReferenceAssets.PinnedAssets.Single(a => a.Name == ReferenceAssets.ModelFileName).Platform.ShouldBeNull();
-    }
+    public void Manifest_ModelAssetIsPlatformIndependent() => ReferenceAssets.PinnedAssets.Single(a => a.Name == ReferenceAssets.ModelFileName).Platform.ShouldBeNull();
 
-    private static string AssetFilePlatform(string platform) => platform switch
-    {
-        "osx-arm64" => "macos-arm64",
-        "linux-x64" => "linux-x86_64",
-        _ => throw new ArgumentOutOfRangeException(nameof(platform))
-    };
+    private static string AssetFilePlatform(string platform) =>
+        platform switch
+        {
+            "osx-arm64" => "macos-arm64",
+            "linux-x64" => "linux-x86_64",
+            _ => throw new ArgumentOutOfRangeException(nameof(platform))
+        };
 }
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -68,10 +66,7 @@ public sealed class ReferenceAssetManifestTests
 public sealed class ReferenceAssetsPlatformTests
 {
     [Fact]
-    public void CurrentPlatform_ResolvesToASupportedPlatform()
-    {
-        ReferenceAssets.CurrentPlatform.ShouldBeOneOf("osx-arm64", "linux-x64");
-    }
+    public void CurrentPlatform_ResolvesToASupportedPlatform() => ReferenceAssets.CurrentPlatform.ShouldBeOneOf("osx-arm64", "linux-x64");
 
     [Fact]
     public void ActiveAssets_ContainCurrentPlatformModulesAndTheModel()
@@ -117,8 +112,7 @@ public sealed class ReferenceAssetGateTests
         var result = await ReferenceAssets.EnsureAsync(TestContext.Current.CancellationToken);
 
         result.Errors.ShouldBeEmpty(
-            "reference assets missing or mismatched; run the bootstrap with network access or place " +
-            $"verified copies in ~/.ai-raccoon/extensions/{ReferenceAssets.CurrentPlatform}/ and ~/.ai-raccoon/models/");
+            $"reference assets missing or mismatched; run the bootstrap with network access or place verified copies in ~/.ai-raccoon/extensions/{ReferenceAssets.CurrentPlatform}/ and ~/.ai-raccoon/models/");
 
         File.Exists(ReferenceAssets.MemoryModulePath).ShouldBeTrue();
         File.Exists(ReferenceAssets.VectorModulePath).ShouldBeTrue();

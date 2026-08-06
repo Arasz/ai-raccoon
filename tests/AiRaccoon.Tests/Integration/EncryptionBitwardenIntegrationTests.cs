@@ -85,12 +85,12 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         File.WriteAllText(SidecarPath(),
             $$"""{"source":"bitwarden","projectId":"{{ProjectId}}","secretId":"{{secretId}}"}""");
 
-    private EncryptionKeyResolver Resolver() => new(new EncryptionSourceSidecar(BankPath()),
-        [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
+    private EncryptionKeyResolver Resolver() =>
+        new(new EncryptionSourceSidecar(BankPath()),
+            [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
 
     /// <summary>Resolver pinned to the derived key, independent of the sidecar (the old StubEnvProvider semantics).</summary>
-    private EncryptionKeyResolver DerivedKeyResolver() =>
-        new(new FixedState(), [new StubEnvProvider(DerivedRawKey)]);
+    private EncryptionKeyResolver DerivedKeyResolver() => new(new FixedState(), [new StubEnvProvider(DerivedRawKey)]);
 
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
@@ -330,6 +330,29 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Startup_BwsMissing_StillLogsSqliteEngineVersion()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // the child launches a shell-based fake; the PATH override is unix-shaped
+        }
+
+        WriteSidecar();
+        var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
+        Directory.CreateDirectory(emptyPathDir);
+
+        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
+
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        // Diagnostics fire before key resolution, so the engine identity is visible even
+        // when startup fails (engine train was the 2.1.11 → 2.4.0 incident class).
+        stderr.Contains("SQLite engine 3.53", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+        stderr.Contains("SQLite3 Multiple Ciphers 2.4", StringComparison.Ordinal)
+            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+    }
+
+    [Fact]
     public async Task Startup_WrongKey_Exits2WithOpenError()
     {
         if (OperatingSystem.IsWindows())
@@ -343,7 +366,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         // something else → the probe open fails with SQLCipher code 26 → exit 2.
         var envFactory = new SqliteConnectionFactory(Options(), new EncryptionKeyResolver(
             new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider("env-passphrase")]));
-        await using (var seed = await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
 
@@ -365,9 +388,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         File.Exists(dll).ShouldBeTrue($"AiRaccoon.dll not found at {dll}");
 
         var dotnetPath = Environment.GetEnvironmentVariable("PATH")!.Split(Path.PathSeparator)
-            .Select(dir => Path.Combine(dir, "dotnet"))
-            .FirstOrDefault(File.Exists)
-            ?? throw new InvalidOperationException("dotnet not found on PATH");
+                             .Select(dir => Path.Combine(dir, "dotnet"))
+                             .FirstOrDefault(File.Exists)
+                         ?? throw new InvalidOperationException("dotnet not found on PATH");
 
         var psi = new ProcessStartInfo(dotnetPath)
         {
@@ -397,7 +420,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     private static string BuildPem(byte[] seed, byte[] pub)
     {
         using var body = new MemoryStream();
-        body.Write(Encoding.ASCII.GetBytes("openssh-key-v1\0"));
+        body.Write("openssh-key-v1\0"u8);
         WriteString(body, "none");
         WriteString(body, "none");
         WriteString(body, []);
@@ -422,7 +445,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         var base64 = Convert.ToBase64String(body.ToArray());
         var wrapped = string.Join('\n', Enumerable.Range(0, (base64.Length + 63) / 64)
             .Select(i => base64.Substring(i * 64, Math.Min(64, base64.Length - i * 64))));
-        return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + wrapped + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        return $"-----BEGIN OPENSSH PRIVATE KEY-----\n{wrapped}\n-----END OPENSSH PRIVATE KEY-----\n";
     }
 
     private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
