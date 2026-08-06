@@ -658,12 +658,7 @@ public sealed class MemoryTools(
                 throw new McpException($"sync-corrupt-file: {ex.Message}");
             }
         }
-        catch (Exception ex) when (ex is not SyncNotConfiguredException
-                                   && ex is not SyncAuthFailedException
-                                   && ex is not SyncConflictException
-                                   && ex is not SyncNetworkException
-                                   && ex is not SyncCorruptFileException
-                                   && ex is not McpException)
+        catch (Exception ex)
         {
             activity.RecordError(ex);
             throw;

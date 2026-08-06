@@ -19,6 +19,7 @@ public sealed class ToolExecutionActivity : IDisposable
     private readonly ToolCallMetrics _metrics;
     private readonly Stopwatch _stopwatch;
     private readonly string _toolName;
+    private bool _recorded;
 
     public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId)
     {
@@ -40,6 +41,12 @@ public sealed class ToolExecutionActivity : IDisposable
     /// <summary>Records a successful invocation: counter + duration histogram, result=success.</summary>
     public void RecordInvocation()
     {
+        if (_recorded)
+        {
+            return;
+        }
+
+        _recorded = true;
         _activity?.SetStatus(ActivityStatusCode.Ok);
         _activity?.SetTag(ResultActivityTag, ResultSuccess);
         _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, false);
@@ -48,6 +55,12 @@ public sealed class ToolExecutionActivity : IDisposable
     /// <summary>Marks the activity as failed and records the invocation with the exception's type name.</summary>
     public void RecordError(Exception exception)
     {
+        if (_recorded)
+        {
+            return;
+        }
+
+        _recorded = true;
         _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
         _activity?.SetTag(ResultActivityTag, ResultError);

@@ -44,8 +44,8 @@ Custom histogram buckets (milliseconds):
 `1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000`.
 These cover sub-millisecond reads up to 30-second timeouts.
 
-The `tool` tag carries the MCP tool name (`"memory_write"`, `"memory_search"`,
-`) — exactly as surfaced to MCP clients. The `result` tag is `"success"` or
+The `tool` tag carries the MCP tool name (`"memory_write"`, `"memory_search"`)
+— exactly as surfaced to MCP clients. The `result` tag is `"success"` or
 `"error"`. The `error_type` tag carries the exception type name when
 `result` is `"error"`; it is absent when the call succeeds.
 

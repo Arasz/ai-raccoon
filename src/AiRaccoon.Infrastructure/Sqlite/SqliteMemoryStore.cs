@@ -1129,12 +1129,12 @@ public sealed class SqliteMemoryStore(
     private sealed record SharedRow(string Path, string Value);
 
     private sealed record ExtractionRow(
-        string Hash, string Path, string Value, string? SourceFile, double Rating, int AccessCount,
-        long CreatedAt, int? TtlDays)
+        string Hash, string Path, string Value, string? SourceFile, double Rating, long AccessCount,
+        long CreatedAt, long? TtlDays)
     {
         public ExtractionCandidateRow ToCandidate() =>
-            new(Hash, Path, Value, SourceFile, Rating, AccessCount,
-                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), TtlDays);
+            new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,
+                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays);
     }
 
     private sealed record SettingRow(string Key, string Value);

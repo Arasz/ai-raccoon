@@ -15,7 +15,7 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 19 tools,
+///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 20 tools,
 ///     and every tool not already round-tripped by <see cref="McpServerE2ETests"/> answers a
 ///     minimal call over the wire.
 /// </summary>
@@ -28,12 +28,13 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
     private static readonly string[] ExpectedToolNames =
     [
-        // 16 memory_* tools
+        // 17 memory_* tools
         "memory_write",
         "memory_search",
         "memory_list",
         "memory_stats",
         "memory_share",
+        "memory_share_extract",
         "memory_delete",
         "memory_delete_context",
         "memory_ingest_file",
@@ -75,7 +76,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ToolsList_SurfacesAllNineteenTools()
+    public async Task ToolsList_SurfacesAllTwentyTools()
     {
         var tools = await _client.ListToolsAsync((ModelContextProtocol.RequestOptions?)null, TestContext.Current.CancellationToken);
         var names = tools.Select(t => t.Name).ToArray();
@@ -95,12 +96,12 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("hash").GetString();
         hash.ShouldNotBeNullOrWhiteSpace();
         var delete = await CallAsync("memory_delete", ("projectId", ProjectId), ("hash", hash));
-        Text(delete).ShouldContain("\"deleted\":1");
+        JsonDocument.Parse(Text(delete)).RootElement.GetProperty("deleted").GetInt32().ShouldBe(1);
 
         // memory_delete_context: write a row, then purge its context.
         await CallAsync("memory_write", ("projectId", ProjectId), ("content", "context purge me"));
         var deleteContext = await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
-        Text(deleteContext).ShouldContain("\"deleted\":1");
+        JsonDocument.Parse(Text(deleteContext)).RootElement.GetProperty("deleted").GetInt32().ShouldBe(1);
 
         // memory_ingest_file: index one temp file.
         var file = Path.Combine(Path.GetTempPath(), $"ai-raccoon-surface-{Guid.NewGuid():N}.txt");
@@ -108,7 +109,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         try
         {
             var ingest = await CallAsync("memory_ingest_file", ("projectId", ProjectId), ("path", file));
-            Text(ingest).ShouldContain("\"indexed\":1");
+            JsonDocument.Parse(Text(ingest)).RootElement.GetProperty("indexed").GetInt32().ShouldBe(1);
         }
         finally
         {
@@ -121,7 +122,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         try
         {
             var scanned = await CallAsync("memory_ingest_directory", ("projectId", ProjectId), ("path", dir.FullName));
-            Text(scanned).ShouldContain("\"scanned\":1");
+            JsonDocument.Parse(Text(scanned)).RootElement.GetProperty("scanned").GetInt32().ShouldBe(1);
         }
         finally
         {
@@ -133,6 +134,13 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         using var sweepDoc = JsonDocument.Parse(Text(sweep));
         sweepDoc.RootElement.GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
         sweepDoc.RootElement.GetProperty("deleted").ValueKind.ShouldBe(JsonValueKind.Array);
+
+        // memory_share_extract: propose mode returns {candidates, promotedHashes} without sharing.
+        var extract = await CallAsync("memory_share_extract",
+            ("projectIds", new[] { ProjectId }), ("mode", "propose"));
+        using var extractDoc = JsonDocument.Parse(Text(extract));
+        extractDoc.RootElement.GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
+        extractDoc.RootElement.GetProperty("promotedHashes").ValueKind.ShouldBe(JsonValueKind.Array);
 
         // watch trio: enabled + scoped via settings, then add -> status -> remove.
         var watchDir = Directory.CreateTempSubdirectory("ai-raccoon-surface-watch-");
@@ -147,8 +155,9 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             var status = await CallAsync("memory_watch_status", ("projectId", ProjectId));
             using var statusDoc = JsonDocument.Parse(Text(status));
             var watches = statusDoc.RootElement.GetProperty("watches");
-            watches.GetArrayLength().ShouldBeGreaterThanOrEqualTo(1);
-            var state = watches[0].GetProperty("state").GetString()?.ToLowerInvariant();
+            var watch = watches.EnumerateArray()
+                .First(w => w.GetProperty("path").GetString() == watchDir.FullName);
+            var state = watch.GetProperty("state").GetString()?.ToLowerInvariant();
             state.ShouldBeOneOf("scanning", "healthy");
 
             var remove = await CallAsync("memory_watch_remove", ("projectId", ProjectId), ("path", watchDir.FullName));
@@ -156,7 +165,15 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         }
         finally
         {
-            watchDir.Delete(true);
+            try
+            {
+                watchDir.Delete(true);
+            }
+            catch (IOException)
+            {
+                // Background scan may still hold a handle on a loaded machine; the
+                // factory's temp root is removed at dispose anyway.
+            }
         }
 
         // Clean up the dedicated project context.
@@ -171,8 +188,8 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
                 new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
-        await store.SetSettingAsync($"watch.enabled.{ProjectId}", "true");
-        await store.SetSettingAsync($"watch.scope.{ProjectId}", WatchConfigKeys.SerializeScope([tempDir]));
+        await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
+        await store.SetSettingAsync(WatchConfigKeys.ScopeProject(ProjectId), WatchConfigKeys.SerializeScope([tempDir]));
     }
 
     private async Task<CallToolResult> CallAsync(string tool, params (string Key, object? Value)[] arguments)

@@ -38,6 +38,14 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
         using var durationCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        var startedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = startedActivities.Add;
+        listener.ActivityStopped = _ => { };
+        ActivitySource.AddActivityListener(listener);
+
         using var activity = new ToolExecutionActivity(metrics, "memory_stats", "acme");
 
         activity.RecordInvocation();
@@ -47,6 +55,10 @@ public class ToolExecutionActivityTests
         invocations[0].Tags["tool"].ShouldBe("memory_stats");
         invocations[0].Tags["result"].ShouldBe("success");
         durationCollector.GetMeasurementSnapshot().Count.ShouldBe(1);
+
+        // ADR-0002: error_type is absent on success (only set on the error path).
+        var started = startedActivities.ShouldHaveSingleItem();
+        started.Tags.Any(kv => kv.Key == "error_type").ShouldBeFalse();
     }
 
     [Fact]
