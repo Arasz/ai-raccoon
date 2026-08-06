@@ -731,6 +731,21 @@
       "resumeCommand": "hermes --resume 20260806_125148_ca8d27",
       "resumeAttempts": [],
       "stateJsonUpdated": true
+    },
+    {
+      "taskId": "integration-review-1-0-9",
+      "title": "Integration review after parallel session: 1.0.9 package-id migration + baseline re-pin + incoming hosted-service PR",
+      "sessionId": "20260806_142455_7cb872",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/integration-review-1-0-9",
+      "risk": false,
+      "startedAt": "2026-08-06T12:28:38.078051+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_142455_7cb872",
+      "resumeAttempts": []
     }
   ]
 }
