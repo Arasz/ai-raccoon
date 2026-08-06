@@ -20,6 +20,14 @@ public class SyncServiceTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
+    /// <summary>Read-write open of a snapshot file: the workspace strip DELETEs + VACUUMs it.</summary>
+    private static async Task<SqliteConnection> OpenSnapshotAsync(string path, CancellationToken ct)
+    {
+        var c = new SqliteConnection($"Data Source={path}");
+        await c.OpenAsync(ct);
+        return c;
+    }
+
     private static async Task<SqliteConnection> CreateAndOpenAsync(string path, CancellationToken ct = default)
     {
         var conn = new SqliteConnection($"Data Source={path}");
@@ -66,13 +74,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
     }
@@ -87,13 +95,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         result.Sent.ShouldBeGreaterThanOrEqualTo(0);
@@ -135,13 +143,13 @@ public class SyncServiceTests : IDisposable
                     await c.OpenAsync(ct);
                     return c;
                 }).Unwrap(),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Now simulate a remote change — push different content to the cloud.
@@ -207,13 +215,13 @@ public class SyncServiceTests : IDisposable
         }
 
         var service = new SyncService(cloud, OpenBank,
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Delete locally and record a tombstone.
@@ -274,13 +282,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Verify the cloud object does NOT contain the workspace row.
@@ -336,13 +344,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Check that the merged row was reindexed (embed_state reset to 'pending').
@@ -382,13 +390,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // The cloud snapshot must not contain the workspace row.
@@ -452,13 +460,13 @@ public class SyncServiceTests : IDisposable
 
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Both rows should exist after merge.
@@ -480,13 +488,13 @@ public class SyncServiceTests : IDisposable
         // First sync to create a valid remote.
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Corrupt the remote with invalid bytes.
@@ -532,13 +540,13 @@ public class SyncServiceTests : IDisposable
                 return Task.FromResult<ICloudStore>(new FakeCloudStore());
             },
             ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
             async (path, ct) =>
             {
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
             }, TimeProvider.System, null!);
-
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
