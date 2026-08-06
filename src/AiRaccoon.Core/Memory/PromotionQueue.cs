@@ -29,3 +29,18 @@ public sealed record PromotionQueueStats(
 
 /// <summary>The row an eviction removed (for logging and the response).</summary>
 public sealed record EvictedRow(string ProjectId, string Hash, double Score, string Reason);
+
+/// <summary>Outcome of persisting candidates into the propose tier.</summary>
+public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evicted);
+
+/// <summary>Outcome of promoting from the queue: shared hashes, duplicates skipped, what still waits.</summary>
+public sealed record PromoteOutcome(
+    IReadOnlyList<string> PromotedHashes,
+    int SkippedDuplicates,
+    IReadOnlyDictionary<string, int> RemainingByProject);
+
+/// <summary>What the envelope's meta tells the agent: how much is waiting and for how long.</summary>
+public sealed record QueueMeta(
+    int WaitingPromotionsCount,
+    double? PromotionsWaitTimeSeconds,
+    IReadOnlyDictionary<string, int>? WaitingByProject);

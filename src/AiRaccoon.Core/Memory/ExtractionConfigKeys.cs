@@ -11,7 +11,11 @@ public static class ExtractionConfigKeys
 
     public const string ExcludePrefixesGlobal = "extract.exclude.prefixes";
 
+    public const string QueueCapacityGlobal = "extract.queue-capacity.global";
+
     public const int DefaultIntervalMinutes = 30;
+
+    public const int DefaultQueueCapacity = 1000;
 
     public static bool ParseEnabled(string? value) => value == "true";
 
@@ -26,4 +30,8 @@ public static class ExtractionConfigKeys
         string.IsNullOrWhiteSpace(value)
             ? []
             : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>The propose tier's total cap; anything non-numeric or below 1 falls back to the default.</summary>
+    public static int ParseQueueCapacity(string? value) =>
+        int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultQueueCapacity;
 }
