@@ -1,79 +1,88 @@
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Launch-identity resolution after the single-channel refactor: transport,
-///     data root and install scope come from CLI flags only (env handling removed);
-///     runtime configuration lives in the settings table via config commands.
+///     Launch-identity resolution after the single-channel refactor: transport, data root,
+///     install scope and port come from CLI flags only (env handling removed); runtime
+///     configuration lives in the settings table via config commands.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ServerConfigTests
 {
     [Fact]
-    public void Build_NullCli_AppliesDefaults()
+    public void ToServerConfig_DefaultCli_AppliesDefaults()
     {
-        var config = ServerConfig.Build(null);
+        var config = Cli().ToServerConfig();
 
         config.Transport.ShouldBe(McpTransport.Stdio);
-        config.Options.DataRoot.ShouldBe(InfrastructureOptions.DefaultDataRoot());
+        config.Options.DataRoot.ShouldBe(DefaultOptions.DataRoot);
         config.Options.Scope.ShouldBe(InstallScope.User);
+        config.Port.ShouldBe(DefaultOptions.Port);
     }
 
     [Fact]
-    public void Build_TransportFromFlag()
+    public void ToServerConfig_TransportFromFlag()
     {
-        ServerConfig.Build(new CliOptions("http", null, null)).Transport.ShouldBe(McpTransport.Http);
-        ServerConfig.Build(new CliOptions("https", null, null)).Transport.ShouldBe(McpTransport.Https);
-        ServerConfig.Build(new CliOptions("bogus", null, null)).Transport.ShouldBe(McpTransport.Stdio);
-        ServerConfig.Build(new CliOptions(null, null, null)).Transport.ShouldBe(McpTransport.Stdio);
+        Cli(transport: "http").ToServerConfig().Transport.ShouldBe(McpTransport.Http);
+        Cli(transport: "https").ToServerConfig().Transport.ShouldBe(McpTransport.Https);
+        Cli().ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
     }
 
     [Fact]
-    public void Build_DataRootFromFlag()
+    public void ToServerConfig_DataRootFromFlag()
     {
-        var config = ServerConfig.Build(new CliOptions(null, "/x", null));
+        var config = Cli(dataRoot: "/x").ToServerConfig();
 
         config.Options.DataRoot.ShouldBe("/x");
     }
 
     [Fact]
-    public void Build_ExpandsTildeInDataRoot()
+    public void ToServerConfig_ExpandsTildeInDataRoot()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        var config = ServerConfig.Build(new CliOptions(null, "~/x", null));
+        var config = Cli(dataRoot: "~/x").ToServerConfig();
 
         config.Options.DataRoot.ShouldBe(Path.Combine(home, "x"));
     }
 
     [Fact]
-    public void Build_WhitespaceDataRoot_FallsBackToDefault()
+    public void ToServerConfig_WhitespaceDataRoot_FallsBackToDefault()
     {
-        var config = ServerConfig.Build(new CliOptions(null, " ", null));
+        var config = Cli(dataRoot: " ").ToServerConfig();
 
-        config.Options.DataRoot.ShouldBe(InfrastructureOptions.DefaultDataRoot());
+        config.Options.DataRoot.ShouldBe(DefaultOptions.DataRoot);
     }
 
     [Fact]
-    public void Build_AppliesPortFromFlag()
+    public void ToServerConfig_AppliesPortFromFlag()
     {
-        ServerConfig.Build(new CliOptions(null, null, null, 7721)).Port.ShouldBe(7721);
-        ServerConfig.Build(new CliOptions(null, null, null, 0)).Port.ShouldBe(0);
+        Cli(port: 7721, isPortExplicit: true).ToServerConfig().Port.ShouldBe(7721);
+        Cli(port: 0, isPortExplicit: true).ToServerConfig().Port.ShouldBe(0);
     }
 
     [Fact]
-    public void Build_DefaultPort_WhenNoFlag() => ServerConfig.Build(null).Port.ShouldBe(7721);
-
-    [Fact]
-    public void Build_InstallScopeFromFlag()
+    public void ToServerConfig_InstallScopeFromFlag()
     {
-        ServerConfig.Build(new CliOptions(null, null, InstallScope.Project)).Options.Scope.ShouldBe(InstallScope.Project);
-        ServerConfig.Build(new CliOptions(null, null, InstallScope.User)).Options.Scope.ShouldBe(InstallScope.User);
-        ServerConfig.Build(new CliOptions(null, null, null)).Options.Scope.ShouldBe(InstallScope.User);
+        Cli(scope: InstallScope.Project).ToServerConfig().Options.Scope.ShouldBe(InstallScope.Project);
+        Cli(scope: InstallScope.User).ToServerConfig().Options.Scope.ShouldBe(InstallScope.User);
+        Cli().ToServerConfig().Options.Scope.ShouldBe(InstallScope.User);
     }
+
+    private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
+        int port = DefaultOptions.Port, bool isPortExplicit = false) =>
+        new()
+        {
+            Transport = transport is null ? DefaultOptions.Transport : Enum.Parse<McpTransport>(transport, ignoreCase: true),
+            DataRoot = dataRoot ?? DefaultOptions.DataRoot,
+            InstallScope = scope ?? DefaultOptions.InstallScope,
+            Port = port,
+            IsPortExplicit = isPortExplicit
+        };
 }

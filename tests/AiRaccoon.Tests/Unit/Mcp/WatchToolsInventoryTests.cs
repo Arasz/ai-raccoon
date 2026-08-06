@@ -82,7 +82,8 @@ public sealed class WatchToolsInventoryTests
         // Mirror the host: WebApplication.CreateBuilder registers logging before
         // RegisterMemoryServices runs (WatchPipeline takes ILogger<WatchPipeline>).
         services.AddLogging();
-        services.RegisterMemoryServices(new InfrastructureOptions());
+        services.RegisterMemoryServices(new InfrastructureOptions
+    { DataRoot = TestData.CreateTempRoot("ai-raccoon-tests"), Scope = InstallScope.User });
 
         using var provider = services.BuildServiceProvider();
 

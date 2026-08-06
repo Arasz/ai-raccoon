@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Microsoft.AspNetCore.Builder;
@@ -19,6 +20,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class McpServerSetupHostTests
 {
+    private static readonly string DataRoot = TestData.CreateTempRoot("mcp-host-tests");
     [Fact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
     {
@@ -92,7 +94,8 @@ public class McpServerSetupHostTests
         await runTask;
     }
 
-    private static ServerConfig Config(McpTransport transport, int port = 7721) => ServerConfig.Build(new CliOptions(transport.ToString().ToLowerInvariant(), null, null, port));
+    private static ServerConfig Config(McpTransport transport, int port = 7721) =>
+        new(port, transport, new InfrastructureOptions { DataRoot = DataRoot, Scope = InstallScope.User });
 
     private static int FreePort()
     {

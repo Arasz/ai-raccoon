@@ -98,7 +98,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
         var ex = Should.Throw<ArgumentException>(() => resolver.Resolve());
 
-        ex.ParamName.ShouldBe("secretId");
+        ex.ParamName.ShouldBe("encryptionData.SecretId");
     }
 
     [Fact]

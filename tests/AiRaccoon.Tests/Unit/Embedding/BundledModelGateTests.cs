@@ -16,7 +16,7 @@ public sealed class BundledModelGateTests
     [Fact]
     public async Task BundledModel_IsPresentAndShaVerified_AfterBootstrap()
     {
-        var result = await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
+        var result = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
 
         result.Errors.ShouldBeEmpty(
             "bundled embedding model missing or mismatched; run scripts/download-embedding-model.sh " +
@@ -24,10 +24,10 @@ public sealed class BundledModelGateTests
 
         var modelPath = BundledModel.ResolveModelPath();
         File.Exists(modelPath).ShouldBeTrue(modelPath);
-        BundledModel.Sha256Of(modelPath).ShouldBe(BundledModel.ModelSha256, StringCompareShould.IgnoreCase);
+        BundledResource.Sha256Of(modelPath).ShouldBe(BundledModel.ModelSha256, StringCompareShould.IgnoreCase);
 
         var vocabPath = BundledModel.ResolveVocabPath();
         File.Exists(vocabPath).ShouldBeTrue(vocabPath);
-        BundledModel.Sha256Of(vocabPath).ShouldBe(BundledModel.VocabSha256, StringCompareShould.IgnoreCase);
+        BundledResource.Sha256Of(vocabPath).ShouldBe(BundledModel.VocabSha256, StringCompareShould.IgnoreCase);
     }
 }

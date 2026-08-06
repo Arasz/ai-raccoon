@@ -23,7 +23,8 @@ public sealed class WatchDependenciesSmokeTests
         // Mirror the host: WebApplication.CreateBuilder registers logging before
         // RegisterMemoryServices runs (watch components take ILogger<T>).
         services.AddLogging();
-        services.RegisterMemoryServices(new InfrastructureOptions());
+        services.RegisterMemoryServices(new InfrastructureOptions
+    { DataRoot = TestData.CreateTempRoot("ai-raccoon-tests"), Scope = InstallScope.User });
 
         using var provider = services.BuildServiceProvider();
 

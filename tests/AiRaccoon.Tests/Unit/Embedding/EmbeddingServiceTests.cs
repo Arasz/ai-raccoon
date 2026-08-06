@@ -17,7 +17,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await BundledModel.EnsureAsync(TestContext.Current.CancellationToken);
+        await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }
 

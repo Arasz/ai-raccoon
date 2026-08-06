@@ -75,7 +75,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     /// </summary>
     private async Task<string> RunCliAsync(params string[] args)
     {
-        var parsed = CliArgs.TryParse(args);
+        CliArgs.TryParse(args, out var parsed);
         // A step that does not parse is a broken contract (e.g. a missing bool argument):
         // fail the scenario loudly instead of dispatching with defaults.
         if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)

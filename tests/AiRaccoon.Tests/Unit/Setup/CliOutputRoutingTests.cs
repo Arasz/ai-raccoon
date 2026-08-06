@@ -20,10 +20,10 @@ public class CliOutputRoutingTests
     [Fact]
     public void Render_Help_WritesOnlyToErrorWriter()
     {
-        var parsed = CliArgs.TryParse(["--help"]);
+        CliArgs.TryParse(["--help"], out var parsed);
         var stderr = new StringWriter();
 
-        CliArgs.Render(parsed, stderr);
+        parsed.RenderTo(stderr);
 
         stderr.ToString().ShouldContain("Usage");
     }
@@ -31,10 +31,10 @@ public class CliOutputRoutingTests
     [Fact]
     public void Render_ParseError_WritesOnlyToErrorWriter()
     {
-        var parsed = CliArgs.TryParse(["--bogus"]);
+        CliArgs.TryParse(["--bogus"], out var parsed);
         var stderr = new StringWriter();
 
-        var exit = CliArgs.Render(parsed, stderr);
+        var exit = parsed.RenderTo(stderr);
 
         exit.ShouldBe(1);
         stderr.ToString().ShouldContain("Unrecognized command or argument '--bogus'.");
@@ -46,10 +46,10 @@ public class CliOutputRoutingTests
         // The rendered string is the entry assembly's version (the test host here), so only
         // the routing contract is asserted; the tool's own version string is proven by the
         // VersionContractTests package-metadata gate.
-        var parsed = CliArgs.TryParse(["--version"]);
+        CliArgs.TryParse(["--version"], out var parsed);
         var stderr = new StringWriter();
 
-        CliArgs.Render(parsed, stderr);
+        parsed.RenderTo(stderr);
 
         stderr.ToString().ShouldNotBeEmpty();
     }
@@ -57,17 +57,17 @@ public class CliOutputRoutingTests
     [Fact]
     public void Render_Help_ReturnsZeroExitCode()
     {
-        var parsed = CliArgs.TryParse(["--help"]);
+        CliArgs.TryParse(["--help"], out var parsed);
 
-        CliArgs.Render(parsed, new StringWriter()).ShouldBe(0);
+        parsed.RenderTo(new StringWriter()).ShouldBe(0);
     }
 
     [Fact]
     public void Render_Version_ReturnsZeroExitCode()
     {
-        var parsed = CliArgs.TryParse(["--version"]);
+        CliArgs.TryParse(["--version"], out var parsed);
 
-        CliArgs.Render(parsed, new StringWriter()).ShouldBe(0);
+        parsed.RenderTo(new StringWriter()).ShouldBe(0);
     }
 
     [Fact]
@@ -78,9 +78,9 @@ public class CliOutputRoutingTests
         {
             using var redirected = new StringWriter();
             Console.SetOut(redirected);
-            var parsed = CliArgs.TryParse(["--help"]);
+            CliArgs.TryParse(["--help"], out var parsed);
 
-            CliArgs.Render(parsed, new StringWriter());
+            parsed.RenderTo(new StringWriter());
 
             redirected.ToString().ShouldBeEmpty();
         }
@@ -98,9 +98,9 @@ public class CliOutputRoutingTests
         {
             using var redirected = new StringWriter();
             Console.SetOut(redirected);
-            var parsed = CliArgs.TryParse(["--bogus"]);
+            CliArgs.TryParse(["--bogus"], out var parsed);
 
-            CliArgs.Render(parsed, new StringWriter());
+            parsed.RenderTo(new StringWriter());
 
             redirected.ToString().ShouldBeEmpty();
         }

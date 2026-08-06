@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 using System.Net;
@@ -30,7 +31,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         using var http = new HttpClient(handler);
 
-        var result = await BundledModel.EnsureDownloadsAsync(http, DownloadDir(), TestContext.Current.CancellationToken);
+        var result = await new BundledModel(NullLogger<BundledModel>.Instance, new StubHttpClientFactory(http)).EnsureDownloadsAsync(DownloadDir(), TestContext.Current.CancellationToken);
 
         result.AllPresent.ShouldBeFalse();
         result.Errors.ShouldNotBeEmpty();
@@ -45,7 +46,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
         });
         using var http = new HttpClient(handler);
 
-        var result = await BundledModel.EnsureDownloadsAsync(http, DownloadDir(), TestContext.Current.CancellationToken);
+        var result = await new BundledModel(NullLogger<BundledModel>.Instance, new StubHttpClientFactory(http)).EnsureDownloadsAsync(DownloadDir(), TestContext.Current.CancellationToken);
 
         result.AllPresent.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.Contains("sha256", StringComparison.OrdinalIgnoreCase));
@@ -59,7 +60,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
-        var result = await BundledModel.EnsureDownloadsAsync(http, DownloadDir(), cts.Token);
+        var result = await new BundledModel(NullLogger<BundledModel>.Instance, new StubHttpClientFactory(http)).EnsureDownloadsAsync(DownloadDir(), cts.Token);
 
         result.AllPresent.ShouldBeFalse();
         result.Errors.ShouldNotBeEmpty();
@@ -86,6 +87,11 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(respond(request));
+    }
+
+    private sealed class StubHttpClientFactory(HttpClient http) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => http;
     }
 
     private sealed class StuckHandler : HttpMessageHandler
