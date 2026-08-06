@@ -5,6 +5,9 @@ using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
 
@@ -95,6 +98,26 @@ public class McpServerSetupHostTests : IDisposable
         await Task.Delay(300, TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
         await runTask;
+    }
+
+    /// <summary>
+    ///     The registered MCP surface is the full 19 tools: 16 memory + 3 watch. Regression
+    ///     gate for PR #30 dropping .WithTools&lt;WatchTools&gt;() — host tests previously
+    ///     pinned transport shape only, so the watch trio silently vanished from tools/list.
+    /// </summary>
+    [Fact]
+    public void StdioHost_RegistersWatchTools_OnTheMcpSurface()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        var options = host.Services.GetRequiredService<IOptions<McpServerOptions>>().Value;
+        var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
+            .Select(t => t.ProtocolTool.Name).ToList();
+
+        toolNames.Count.ShouldBe(19);
+        toolNames.ShouldContain("memory_watch_add");
+        toolNames.ShouldContain("memory_watch_status");
+        toolNames.ShouldContain("memory_watch_remove");
     }
 
     private ServerConfig Config(McpTransport transport, int port = 7721) =>
