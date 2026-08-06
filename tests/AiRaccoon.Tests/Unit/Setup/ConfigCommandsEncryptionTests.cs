@@ -34,7 +34,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private const string BwsNotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
-    // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with ConfigVerbRunnerTests
+    // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with CliCommandRunnerTests
     // via TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-tests");
 
@@ -509,60 +509,65 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     [Fact]
     public void Constructor_NullBank_ThrowsArgumentNullException()
     {
-        Should.Throw<ArgumentNullException>(() =>
+        var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(null!,
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger()));
+        ex.ParamName.ShouldBe("bank");
     }
 
     [Fact]
     public void Constructor_NullBws_ThrowsArgumentNullException()
     {
-        Should.Throw<ArgumentNullException>(() =>
+        var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 null!,
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger()));
+        ex.ParamName.ShouldBe("bws");
     }
 
     [Fact]
     public void Constructor_NullEnv_ThrowsArgumentNullException()
     {
-        Should.Throw<ArgumentNullException>(() =>
+        var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger()));
+        ex.ParamName.ShouldBe("env");
     }
 
     [Fact]
-    public void Constructor_NullEncryptionState_ThrowsArgumentNullException()
+    public void Constructor_NullSidecar_ThrowsArgumentNullException()
     {
-        Should.Throw<ArgumentNullException>(() =>
+        var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
                 new FakeLogger()));
+        ex.ParamName.ShouldBe("sidecar");
     }
 
     [Fact]
     public void Constructor_NullLogger_ThrowsArgumentNullException()
     {
-        Should.Throw<ArgumentNullException>(() =>
+        var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 null!));
+        ex.ParamName.ShouldBe("logger");
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
