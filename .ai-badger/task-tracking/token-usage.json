@@ -4751,16 +4751,8 @@
               "start": {
                   "timestamp": "2026-08-06T21:22:35.383328+00:00",
                   "contextTokens": 0,
-                  "assistantMessages": 1,
-                  "byModel": {
-                      "<synthetic>": {
-                          "inputTokens": 0,
-                          "outputTokens": 0,
-                          "cacheReadTokens": 0,
-                          "cacheCreationTokens": 0,
-                          "assistantMessages": 1
-                      }
-                  },
+                  "assistantMessages": 0,
+                  "byModel": {},
                   "cumulative": {
                       "inputTokens": 0,
                       "outputTokens": 0,
@@ -4791,38 +4783,42 @@
               "finish": {
                   "timestamp": "2026-08-06T21:22:50.814816+00:00",
                   "contextTokens": 0,
-                  "assistantMessages": 1,
+                  "assistantMessages": 213,
                   "byModel": {
-                      "<synthetic>": {
-                          "inputTokens": 0,
-                          "outputTokens": 0,
-                          "cacheReadTokens": 0,
+                      "deepseek-v4-flash": {
+                          "inputTokens": 242134,
+                          "outputTokens": 180394,
+                          "cacheReadTokens": 46268416,
                           "cacheCreationTokens": 0,
-                          "assistantMessages": 1
+                          "assistantMessages": 258
                       }
                   },
                   "cumulative": {
-                      "inputTokens": 0,
-                      "outputTokens": 0,
-                      "cacheReadTokens": 0,
+                      "inputTokens": 469989,
+                      "outputTokens": 257059,
+                      "cacheReadTokens": 55029504,
                       "cacheCreationTokens": 0
                   }
               }
           },
           "usage": {
-              "outputByModel": {},
-              "modelMix": {},
-              "inputTokens": 0,
-              "outputTokens": 0,
-              "cacheReadTokens": 0,
+              "outputByModel": {
+                  "deepseek-v4-flash": 180394
+              },
+              "modelMix": {
+                  "deepseek-v4-flash": 1.0
+              },
+              "inputTokens": 469989,
+              "outputTokens": 257059,
+              "cacheReadTokens": 55029504,
               "cacheCreationTokens": 0,
-              "cacheEfficiency": null,
+              "cacheEfficiency": 1.0,
               "subagentTokens": 9112751,
               "contextTokensAtStart": 0,
               "contextTokensAtFinish": 0,
               "contextGrowth": 0,
-              "mainSessionTotal": 0,
-              "grandTotal": 0
+              "mainSessionTotal": 55756552,
+              "grandTotal": 55756552
           }
     }
   ]
