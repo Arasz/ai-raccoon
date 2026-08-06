@@ -1,29 +1,29 @@
 {
-    "mcpServers": {
-        "code-review-graph": {
-            "command": "code-review-graph",
-            "args": [
-                "serve"
-            ],
-            "tools": [
-                "*"
-            ]
-        },
-        "hermes": {
-            "command": "${HOME}/.local/bin/hermes",
-            "args": [
-                "mcp",
-                "serve"
-            ],
-            "tools": [
-                "*"
-            ]
-        },
-        "ai-raccoon": {
-            "command": "${HOME}/.dotnet/tools/ai-raccoon",
-            "tools": [
-                "*"
-            ]
-        }
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "code-review-graph",
+      "args": [
+        "serve"
+      ],
+      "tools": [
+        "*"
+      ]
+    },
+    "hermes": {
+      "command": "${HOME}/.local/bin/hermes",
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "tools": [
+        "*"
+      ]
+    },
+    "ai-raccoon": {
+      "command": "${HOME}/.dotnet/tools/ai-raccoon",
+      "tools": [
+        "*"
+      ]
     }
+  }
 }

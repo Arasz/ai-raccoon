@@ -3,6 +3,7 @@
 Provides feature-parity with Claude Code hooks:
 - on_session_start: drift notice (Tier 1, ADR-0001 decision 5)
 - pre_llm_call: inject framework version context, usage hints, and MCP tool index recommendations
+- pre_tool_call: memory-first gate — block text search until the session consulted memory_search
 - post_tool_call: log tool usage, index hit/miss metrics, and learned-skill sync
 
 Installation (0.80.0+): `welcome-ai-badger` ships these hooks as a Hermes
@@ -229,6 +230,95 @@ def reset_session_hints() -> None:
     _session_hints_shown.clear()
 
 
+# ---------------------------------------------------------------------------
+# Memory-first gate — Hermes has no shell-hook session_id, so state is
+# per-process keyed by project cwd; a gateway handling several sessions for one
+# project shares the consulted flag until the next on_session_start reset.
+# ---------------------------------------------------------------------------
+
+MEMORY_FIRST_GATE_MODULE_NAME = "memory_first_gate"
+
+# Projects (resolved cwd) that already ran memory_search this session.
+_memory_consulted: set = set()
+# Denials per project; after MAX_DENIALS the gate passes through so an agent
+# cannot stall on a bank that simply has no hit for its query.
+_gate_denials: dict = {}
+
+
+def reset_gate_state() -> None:
+    """Forget the per-session memory-first gate state (called at session start)."""
+    _memory_consulted.clear()
+    _gate_denials.clear()
+
+
+def _load_memory_first_gate() -> Optional[Any]:
+    """Import the sibling memory_first_gate module lazily; None when absent.
+
+    An older scaffold without the module gets no gate at all — fail open, never
+    block a session because a sibling module is missing.
+    """
+    cached = sys.modules.get(MEMORY_FIRST_GATE_MODULE_NAME)
+    if cached is not None:
+        return cached
+    path = Path(__file__).resolve().parent / "memory_first_gate.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(MEMORY_FIRST_GATE_MODULE_NAME, path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[MEMORY_FIRST_GATE_MODULE_NAME] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:  # pylint: disable=broad-exception-caught
+        sys.modules.pop(MEMORY_FIRST_GATE_MODULE_NAME, None)
+        logger.warning("memory_first_gate could not be loaded from %s", path,
+                       exc_info=True)
+        return None
+    return module
+
+
+def _gate_project() -> str:
+    """The project the gate keys state on; plugin callbacks carry no cwd."""
+    return _project_cwd("")
+
+
+def _maybe_record_memory_consult(tool_name: str, args: Dict[str, Any], cwd: str,
+                                 session_id: Optional[str] = None) -> None:
+    """After a memory_search call, unlock the gate for this project's session."""
+    memory_grade = _load_memory_grade()
+    if memory_grade is None or not memory_grade.is_memory_search(tool_name):
+        return
+    project = _project_cwd(cwd)
+    _memory_consulted.add(project)
+    gate = _load_memory_first_gate()
+    if gate is not None:
+        gate.record_search(session_id)
+
+
+def pre_tool_call_memory_gate(tool_name: str = "", args: Optional[Dict[str, Any]] = None,
+                              task_id: Optional[str] = None, **_kwargs: Any) -> Optional[Dict[str, str]]:
+    """Block text-search tools until the session's first memory_search call.
+
+    Returns a block decision naming memory_search, or None to allow. Never blocks
+    once consulted, after MAX_DENIALS, or when the gate module is missing.
+    """
+    gate = _load_memory_first_gate()
+    if gate is None:
+        return None
+    project = _gate_project()
+    if project in _memory_consulted:
+        return None
+    tool_name = tool_name or _kwargs.get("function_name") or ""
+    if not gate.is_text_search(tool_name, args or {}):
+        return None
+    denials = _gate_denials.get(project, 0)
+    if denials >= gate.MAX_DENIALS:
+        return None
+    _gate_denials[project] = denials + 1
+    return gate.build_decision("hermes", tool_name, args or {}, None, cwd=project)
+
+
 def on_session_start_drift_notice(cwd: str = "", **_kwargs: Any) -> None:
     """Check for framework version drift on every session start.
 
@@ -236,6 +326,7 @@ def on_session_start_drift_notice(cwd: str = "", **_kwargs: Any) -> None:
     A hook that breaks session start or nags unconditionally defeats its purpose.
     """
     reset_session_hints()
+    reset_gate_state()
     project = _project_cwd(cwd)
     _debug("ai_badger_hooks/session_start", "start", project=project)
     scaffold_ver = _read_scaffold_version(project)
@@ -855,6 +946,11 @@ def post_tool_observer(tool_name: str = "", result: str = "",
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("memory grade logging failed", exc_info=True)
 
+    try:
+        _maybe_record_memory_consult(tool_name, args, cwd, session_id)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("memory-first gate record failed", exc_info=True)
+
     # Log index hit/miss metrics if the index is available
     if tool_name:
         project = _project_cwd(cwd)
@@ -883,5 +979,7 @@ def register(ctx: Any) -> None:
         return
     ctx.register_hook("on_session_start", on_session_start_drift_notice)
     ctx.register_hook("pre_llm_call", pre_llm_inject_context)
+    ctx.register_hook("pre_tool_call", pre_tool_call_memory_gate)
     ctx.register_hook("post_tool_call", post_tool_observer)
-    logger.info("ai-badger hooks registered: on_session_start, pre_llm_call, post_tool_call")
+    logger.info("ai-badger hooks registered: on_session_start, pre_llm_call, "
+                "pre_tool_call, post_tool_call")

@@ -12,6 +12,7 @@ from typing import Dict, List
 from scaffold_context import ScaffoldContext
 from template_rendering import TemplateRendering
 
+
 # Known non-standard agent file locations that may coexist with the standard ones.
 _NONSTANDARD_AGENT_FILES: Dict[str, List[str]] = {
     ".github/copilot-instructions.md": ["COPILOT_INSTRUCTIONS.md"],
