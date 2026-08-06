@@ -4,7 +4,7 @@
 Proves a clean install from nuget.org works perfectly first try: all deps present,
 no missing models, no silent repair. Post-publish complement to scripts/verify-tool-package.sh
 (the pre-publish gate). Run from anywhere; everything happens in temp dirs and never touches
-~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.7 (pin must be
+~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.0.9 (pin must be
 bumped after each republish — NuGet versions are immutable).
 
 Protocol (revised per architect plan review deleg_98028a5e):
@@ -36,7 +36,7 @@ import tempfile
 import time
 import uuid
 
-VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.8")
+VERSION = os.environ.get("AI_RACCOON_VERSION", "1.0.9")
 # NOTE: the model/vocab sha256 pins below are version-coupled and live in three places —
 # this script, scripts/verify-tool-package.sh, and scripts/download-embedding-model.sh.
 # After every model swap (or republish of a new bundle), re-derive the hashes from
@@ -83,7 +83,7 @@ check("no inherited AIRACCOON_DB_PASSPHRASE", had_passphrase is None, f"inherite
 
 print("== step 1: fresh install from nuget.org ==")
 t0 = time.time()
-r = run(["dotnet", "tool", "install", "--tool-path", TOOLPATH, "--version", VERSION, "arasz.ai-raccoon"], env=env, timeout=300)
+r = run(["dotnet", "tool", "install", "--tool-path", TOOLPATH, "--version", VERSION, "ai-raccoon"], env=env, timeout=300)
 install_ok = r.returncode == 0
 check("dotnet tool install exits 0", install_ok, r.stderr.strip()[-300:] if not install_ok else "")
 print(f"    install took {time.time()-t0:.1f}s")

@@ -81,7 +81,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task BothTransports_CreateWebHostWithStdio()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio), [McpTransport.Stdio, McpTransport.Http]);
+        // Free port: 7721 may be held by a live server or a concurrent suite.
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
 
         host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
         await host.StartAsync(TestContext.Current.CancellationToken);
