@@ -42,6 +42,22 @@ public sealed class ExtractCommands : IExtractCommands
         return 0;
     }
 
+    public async Task<int> SetIntervalAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
+        TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var minutes = parseResult.GetValue<string>("minutes");
+        if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
+        {
+            await stderr.WriteLineAsync("ai-raccoon: interval must be a positive number of minutes");
+            return 1;
+        }
+
+        await store.SetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, parsed.ToString(),
+            cancellationToken);
+        await stdout.WriteLineAsync($"extraction interval: {parsed} min");
+        return 0;
+    }
+
     public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken)
     {
         var enabled = ExtractionConfigKeys.ParseEnabled(

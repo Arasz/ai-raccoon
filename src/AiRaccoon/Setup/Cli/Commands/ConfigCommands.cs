@@ -64,6 +64,7 @@ internal static class ConfigCommands
                 ["encryption", "bitwarden"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).BitwardenAsync(parseResult, store, stdout, stderr, stdin, cancellationToken),
                 ["extract", "enable"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetEnabledAsync(parseResult, store, stdout, cancellationToken),
                 ["extract", "mode"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetModeAsync(parseResult, store, stdout, stderr, cancellationToken),
+                ["extract", "interval"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).SetIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["extract", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ListAsync(store, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),

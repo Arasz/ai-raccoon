@@ -188,6 +188,8 @@ internal static class CliCommandTree
                 { new Argument<bool>("enabled") { HelpName = "true|false" } },
             new Command("mode", "Sets the extraction mode: propose (default, logs ranked candidates) or promote (shares the top candidates into the shared tier)")
                 { new Argument<string>("mode") { HelpName = "propose|promote" } },
+            new Command("interval", "Sets the extraction pass interval in minutes (positive integer; default 60)")
+                { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
         };
         return extract;
