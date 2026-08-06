@@ -80,6 +80,47 @@ public class ToolExecutionActivityTests
     }
 
     [Fact]
+    public void RecordInvocation_SetsOkStatus_AndResultTag_OnTheActivity()
+    {
+        var metrics = new ToolCallMetrics();
+        var startedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = startedActivities.Add;
+        listener.ActivityStopped = _ => { };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
+        activity.RecordInvocation();
+
+        var started = startedActivities.ShouldHaveSingleItem();
+        started.Status.ShouldBe(ActivityStatusCode.Ok);
+        started.Tags.Any(kv => kv.Key == "result" && kv.Value?.ToString() == "success").ShouldBeTrue();
+    }
+
+    [Fact]
+    public void RecordError_AddsResultErrorTag_OnTheActivity()
+    {
+        var metrics = new ToolCallMetrics();
+        var stoppedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = _ => { };
+        listener.ActivityStopped = stoppedActivities.Add;
+        ActivitySource.AddActivityListener(listener);
+
+        using (var activity = new ToolExecutionActivity(metrics, "memory_search", "acme"))
+        {
+            activity.RecordError(new InvalidOperationException("boom"));
+        }
+
+        var stopped = stoppedActivities.ShouldHaveSingleItem();
+        stopped.Tags.Any(kv => kv.Key == "result" && kv.Value?.ToString() == "error").ShouldBeTrue();
+    }
+
+    [Fact]
     public void Dispose_StopsTheActivity()
     {
         var metrics = new ToolCallMetrics();

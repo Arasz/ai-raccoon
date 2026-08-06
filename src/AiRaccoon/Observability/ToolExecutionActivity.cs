@@ -11,6 +11,9 @@ public sealed class ToolExecutionActivity : IDisposable
     private const string ToolActivityTag = "tool";
     private const string ProjectIdActivityTag = "project_id";
     private const string ErrorTypeActivityTag = "error_type";
+    private const string ResultActivityTag = "result";
+    private const string ResultSuccess = "success";
+    private const string ResultError = "error";
 
     private readonly Activity? _activity;
     private readonly ToolCallMetrics _metrics;
@@ -35,13 +38,19 @@ public sealed class ToolExecutionActivity : IDisposable
     }
 
     /// <summary>Records a successful invocation: counter + duration histogram, result=success.</summary>
-    public void RecordInvocation() => _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, false);
+    public void RecordInvocation()
+    {
+        _activity?.SetStatus(ActivityStatusCode.Ok);
+        _activity?.SetTag(ResultActivityTag, ResultSuccess);
+        _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, false);
+    }
 
     /// <summary>Marks the activity as failed and records the invocation with the exception's type name.</summary>
     public void RecordError(Exception exception)
     {
         _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
+        _activity?.SetTag(ResultActivityTag, ResultError);
         _metrics.RecordInvocation(_toolName, _stopwatch.Elapsed, true, exception.GetType().Name);
     }
 }
