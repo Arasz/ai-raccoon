@@ -23,6 +23,7 @@ namespace AiRaccoon.Tests.Integration;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(WatchIntegrationCollection.Name)]
 public sealed class WatchIntegrationTests
 {
     private const string Project = "acme";
