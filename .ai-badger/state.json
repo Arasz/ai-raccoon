@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-08-06T17:50:00Z",
+  "lastUpdated": "2026-08-06T19:00:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "switch-from-stdio-to-http",
+      "title": "HTTP serve mode: serve verb + --mcp-entry + 4h idle watchdog + idempotent attach",
+      "summary": "Full design->MoE->plan->impl->QA cycle (user process). Design by architect (docs/work/2026-08-06-http-serve-design.md), MoE review = 4 parallel lanes (code-reviewer/test-engineer/dotnet-engineer/protocol-switch; reports docs/work/2026-08-06-http-serve-moe-*.md), rulings R1-R17 folded into design + plan (docs/plans/2026-08-06-http-serve-mode-plan.md). Key rulings: R1 watchdog DI triple (AddHostedService registers IHostedService only), R2 tick=min(60s,timeout/4), R3 4h watchdog serve-only by construction (ServerConfig.IdleTimeout defaults Zero), R4 any-/mcp request = activity (path-branched middleware), R14 idempotent attach (probe POST /mcp Accept json/event-stream, recognized iff 400/405/406 AND body has jsonrpc; bind-race re-probe once; attached = exit 0, no watchdog, no bank), R15 protocol-switch banner DEFERRED (no MCP standard; ~110-line SDK stdio_client fork; attach+url-config covers it), R16 ai-badger .mcp.json stays stdio (serve never answers JSON-RPC). 4 WPs TDD: WP1 serve verb+IdleTimeoutParser+config (5fa54f5), WP2 watchdog (5343e59), WP3 ServeRunner+attach+renderer+Program.cs routing (c65ee7e), WP4 docs (2ebdea9). Gates: build 0 warnings; targeted 94/94+27/27; Unit 899/899; live smoke (mcp-entry golden JSON byte-exact, attach exit 0+ownership GET 405, initialize round trip 200); full suite 1282-1283 passed, only recorded watch flakes (Class-B DeletedDirectory passes isolated; BDD rename tolerated, 139/139 isolated). Code-reviewer gate APPROVE-WITH-CHANGES 0 MUST-FIX (F1 flake-hardened 5s smoke, F6/F7 folded; docs/work/2026-08-06-http-serve-code-review-gate.md). PR #62 ready. Cross-repo extension: ai-badger PR #316 (0.82.0 release-shaped: meta.json package id arasz.ai-raccoon->ai-raccoon drift fix + install line + HTTP-mode description, server.md HTTP-mode guidance within 15-line budget, re-scaffolded 7 agent files, package-id contract test; gates: pytest 3209 green, validate.py, freshness guard, pre-push quality gate). Hermes switch (user action): hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp after 'ai-raccoon serve > serve.log 2>&1 &'.",
+      "pr": [
+        62,
+        316
+      ],
+      "date": "2026-08-06"
+    },
     {
       "id": "continue-improv",
       "title": "Extraction follow-ups: S4 propose candidate logs, S5 OCE filter, S10 shared limit constant, F3 unique-bucket indexes (PR #64)",

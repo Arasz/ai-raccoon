@@ -789,11 +789,12 @@
       "branch": "task/switch-from-stdio-to-http",
       "risk": false,
       "startedAt": "2026-08-06T14:52:30.994140+00:00",
-      "finishedAt": null,
-      "state": "STARTED",
+      "finishedAt": "2026-08-06T16:39:26.612456+00:00",
+      "state": "FINISHED",
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_164327_13b8a9",
-      "resumeAttempts": []
+      "resumeAttempts": [],
+      "stateJsonUpdated": true
     },
     {
       "taskId": "hermes-ai-raccoon-memory-provider",

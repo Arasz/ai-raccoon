@@ -112,10 +112,10 @@
     {
       "category": "uncategorized",
       "name": "ai-badger-project-ops",
-      "sourceHash": "80f55a387662096ed4f8808f49dccf70a554f6720447e51ca43965b9f5e3c012",
+      "sourceHash": "31bc79d439c8aba3cb8a2be3088a5e280eda3f9b0dc1490cd728666096ed03d2",
       "sourcePath": "ai-badger-project-ops",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:25:00Z",
+      "syncedAt": "2026-08-06T16:38:31Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
     },
     {
