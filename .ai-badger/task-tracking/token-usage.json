@@ -3233,7 +3233,19 @@
           }
         },
         "latest": {
-          "timestamp": "2026-08-06T08:04:33.564184+00:00",
+          "timestamp": "2026-08-06T12:02:33.972527+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T12:02:33.972527+00:00",
           "contextTokens": 0,
           "assistantMessages": 0,
           "byModel": {},
