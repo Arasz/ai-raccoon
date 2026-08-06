@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
@@ -25,7 +26,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigCommandsEncryptionTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…' (the OpenSshKeyBuilder below builds that seed).
+    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…' (TestOpenSshKeyBuilder builds that seed).
     private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
@@ -116,7 +117,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_InteractiveOwnerDefaults_PersistsSourceAndWarns()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
@@ -144,7 +145,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_NonDefaultIdsViaStdin_ArePersisted()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("p-111\ns-222\n"));
 
@@ -161,7 +162,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_Token_UsedForValidationOnlyNeverPersisted()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, _, _) = await Run(["encryption", "bitwarden", "-t", "tok-123"], store, runner,
             new StringReader("\n\n"));
@@ -209,7 +210,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_EnvKeyedBank_RekeysToDerivedKey()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
@@ -243,7 +244,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_SelfHeal_BankAlreadyDerivedKeyed_SkipsRekeyAndPersists()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
@@ -267,7 +268,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     {
         // Amendment 1 (unset crash window): bank rekeyed back to env, sidecar never deleted.
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -293,7 +294,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_NoEnvPassphrase_ErrorsWithoutChange()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -320,7 +321,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Show_NoRowsNoSidecar_PrintsEnvSource()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
 
@@ -340,7 +341,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = DefaultSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
 
@@ -354,7 +355,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Show_NoRows_SidecarFallback_PrintsBitwardenWithIds()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", "p-9", "s-9");
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
@@ -379,7 +380,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = DefaultSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
 
         var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
@@ -404,7 +405,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = DefaultSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -442,7 +443,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = DefaultSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -486,7 +487,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = DefaultSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -510,7 +511,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     {
         Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(null!,
-                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger()));
@@ -534,7 +535,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger()));
@@ -546,7 +547,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
                 new FakeLogger()));
@@ -558,7 +559,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new OpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 null!));
@@ -602,76 +603,4 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    /// <summary>Assembles an openssh-key-v1 blob from synthetic bytes — deterministic, no real key material.</summary>
-    private sealed class OpenSshKeyBuilder
-    {
-        private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
-        private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
-        private uint _checkint1 = 0x01234567;
-        private uint _checkint2 = 0x01234567;
-        private string _cipherName = "none";
-        private string _kdfName = "none";
-        private string _keyType = "ssh-ed25519";
-
-        private string _magic = "openssh-key-v1\0";
-
-        public OpenSshKeyBuilder WithEncrypted(string cipherName = "aes256-ctr", string kdfName = "bcrypt")
-        {
-            _cipherName = cipherName;
-            _kdfName = kdfName;
-            return this;
-        }
-
-        public OpenSshKeyBuilder WithKeyType(string keyType)
-        {
-            _keyType = keyType;
-            return this;
-        }
-
-        public string Build()
-        {
-            using var body = new MemoryStream();
-            body.Write(Encoding.ASCII.GetBytes(_magic));
-            WriteString(body, _cipherName);
-            WriteString(body, _kdfName);
-            WriteString(body, []);
-            WriteUInt32(body, 1);
-            WriteString(body, BuildPublicKeyBlob());
-            WriteString(body, BuildPrivateSection());
-
-            return "-----BEGIN OPENSSH PRIVATE KEY-----\n" + Convert.ToBase64String(body.ToArray())
-                                                           + "\n-----END OPENSSH PRIVATE KEY-----\n";
-        }
-
-        private byte[] BuildPublicKeyBlob()
-        {
-            using var blob = new MemoryStream();
-            WriteString(blob, _keyType);
-            WriteString(blob, PublicKey01To20);
-            return blob.ToArray();
-        }
-
-        private byte[] BuildPrivateSection()
-        {
-            using var section = new MemoryStream();
-            WriteUInt32(section, _checkint1);
-            WriteUInt32(section, _checkint2);
-            WriteString(section, _keyType);
-            WriteString(section, PublicKey01To20);
-            WriteString(section, [.. Seed00To1F, .. PublicKey01To20]);
-            WriteString(section, []);
-            section.Write(new byte[8 - (int)section.Length % 8]);
-            return section.ToArray();
-        }
-
-        private static void WriteUInt32(Stream stream, uint value) => stream.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
-
-        private static void WriteString(Stream stream, string value) => WriteString(stream, Encoding.ASCII.GetBytes(value));
-
-        private static void WriteString(Stream stream, byte[] value)
-        {
-            WriteUInt32(stream, (uint)value.Length);
-            stream.Write(value);
-        }
-    }
 }
