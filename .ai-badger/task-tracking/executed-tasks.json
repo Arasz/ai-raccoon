@@ -681,6 +681,21 @@
       "trackingSource": "hermes",
       "resumeCommand": "hermes --resume 20260806_110338_f0a19c",
       "resumeAttempts": []
+    },
+    {
+      "taskId": "full-test-all-tools-in-ai-raccoon",
+      "title": "Full test of all tools exported by AiRaccoon",
+      "sessionId": "20260806_111438_61b45c",
+      "transcriptPath": null,
+      "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+      "branch": "task/full-test-all-tools-in-ai-raccoon",
+      "risk": false,
+      "startedAt": "2026-08-06T09:16:16.357375+00:00",
+      "finishedAt": null,
+      "state": "STARTED",
+      "trackingSource": "hermes",
+      "resumeCommand": "hermes --resume 20260806_111438_61b45c",
+      "resumeAttempts": []
     }
   ]
 }
