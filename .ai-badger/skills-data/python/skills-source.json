@@ -1,0 +1,10 @@
+{
+  "sources": [
+    {
+      "name": "claude-plugins-official",
+      "type": "marketplace",
+      "source": "https://github.com/anthropics/claude-plugins-official",
+      "support": ["claude"]
+    }
+  ]
+}
