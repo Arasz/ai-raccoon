@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class VersionContractTests
 {
-    private const string ExpectedVersion = "1.0.7";
+    private const string ExpectedVersion = "1.0.8";
 
     [Fact]
     public void PackageMetadata_IsStable_OnePointZero()
@@ -46,8 +46,8 @@ public class VersionContractTests
 
         string Property(string name) => csproj.Descendants("PropertyGroup").Elements(name).First().Value;
 
-        Property("PackageId").ShouldBe("arasz.ai-raccoon");
-        root.GetProperty("packages")[0].GetProperty("identifier").GetString().ShouldBe("arasz.ai-raccoon");
+        Property("PackageId").ShouldBe("ai-raccoon");
+        root.GetProperty("packages")[0].GetProperty("identifier").GetString().ShouldBe("ai-raccoon");
         Property("ToolCommandName").ShouldBe("ai-raccoon");
     }
 
