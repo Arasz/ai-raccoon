@@ -43,7 +43,7 @@ import httpx
 
 JSAA_ROOT = Path("/Users/arasz/RiderProjects/job-search-ai-assistant")
 # Wave 0 reproducibility: ingest only the pinned jsaa tree (plan C §0/§3 Wave 0).
-JSAA_PINNED_COMMIT = "0bb8ff8a7af47efe248add0c16bcf79e96054e19"
+JSAA_PINNED_COMMIT = "9397bbef504b5b30a31003c84e8c5c316641adb6"
 # Port 5000 is taken by macOS ControlCenter; override via MCP_URL env var.
 MCP_BASE = os.environ.get("MCP_URL", "http://localhost:5000/mcp")
 PROJECT_ID = "job-search-ai-assistant"
@@ -183,19 +183,6 @@ class AiRaccoonClient:
             log.exception("MCP %s → error (%.2fs)", method, elapsed)
             raise
 
-    async def memory_configure(
-        self, client: httpx.AsyncClient, project_id: str, provider: str
-    ) -> dict:
-        result = await self._call(
-            client,
-            "tools/call",
-            {
-                "name": "memory_configure",
-                "arguments": {"projectId": project_id, "provider": provider},
-            },
-        )
-        return _unwrap(result)
-
     async def memory_write(
         self,
         client: httpx.AsyncClient,
@@ -279,17 +266,7 @@ class AiRaccoonClient:
 
 
 CONTEXTS_TO_DELETE = [
-    "docs:adr",
-    "docs:architecture",
-    "docs:explanation",
-    "docs:how-to",
-    "docs:reference",
-    "docs:rules",
-    "ai-badger:invariants",
-    "ai-badger:skills",
-    "ai-badger:agents",
-    "ai-badger:instructions",
-    "remember:operational",
+    "project:job-search-ai-assistant",
 ]
 
 
@@ -872,7 +849,6 @@ async def write_chunks_batched(
                 http,
                 project_id=PROJECT_ID,
                 content=chunk.content,
-                agent_id=chunk.structured_path,
                 source_file=chunk.source_file,
                 section=section,
             )
@@ -889,6 +865,12 @@ async def write_chunks_batched(
             processed,
             written,
         )
+        if isinstance(embed_result, dict) and embed_result.get("processed", 0) == 0 and embed_result.get("pending", 0) > 0:
+            log.warning(
+                "No embedding provider configured (%d rows stay pending). "
+                "Fix with `ai-raccoon model set local` (single config channel) and re-run.",
+                embed_result.get("pending", 0),
+            )
 
     # Final embed (omit limit = all pending)
     if not dry_run:
@@ -945,7 +927,7 @@ async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> N
 
 
 async def reset_contexts(client: AiRaccoonClient, http: httpx.AsyncClient) -> None:
-    """Delete all known contexts. Requires full access mode."""
+    """Delete the project's committed rows (project:<id> scope). Requires full access mode."""
     for ctx in CONTEXTS_TO_DELETE:
         try:
             result = await client.memory_delete_context(http, PROJECT_ID, ctx)
@@ -1061,10 +1043,6 @@ async def run_pipeline(
         if reset:
             log.info("Resetting contexts...")
             await reset_contexts(client, http)
-
-        # Configure
-        cfg = await client.memory_configure(http, PROJECT_ID, "local")
-        log.info("memory_configure → %s", cfg)
 
         # Write batches
         written = await write_chunks_batched(client, http, chunks, dry_run=False)

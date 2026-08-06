@@ -3,6 +3,7 @@ using System.Text;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
 
@@ -11,11 +12,12 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     OnSourceChanged firing (post-hash-skip, pre-ingest), re-digest through the existing ingest path,
 ///     rename = remove old path + digest new path with overwrite (D2). File gone → chunks removed.
 /// </summary>
-public sealed class WatchDigestExecutor(
+public sealed partial class WatchDigestExecutor(
     IMemoryStore store,
     IWatchStore watchStore,
     MemoryExtensionHost extensionHost,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<WatchDigestExecutor> logger)
 {
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
@@ -54,7 +56,26 @@ public sealed class WatchDigestExecutor(
             .ConfigureAwait(false);
         await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
         await store.IngestFileAsync(projectId, normalized, null, cancellationToken).ConfigureAwait(false);
+        await TryEmbedPendingAsync(projectId, cancellationToken).ConfigureAwait(false);
         await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Best-effort retry net for rows the inline embed left pending (audit F6 / issue #44):
+    ///     the ingest path embeds only when a provider is configured AND the inline embed
+    ///     succeeds; nothing else retries a row left pending. A failure here is logged and
+    ///     never breaks the digest.
+    /// </summary>
+    private async Task TryEmbedPendingAsync(string projectId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await store.EmbedPendingAsync(projectId, null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.EmbedFailed(logger, projectId, ex);
+        }
     }
 
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (R5 contract).</summary>
@@ -85,4 +106,11 @@ public sealed class WatchDigestExecutor(
     }
 
     private long Now() => timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 400, Level = LogLevel.Warning,
+            Message = "Best-effort embed after watch ingest failed for {ProjectId}; rows stay pending")]
+        public static partial void EmbedFailed(ILogger logger, string projectId, Exception exception);
+    }
 }
