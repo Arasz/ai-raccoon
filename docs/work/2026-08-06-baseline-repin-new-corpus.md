@@ -38,7 +38,7 @@ File-level retrieval stays strong (9/12 at rank 1). The drift concentrates in (a
 - SectionTargetedRetrievalTests S2: file-level gate ≤ 3 (measured 1) kept; exact-chunk gate replaced by the documented gap (decision chunk outside top-10; structure-signal follow-up).
 - QueryConstructionTests: wave0 dict — A6 and C2 removed (A6 rank 6 at limit 10 cannot appear in the limit-5 gate; C2 hybrid collapsed), C5 1 → 5; C2's FTS-only rank-1 gate kept (measured 1).
 - SourceAffinitySweepTests: S2 gated at file level ≤ 3 (new S2FileRank harness field); A6 file/exact 3/2 → 6/6; C1 kept 1; C2 hybrid gate dropped (FTS gate lives in QueryConstructionTests); C5 1 → 5; the strict "nDCG@5 beats the λ=0 arm" gate became ≥ — on the re-pinned corpus the chosen config TIES the λ=0 arm at 0.674 (measured), still above the 0.650 merged-state floor.
-- RrfParameterSweepTests: same S2 file-level re-scope; A6/A7/C2/C5 gates re-pinned to the measured values; fusion loop documents C2's hybrid-null collapse; GateViolations mirrors the re-pinned set for the Pareto machinery.
+- RrfParameterSweepTests: same S2 file-level re-scope; A6/A7/C2/C5 gates re-pinned to the measured values; the fusion gate (hybrid ≤ best single modality) carries the measured modality matrix — 7 of 11 gate queries violate it on the new corpus (A3 4/4/3, A5 4/-/3, A6 6/2/-, A7 7/2/-, S2 -/3/-, C2 -/1/-, C5 5/1/3; hybrid/fts/vector exact ranks) and are documented exclusions; the 4 compliant queries (A1, A2, A4, C1) keep the strict gate; GateViolations mirrors the re-pinned set for the Pareto machinery.
 
 **Evidence:** the committed test edits + the measured table above; final numbers (nDCG@5, exactAt3, Pareto holders) recorded from the green sweep runs.
 
