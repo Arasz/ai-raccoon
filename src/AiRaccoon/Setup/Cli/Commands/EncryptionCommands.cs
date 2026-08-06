@@ -32,11 +32,11 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
     private readonly SqliteConnectionFactory _bank;
     private readonly ICliSecretManager _bws;
     private readonly IEncryptionKeyProvider _env;
-    private readonly IEncryptionState _encryptionState;
+    private readonly IEncryptionSourceSidecar _encryptionState;
     private readonly ILogger _logger;
 
     public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
-        IEncryptionKeyProvider env, IEncryptionState encryptionState, ILogger logger)
+        IEncryptionKeyProvider env, IEncryptionSourceSidecar encryptionState, ILogger logger)
     {
         _bank = bank;
         _bws = bws;
@@ -126,7 +126,7 @@ public sealed partial class EncryptionCommands : IEncryptionCommands
             else
             {
                 var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
-                if (File.Exists(EncryptionState.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
+                if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await TryOpenAsync(_bank, envPassphrase, cancellationToken))
                 {
                     _encryptionState.Delete();

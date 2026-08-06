@@ -30,10 +30,10 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private string BankPath() => SqliteConnectionFactory.BankPathFor(Options());
 
-    private string SidecarPath() => EncryptionState.PathFor(BankPath());
+    private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
     private EncryptionKeyResolver Resolver(IEncryptionKeyProvider env, FakeBwsRunner runner) =>
-        new(new EncryptionState(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
+        new(new EncryptionSourceSidecar(BankPath()), [env, new BitwardenEncryptionKeyProvider(runner)]);
 
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 

@@ -83,7 +83,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         FakeBwsDir = Path.Combine(DataRoot, "fake-bws");
         BwsExecutable = Path.Combine(FakeBwsDir, "bws");
         var runner = new PathSwitchingRunner(() => BwsExecutable);
-        Resolver = new EncryptionKeyResolver(new EncryptionState(SqliteConnectionFactory.BankPathFor(options)),
+        Resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
         ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
@@ -111,7 +111,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     public string BankPath => Bank.BankPath;
 
-    public string SidecarPath => EncryptionState.PathFor(BankPath);
+    public string SidecarPath => EncryptionSourceSidecar.PathFor(BankPath);
 
     public string CallsLogPath => Path.Combine(FakeBwsDir, "bws-calls.log");
 
@@ -148,7 +148,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     /// <summary>Writes the sidecar as the bitwarden source pointing at the given secret id.</summary>
     public void WriteSidecar(string secretId, string projectId = ProjectId) =>
-        new EncryptionState(BankPath).Write(new EncryptionData("bitwarden") { ProjectId = projectId, SecretId = secretId });
+        new EncryptionSourceSidecar(BankPath).Write(new EncryptionData("bitwarden") { ProjectId = projectId, SecretId = secretId });
 
     /// <summary>
     ///     The feature's "the encryption source is bitwarden" baseline: fake installed, sidecar
@@ -192,7 +192,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var envProvider = new StubEnvProvider(EnvPassphrase);
-        var encryptionState = new EncryptionState(BankPath);
+        var encryptionState = new EncryptionSourceSidecar(BankPath);
         var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger());
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr,
             new StringReader(stdin), CancellationToken.None,

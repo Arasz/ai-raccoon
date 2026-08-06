@@ -32,7 +32,7 @@ internal static class ConfigVerbRunner
         var bankPath = SqliteConnectionFactory.BankPathFor(config.Options);
         var bws = new BitwardenCliSecretManager();
         var resolver = EncryptionKeyResolver.Create(bankPath, bws);
-        var encryptionState = new EncryptionState(bankPath);
+        var encryptionState = new EncryptionSourceSidecar(bankPath);
         var env = new EnvEncryptionKeyProvider();
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());

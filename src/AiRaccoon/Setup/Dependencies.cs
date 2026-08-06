@@ -92,11 +92,11 @@ public static partial class Dependencies
         private void RegisterEncryptionServices(InfrastructureOptions options)
         {
             services.AddSingleton<ICliSecretManager>(_ => new BitwardenCliSecretManager());
-            services.AddSingleton<IEncryptionState>(_ => new EncryptionState(SqliteConnectionFactory.BankPathFor(options)));
+            services.AddSingleton<IEncryptionSourceSidecar>(_ => new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)));
             services.AddSingleton<IEncryptionKeyProvider, NoneEncryptionKeyProvider>();
             services.AddSingleton<IEncryptionKeyProvider, EnvEncryptionKeyProvider>();
             services.AddSingleton<IEncryptionKeyProvider, BitwardenEncryptionKeyProvider>();
-            services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionState>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
+            services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
         }
     }
 
