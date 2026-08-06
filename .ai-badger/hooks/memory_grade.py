@@ -62,14 +62,21 @@ def _result_payload(result: Any) -> Any:
     return {"raw": str(result)}
 
 
-def _build_line(args: Dict[str, Any], result: Any) -> Dict[str, Any]:
-    """One JSONL line; key spellings are read defensively (F4), workspace null when absent."""
+def _build_line(args: Dict[str, Any], result: Any, host: Optional[str] = None,
+                session_id: Optional[str] = None) -> Dict[str, Any]:
+    """One JSONL line; key spellings are read defensively (F4), workspace null when absent.
+
+    ``host``/``sessionId`` attribute the line to a transport (hermes/claude/copilot) so
+    "no usage" vs "no capture" is answerable from the log itself; null in manual lines.
+    """
     return {
         "ts": _now_iso(),
         "query": args.get("query", ""),
         "scope": args.get("scope", "all"),
         "projectId": args.get("projectId", args.get("project_id")),
         "workspaceId": args.get("workspaceId", args.get("workspace_id")),
+        "host": host,
+        "sessionId": session_id,
         "result": _result_payload(result),
         "usefulness": None,
         "note": None,
@@ -124,16 +131,18 @@ def _set_pending(project: str, ask: str) -> None:
 
 
 def log_search(args: Dict[str, Any], result: Any, cwd: str,
-               stash: bool = True) -> Optional[str]:
+               stash: bool = True, host: Optional[str] = None,
+               session_id: Optional[str] = None) -> Optional[str]:
     """Append one line for a memory_search call and stash the ask; the ask text back.
 
     Returns None when disabled (no reads, no writes) or when the log write fails.
     ``stash=False`` for transports that return the ask directly (Claude's
     PostToolUse) — they must not leave a stale ask a Hermes session would pop.
+    ``host`` names the transport (hermes/claude/copilot); ``session_id`` the session.
     """
     if not enabled():
         return None
-    line = _build_line(args, result)
+    line = _build_line(args, result, host=host, session_id=session_id)
     ts = line["ts"]
     if not _append_log(line):
         return None

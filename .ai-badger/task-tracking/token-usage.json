@@ -2820,6 +2820,430 @@
         "mainSessionTotal": 0,
         "grandTotal": 0
       }
+    },
+    {
+      "taskId": "encryption-commands-rework",
+      "subagents": [
+        {
+          "description": "architect: plan for encryption refactor completion (Q1-Q6 decisions, WP1-WP8, DoD)",
+          "at": "2026-08-06T01:11:30.870434+00:00",
+          "totalTokens": 3073697,
+          "delegationId": "deleg_f834935b",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 29
+        },
+        {
+          "description": "dotnet-engineer: WP1-WP8 implementation",
+          "at": "2026-08-06T02:01:34.275727+00:00",
+          "totalTokens": 62315370,
+          "delegationId": "deleg_905ceb54",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 250
+        },
+        {
+          "description": "code-reviewer: PR #31 gate (S1/S2 SHOULD-FIX + S3 gap + NITs)",
+          "at": "2026-08-06T02:24:25.650850+00:00",
+          "totalTokens": 5307768,
+          "delegationId": "deleg_e14d26ab",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 50
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_024614_942e9f",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T00:52:19.298962+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 11,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 152163,
+              "outputTokens": 16003,
+              "cacheReadTokens": 1365632,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 11
+            }
+          },
+          "cumulative": {
+            "inputTokens": 152163,
+            "outputTokens": 16003,
+            "cacheReadTokens": 1365632,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T02:26:05.521741+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 168,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 348286,
+              "outputTokens": 146329,
+              "cacheReadTokens": 58532480,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 172
+            }
+          },
+          "cumulative": {
+            "inputTokens": 855348,
+            "outputTokens": 421038,
+            "cacheReadTokens": 128444672,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T02:26:05.521741+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 168,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 348286,
+              "outputTokens": 146329,
+              "cacheReadTokens": 58532480,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 172
+            }
+          },
+          "cumulative": {
+            "inputTokens": 855348,
+            "outputTokens": 421038,
+            "cacheReadTokens": 128444672,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-flash": 130326
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 703185,
+        "outputTokens": 405035,
+        "cacheReadTokens": 127079040,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 70696835,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 128187260,
+        "grandTotal": 128187260
+      }
+    },
+    {
+      "taskId": "review-encryption-refactor",
+      "subagents": [],
+      "grade": null,
+      "sessionId": "20260806_074701_6803f8",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T05:55:10.487477+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 3,
+          "byModel": {
+            "deepseek-v4-pro": {
+              "inputTokens": 67474,
+              "outputTokens": 2066,
+              "cacheReadTokens": 87552,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 3
+            }
+          },
+          "cumulative": {
+            "inputTokens": 67474,
+            "outputTokens": 2066,
+            "cacheReadTokens": 87552,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T07:19:27.242852+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 239,
+          "byModel": {
+            "deepseek-v4-pro": {
+              "inputTokens": 270597,
+              "outputTokens": 91525,
+              "cacheReadTokens": 54685568,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 249
+            }
+          },
+          "cumulative": {
+            "inputTokens": 578966,
+            "outputTokens": 140163,
+            "cacheReadTokens": 60482688,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T07:19:27.242852+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 239,
+          "byModel": {
+            "deepseek-v4-pro": {
+              "inputTokens": 270597,
+              "outputTokens": 91525,
+              "cacheReadTokens": 54685568,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 249
+            }
+          },
+          "cumulative": {
+            "inputTokens": 578966,
+            "outputTokens": 140163,
+            "cacheReadTokens": 60482688,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-pro": 89459
+        },
+        "modelMix": {
+          "deepseek-v4-pro": 1.0
+        },
+        "inputTokens": 511492,
+        "outputTokens": 138097,
+        "cacheReadTokens": 60395136,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 61044725,
+        "grandTotal": 61044725
+      }
+    },
+    {
+      "taskId": "manual-test-fresh-ai-raccoon-tool-install",
+      "subagents": [
+        {
+          "description": "architect plan review of fresh-install protocol (APPROVE-WITH-CHANGES, 2 fatal findings folded in)",
+          "at": "2026-08-06T07:29:39.144608+00:00",
+          "totalTokens": 1049979,
+          "delegationId": "deleg_98028a5e",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 17
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_074942_a04fab",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T07:19:42.240243+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 25,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 59351,
+              "outputTokens": 18626,
+              "cacheReadTokens": 1413376,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 31
+            }
+          },
+          "cumulative": {
+            "inputTokens": 58075,
+            "outputTokens": 16427,
+            "cacheReadTokens": 1411968,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T07:35:00.612832+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 96,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 122148,
+              "outputTokens": 77541,
+              "cacheReadTokens": 10887680,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 107
+            }
+          },
+          "cumulative": {
+            "inputTokens": 230470,
+            "outputTokens": 111571,
+            "cacheReadTokens": 12050944,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T07:35:00.612832+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 96,
+          "byModel": {
+            "deepseek-v4-flash": {
+              "inputTokens": 122148,
+              "outputTokens": 77541,
+              "cacheReadTokens": 10887680,
+              "cacheCreationTokens": 0,
+              "assistantMessages": 107
+            }
+          },
+          "cumulative": {
+            "inputTokens": 230470,
+            "outputTokens": 111571,
+            "cacheReadTokens": 12050944,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {
+          "deepseek-v4-flash": 58915
+        },
+        "modelMix": {
+          "deepseek-v4-flash": 1.0
+        },
+        "inputTokens": 172395,
+        "outputTokens": 95144,
+        "cacheReadTokens": 10638976,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": 1.0,
+        "subagentTokens": 1049979,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 10906515,
+        "grandTotal": 10906515
+      }
+    },
+    {
+      "taskId": "online-pr-review",
+      "subagents": [],
+      "grade": 5,
+      "sessionId": "20260806_092102_537765",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T07:21:35.300694+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T07:23:23.527972+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "finish": {
+          "timestamp": "2026-08-06T07:23:23.527972+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 0,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      },
+      "gradedAt": "2026-08-06T07:26:50.769520+00:00"
+    },
+    {
+      "taskId": "refactor-part-2",
+      "subagents": [
+        {
+          "description": "MoE review batch: architect + dotnet-engineer + test-engineer on part2-plan.md",
+          "at": "2026-08-06T08:15:03.424247+00:00",
+          "totalTokens": 4134684,
+          "delegationId": "deleg_83280ff0",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 57
+        },
+        {
+          "description": "Code-reviewer quality gate on integrated plan",
+          "at": "2026-08-06T08:25:46.786181+00:00",
+          "totalTokens": 2613897,
+          "delegationId": "deleg_3a5c2235",
+          "model": "deepseek-v4-flash",
+          "apiCalls": 38
+        }
+      ],
+      "grade": null,
+      "sessionId": "20260806_100353_81f79b",
+      "trackingSource": "hermes",
+      "checkpoints": {
+        "start": {
+          "timestamp": "2026-08-06T08:04:33.564184+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        },
+        "latest": {
+          "timestamp": "2026-08-06T08:04:33.564184+00:00",
+          "contextTokens": 0,
+          "assistantMessages": 0,
+          "byModel": {},
+          "cumulative": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheCreationTokens": 0
+          }
+        }
+      },
+      "usage": {
+        "outputByModel": {},
+        "modelMix": {},
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "cacheEfficiency": null,
+        "subagentTokens": 6748581,
+        "contextTokensAtStart": 0,
+        "contextTokensAtFinish": 0,
+        "contextGrowth": 0,
+        "mainSessionTotal": 0,
+        "grandTotal": 0
+      }
     }
   ]
 }

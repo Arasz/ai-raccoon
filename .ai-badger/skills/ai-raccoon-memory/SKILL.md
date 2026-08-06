@@ -69,26 +69,46 @@ size; `memory_sync` exchanges snapshots with cloud storage when configured.
 ## 8. Memory-grade hook (dogfooding, default off)
 
 Every `memory_search` can be logged to a machine-wide quality log with a 1-5 usefulness grade
-filled in afterwards — retrieval-quality telemetry correlated by `projectId`/`workspaceId`
-across sessions. **Off by default**: the hook does no reads, no writes, and no injection until
-the env var is set. Enable on the machine (then restart the agent host):
+filled in afterwards — retrieval-quality telemetry correlated by `projectId`/`workspaceId`,
+`host` and `sessionId` across sessions. **Off by default**: the hook does no reads, no writes,
+and no injection until the env var is set. Enable on the machine (then restart the agent host):
 
 ```sh
 echo 'export AI_BADGER_MEMORY_GRADE=1' >> ~/.zshrc
 launchctl setenv AI_BADGER_MEMORY_GRADE 1
 ```
 
+**Host coverage (verified 0.80.0):** the hook fires on Claude Code/Copilot via the
+PostToolUse hook, and on Hermes only when the `ai-badger` plugin is installed as a directory
+plugin (`~/.hermes/plugins/ai-badger/` with `plugin.yaml` + `register(ctx)`, shipped by the
+scaffold when `hermes` is an agent) **and enabled**:
+
+```sh
+hermes plugins enable ai-badger   # or plugins.enabled: [ai-badger] in ~/.hermes/config.yaml
+```
+
+Before trusting the log on any host, verify the capture path once: set the env var, run one
+organic `memory_search`, and confirm a line appeared (see the checklist). A missing line means
+"no capture", not "no usage" — the `host`/`sessionId` fields make the two distinguishable.
+
 When on, each search appends one line to `~/.ai-badger/memory-grade/memory-quality.jsonl`
 (with `usefulness: null`), and the very next turn asks the agent to rate it. Answer by filling
 the grade in place — nothing is lost when an ask goes unanswered:
 
 ```sh
-python3 ~/.hermes/plugins/memory_grade.py grade <ts> <1-5> [note]
-python3 ~/.hermes/plugins/memory_grade.py probe   # config state, log path, last 3 lines
+python3 ~/.hermes/plugins/ai-badger/memory_grade.py grade <ts> <1-5> [note]
+python3 ~/.hermes/plugins/ai-badger/memory_grade.py probe  # config state, log path, last 3 lines
 ```
+
+The hook line is a superset of the manual shape: `ts, query, scope, projectId, workspaceId,
+host, sessionId, result, usefulness, note` — `host` (hermes/claude/copilot) and `sessionId`
+are null in manual lines.
 
 ## Verification Checklist
 
 - [ ] `memory_watch_status` shows the docs dir `healthy`
 - [ ] `memory_search(project_id, scope=all)` returns docs-derived hits
 - [ ] A durable finding was written back with `memory_write`, source path included
+- [ ] `AI_BADGER_MEMORY_GRADE=1` is set in the host env and the host was restarted
+- [ ] One organic `memory_search` appended a line to
+      `~/.ai-badger/memory-grade/memory-quality.jsonl` (with `host` set)
