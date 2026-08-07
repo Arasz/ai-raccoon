@@ -1,9 +1,16 @@
 {
-  "lastUpdated": "2026-08-06T21:23:03Z",
+    "lastUpdated": "2026-08-06T23:13:25Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+        "id": "sqli-impro",
+        "title": "SQLite bank maintenance: periodic WAL checkpoint + VACUUM/ANALYZE (R1/R2/R4)",
+        "summary": "Evidence-first bank analysis (docs/work/2026-08-06-sqlanalyze-usefulness.md) measured a 431MB WAL that was 100% checkpointable garbage (TRUNCATE -> 0 bytes, tuple 0|0|0) and 47.9% freelist (14.1MB reclaimable, VACUUM 90-160ms). Owner decisions: R1 lifecycle-aware ALL-MODES maintenance (corrected from stdio-only after owner f: stdio processes are session-bound, serve is long-lived but idle-watchdog-exits; every process checkpoints at startup + shutdown, serve runs the hourly timer), R2 weekly VACUUM (not daily), R4 ANALYZE rides the vacuum tick. BankMaintenanceHostedService (Infrastructure/Maintenance): startup pass -> PeriodicTimer loop with per-tick interval re-read -> StopAsync final checkpoint; busy|log|checkpointed tuple read (busy>0 -> Warning 511 defer, never error); VACUUM busy on write-lock contention -> Warning 516 defer (never Error 513); busy_timeout 250ms override restored to 5000 before pool return; in-memory per-process vacuum clock (short-lived processes never vacuum); settings keys maintenance.checkpoint-interval-minutes.global (60) + maintenance.vacuum-interval-days.global (7, clamped at 36500); CLI family config maintenance interval|vacuum-interval|list; unconditional AddHostedService (all modes). Architect plan -> dotnet-engineer TDD implementation (7 commits) -> code-reviewer gate APPROVE-WITH-CHANGES (0 MUST-FIX; 2 SHOULD-FIX folded: interval overflow clamp + CLI reject, VACUUM busy defer; NITs: OCE return, post-analyze checkpoint, busy restore, doc trim) -> review-fix commit, RED 3/3 confirmed. Test hardening: lifecycle tests sync on FakeLogger polling instead of fixed delays. Gates: build 0 errors; full suite 1370 passed/0 failed/4 skipped (2 consecutive green; one environmental ReferenceAssets copy flake passed isolated); targeted 63/63 + 3x stable. PR #79 ready for owner merge.",
+        "pr": 79,
+        "date": "2026-08-07"
+    },
+      {
       "id": "fix-missing-data-in-promotion",
       "title": "Promotion carries provenance into shared rows + config-driven extraction exclusion; bank cleanup",
       "summary": "WP1: ShareAsync copies source_file/section into shared rows (single insertion point; search scope=shared surfaces sourceFile). WP2: extract.exclude.prefixes settings + extract exclude add|remove|list verbs; setup script wires 'hermes/' (owner f: engine agent-agnostic). TDD 2+6 tests; suite 1332/0/4; review APPROVE-WITH-NITS; merged PR #75 (256adce). E2E on scratch: exclusion gates hermes rows, control adds back, provenance in search. Bank cleanup: shared 318 + ai-badger/hermes-default/jsaa/e2e wiped; extraction disabled; ai-badger watch removed; project:ai-raccoon intact. NOTE: #75 shipped broken .mcp.json (from local-only commits 4643eb6/01398c0) \u2014 this PR repairs.",
