@@ -6,9 +6,11 @@ name: publish
 # trusted-publishing policy for this repo (owner Arasz, workflow publish.yml,
 # environment production) is already active.
 #
-# The pack job downloads the bundled embedding model before packing: the ONNX is
-# gitignored, so without that step the package would ship without Models/ (FR-NM-3;
-# see docs/work/features-native-memory/native-memory.feature). scripts/verify-tool-package.py
+# The pack job verifies the bundled embedding model before packing. The ONNX is
+# committed, so the script finds it present and SHA-matching and downloads nothing —
+# but it stays because this job runs no tests, making it the only integrity check
+# between the committed binary and nuget.org (FR-NM-3; see
+# docs/work/features-native-memory/native-memory.feature). scripts/verify-tool-package.py
 # checks the same contract locally.
 #
 # Before dispatching: bump PackageVersion in src/AiRaccoon/AiRaccoon.csproj and
@@ -45,10 +47,11 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - name: Download the bundled embedding model
-        # src/AiRaccoon/Models is the pack source; the ONNX is gitignored and must be
-        # fetched on the fresh runner or the package ships without it. SHA-pinned,
-        # exits 1 on mismatch (see scripts/download-embedding-model.py).
+      - name: Verify the bundled embedding model
+        # src/AiRaccoon/Models is the pack source. The ONNX is committed, so
+        # fetch_verified finds it present and SHA-matching and skips the download
+        # (scripts/src/download.py) — this costs one hash and exits 1 on mismatch,
+        # which is the only thing standing between a corrupted binary and nuget.org.
         run: python3 scripts/download-embedding-model.py
       - name: Pack (${{ matrix.rid }})
         # nuget.config references the gitignored local feed .nupkg-local/; make it
