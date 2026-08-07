@@ -30,6 +30,21 @@ public sealed class ExtractionHostedServiceTests
         return (store, time, service, queue);
     }
 
+    /// <summary>Polls until the loop has done the thing, instead of betting a fixed sleep against machine load.</summary>
+    private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!condition())
+        {
+            if (timeout.IsCancellationRequested)
+            {
+                throw new TimeoutException("The extraction loop did not reach the expected state in 30s.");
+            }
+
+            await Task.Delay(10, cancellationToken);
+        }
+    }
+
     private static ExtractionCandidateRow Row(string hash, string? sourceFile = null, string value = "fact",
         int accessCount = 0, double rating = 0.5) =>
         new(hash, $"{hash}.md", value, sourceFile, rating, accessCount, FixedNow.AddDays(-5), null);
@@ -150,12 +165,11 @@ public sealed class ExtractionHostedServiceTests
 
         // ExecuteAsync must fall back to the default interval and keep looping,
         // not fault (BackgroundService StopHost would kill the whole server).
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => store.IntervalReads > 0, TestContext.Current.CancellationToken);
         time.Advance(TimeSpan.FromMinutes(60));
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => queue.PromoteCalls.Count > 0, TestContext.Current.CancellationToken);
 
         run.IsFaulted.ShouldBeFalse();
-        queue.PromoteCalls.Count.ShouldBeGreaterThan(0);
 
         await cts.CancelAsync();
         await run;
@@ -172,15 +186,15 @@ public sealed class ExtractionHostedServiceTests
         using var cts = new CancellationTokenSource();
         var run = service.StartAsync(cts.Token);
 
-        // Let ExecuteAsync create the PeriodicTimer before advancing the fake clock.
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        // Let ExecuteAsync read the interval and create the PeriodicTimer before the clock moves.
+        await WaitUntilAsync(() => store.IntervalReads > 0, TestContext.Current.CancellationToken);
 
         time.Advance(TimeSpan.FromMinutes(30)); // default interval
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => queue.PromoteCalls.Count >= 2, TestContext.Current.CancellationToken);
         queue.PromoteCalls.Count.ShouldBe(2); // 2 projects, one pass
 
         time.Advance(TimeSpan.FromMinutes(30));
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => queue.PromoteCalls.Count >= 4, TestContext.Current.CancellationToken);
         // Second pass proves the loop iterates: 2 passes x 2 projects.
         queue.PromoteCalls.Count.ShouldBe(4);
 

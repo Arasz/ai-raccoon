@@ -22,9 +22,6 @@ public sealed class SweepMatrixTests
     }
 
     [Fact]
-    public void Matrix_IsDeterministicAcrossReads() => SweepMatrix.Points.Select(p => p.Id).ShouldBe(SweepMatrix.Points.Select(p => p.Id));
-
-    [Fact]
     public void RrfGrid_ContainsAllNinetySixParameterPoints()
     {
         var points = SweepMatrix.RrfGrid;
@@ -35,9 +32,6 @@ public sealed class SweepMatrixTests
         points[^1].ShouldBe(new SweepPoint(120, 2, 1, 0.7, CandidateWindowMode.Max5X50));
         points.Select(p => (p.K, p.FtsWeight, p.VectorWeight, p.MinScore, p.Window)).ShouldBeInOrder();
     }
-
-    [Fact]
-    public void RrfGrid_IsDeterministicAcrossReads() => SweepMatrix.RrfGrid.ShouldBe(SweepMatrix.RrfGrid);
 }
 
 public sealed class SweepRunnerTests

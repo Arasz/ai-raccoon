@@ -135,6 +135,11 @@ public sealed class FakeExtractionStore : IMemoryStore
 
     public Exception? IntervalReadError { get; set; }
 
+    /// <summary>Interval reads seen — the loop reads it once before creating its timer.</summary>
+    public int IntervalReads => _intervalReads;
+
+    private int _intervalReads;
+
     public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(Projects);
 
     public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
@@ -169,6 +174,11 @@ public sealed class FakeExtractionStore : IMemoryStore
 
     public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {
+        if (key == ExtractionConfigKeys.IntervalMinutesGlobal)
+        {
+            Interlocked.Increment(ref _intervalReads);
+        }
+
         if (IntervalReadError is not null && key == ExtractionConfigKeys.IntervalMinutesGlobal)
         {
             throw IntervalReadError;
