@@ -9,7 +9,6 @@
 
     <ItemGroup>
         <PackageReference Include="FluentValidation"/>
-        <PackageReference Include="JetBrains.Annotations"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
     </ItemGroup>
 
