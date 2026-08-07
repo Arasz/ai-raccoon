@@ -2,6 +2,9 @@ using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
+using AiRaccoon.Core.Workspace;
+using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Workspace;
 using Shouldly;
 using Xunit;
 
@@ -94,6 +97,37 @@ public sealed class MemoryExtensionHostTests
             TestContext.Current.CancellationToken);
 
         recorder.SourceChanges.ShouldHaveSingleItem();
+    }
+
+    /// <summary>Characterization test: SweepService deletes through IMemoryStore, which the host wraps — an
+    /// extension observing forgetting still can via OnDeleteAsync, with no dedicated sweep hook (ADR-0013).</summary>
+    [Fact]
+    public async Task Sweep_DeletesThroughHost_ReachesExtensionOnDeleteHook()
+    {
+        var recorder = new RecordingExtension("first");
+        var inner = new SweepableStore();
+        var host = new MemoryExtensionHost(inner, [recorder]);
+        var sweepService = new SweepService(host, TimeProvider.System);
+
+        await sweepService.SweepAsync("acme", 0.3, dryRun: false, TestContext.Current.CancellationToken);
+
+        recorder.Calls.ShouldContain("OnDeleteAsync");
+    }
+
+    /// <summary>Characterization test: WorkspaceService.ConsolidateAsync deletes the workspace context through
+    /// IMemoryStore, which the host wraps — an extension observing consolidation still can via OnDeleteAsync,
+    /// with no dedicated consolidation hook (ADR-0013).</summary>
+    [Fact]
+    public async Task Consolidate_DeletesWorkspaceContextThroughHost_ReachesExtensionOnDeleteHook()
+    {
+        var recorder = new RecordingExtension("first");
+        var inner = new WorkspaceableStore();
+        var host = new MemoryExtensionHost(inner, [recorder]);
+        var workspaceService = new WorkspaceService(host, new NoOpWorkspaceStore(), TimeProvider.System);
+
+        await workspaceService.ConsolidateAsync("acme", "ws-1", [], TestContext.Current.CancellationToken);
+
+        recorder.Calls.ShouldContain("OnDeleteAsync");
     }
 
     private static string CreateTempRoot() =>
@@ -255,6 +289,190 @@ public sealed class MemoryExtensionHostTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    /// <summary>Minimal IMemoryStore backing one sweep-eligible entry, for SweepService's characterization test.</summary>
+    private sealed class SweepableStore : IMemoryStore
+    {
+        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default)
+        {
+            if (context == ContextNaming.SharedContext)
+            {
+                return Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+            }
+
+            var ancient = DateTimeOffset.UtcNow.AddYears(-5).ToUnixTimeSeconds();
+            return Task.FromResult<IReadOnlyList<MemoryEntry>>(
+                [new MemoryEntry("old-low", "note.md", context, "value", ancient)]);
+        }
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.1, 1));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+    }
+
+    /// <summary>Minimal IMemoryStore backing one workspace entry, for WorkspaceService's characterization test.</summary>
+    private sealed class WorkspaceableStore : IMemoryStore
+    {
+        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
+
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<MemoryEntry>>(
+                [new MemoryEntry("h1", "note.md", context, "draft", 1)]);
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class NoOpWorkspaceStore : IWorkspaceStore
+    {
+        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
