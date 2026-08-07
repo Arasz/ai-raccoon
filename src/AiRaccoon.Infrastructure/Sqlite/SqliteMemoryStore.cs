@@ -6,6 +6,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -419,6 +420,7 @@ public sealed partial class SqliteMemoryStore(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        await RequireInScopeAsync(projectId, path, cancellationToken).ConfigureAwait(false);
 
         if (!IsIndexableFile(path))
         {
@@ -434,6 +436,7 @@ public sealed partial class SqliteMemoryStore(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        await RequireInScopeAsync(projectId, path, cancellationToken).ConfigureAwait(false);
 
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(file) && IsIndexableFile(file))
@@ -623,10 +626,14 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.QuerySingleOrDefaultAsync<string?>(
+        return await ReadSettingAsync(connection, key, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
+        CancellationToken cancellationToken) =>
+        await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key }, cancellationToken))
             .ConfigureAwait(false);
-    }
 
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
@@ -732,6 +739,32 @@ public sealed partial class SqliteMemoryStore(
             // list, and a broken index looks exactly like "nothing matched" without this.
             Log.KeywordModalityFailed(logger, ex);
             return [];
+        }
+    }
+
+    /// <summary>
+    ///     Ingest reads whatever path it is handed, so the project's declared scope contains it —
+    ///     the same rule and the same primitive memory_watch_add uses, and deny-by-default for the
+    ///     same reason: an unscoped project would otherwise let any caller read any file the
+    ///     server can. Enforced here rather than in the tool so every client is bound.
+    /// </summary>
+    private async Task RequireInScopeAsync(string projectId, string path, CancellationToken cancellationToken)
+    {
+        // One connection for both keys: opening the bank runs the whole schema-ensure pass,
+        // and this sits on the per-file ingest path the watcher drives.
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var scope = WatchConfigKeys.ParseScope(
+                        await ReadSettingAsync(connection, WatchConfigKeys.ScopeProject(projectId), cancellationToken)
+                            .ConfigureAwait(false))
+                    ?? WatchConfigKeys.ParseScope(
+                        await ReadSettingAsync(connection, WatchConfigKeys.ScopeGlobal, cancellationToken)
+                            .ConfigureAwait(false))
+                    ?? [];
+
+        var normalized = WatchPath.Normalize(path);
+        if (!scope.Any(entry => WatchPath.IsWithinScope(normalized, entry)))
+        {
+            throw new PathOutsideScopeException(normalized);
         }
     }
 

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -63,6 +64,11 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
+
+        // Ingest is contained by the declared scope, so the E2E server is configured with one
+        // just as a real deployment is; the surface tests ingest from temp paths.
+        await store.SetSettingAsync(WatchConfigKeys.ScopeGlobal,
+            WatchConfigKeys.SerializeScope([Path.GetTempPath(), DataRoot]));
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

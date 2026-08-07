@@ -49,7 +49,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     /// <summary>Adapter-level error events collected by the event source callback (DI wires these to the logger).</summary>
     public List<WatchEventError> Errors { get; } = [];
 
-    private ToolCallMetrics Metrics { get; set; } = null!;
+    private ToolCallMetrics? Metrics { get; set; }
 
     /// <summary>Maps a feature-file path ("/repo", "/repo/docs", "/other") to a real path under this scenario's DataRoot.</summary>
     public string MapPath(string virtualPath)
@@ -71,7 +71,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public void StopWatchStack()
     {
         EventSource.StopAll();
-        Metrics.Dispose();
+        Metrics?.Dispose();
     }
 
     /// <summary>
@@ -157,6 +157,14 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public Task SetWatchScopeGlobalAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default) =>
         Store.SetSettingAsync(WatchConfigKeys.ScopeGlobal, WatchConfigKeys.SerializeScope(paths), cancellationToken);
 
+    /// <summary>Adds one path to the global scope, keeping what is already there.</summary>
+    public async Task AddWatchScopeGlobalAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var existing = WatchConfigKeys.ParseScope(
+            await Store.GetSettingAsync(WatchConfigKeys.ScopeGlobal, cancellationToken)) ?? [];
+        await SetWatchScopeGlobalAsync(existing.Append(path).Distinct(WatchPath.PathComparer), cancellationToken);
+    }
+
     public Task SetConcurrencyGlobalAsync(int value, CancellationToken cancellationToken = default) =>
         Store.SetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, value.ToString(CultureInfo.InvariantCulture),
             cancellationToken);
@@ -196,7 +204,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Host, Pipeline, TimeProvider);
         Metrics?.Dispose();
-        Metrics = new ToolCallMetrics();
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Host), new FakePromotionQueue()), Metrics);
+        var metrics = new ToolCallMetrics();
+        Metrics = metrics;
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Host), new FakePromotionQueue()), metrics);
     }
 }

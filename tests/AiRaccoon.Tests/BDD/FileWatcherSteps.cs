@@ -131,7 +131,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
 
         await Ctx.SetWatchEnabledGlobalAsync(true);
-        await Ctx.SetWatchScopeGlobalAsync([path]);
+        // Add to the scope rather than replace it: a scenario watching three repos has all
+        // three in scope, and ingest is bound by that scope too.
+        await Ctx.AddWatchScopeGlobalAsync(path);
         _scopeExplicitlySet = true;
         await Ctx.Service.AddAsync(projectId, path);
         await Ctx.ReconcileOnceAsync();
@@ -190,8 +192,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             (await SearchAsync(projectId, token)).Count == 0, maxFakeSeconds);
     }
 
-    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) =>
-        _lastStatusDataData = (await Ctx.Tools.Status(projectId)).Data!;
+    private async Task<WatchTools.WatchStatusResult> StatusAsync(string projectId) => _lastStatusDataData = (await Ctx.Tools.Status(projectId)).Data!;
 
     private void MakeUnreadable(string path)
     {

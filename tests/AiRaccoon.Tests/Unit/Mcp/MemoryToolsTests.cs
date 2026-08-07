@@ -4,6 +4,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
@@ -390,6 +391,29 @@ public class MemoryToolsTests
     }
 
 
+    // A refused path is an answer the agent must be able to read, not an internal error.
+    [Fact]
+    public async Task IngestFile_OutsideTheScope_IsAProtocolError()
+    {
+        _store.IngestError = new PathOutsideScopeException("/etc/passwd");
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.IngestFile("acme", "/etc/passwd", null, TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("path-outside-scope:");
+    }
+
+    [Fact]
+    public async Task IngestDirectory_OutsideTheScope_IsAProtocolError()
+    {
+        _store.IngestError = new PathOutsideScopeException("/etc");
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.IngestDirectory("acme", "/etc", null, TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("path-outside-scope:");
+    }
+
     private sealed class FakeStore : IMemoryStore
     {
         public MemoryEntry Entry { get; set; } = new("h", "p.md", "project:acme", "v", 0);
@@ -460,13 +484,15 @@ public class MemoryToolsTests
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
 
+        public Exception? IngestError { get; set; }
+
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
+            IngestError is not null ? Task.FromException<int>(IngestError) : Task.FromResult(1);
 
         public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
+            IngestError is not null ? Task.FromException<int>(IngestError) : Task.FromResult(1);
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
             CancellationToken cancellationToken = default) =>

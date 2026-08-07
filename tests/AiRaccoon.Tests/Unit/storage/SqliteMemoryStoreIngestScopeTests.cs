@@ -1,0 +1,158 @@
+using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Unit.storage;
+
+/// <summary>
+///     Ingest reads whatever path it is handed, so it is contained by the project's declared
+///     scope exactly as memory_watch_add is — deny by default, enforced in the store so every
+///     client is bound, not just the MCP tool.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
+public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
+{
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-ingest-scope");
+    private readonly string _contentRoot = TestData.CreateTempRoot("airaccoon-ingest-content");
+    private readonly SqliteMemoryStore _store;
+
+    public SqliteMemoryStoreIngestScopeTests()
+    {
+        var options = new InfrastructureOptions
+        {
+            DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
+        };
+        _store = new SqliteMemoryStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)),
+            new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService(),
+            NullLogger<SqliteMemoryStore>.Instance);
+    }
+
+    public void Dispose()
+    {
+        foreach (var root in new[] { _dataRoot, _contentRoot })
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task IngestFile_WithNoScopeConfigured_IsRefused()
+    {
+        var file = await WriteFileAsync("notes.md");
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task IngestFile_InsideTheProjectScope_IsIndexed()
+    {
+        var file = await WriteFileAsync("notes.md");
+        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), _contentRoot);
+
+        var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        indexed.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task IngestFile_OutsideTheProjectScope_IsRefused()
+    {
+        var outside = await WriteFileAsync("notes.md");
+        var scoped = Path.Combine(_contentRoot, "scoped");
+        Directory.CreateDirectory(scoped);
+        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestFileAsync("acme", outside, null, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Containment resolves the path first, so ".." cannot walk out of the scope.</summary>
+    [Fact]
+    public async Task IngestFile_TraversingOutOfScope_IsRefused()
+    {
+        await WriteFileAsync("notes.md");
+        var scoped = Path.Combine(_contentRoot, "scoped");
+        Directory.CreateDirectory(scoped);
+        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+
+        var traversal = Path.Combine(scoped, "..", "notes.md");
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestFileAsync("acme", traversal, null, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task IngestFile_UnderTheGlobalScope_IsIndexed()
+    {
+        var file = await WriteFileAsync("notes.md");
+        await SetScopeAsync(WatchConfigKeys.ScopeGlobal, _contentRoot);
+
+        var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        indexed.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task IngestDirectory_OutsideTheProjectScope_IsRefused()
+    {
+        await WriteFileAsync("notes.md");
+        var scoped = Path.Combine(_contentRoot, "scoped");
+        Directory.CreateDirectory(scoped);
+        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestDirectoryAsync("acme", _contentRoot, null, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task IngestDirectory_InsideTheProjectScope_IsIndexed()
+    {
+        await WriteFileAsync("notes.md");
+        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), _contentRoot);
+
+        var indexed = await _store.IngestDirectoryAsync("acme", _contentRoot, null,
+            TestContext.Current.CancellationToken);
+
+        indexed.ShouldBeGreaterThan(0);
+    }
+
+    /// <summary>A non-indexable file used to return 0 before anything read it; scope still comes first.</summary>
+    [Fact]
+    public async Task IngestFile_NonIndexableOutsideScope_IsStillRefused()
+    {
+        var file = await WriteFileAsync("secrets.env");
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken));
+    }
+
+    private async Task<string> WriteFileAsync(string name)
+    {
+        var path = Path.Combine(_contentRoot, name);
+        await File.WriteAllTextAsync(path, "the quick brown fox", TestContext.Current.CancellationToken);
+        return path;
+    }
+
+    private Task SetScopeAsync(string key, string directory) =>
+        _store.SetSettingAsync(key, WatchConfigKeys.SerializeScope([directory]),
+            TestContext.Current.CancellationToken);
+
+    private sealed class StubChunker : IChunker
+    {
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
+            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+    }
+}
