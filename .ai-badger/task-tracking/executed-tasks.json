@@ -964,11 +964,12 @@
           "branch": "task/sqli-impro-bank-maintenance",
           "risk": false,
           "startedAt": "2026-08-06T22:28:49.905562+00:00",
-          "finishedAt": null,
-          "state": "STARTED",
+          "finishedAt": "2026-08-06T23:13:29.311298+00:00",
+          "state": "FINISHED",
           "trackingSource": "claude",
           "resumeCommand": "claude --resume cd899fae-395f-45ff-bc58-6057b2d651d9",
-          "resumeAttempts": []
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
     }
   ]
 }

@@ -4818,7 +4818,27 @@
                   }
               },
               "latest": {
-                  "timestamp": "2026-08-06T22:28:49.905196+00:00",
+                  "timestamp": "2026-08-06T23:13:29.311292+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 1,
+                  "byModel": {
+                      "<synthetic>": {
+                          "inputTokens": 0,
+                          "outputTokens": 0,
+                          "cacheReadTokens": 0,
+                          "cacheCreationTokens": 0,
+                          "assistantMessages": 1
+                      }
+                  },
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "finish": {
+                  "timestamp": "2026-08-06T23:13:29.311292+00:00",
                   "contextTokens": 0,
                   "assistantMessages": 1,
                   "byModel": {
@@ -4837,6 +4857,21 @@
                       "cacheCreationTokens": 0
                   }
               }
+          },
+          "usage": {
+              "outputByModel": {},
+              "modelMix": {},
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "cacheReadTokens": 0,
+              "cacheCreationTokens": 0,
+              "cacheEfficiency": null,
+              "subagentTokens": 0,
+              "contextTokensAtStart": 0,
+              "contextTokensAtFinish": 0,
+              "contextGrowth": 0,
+              "mainSessionTotal": 0,
+              "grandTotal": 0
           }
     }
   ]

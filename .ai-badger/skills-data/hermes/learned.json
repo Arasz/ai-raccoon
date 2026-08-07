@@ -29,6 +29,15 @@
       "target": ".ai-badger/skills/learned/data-analysis/memory-bank-audit"
     },
     {
+        "category": "data-analysis",
+        "name": "sqlite-bank-space-diagnosis",
+        "sourceHash": "98b906fb4082e012a401d032db5303f3d28233c9d3a7d9bb766d33b827384d03",
+        "sourcePath": "data-analysis/sqlite-bank-space-diagnosis",
+        "status": "synced",
+        "syncedAt": "2026-08-06T23:27:26Z",
+        "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
+    },
+      {
       "category": "hermes",
       "name": "hermes-memory-provider-development",
       "sourceHash": "da1e52e8323a74ff265095be3a67433a93932233264b42da0fb9979e1d352412",
@@ -164,6 +173,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/code-review-evidence"
     },
     {
+        "category": "uncategorized",
+        "name": "cron-watchdog-authoring",
+        "sourceHash": "7635838dd607766f90ad92abcb5d3b17e524ce1ef44fb6341898af0eeb356f4a",
+        "sourcePath": "cron-watchdog-authoring",
+        "status": "synced",
+        "syncedAt": "2026-08-06T22:57:25Z",
+        "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
+    },
+      {
       "category": "uncategorized",
       "name": "design-gate-audit",
       "sourceHash": "33ccc233b4b7a963a699f2f66f90c2f8230241446967a6cfb1621e5a39abcd87",
