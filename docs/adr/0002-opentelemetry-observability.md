@@ -2,7 +2,7 @@
 
 Date: 2026-08-04
 
-Status: Accepted
+Status: Accepted; partially superseded by ADR 0008 (HTTP endpoint) and ADR 0009 (OTLP export) — 2026-08-07
 
 ## Context
 
@@ -148,6 +148,16 @@ implementation:
   collection; the OTel Collector is a future concern.
 - **No Azure Monitor export**: Application Insights / Azure Monitor exporter
   belongs in a hosted deployment ADR (MS3).
+
+> **2026-08-07 update.** `serve` mode now hosts an HTTP server, which
+> falsifies the "AiRaccoon does not host an HTTP server" premise the
+> ASP.NET-instrumentation non-goal above was written against — see ADR 0008.
+> The OTLP/gRPC non-goal is superseded by ADR 0009, on explicit owner
+> instruction. The ASP.NET auto-instrumentation and Azure Monitor non-goals
+> above **remain in force**. §Future evolution item 3 below (`project_id`
+> hashing) is **retired, not implemented** — ADR 0009 exports `project_id`
+> in plaintext; see its "`project_id` export" section and `SECURITY.md` for
+> the reasoning and the residual risk.
 
 ## Future evolution
 

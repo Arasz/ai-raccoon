@@ -125,12 +125,55 @@ harness: [docs/reference/embedding-benchmark.md](docs/reference/embedding-benchm
 ## Observability
 
 Every tool call records OpenTelemetry-compatible metrics and traces through the
-`AiRaccoon.MemoryTools` meter. Watch them live without touching the server:
+`AiRaccoon.MemoryTools` meter. The diagnostic tools need the server's process id,
+and a backgrounded `serve` does not tell you what it is — so ask it:
 
 ```bash
-dotnet-counters monitor -p <server-pid> --counters AiRaccoon.MemoryTools
-dotnet-trace collect -p <server-pid> --providers AiRaccoon.MemoryTools
+ai-raccoon serve observability counters   # dotnet-counters monitor -p 4711
+ai-raccoon serve observability trace      # dotnet-trace collect -p 4711 --providers AiRaccoon.MemoryTools
+ai-raccoon serve observability pid        # 4711
+ai-raccoon serve observability otlp       # http://127.0.0.1:4317
 ```
+
+Each prints one line on stdout, so it composes:
+
+```bash
+$(ai-raccoon serve observability counters)
+dotnet-gcdump collect -p $(ai-raccoon serve observability pid)
+```
+
+The PID comes from the running server itself over `GET /observability` on its
+loopback port (`--port` to ask a server on a different one), so it is never
+stale. With no server listening it exits 4 and says so.
+
+The three views answer different questions:
+
+| Verb | Shows | Notes |
+|---|---|---|
+| `counters` | GC, CPU, working set, thread pool | `dotnet-counters` with no `--counters` monitors `System.Runtime` alone; append `--counters AiRaccoon.MemoryTools` to swap in the tool metrics instead |
+| `trace` | one span per tool call, with `tool`, `project_id`, `result`, `error_type` | |
+| `otlp` | everything, to your collector | tool metrics, promotion-queue metrics, runtime metrics and traces |
+
+### OTLP export
+
+Serve mode only, and off unless you ask for it — stdio servers recycle every few
+minutes, too short-lived for a batch exporter to earn its keep. Set the standard
+variable before starting the server:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 ai-raccoon serve > serve.log 2>&1 &
+```
+
+Unset, no exporter is built at all — no threads, no sockets, no cost. A
+configured-but-unreachable collector is silent by design (OpenTelemetry routes
+its own errors to an `EventSource` that nothing listens to unless you drop an
+`OTEL_DIAGNOSTICS.json` beside the binary), which keeps `serve.log` clean but
+means a broken endpoint fails quietly — `serve observability otlp` reports what
+the server is actually exporting to.
+
+Spans carry `project_id` in plaintext. No memory content, queries or embeddings
+ever leave the process — see [SECURITY.md](SECURITY.md#what-leaves-the-process-when-otlp-export-is-on)
+and [ADR 0009](docs/adr/0009-otlp-export.md).
 
 ## Architecture
 

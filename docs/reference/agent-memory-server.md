@@ -208,6 +208,38 @@ Keep stderr out of the entry file: `ai-raccoon serve --mcp-entry > entry.json
 recycle of per-connection processes and lets the background extraction and
 bank-maintenance hosted services actually fire.
 
+`serve observability <counters|trace|otlp|pid> [--port <n>]` prints a ready-to-run
+diagnostic command for the **running** server, with its process id filled in. It
+does not start or touch a server: it reads the PID from `GET /observability` on
+the loopback port (default `7721`), so the value cannot go stale, and it returns
+the owning process's PID even when the server it dials was itself started by an
+attached `serve`. The verb never opens the bank, resolves the encryption key, or
+loads the embedding engine.
+
+| Kind | stdout |
+|---|---|
+| `counters` | `dotnet-counters monitor -p <pid>` — `System.Runtime` only (GC, CPU, working set, thread pool); append `--counters AiRaccoon.MemoryTools` for the tool metrics |
+| `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools` |
+| `otlp` | the OTLP endpoint the server exports to; the protocol goes to stderr |
+| `pid` | the bare process id, for composing with other tools |
+
+Exit codes: `0` success; `4` nothing listening on the port (or the server predates
+the endpoint); `3` the port is held by a foreign listener; `5` `otlp` was asked for
+but the server has no OTLP export configured. `--port 0` is a parse error — unlike
+`serve --port 0`, there is no "any free port" to dial. Failures write nothing to
+stdout, so command substitution yields an empty string rather than an error message.
+
+OTLP export is **serve/HTTP mode only** — a stdio server is a per-connection
+process on a ~5-minute recycle, too short-lived for a batch exporter to be worth
+its schedule delay and shutdown grace. It is opt-in and configured only through
+the standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_PROTOCOL`
+variables, read at host-build time; unset means no exporter is constructed.
+Exported: the
+`AiRaccoon.MemoryTools` meter and ActivitySource, the `AiRaccoon.PromotionQueue`
+meter, and the built-in `System.Runtime` meter. See
+[ADR 0008](../adr/0008-live-pid-discovery-for-monitoring.md) and
+[ADR 0009](../adr/0009-otlp-export.md).
+
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):
 

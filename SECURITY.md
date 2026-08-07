@@ -37,6 +37,8 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
 | stdio transport (default)  | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr                                                                                          | The MCP client that launched the process      |
 | HTTP transport (opt-in)    | Serves MCP over Streamable HTTP at `/mcp` on `localhost`                                                                                                                                | Any process that can reach the listening port |
+| `/observability` endpoint (HTTP mode) | Returns the server's PID and OTLP export state on the same loopback port as `/mcp`                                                                                          | Any process that can reach the listening port |
+| OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
 | Memory tools (22 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
 | Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled)                                                                                                     | The model file shipped with the binary        |
@@ -52,6 +54,51 @@ unauthenticated `localhost` listener is reachable by any local process.
 **Access modes provide a defence-in-depth layer:** `ro` mode allows only reads; `rw`
 (default) adds writes; `full` enables destructive operations (delete, sweep, forget).
 Per-project modes override the global setting, stored in the bank's `settings` table.
+
+### What leaves the process when OTLP export is on
+
+Spans carry `project_id` in **plaintext**, alongside `tool`, `result`, `error_type`,
+and duration (`src/AiRaccoon/Observability/ToolExecutionActivity.cs`).
+
+Metrics differ by meter, and the difference matters:
+
+| Meter | Carries `project_id`? |
+|---|---|
+| `AiRaccoon.MemoryTools` (tool calls) | No — only `tool`, `result`, `error_type` (`ToolCallMetrics.RecordInvocation`) |
+| `AiRaccoon.PromotionQueue` | **Yes**, on four of its seven instruments — the queued/evicted/promoted/discarded counters (`PromotionQueueMetrics.RecordQueued`/`RecordEviction`/`RecordPromoted`/`RecordDiscarded`). The wait-seconds histogram and the capacity gauge carry no project tag |
+| `System.Runtime` (built-in) | No — process-level GC/CPU/memory only |
+
+So project names reach a collector through two channels, not one: trace spans and
+the promotion-queue metrics. There is a second, non-privacy cost to the metric
+channel — `project_id` is unbounded, so each distinct project becomes its own time
+series. That is free over EventPipe locally, but a hosted collector generally bills
+per series.
+
+**Memory content never leaves.** No entry text, no search queries, no file contents,
+no embeddings — only the scope name (`project_id`) and call-shape telemetry (which
+tool, how long, success or failure). If your first worry on reading this is "is my
+memory bank being shipped to a collector" — it is not.
+
+The exposure this creates is: whoever can read your collector learns your **project
+names** and your usage pattern. Do not use a project id that is itself sensitive (a
+client name, an unreleased codename) if you point `OTEL_EXPORTER_OTLP_ENDPOINT` at a
+shared team or third-party vendor collector.
+
+For completeness: `project_id` already appears in plaintext in the server's own
+stderr log (`serve.log`, when redirected per the README's
+`ai-raccoon serve > serve.log 2>&1 &` pattern) regardless of whether OTLP export is
+on — e.g. `PromotionQueueService.Log.Proposed`
+(`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs:146`,
+`"Propose for {ProjectId}: ..."`) and `ExtractionHostedService.Log.Pass`
+(`src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs:179`,
+`"Extraction pass for {ProjectId} ({Mode}): ..."`). OTLP export is not a new class of
+disclosure for this value — this is precisely why no hashing is applied before export
+(ADR 0009).
+
+The `/observability` endpoint discloses the server's PID, unauthenticated, on
+loopback. A PID is not a secret, and the same port already serves `/mcp`
+unauthenticated — this widens an existing surface rather than opening a new one, but
+it is still one more thing that port answers.
 
 ## What is deliberately not here yet
 

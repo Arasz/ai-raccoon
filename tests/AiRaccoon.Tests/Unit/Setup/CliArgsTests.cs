@@ -529,6 +529,87 @@ public class CliArgsTests
     // ── Verb tree: serve ──
 
     [Fact]
+    public void Parse_BareServe_StillParsesCleanly_AfterObservabilitySubcommandAdded()
+    {
+        // Regression guard: giving serve an "observability" subcommand makes
+        // System.CommandLine require one unless serve declares its own action.
+        CliArgs.TryParse(["serve"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
+    [Fact]
+    public void Parse_ServeObservability_YieldsTheObservabilityCommandPath()
+    {
+        CliArgs.TryParse(["serve", "observability", "counters"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve", "observability"]);
+    }
+
+    [Fact]
+    public void Parse_ServeObservability_ReadsPortAfterTheKind()
+    {
+        CliArgs.TryParse(["serve", "observability", "counters", "--port", "9000"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.ParseResult.GetValue(CliCommandTree.ObservabilityPortOption).ShouldBe(9000);
+    }
+
+    [Fact]
+    public void Parse_ServeObservability_ReadsPortBeforeTheKind()
+    {
+        CliArgs.TryParse(["serve", "observability", "--port", "9000", "counters"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.ParseResult.GetValue(CliCommandTree.ObservabilityPortOption).ShouldBe(9000);
+    }
+
+    [Fact]
+    public void Parse_ServeObservability_DefaultsToPort7721()
+    {
+        CliArgs.TryParse(["serve", "observability", "trace"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.ParseResult.GetValue(CliCommandTree.ObservabilityPortOption).ShouldBe(7721);
+    }
+
+    [Fact]
+    public void Parse_ServeObservabilityPid_IsAccepted()
+    {
+        CliArgs.TryParse(["serve", "observability", "pid"], out var parsed);
+
+        parsed.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve", "observability"]);
+    }
+
+    [Fact]
+    public void Parse_ServeObservabilityUnknownKind_IsAParseError()
+    {
+        CliArgs.TryParse(["serve", "observability", "bogus"], out var parsed);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_ServeObservabilityPortZero_IsAParseError()
+    {
+        CliArgs.TryParse(["serve", "observability", "counters", "--port", "0"], out var parsed);
+
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_ServeHelp_StillRendersHelp()
+    {
+        CliArgs.TryParse(["serve", "--help"], out var parsed);
+
+        parsed.ShowHelp.ShouldBeTrue();
+        parsed.Errors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Parse_ServeAlone_ParsesCommandPathAndDefaultFormat()
     {
         CliArgs.TryParse(["serve"], out var parsed);
