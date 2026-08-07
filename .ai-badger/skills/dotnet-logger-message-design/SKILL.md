@@ -1,7 +1,6 @@
 ---
 name: dotnet-logger-message-design
 description: "Use when designing or testing [LoggerMessage] log lines in .NET: nested static partial Log classes, explicit EventIds with per-category ranges, no call-site interpolation, collection parameters (pre-join at the call site), per-item detail logs vs counts, and FakeLogger-based log assertions (generic vs non-generic compile contract, LatestRecord/AllRecords, RED-first EventId tests)."
-description: Use when designing [LoggerMessage] log lines or log tests.
 version: 1.0.0
 author: ai-badger
 license: MIT

@@ -1,7 +1,6 @@
 ---
 name: dotnet-hosted-service-testing
 description: "Use when writing or reviewing .NET BackgroundService tests with FakeTimeProvider/TimeProvider: lost-first-Advance semantics, inline-vs-threadpool timer callbacks, poll-loop test honesty (invocation counters, not side-effect counts), tick derivation from timeouts, DI registration smoke tests, vacuous-gate detection. Verified on .NET 10; includes an empirical probe script."
-description: Write or review BackgroundService/FakeTimeProvider tests.
 version: 1.0.0
 author: ai-badger
 license: MIT

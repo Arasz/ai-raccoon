@@ -1,7 +1,6 @@
 ---
 name: dotnet-mcp-server
 description: "Use when adding MCP (Model Context Protocol) tools or servers to a .NET project: tool/prompt registration with [McpServerTool]/[McpServerPrompt], stdio or Streamable-HTTP host wiring (dual-mode, port traps), DI + typed HttpClient for REST-backed tools, unit tests with mock HTTP handlers, tool-inventory tests that assert the REGISTERED surface, and SDK 2.x specifics (McpException error signaling, request filters, tool-name derivation)."
-description: Implement MCP (Model Context Protocol) servers in .NET using the ModelContextProtocol NuGet package — tool registration, DI wiring, HttpClient for REST-based tools, and unit testing with mock HTTP handlers. Use when adding MCP tools to a .NET project, wiring up a stdio MCP server host, or testing MCP server tool classes.
 version: 1.0.0
 author: ai-badger
 license: MIT
