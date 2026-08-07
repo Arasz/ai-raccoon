@@ -30,6 +30,7 @@ public sealed class OtlpExportTests : IDisposable
     private const string IntervalVar = "OTEL_METRIC_EXPORT_INTERVAL";
     private const string TimeoutVar = "OTEL_METRIC_EXPORT_TIMEOUT";
     private const string ServiceNameVar = "OTEL_SERVICE_NAME";
+    private const string ResourceAttributesVar = "OTEL_RESOURCE_ATTRIBUTES";
 
     // SDK defaults (PeriodicExportingMetricReaderHelper), measured against opentelemetry-dotnet
     // core-1.17.0 source — the ceiling these tests prove we no longer silently fall back to.
@@ -263,12 +264,13 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
     }
 
-    // Without an explicit resource the SDK falls back to "unknown_service:<process>", which is what
-    // a collector actually displayed. OTEL_SERVICE_NAME cannot rescue it: the environment detector
-    // behind ResourceBuilder.CreateDefault() resolves through the same DI IConfiguration that
-    // McpServerSetup clears — the identical mechanism that swallowed the export interval.
+    // service.name is a deliberate fixed product identity (PR #107), not an operator knob: now that
+    // McpServerSetup re-admits OTEL_* variables into config (this fix), the SDK's own environment
+    // AddService wins the resource merge over CreateDefault()'s own environment detector, so
+    // OTEL_SERVICE_NAME only takes effect because Resolve() reads it into state.ServiceName.
+    // Operators running several environments need this knob to tell them apart.
     [Fact]
-    public async Task HttpHost_ServiceName_ComesFromOtelServiceName_WhenSet()
+    public async Task HttpHost_ServiceName_HonoursOtelServiceNameWhenSet()
     {
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
@@ -305,6 +307,23 @@ public sealed class OtlpExportTests : IDisposable
             .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
     }
 
+    // Root-cause test for the config-clearing bug (fixed here): OTEL_RESOURCE_ATTRIBUTES is parsed
+    // by the SDK's own environment detector through DI's IConfiguration, same mechanism that
+    // swallowed the export interval and the OTLP headers/compression. Before the fix, McpServerSetup
+    // clearing all config sources meant this attribute never reached the exported Resource.
+    [Fact]
+    public async Task HttpHost_ResourceAttributesEnvVar_ReachesTheExportedResource()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        Environment.SetEnvironmentVariable(ResourceAttributesVar, "deployment.environment=probe-env");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        ResourceAttribute(host.Services.GetRequiredService<TracerProvider>(), "deployment.environment")
+            .ShouldBe("probe-env");
+    }
+
     // The bare-ServiceCollection listener test elsewhere in this file cannot show this: it never
     // starts a host, so it never exercises the path a running serve takes. If no listener is
     // attached after the host starts, ActivitySource.StartActivity returns null and every tool
@@ -331,9 +350,12 @@ public sealed class OtlpExportTests : IDisposable
         }
     }
 
-    /// <summary>Reads service.name off a provider's Resource; both provider SDKs expose it
-    /// internally only, so reflection is the only way to assert what was actually applied.</summary>
-    private static string ServiceName(object provider)
+    /// <summary>Reads service.name off a provider's Resource.</summary>
+    private static string ServiceName(object provider) => ResourceAttribute(provider, "service.name");
+
+    /// <summary>Reads a resource attribute off a provider's Resource; both provider SDKs expose the
+    /// Resource internally only, so reflection is the only way to assert what was actually applied.</summary>
+    private static string ResourceAttribute(object provider, string key)
     {
         var resource = provider.GetType()
             .GetProperty("Resource", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)!
@@ -341,7 +363,7 @@ public sealed class OtlpExportTests : IDisposable
         var attributes = (IEnumerable<KeyValuePair<string, object>>)resource.GetType()
             .GetProperty("Attributes")!
             .GetValue(resource)!;
-        return (string)attributes.Single(a => a.Key == "service.name").Value;
+        return (string)attributes.Single(a => a.Key == key).Value;
     }
 
     private static int PeriodicReaderField(MeterProvider meterProvider, string fieldName)
@@ -374,19 +396,22 @@ public sealed class OtlpExportTests : IDisposable
         var originalInterval = Environment.GetEnvironmentVariable(IntervalVar);
         var originalTimeout = Environment.GetEnvironmentVariable(TimeoutVar);
         var originalServiceName = Environment.GetEnvironmentVariable(ServiceNameVar);
+        var originalResourceAttributes = Environment.GetEnvironmentVariable(ResourceAttributesVar);
         var originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         Environment.SetEnvironmentVariable(EndpointVar, null);
         Environment.SetEnvironmentVariable(ProtocolVar, null);
         Environment.SetEnvironmentVariable(IntervalVar, null);
         Environment.SetEnvironmentVariable(TimeoutVar, null);
         Environment.SetEnvironmentVariable(ServiceNameVar, null);
+        Environment.SetEnvironmentVariable(ResourceAttributesVar, null);
         Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout, originalServiceName, originalPassphrase);
+        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout,
+            originalServiceName, originalResourceAttributes, originalPassphrase);
     }
 
     private sealed class EnvRestore(
         string? originalEndpoint, string? originalProtocol, string? originalInterval, string? originalTimeout,
-        string? originalServiceName, string? originalPassphrase)
+        string? originalServiceName, string? originalResourceAttributes, string? originalPassphrase)
         : IDisposable
     {
         public void Dispose()
@@ -396,6 +421,7 @@ public sealed class OtlpExportTests : IDisposable
             Environment.SetEnvironmentVariable(IntervalVar, originalInterval);
             Environment.SetEnvironmentVariable(TimeoutVar, originalTimeout);
             Environment.SetEnvironmentVariable(ServiceNameVar, originalServiceName);
+            Environment.SetEnvironmentVariable(ResourceAttributesVar, originalResourceAttributes);
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, originalPassphrase);
             TestData.EnvVarGate.Release();
         }
