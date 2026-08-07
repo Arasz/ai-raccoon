@@ -156,7 +156,9 @@ The three views answer different questions:
 
 ### OTLP export
 
-Off unless you ask for it. Set the standard variable before starting the server:
+Serve mode only, and off unless you ask for it — stdio servers recycle every few
+minutes, too short-lived for a batch exporter to earn its keep. Set the standard
+variable before starting the server:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 ai-raccoon serve > serve.log 2>&1 &
