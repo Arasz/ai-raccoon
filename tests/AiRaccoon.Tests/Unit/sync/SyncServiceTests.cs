@@ -655,6 +655,225 @@ public class SyncServiceTests : IDisposable
         }
     }
 
+    //
+    // Security regression: the settings/workspace strip only ran on the FIRST push
+    // (remote is null). When a remote object already exists the merge branch re-VACUUMs the
+    // live bank into mergedPath and pushes THAT unstripped — leaking cloud credentials and
+    // workspace-scoped entries into the very bucket those credentials unlock.
+    //
+    [Fact]
+    public async Task MemorySync_MergeBranchWithExistingRemote_StripsSettingsAndWorkspaceFromPushedPayload()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Seed an existing remote object so `remote is not null` and the merge branch runs.
+        var remoteSeedPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            cloud.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        // Local bank carries a fake secret in settings and a workspace-scoped entry.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var settings = conn.CreateCommand();
+            settings.CommandText = $"""
+                                    INSERT INTO settings (key, value) VALUES ('{SyncSettingsKeys.SecretKey}', 'super-secret-value')
+                                    """;
+            await settings.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var ws = conn.CreateCommand();
+            ws.CommandText = """
+                             INSERT INTO workspaces (id, project_id, status, created_at)
+                             VALUES ('ws-1', 'acme', 'Active', 1)
+                             """;
+            await ws.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var entry = conn.CreateCommand();
+            entry.CommandText = """
+                                INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
+                                VALUES ('ws-hash', 'ws.md', 'private scratch', 'ws-1', 'acme', 1, 1)
+                                """;
+            await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        // Inspect what actually got pushed to the cloud.
+        var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        cloudObj.ShouldNotBeNull();
+        var pushedPath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllBytesAsync(pushedPath, cloudObj.Data, TestContext.Current.CancellationToken);
+            await using var pushedConn = new SqliteConnection($"Data Source={pushedPath}");
+            await pushedConn.OpenAsync(TestContext.Current.CancellationToken);
+
+            await using var settingsCount = pushedConn.CreateCommand();
+            settingsCount.CommandText = "SELECT COUNT(*) FROM settings";
+            var settingsScalar = await settingsCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            settingsScalar.ShouldNotBeNull();
+            ((long)settingsScalar).ShouldBe(0,
+                "The merge branch must strip settings from the pushed payload, not just the first push.");
+
+            await using var workspaceCount = pushedConn.CreateCommand();
+            workspaceCount.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL";
+            var workspaceScalar = await workspaceCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            workspaceScalar.ShouldNotBeNull();
+            ((long)workspaceScalar).ShouldBe(0,
+                "The merge branch must strip workspace entries from the pushed payload, not just the first push.");
+        }
+        finally
+        {
+            File.Delete(pushedPath);
+        }
+    }
+
+    //
+    // Same regression as above, but for the conflict-retry path: a push that hits
+    // SyncConflictException re-merges and re-VACUUMs into retryPath, which must be stripped too.
+    //
+    [Fact]
+    public async Task MemorySync_ConflictRetryBranch_StripsSettingsAndWorkspaceFromPushedPayload()
+    {
+        var inner = new FakeCloudStore();
+        var cloud = new ConflictOnceCloudStore(inner);
+
+        // Seed an existing remote object so both the initial pull and the post-conflict
+        // re-pull see `remote is not null`.
+        var remoteSeedPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            inner.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        // Local bank carries a fake secret in settings and a workspace-scoped entry.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var settings = conn.CreateCommand();
+            settings.CommandText = $"""
+                                    INSERT INTO settings (key, value) VALUES ('{SyncSettingsKeys.SecretKey}', 'super-secret-value')
+                                    """;
+            await settings.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var ws = conn.CreateCommand();
+            ws.CommandText = """
+                             INSERT INTO workspaces (id, project_id, status, created_at)
+                             VALUES ('ws-1', 'acme', 'Active', 1)
+                             """;
+            await ws.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var entry = conn.CreateCommand();
+            entry.CommandText = """
+                                INSERT INTO entries (hash, path, value, workspace_id, project_id, created_at, updated_at)
+                                VALUES ('ws-hash', 'ws.md', 'private scratch', 'ws-1', 'acme', 1, 1)
+                                """;
+            await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        cloud.ConflictWasRaised.ShouldBeTrue("The test must actually exercise the conflict-retry branch.");
+
+        // Inspect what actually got pushed to the cloud on the retry attempt.
+        var cloudObj = await inner.PullAsync("test-object", TestContext.Current.CancellationToken);
+        cloudObj.ShouldNotBeNull();
+        var pushedPath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllBytesAsync(pushedPath, cloudObj.Data, TestContext.Current.CancellationToken);
+            await using var pushedConn = new SqliteConnection($"Data Source={pushedPath}");
+            await pushedConn.OpenAsync(TestContext.Current.CancellationToken);
+
+            await using var settingsCount = pushedConn.CreateCommand();
+            settingsCount.CommandText = "SELECT COUNT(*) FROM settings";
+            var settingsScalar = await settingsCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            settingsScalar.ShouldNotBeNull();
+            ((long)settingsScalar).ShouldBe(0,
+                "The conflict-retry branch must strip settings from the pushed payload.");
+
+            await using var workspaceCount = pushedConn.CreateCommand();
+            workspaceCount.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL";
+            var workspaceScalar = await workspaceCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            workspaceScalar.ShouldNotBeNull();
+            ((long)workspaceScalar).ShouldBe(0,
+                "The conflict-retry branch must strip workspace entries from the pushed payload.");
+        }
+        finally
+        {
+            File.Delete(pushedPath);
+        }
+    }
+
+    /// <summary>Forces exactly one SyncConflictException on the first push, then delegates.</summary>
+    private sealed class ConflictOnceCloudStore(FakeCloudStore inner) : ICloudStore
+    {
+        public bool ConflictWasRaised { get; private set; }
+
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
+            => inner.PullAsync(objectKey, cancellationToken);
+
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
+            CancellationToken cancellationToken = default)
+        {
+            if (!ConflictWasRaised)
+            {
+                ConflictWasRaised = true;
+                throw new SyncConflictException("Simulated concurrent write.");
+            }
+
+            return inner.PushAsync(objectKey, data, etag, cancellationToken);
+        }
+    }
+
     [Fact]
     public async Task MemorySync_ResolvesTheCloudStorePerCall()
     {
