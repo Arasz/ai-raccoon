@@ -1,7 +1,6 @@
 ---
 name: mcp-tool-surface-testing
 description: "Use when testing every tool an MCP server exports: black-box expectations-first audit (expectations → call → compare), live contract vs docs-drift findings, destructive-tool safety controls, dependency-ordered execution, and a results doc committed to the repo. Triggers: 'test all tools', 'does every MCP tool work', server surface changed."
-description: Use when testing all tools exported by an MCP server.
 version: 1.0.0
 author: ai-badger
 license: MIT

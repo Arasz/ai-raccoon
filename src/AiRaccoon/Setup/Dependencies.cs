@@ -130,6 +130,9 @@ public static partial class Dependencies
             services.AddSingleton<WatchRetryPolicy>();
             services.AddSingleton<WatchDigestExecutor>();
             services.AddSingleton<WatchScheduler>();
+            // Singleton is load-bearing: a transient guard silently defeats single-flight (R8).
+            services.AddSingleton<WatchScanGuard>();
+            services.AddSingleton<IWatchScanLease, WatchScanLease>();
             services.AddSingleton<WatchPipeline>();
             services.AddSingleton<IWatchService, WatchService>();
         }

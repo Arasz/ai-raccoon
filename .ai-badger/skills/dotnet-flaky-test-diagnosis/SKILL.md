@@ -1,7 +1,6 @@
 ---
 name: dotnet-flaky-test-diagnosis
 description: "Use when a .NET test fails in the full suite but passes alone (or flakes intermittently): classify via the ladder — intra-test race (lock-guard fake collections), inter-test contention (xunit v3 DisableParallelization collections), or environmental flakes (child PATH/env, cold-worktree asset provisioning) — before blaming the branch. Includes the clean-main baseline check and gate discipline."
-description: Use when a test fails in the full suite but passes alone.
 version: 1.0.0
 author: ai-badger
 license: MIT

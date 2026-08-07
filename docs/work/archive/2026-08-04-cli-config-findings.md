@@ -49,9 +49,9 @@ The tool validates alpha ∈ [0,1] and writes `retrieval.structureAlpha` via `Se
 
 ### F8 — The file-watcher spec already rules the pattern to copy: CLI-only config, `{project-id|*}` targets, more specific entry wins, user commands bypass access tiers, persisted [READ]
 
-`docs/work/features-file-watcher/file-watcher.feature:44-68` (2026-08-04 ruling f): the CLI is the ONLY channel for watch config — no MCP tools, no env/args, no config-file edits. Format: `watch enable|disable {project-id|*} {true|false}` and `watch scope add|remove|list {project-id|*} {path}`; `*` matches all projects and the more specific entry wins; `watch enable * true` returns a message to add at least one scope; config survives restart. User-run commands get no access-tier checks (`file-watcher.feature:46`). Watch registrations (add/status/remove) remain MCP tools in the same feature (baseline `:17-18`, tier rules `:392-421`) — the split is config-vs-operation: the CLI owns enable/scope, the tools own registration.
+`docs/work/archive/features-file-watcher/file-watcher.feature:44-68` (2026-08-04 ruling f): the CLI is the ONLY channel for watch config — no MCP tools, no env/args, no config-file edits. Format: `watch enable|disable {project-id|*} {true|false}` and `watch scope add|remove|list {project-id|*} {path}`; `*` matches all projects and the more specific entry wins; `watch enable * true` returns a message to add at least one scope; config survives restart. User-run commands get no access-tier checks (`file-watcher.feature:46`). Watch registrations (add/status/remove) remain MCP tools in the same feature (baseline `:17-18`, tier rules `:392-421`) — the split is config-vs-operation: the CLI owns enable/scope, the tools own registration.
 
-**Evidence:** `docs/work/features-file-watcher/file-watcher.feature:16-19,44-68,392-421`.
+**Evidence:** `docs/work/archive/features-file-watcher/file-watcher.feature:16-19,44-68,392-421`.
 
 ### F9 — The only two runtime config-change MCP tools are `memory_configure` and `memory_set_structure_alpha`; everything else in the 17-tool surface is an operation [READ]
 

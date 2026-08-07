@@ -217,6 +217,29 @@ internal static class MemorySql
                                         ORDER BY project_id, path
                                         """;
 
+    // WP4 cross-process scan lease (D-2; docs/plans/2026-08-07-watch-scan-runaway-fix.md): the
+    // lease lives on the watches row, not a separate table, so a row delete is lease release.
+    // ExecuteAsync(...) == 1 tells the caller whether the grant/renewal succeeded.
+
+    // Grants when unowned, re-entrant for the current owner, or the previous owner's lease expired.
+    public const string AcquireWatchScanLease = """
+                                                UPDATE watches SET scan_owner = @owner, scan_lease_expires_at = @expiresAt
+                                                WHERE project_id = @projectId AND path = @path
+                                                  AND (scan_owner IS NULL OR scan_owner = @owner OR scan_lease_expires_at <= @now)
+                                                """;
+
+    // Only the owner may renew, and only while the row still exists — a watch removed out from
+    // under a running scan makes this return zero rows at the next renewal, with no extra check.
+    public const string RenewWatchScanLease = """
+                                              UPDATE watches SET scan_lease_expires_at = @expiresAt
+                                              WHERE project_id = @projectId AND path = @path AND scan_owner = @owner
+                                              """;
+
+    public const string ReleaseWatchScanLease = """
+                                                UPDATE watches SET scan_owner = NULL, scan_lease_expires_at = 0
+                                                WHERE project_id = @projectId AND path = @path AND scan_owner = @owner
+                                                """;
+
     public const string UpsertWatchFile = """
                                           INSERT INTO watch_files (project_id, path, file_hash, updated_at)
                                           VALUES (@projectId, @path, @fileHash, @updatedAt)

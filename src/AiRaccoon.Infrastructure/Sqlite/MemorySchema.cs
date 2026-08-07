@@ -128,10 +128,12 @@ internal static class MemorySchema
                                -- File-watcher feature: persisted watch registrations and per-path
                                -- fingerprints (hash-skip). D3-normalized paths; runtime state is not persisted.
                                CREATE TABLE IF NOT EXISTS watches (
-                                   project_id      TEXT NOT NULL,
-                                   path            TEXT NOT NULL,
-                                   created_at      INTEGER NOT NULL,
-                                   last_change_ts  INTEGER NOT NULL,       -- catch-up watermark (D1)
+                                   project_id            TEXT NOT NULL,
+                                   path                  TEXT NOT NULL,
+                                   created_at            INTEGER NOT NULL,
+                                   last_change_ts        INTEGER NOT NULL,       -- catch-up watermark (D1)
+                                   scan_owner            TEXT NULL,              -- cross-process scan lease (D2)
+                                   scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
                                    PRIMARY KEY (project_id, path)
                                );
 
@@ -222,6 +224,31 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        // WP4 cross-process scan lease (D-2; docs/plans/2026-08-07-watch-scan-runaway-fix.md):
+        // the lease lives on the watches row so DELETE FROM watches is lease release.
+        var watchColumns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('watches')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!watchColumns.Contains("scan_owner"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE watches ADD COLUMN scan_owner TEXT",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!watchColumns.Contains("scan_lease_expires_at"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE watches ADD COLUMN scan_lease_expires_at INTEGER NOT NULL DEFAULT 0",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }

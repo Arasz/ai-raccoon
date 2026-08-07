@@ -54,8 +54,9 @@ public sealed class PromotionTools(
 
             var rows = await queue.ListAsync(projectId, limit, cancellationToken);
             var result = new PromotionListResult(rows);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -81,8 +82,9 @@ public sealed class PromotionTools(
 
             var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
             var result = new PromotionDiscardResult(discarded);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {

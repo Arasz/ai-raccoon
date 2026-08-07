@@ -477,9 +477,9 @@ engine's maximum input tokens:
 
 ```
 src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
-  Tools/MemoryTools.cs      17 [McpServerTool] methods, no business logic
+  Tools/MemoryTools.cs      9 [McpServerTool] methods, no business logic
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
-  Setup/McpServerSetup.cs   MCP_TRANSPORT env → stdio/HTTP
+  Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery
@@ -488,15 +488,21 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Rating/                   RatingPolicy, IMemoryExtension pipeline
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
+  Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
+  Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
   Common/                   ContextNaming
 
 src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
                             SearchContexts, SearchResultMerger
+  Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel
   Sync/                     SyncService, S3CloudStore, FakeCloudStore
   Chunking/                 TokenizerChunker (o200k_base)
   Workspace/                WorkspaceService
+  Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
+  Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
+  Encryption/               BitwardenCliSecretManager (Bitwarden key source)
   Degradation/              SweepService
   Rating/                   RetrievalRatingExtension (no-op, kept for extension host)
   Options/                  SyncOptions, InfrastructureOptions

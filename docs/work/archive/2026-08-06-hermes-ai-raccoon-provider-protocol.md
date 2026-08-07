@@ -10,7 +10,7 @@ A Hermes memory provider plugin (`plugins/memory/ai-raccoon/`, user-installed at
 (`agent/memory_provider.py`) so the AiRaccoon MCP memory server gains the full provider
 lifecycle: per-turn prefetch, background sync, system-prompt block, session hooks — instead of
 being only a plain MCP tool server (the current setup). The interface contract is documented in
-`docs/work/2026-08-06-hermes-memory-provider-interface.md` (findings F1-F10).
+`docs/work/archive/2026-08-06-hermes-memory-provider-interface.md` (findings F1-F10).
 
 ## Constraints (verified)
 

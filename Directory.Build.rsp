@@ -1,0 +1,12 @@
+# Default MSBuild command-line switches for this repository.
+#
+# Node reuse keeps MSBuild worker nodes alive between builds. With several agents
+# building concurrently in parallel worktrees, those nodes wedge and every later
+# build queues behind them instead of starting its own (observed 2026-08-07:
+# 11 stacked `dotnet build` processes, the oldest blocked for 3.5 hours, all at
+# ~0% CPU). Disabling reuse also disables MSBuild Server, which has the same
+# failure mode.
+#
+# Applies to `dotnet build` / `msbuild` command-line builds only — Rider and
+# Visual Studio do not read .rsp files.
+-nodeReuse:false

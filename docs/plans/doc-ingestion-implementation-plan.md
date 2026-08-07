@@ -1,7 +1,7 @@
 # Doc Ingestion Pipeline & Retrieval Test Suite — Implementation Plan
 
 **Task:** `doc-ingestion-and-tests`
-**Source design:** `docs/design/job-search-ai-assistant-ingestion-pipeline.md`
+**Source design:** `job-search-ai-assistant-ingestion-pipeline.md` — removed from this repo 2026-08-07; it belongs to the `job-search-ai-assistant` project.
 **Project:** AiRaccoon — C# .NET 10 MCP server over sqlite-memory
 **Date:** 2026-08-04
 
@@ -66,7 +66,7 @@ Implement the document ingestion pipeline and retrieval test suite for ingesting
 - AiRaccoon MCP server built and running (`dotnet run` from `src/AiRaccoon/`)
 - `python3` available with `pip` for `mcp` client package
 - `job-search-ai-assistant` repo present at `/Users/arasz/RiderProjects/job-search-ai-assistant`
-- The `docs/design/job-search-ai-assistant-ingestion-pipeline.md` design doc is the source of truth
+- The `job-search-ai-assistant-ingestion-pipeline.md` design doc is the source of truth (held by the `job-search-ai-assistant` project; removed from this repo 2026-08-07)
 
 ---
 

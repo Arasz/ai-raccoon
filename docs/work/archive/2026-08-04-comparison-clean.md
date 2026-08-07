@@ -220,7 +220,7 @@ on 746 chunks, 704 unique heading paths, vec_structure populated; chunk content/
 ## Post-Wave-3 Integration — 2026-08-04 (source-affinity scoring: adjacent boost + consolidation + document-first)
 
 Corpus unchanged (752 chunks). Commit: a82ba41. Full suite 559 passed / 0 failed / 43 skipped.
-Chosen point (sweep of 32 points, docs/work/2026-08-04-wave3-source-affinity-sweep.md + ADR-0005):
+Chosen point (sweep of 32 points, docs/work/archive/2026-08-04-wave3-source-affinity-sweep.md + ADR-0005):
 λ=0.1, consolidation threshold=0.1, doc-score formula Max.
 
 ### Per-query (hybrid) — vs post-Wave-6
@@ -295,7 +295,7 @@ Commit: ab44a09. Full suite 576 passed / 0 failed / 43 skipped. Corpus unchanged
   window {Max3x100, Max5x50}) through the REAL pipeline (SearchAsync → FTS/dual-vector →
   RRF → source-affinity ranker → merger), W3 params fixed (λ=0.1, thr=0.1, Max), per-point
   gates enforced (S2 ≤3, A6 file/exact ≤2, A1/A4 file 1, A7 exact ≤2, C1/C2/C5 rank 1,
-  exact@3 ≥ 10/11). Full matrix: docs/work/2026-08-04-wave4-rrf-sweep.md; ADR-0006.
+  exact@3 ≥ 10/11). Full matrix: docs/work/archive/2026-08-04-wave4-rrf-sweep.md; ADR-0006.
 - **Result: the pre-sweep defaults (k=60, 1:1, minScore=0.0, Max3x100) are the gate-holding
   optimum.** 24 points score above nDCG@5 0.722; every one violates ≥1 gate (k=120 → A1
   file 2 + A6 exact 6 + exact@3 9/11; 2:1 weights → A1 file 2; Max5x50 → A1 file 2

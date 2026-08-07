@@ -1,7 +1,6 @@
 ---
 name: dotnet-tool-publishing
 description: "Use when packaging or publishing a .NET CLI tool (PackAsTool) or library to NuGet: the MSB3030 build-before-pack trap (and its Web-SDK inversion), multi-RID matrix shells + the shell-race fix, gitignored bundled assets, Trusted Publishing/OIDC with human approval gates, the 409-published-nothing diagnosis, ToolCommandName/PATH shim rules, and full fresh-install verification for MCP tools with bundled models."
-description: Use when packaging or publishing a .NET CLI tool to NuGet.
 version: 1.0.0
 author: ai-badger
 license: MIT

@@ -2,7 +2,7 @@
 
 **Reviewer:** Hermes subagent  
 **Date:** 2026-08-04  
-**Reviewed against:** Design doc (`docs/design/job-search-ai-assistant-ingestion-pipeline.md`), AiRaccoon actual API surface (`src/AiRaccoon/Tools/MemoryTools.cs`, `SqliteMemoryStore.cs`, core types)
+**Reviewed against:** Design doc (`job-search-ai-assistant-ingestion-pipeline.md`, held by the `job-search-ai-assistant` project; removed from this repo 2026-08-07), AiRaccoon actual API surface (`src/AiRaccoon/Tools/MemoryTools.cs`, `SqliteMemoryStore.cs`, core types)
 
 ---
 

@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 using static System.IO.File;
@@ -18,7 +20,9 @@ public sealed class WatchCatchUpTests
 {
     private const string Project = "acme";
 
-    private static WatchCatchUp NewCatchUp(WatchTestStack stack) => new(stack.Pipeline, stack.Store, NullLogger<WatchCatchUp>.Instance);
+    private static WatchCatchUp NewCatchUp(WatchTestStack stack, ILogger<WatchCatchUp>? logger = null) =>
+        new(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
+            logger ?? NullLogger<WatchCatchUp>.Instance);
 
     private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
@@ -99,7 +103,7 @@ public sealed class WatchCatchUpTests
         await stack.Service.AddAsync(Project, file, TestContext.Current.CancellationToken);
         var catchUp = NewCatchUp(stack);
 
-        catchUp.EnqueueInitialScan(Project, file);
+        catchUp.EnqueueInitialScan(Project, file, TestContext.Current.CancellationToken);
         await catchUp.LastScan!;
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
@@ -123,7 +127,7 @@ public sealed class WatchCatchUpTests
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
         var catchUp = NewCatchUp(stack);
 
-        catchUp.EnqueueInitialScan(Project, dir.Path);
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
         var scan = catchUp.LastScan.ShouldNotBeNull();
         await scan;
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
@@ -150,7 +154,7 @@ public sealed class WatchCatchUpTests
         Stamp(newer, DateTimeOffset.FromUnixTimeSeconds(watermark + 3600));
         var catchUp = NewCatchUp(stack);
 
-        catchUp.EnqueueChangedSince(Project, dir.Path, watermark);
+        catchUp.EnqueueChangedSince(Project, dir.Path, watermark, TestContext.Current.CancellationToken);
         await catchUp.LastScan!;
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
@@ -177,12 +181,62 @@ public sealed class WatchCatchUpTests
         var catchUp = NewCatchUp(stack);
 
         // The call must not run the scan inline: the scan task is created, not awaited.
-        catchUp.EnqueueInitialScan(Project, dir.Path);
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
         var scan = catchUp.LastScan.ShouldNotBeNull();
         stack.Memory.Ingested.ShouldBeEmpty();
 
         await scan;
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.Count.ShouldBe(200);
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_WithACancelledToken_EnqueuesNothing()
+    {
+        using var dir = TempDir.New("catchup-precancelled");
+        var file = dir.File("a.md");
+        await WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, cts.Token);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_CancelledMidScan_DoesNotLogAScanError()
+    {
+        using var dir = TempDir.New("catchup-cancel-midscan");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var logger = new FakeLogger<WatchCatchUp>();
+        var catchUp = NewCatchUp(stack, logger);
+        var insideListFiles = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Store.OnListFiles = async () =>
+        {
+            insideListFiles.TrySetResult();
+            await releaseGate.Task;
+        };
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await insideListFiles.Task.WaitAsync(TestContext.Current.CancellationToken);
+        catchUp.CancelAllScans();
+        releaseGate.SetResult();
+        await catchUp.LastScan!;
+
+        var records = logger.Collector.GetSnapshot();
+        records.ShouldContain(r => r.Id.Id == 311);
+        records.ShouldNotContain(r => r.Id.Id == 310);
     }
 }

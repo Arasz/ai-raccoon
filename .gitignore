@@ -4,6 +4,7 @@ obj/
 /.nupkg/
 /.nupkg-local/
 /.ai-badger/worktrees/
+/.ai-badger/task-tracking/
 /.ai-badger.bckp/
 riderModule.iml
 /_ReSharper.Caches/

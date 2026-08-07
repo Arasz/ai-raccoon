@@ -48,7 +48,7 @@ SQLite3MC encrypts per 4KB page (AES-256-CBC)
 
 **Migration path:** Opt-in first (env var `AIRACCOON_DB_PASSPHRASE`), `sqlcipher_export` for existing DBs, eventually make default.
 
-**Full report:** `docs/research/encryption-at-rest.md`
+**Full report:** `docs/research/archive/encryption-at-rest.md`
 
 ---
 
@@ -328,7 +328,7 @@ The mcp-index doesn't go away — it solves tool selection, which is a different
 
 | Document | Location |
 |---|---|
-| Encryption at rest report | `docs/research/encryption-at-rest.md` |
+| Encryption at rest report | `docs/research/archive/encryption-at-rest.md` |
 | Doc ingestion pipeline design | `docs/design/job-search-ai-assistant-ingestion-pipeline.md` |
 | Memory model gap analysis | `docs/work/2026-08-04-memory-model-gap-analysis.md` |
 | This synthesis | `docs/work/2026-08-04-memory-model-research-synthesis.md` |

@@ -1,7 +1,7 @@
 # Test-engineer review — HTTP serve-mode design
 
 **Lane:** test strategy, gate honesty, TDD plan
-**Design reviewed:** `docs/work/2026-08-06-http-serve-design.md` (worktree `switch-from-stdio-to-http`)
+**Design reviewed:** `docs/work/archive/2026-08-06-http-serve-design.md` (worktree `switch-from-stdio-to-http`)
 **Reviewer:** test-engineer lane (independent) · **Date:** 2026-08-06
 **Evidence base:** design doc §1–§7 + Appendix; `tests/AiRaccoon.Tests/` (147 files) read directly: `McpServerSetupHostTests`, `ExtractionHostedServiceTests`, `ExtractionDependenciesSmokeTests`, `CliCommandTreeTests`, `CliArgsTests`, `CliCommandRunnerTests`, `CliOutputRoutingTests`, `ServerConfigTests`, `LoggerMessageTests`, `E2E/McpServerFactory`, `E2E/McpServerE2ETests`, `E2E/McpServerLaunchArgsE2ETests`, `E2E/E2ETestCollection`, `TestCategories`; src read: `Program.cs`, `McpServerSetup.cs`, `Dependencies.cs`, `HostExtensions.cs`, `ConfigCommands.cs`, `EmbeddingAvailability.cs`, `ExtractionConfigKeys.cs`, `ServerConfig.cs`, `CliOptionsExtensions.cs`. Hosted-service testing knowledge per the project's verified `dotnet-hosted-service-testing` skill (FakeTimeProvider semantics empirically confirmed on .NET 10).
 

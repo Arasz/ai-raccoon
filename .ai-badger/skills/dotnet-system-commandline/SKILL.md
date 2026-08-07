@@ -1,7 +1,6 @@
 ---
 name: dotnet-system-commandline
 description: "Use when adding CLI argument parsing to a .NET app or dotnet tool: System.CommandLine 2.0.x GA idioms (parse-first, HelpAction/VersionOptionAction detection, Option.Validators, FromAmong), parser-landscape verdicts (Cocona archived — don't adopt), and the stdio-MCP trap where help/version must render to stderr. Includes Cocona-maintenance guidance for existing tools."
-description: Use when adding CLI argument parsing to a .NET app.
 version: 1.0.0
 author: ai-badger
 license: MIT

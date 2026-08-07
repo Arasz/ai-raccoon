@@ -18,7 +18,7 @@ internal sealed class WatchTestStack
         var host = new MemoryExtensionHost(Memory, [Extension]);
         Executor = new WatchDigestExecutor(host, Store, host, Time, NullLogger<WatchDigestExecutor>.Instance);
         Pipeline = new WatchPipeline(
-            new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time,
+            new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time, ScanGuard,
             NullLogger<WatchPipeline>.Instance);
         Service = new WatchService(Store, Memory, Pipeline, Time);
     }
@@ -30,6 +30,10 @@ internal sealed class WatchTestStack
     public FakeWatchStore Store { get; } = new();
 
     public RecordingExtension Extension { get; } = new();
+
+    public WatchScanGuard ScanGuard { get; } = new();
+
+    public FakeWatchScanLease ScanLease { get; } = new();
 
     public WatchDigestExecutor Executor { get; }
 
@@ -87,6 +91,14 @@ internal sealed class FakeWatchStore : IWatchStore
 
     public int UpsertFileHashCalls { get; private set; }
 
+    public int ListFilesCalls { get; private set; }
+
+    /// <summary>Tokens passed to each ListFilesAsync call, in call order (asserts cancellation threading).</summary>
+    public List<CancellationToken> ListFilesTokens { get; } = [];
+
+    /// <summary>Runs before ListFilesAsync returns — gate to hold a scan open inside ReconcileMissingAsync.</summary>
+    public Func<Task>? OnListFiles { get; set; }
+
     public Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
@@ -95,9 +107,18 @@ internal sealed class FakeWatchStore : IWatchStore
         return Task.CompletedTask;
     }
 
+    /// <summary>Mirrors the real cascade delete: fingerprints at or under the watch path die with it.</summary>
     public Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         Watches.Remove((projectId, path));
+        foreach (var key in FileHashes.Keys
+                     .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal) &&
+                                 WatchPath.IsWithinScope(k[(projectId.Length + 1)..], path))
+                     .ToArray())
+        {
+            FileHashes.Remove(key);
+        }
+
         RemoveWatchCalls++;
         return Task.CompletedTask;
     }
@@ -129,18 +150,56 @@ internal sealed class FakeWatchStore : IWatchStore
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<string>>([
+    public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        ListFilesCalls++;
+        ListFilesTokens.Add(cancellationToken);
+        if (OnListFiles is not null)
+        {
+            await OnListFiles();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var prefix = $"{projectId}\u0000";
+        return [
             .. FileHashes.Keys
-                .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal))
+                .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
                 .Select(k => k[(projectId.Length + 1)..])
-        ]);
+        ];
+    }
 
     /// <summary>Mirrors the real DeleteSourcePathAsync transaction: chunks + fingerprint die together.</summary>
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
 
     private static string Key(string projectId, string path) => $"{projectId}\u0000{path}";
+}
+
+/// <summary>IWatchScanLease fake: grants by default, with injectable results and call counters.</summary>
+internal sealed class FakeWatchScanLease : IWatchScanLease
+{
+    public bool AcquireResult { get; set; } = true;
+
+    public Queue<bool> RenewResults { get; } = new();
+
+    public int ReleaseCalls { get; private set; }
+
+    public Action? OnAcquire { get; set; }
+
+    public Task<bool> TryAcquireAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        OnAcquire?.Invoke();
+        return Task.FromResult(AcquireResult);
+    }
+
+    public Task<bool> TryRenewAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
+        Task.FromResult(RenewResults.Count > 0 ? RenewResults.Dequeue() : true);
+
+    public Task ReleaseAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        ReleaseCalls++;
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>IMemoryStore fake: settings + the watch-used slice; the rest is unsupported.</summary>

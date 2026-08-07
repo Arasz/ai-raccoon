@@ -80,6 +80,58 @@ public class MemoryToolsInstrumentationTests
     }
 
     [Fact]
+    public async Task Write_WhenResponseEnvelopeFails_RecordsError_NotSuccess()
+    {
+        // WrapAsync (queue.GetMetaAsync) runs after the store call succeeds; a failure there
+        // must still be recorded as an error, not as a success followed by a no-op RecordError.
+        var metrics = new ToolCallMetrics();
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        var stoppedActivities = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
+            Sample = (ref _) => ActivitySamplingResult.AllData,
+            ActivityStarted = _ => { },
+            ActivityStopped = stoppedActivities.Add
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
+        var queue = new FakePromotionQueue { GetMetaError = new InvalidOperationException("meta boom") };
+        var tools = new MemoryTools(store, new MemoryAccessGuard(store), metrics, queue);
+
+        await Should.ThrowAsync<InvalidOperationException>(() =>
+            tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken));
+
+        var invocations = invocationCollector.GetMeasurementSnapshot();
+        invocations.Count.ShouldBe(1);
+        invocations[0].Tags["result"].ShouldBe("error");
+        invocations[0].Tags["error_type"].ShouldBe("InvalidOperationException");
+
+        var stopped = stoppedActivities.ShouldHaveSingleItem();
+        stopped.Status.ShouldBe(ActivityStatusCode.Error);
+    }
+
+    [Fact]
+    public async Task Write_Duration_IncludesResponseEnvelopeLatency()
+    {
+        // The stopwatch must cover the full call, including WrapAsync's queue.GetMetaAsync —
+        // not just the bookkeeping before it.
+        var metrics = new ToolCallMetrics();
+        using var durationCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+
+        var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
+        var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
+        var tools = new MemoryTools(store, new MemoryAccessGuard(store), metrics, queue);
+
+        await tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken);
+
+        var durations = durationCollector.GetMeasurementSnapshot();
+        durations.Count.ShouldBe(1);
+        durations[0].Value.ShouldBeGreaterThanOrEqualTo(50.0);
+    }
+
+    [Fact]
     public async Task Sync_NotConfigured_PreCheck_RecordsError()
     {
         var metrics = new ToolCallMetrics();

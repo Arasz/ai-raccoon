@@ -19,6 +19,7 @@ public sealed partial class WatchPipeline(
     WatchRetryPolicy retryPolicy,
     IMemoryStore memoryStore,
     TimeProvider timeProvider,
+    WatchScanGuard scanGuard,
     ILogger<WatchPipeline> logger)
 {
     private readonly Channel<WatchEvent> _events = Channel.CreateUnbounded<WatchEvent>();
@@ -58,7 +59,8 @@ public sealed partial class WatchPipeline(
         }
     }
 
-    /// <summary>Drops a watch's runtime state and any pending digests under it (remove must not resurrect).</summary>
+    /// <summary>Drops a watch's runtime state and any pending digests under it (remove must not resurrect),
+    /// and cancels its in-flight catch-up scan (D-1: this is the one choke point every removal inherits).</summary>
     public void UnregisterWatch(string projectId, string path)
     {
         var normalized = WatchPath.Normalize(path);
@@ -79,6 +81,7 @@ public sealed partial class WatchPipeline(
         }
 
         retryPolicy.Forget(projectId, normalized);
+        scanGuard.Cancel(projectId, normalized);
     }
 
     /// <summary>Marks a watch scanning (S5's initial scan) — clears the last error.</summary>
@@ -253,7 +256,7 @@ public sealed partial class WatchPipeline(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 200, Level = LogLevel.Error, Message = "Watch pipeline loop iteration failed")]
+        [LoggerMessage(EventId = 302, Level = LogLevel.Error, Message = "Watch pipeline loop iteration failed")]
         public static partial void PipelineLoopError(ILogger logger, Exception exception);
     }
 }

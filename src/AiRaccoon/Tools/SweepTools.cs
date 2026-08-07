@@ -54,8 +54,9 @@ public sealed class SweepTools(
             var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
             var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
