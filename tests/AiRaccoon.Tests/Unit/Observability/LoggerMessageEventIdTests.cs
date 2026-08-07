@@ -37,6 +37,47 @@ public class LoggerMessageEventIdTests
         duplicates.ShouldBeEmpty(string.Join("; ", duplicates));
     }
 
+    /// <summary>
+    ///     Each owning type's EventIds must form one contiguous block — no other type's id
+    ///     sitting inside the range. Two types can each be internally unique yet still interleave
+    ///     (S3CloudStore 200,201,205 / AzureBlobCloudStore 202-204): unique doesn't mean readable,
+    ///     and #109 already moved PromotionQueueService wholesale once to avoid exactly this shape.
+    /// </summary>
+    [Fact]
+    public void EventIds_FormAContiguousBlockPerType_NoInterleaving()
+    {
+        var entries = DiscoverAiRaccoonAssemblies()
+            .SelectMany(a => a.GetTypes())
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+                                           BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            .SelectMany(m => m.GetCustomAttributes<LoggerMessageAttribute>()
+                .Select(a => (Owner: m.DeclaringType?.DeclaringType ?? m.DeclaringType!, a.EventId)))
+            .ToList();
+
+        entries.ShouldNotBeEmpty();
+
+        var ownersWithMultipleIds = entries.GroupBy(e => e.Owner).Where(g => g.Count() > 1).ToList();
+        ownersWithMultipleIds.ShouldNotBeEmpty();
+
+        var interleaved = new List<string>();
+        foreach (var group in ownersWithMultipleIds)
+        {
+            var ids = group.Select(e => e.EventId).OrderBy(x => x).ToList();
+            var ownBlock = new HashSet<int>(Enumerable.Range(ids[0], ids[^1] - ids[0] + 1));
+            var intruders = entries
+                .Where(e => e.Owner != group.Key && ownBlock.Contains(e.EventId))
+                .Select(e => $"{e.Owner.Name}:{e.EventId}")
+                .ToList();
+
+            if (intruders.Count > 0)
+            {
+                interleaved.Add($"{group.Key.Name}'s block {ids[0]}-{ids[^1]} interleaves with {string.Join(", ", intruders)}");
+            }
+        }
+
+        interleaved.ShouldBeEmpty(string.Join("; ", interleaved));
+    }
+
     /// <summary>The discovery itself must not silently find zero assemblies and pass vacuously.</summary>
     [Fact]
     public void DiscoverAiRaccoonAssemblies_FindsAllThreeProductionAssembliesByName()
