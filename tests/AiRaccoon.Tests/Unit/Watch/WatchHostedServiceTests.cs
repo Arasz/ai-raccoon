@@ -23,7 +23,8 @@ public sealed class WatchHostedServiceTests
         var stack = new WatchTestStack();
         var source = new WatchEventSource(stack.Pipeline.Enqueue, _ => { },
             NullLogger<WatchEventSource>.Instance);
-        var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, NullLogger<WatchCatchUp>.Instance);
+        var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
+            NullLogger<WatchCatchUp>.Instance);
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
             NullLogger<WatchHostedService>.Instance);
         return (stack, source, catchUp, hosted);
