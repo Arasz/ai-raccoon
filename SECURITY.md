@@ -58,9 +58,21 @@ Per-project modes override the global setting, stored in the bank's `settings` t
 ### What leaves the process when OTLP export is on
 
 Spans carry `project_id` in **plaintext**, alongside `tool`, `result`, `error_type`,
-and duration (`src/AiRaccoon/Observability/ToolExecutionActivity.cs`). Metrics carry
-**no** `project_id` at all — only `tool`, `result`, `error_type`
-(`ToolCallMetrics.RecordInvocation`, same directory).
+and duration (`src/AiRaccoon/Observability/ToolExecutionActivity.cs`).
+
+Metrics differ by meter, and the difference matters:
+
+| Meter | Carries `project_id`? |
+|---|---|
+| `AiRaccoon.MemoryTools` (tool calls) | No — only `tool`, `result`, `error_type` (`ToolCallMetrics.RecordInvocation`) |
+| `AiRaccoon.PromotionQueue` | **Yes**, on all five instruments (`PromotionQueueMetrics.RecordQueued`/`RecordEviction`/`RecordPromoted`/`RecordDiscarded`) |
+| `System.Runtime` (built-in) | No — process-level GC/CPU/memory only |
+
+So project names reach a collector through two channels, not one: trace spans and
+the promotion-queue metrics. There is a second, non-privacy cost to the metric
+channel — `project_id` is unbounded, so each distinct project becomes its own time
+series. That is free over EventPipe locally, but a hosted collector generally bills
+per series.
 
 **Memory content never leaves.** No entry text, no search queries, no file contents,
 no embeddings — only the scope name (`project_id`) and call-shape telemetry (which
