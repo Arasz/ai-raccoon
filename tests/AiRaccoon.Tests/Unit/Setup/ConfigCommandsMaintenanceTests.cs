@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
@@ -9,13 +11,26 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// <summary>
 ///     Maintenance-config commands pin the settings-key contract the bank-maintenance
 ///     hosted service reads: maintenance.checkpoint-interval-minutes.global (default 60)
-///     and maintenance.vacuum-interval-days.global (default 7).
+///     and maintenance.vacuum-interval-days.global (default 7). The list verb also
+///     reports live bank disk stats (db/WAL sizes, reclaimable bytes, delta vs the
+///     previous check via the maintenance-stats.json sidecar).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public class ConfigCommandsMaintenanceTests
+public class ConfigCommandsMaintenanceTests : IDisposable
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
+    private readonly string _dataRoot = TestData.CreateTempRoot("maintenance-cli");
+    private readonly SqliteConnectionFactory _factory;
+
+    public ConfigCommandsMaintenanceTests()
+    {
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+    }
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
+    private async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
         CliArgs.TryParse(args, out var parsed);
         parsed.Errors.ShouldBeEmpty();
@@ -24,9 +39,49 @@ public class ConfigCommandsMaintenanceTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            TextReader.Null, maintenance: new MaintenanceCommands(),
+            TextReader.Null, maintenance: new MaintenanceCommands(_factory),
             cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
+    }
+
+    /// <summary>Writes then deletes rows so the bank's freelist grows.</summary>
+    private async Task SeedFreelistAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = """
+                             INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                             VALUES (@hash, @path, @value, 'project', 'acme', 0, 0)
+                             """;
+        var hash = insert.Parameters.Add("@hash", SqliteType.Text);
+        var path = insert.Parameters.Add("@path", SqliteType.Text);
+        var value = insert.Parameters.Add("@value", SqliteType.Text);
+        for (var i = 0; i < 2000; i++)
+        {
+            hash.Value = $"h{i}";
+            path.Value = $"p{i}.md";
+            value.Value = new string('x', 200);
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var delete = connection.CreateCommand();
+        delete.CommandText = "DELETE FROM entries WHERE project_id = 'acme'";
+        await delete.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>One committed write so the bank grows between two list calls.</summary>
+    private async Task WriteRowAsync(string suffix)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                              VALUES (@hash, @path, @value, 'project', 'acme', 0, 0)
+                              """;
+        command.Parameters.AddWithValue("@hash", $"delta-{suffix}");
+        command.Parameters.AddWithValue("@path", $"delta-{suffix}.md");
+        command.Parameters.AddWithValue("@value", new string('y', 400));
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -111,6 +166,46 @@ public class ConfigCommandsMaintenanceTests
         exit.ShouldBe(0);
         outp.ShouldContain("checkpoint interval: 60 min");
         outp.ShouldContain("vacuum interval: 7 days");
+    }
+
+    [Fact]
+    public async Task MaintenanceList_ShowsDiskStats_AndReclaimable()
+    {
+        var store = new FakeConfigStore();
+        await SeedFreelistAsync();
+
+        var (exit, outp, _) = await Run(["maintenance", "list"], store);
+
+        exit.ShouldBe(0);
+        outp.ShouldContain("db file:");
+        outp.ShouldContain("on-disk total:");
+        outp.ShouldContain("reclaimable:");
+        outp.ShouldContain("freelist");
+    }
+
+    [Fact]
+    public async Task MaintenanceList_SecondCall_ShowsDelta()
+    {
+        var store = new FakeConfigStore();
+        var (exit1, outp1, _) = await Run(["maintenance", "list"], store);
+        exit1.ShouldBe(0);
+        outp1.ShouldContain("no previous measurement");
+
+        await WriteRowAsync("probe");
+
+        var (exit2, outp2, _) = await Run(["maintenance", "list"], store);
+        exit2.ShouldBe(0);
+        outp2.ShouldContain("since last check:");
+    }
+
+    [Fact]
+    public async Task MaintenanceList_WritesStatsSidecar()
+    {
+        var store = new FakeConfigStore();
+
+        await Run(["maintenance", "list"], store);
+
+        File.Exists(Path.Combine(_dataRoot, "maintenance-stats.json")).ShouldBeTrue();
     }
 
     [Fact]
