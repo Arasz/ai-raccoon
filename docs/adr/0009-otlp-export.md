@@ -258,6 +258,14 @@ appends the per-signal path (e.g. `/v1/traces`) for `http/protobuf`. When
 the endpoint is set per-signal (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) or set
 explicitly in code, it is used verbatim — no path is appended.
 
+Because we set the endpoint explicitly (`OtlpExport.ConfigureExporter`,
+forced by the cleared configuration sources — see "Configuration channel"
+below), the SDK's own append never fires for us either. We reproduce it
+ourselves for `http/protobuf` (`OtlpExport.SignalEndpoint`), appending
+`/v1/traces` or `/v1/metrics` idempotently so an endpoint that already
+carries the signal path is not doubled; gRPC endpoints are left verbatim,
+matching the SDK's own behavior for that protocol.
+
 ## Consequences
 
 - **Positive.** Existing instrumentation (ADR 0002, ADR 0007) becomes

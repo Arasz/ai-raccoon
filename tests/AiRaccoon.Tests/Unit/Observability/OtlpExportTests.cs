@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Net;
+using System.Net.Sockets;
+using System.Reflection;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
@@ -24,6 +27,13 @@ public sealed class OtlpExportTests : IDisposable
 {
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
+    private const string IntervalVar = "OTEL_METRIC_EXPORT_INTERVAL";
+    private const string TimeoutVar = "OTEL_METRIC_EXPORT_TIMEOUT";
+
+    // SDK defaults (PeriodicExportingMetricReaderHelper), measured against opentelemetry-dotnet
+    // core-1.17.0 source — the ceiling these tests prove we no longer silently fall back to.
+    private const int SdkDefaultExportIntervalMilliseconds = 60_000;
+    private const int SdkDefaultExportTimeoutMilliseconds = 30_000;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-export");
 
@@ -124,6 +134,153 @@ public sealed class OtlpExportTests : IDisposable
         toolMetrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
     }
 
+    // ADR 0009 "Default protocol and ports": explicit-endpoint assignment disables the SDK's
+    // own AppendSignalPathToEndpoint behavior, so http/protobuf needs the per-signal path
+    // appended here or the collector never receives traces/metrics — silently, per the ADR's
+    // failure posture. gRPC must stay verbatim: one endpoint, signal encoded in the RPC method.
+    [Fact]
+    public void HttpProtobuf_AppendsTracesSignalPath()
+    {
+        var state = new OtlpExportState(true, "http://localhost:4318", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    [Fact]
+    public void HttpProtobuf_AppendsMetricsSignalPath()
+    {
+        var state = new OtlpExportState(true, "http://localhost:4318", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/metrics");
+
+        endpoint.ShouldBe(new Uri("http://localhost:4318/v1/metrics"));
+    }
+
+    [Fact]
+    public void HttpProtobuf_EndpointAlreadyCarryingSignalPath_IsNotDoubled()
+    {
+        var state = new OtlpExportState(true, "http://localhost:4318/v1/traces", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    [Fact]
+    public void HttpProtobuf_TrailingSlashEndpoint_DoesNotProduceDoubleSlash()
+    {
+        var state = new OtlpExportState(true, "http://localhost:4318/", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    [Fact]
+    public void Grpc_EndpointIsUsedVerbatim()
+    {
+        var state = new OtlpExportState(true, "http://127.0.0.1:4317", "grpc");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://127.0.0.1:4317"));
+    }
+
+    [Theory]
+    [InlineData("HTTP/PROTOBUF")]
+    [InlineData(" http/protobuf ")]
+    public void HttpProtobuf_ProtocolCasingAndWhitespace_IsTolerated(string protocol)
+    {
+        var state = new OtlpExportState(true, "http://localhost:4318", protocol);
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    // ADR 0009 "Configuration channel": OTEL_METRIC_EXPORT_INTERVAL/_TIMEOUT are read explicitly
+    // for the same cleared-sources reason as the endpoint. Unlike SignalEndpoint, this cannot be
+    // proven with a pure-function unit test: the SDK core (not the exporter package) registers
+    // PeriodicExportingMetricReaderOptions through RegisterOptionsFactory bound to DI's
+    // IConfiguration, which McpServerSetup clears — so only the real CreateWebHost pipeline, with
+    // the real (cleared) host IConfiguration in play, can show whether the value actually reaches
+    // the reader. The bare ServiceCollection seam used elsewhere in this file does NOT reproduce
+    // this: with no host builder, AddOpenTelemetrySharedProviderBuilderServices's
+    // TryAddSingleton<IConfiguration> takes effect and reads real env vars regardless of our fix,
+    // masking the bug either way. Reflection reaches the internal Reader property (MeterProviderSdk)
+    // and the internal ExportIntervalMilliseconds/ExportTimeoutMilliseconds fields
+    // (PeriodicExportingMetricReader) — there is no public surface to assert the applied values.
+    [Fact]
+    public async Task HttpHost_MetricExportInterval_IsAppliedToThePeriodicReader_WhenSet()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        Environment.SetEnvironmentVariable(IntervalVar, "1234");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        var meterProvider = host.Services.GetRequiredService<MeterProvider>();
+
+        PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(1234);
+    }
+
+    [Fact]
+    public async Task HttpHost_MetricExportInterval_LeavesSdkDefault_WhenUnset()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        var meterProvider = host.Services.GetRequiredService<MeterProvider>();
+
+        PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(SdkDefaultExportIntervalMilliseconds);
+    }
+
+    [Fact]
+    public async Task HttpHost_MetricExportTimeout_IsAppliedToThePeriodicReader_WhenSet()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        Environment.SetEnvironmentVariable(TimeoutVar, "9876");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        var meterProvider = host.Services.GetRequiredService<MeterProvider>();
+
+        PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(9876);
+    }
+
+    [Fact]
+    public async Task HttpHost_MetricExportTimeout_LeavesSdkDefault_WhenUnset()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        var meterProvider = host.Services.GetRequiredService<MeterProvider>();
+
+        PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
+    }
+
+    private static int PeriodicReaderField(MeterProvider meterProvider, string fieldName)
+    {
+        var reader = meterProvider.GetType()
+            .GetProperty("Reader", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(meterProvider)!;
+        return (int)reader.GetType()
+            .GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(reader)!;
+    }
+
+    private static int FreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
     private ServerConfig Config(McpTransport transport, int port = 7721, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
@@ -132,19 +289,28 @@ public sealed class OtlpExportTests : IDisposable
         await TestData.EnvVarGate.WaitAsync();
         var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
         var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
+        var originalInterval = Environment.GetEnvironmentVariable(IntervalVar);
+        var originalTimeout = Environment.GetEnvironmentVariable(TimeoutVar);
         var originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         Environment.SetEnvironmentVariable(EndpointVar, null);
         Environment.SetEnvironmentVariable(ProtocolVar, null);
+        Environment.SetEnvironmentVariable(IntervalVar, null);
+        Environment.SetEnvironmentVariable(TimeoutVar, null);
         Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(originalEndpoint, originalProtocol, originalPassphrase);
+        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout, originalPassphrase);
     }
 
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol, string? originalPassphrase) : IDisposable
+    private sealed class EnvRestore(
+        string? originalEndpoint, string? originalProtocol, string? originalInterval, string? originalTimeout,
+        string? originalPassphrase)
+        : IDisposable
     {
         public void Dispose()
         {
             Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
             Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
+            Environment.SetEnvironmentVariable(IntervalVar, originalInterval);
+            Environment.SetEnvironmentVariable(TimeoutVar, originalTimeout);
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, originalPassphrase);
             TestData.EnvVarGate.Release();
         }
