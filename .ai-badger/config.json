@@ -56,5 +56,9 @@
       "update-documentation"
     ]
   },
-  "docs": {}
+  "docs": {},
+  "agentDocs": {
+    "maxChars": 14000,
+    "maxLines": 230
+  }
 }
