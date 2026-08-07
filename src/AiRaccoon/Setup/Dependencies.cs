@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -111,6 +112,7 @@ public static partial class Dependencies
 
             services.RegisterExtractionBackgroundService(mcpTransport);
             services.RegisterWatchSyncBackgroundService();
+            services.AddHostedService<BankMaintenanceHostedService>();
         }
 
         private void RegisterExtractionBackgroundService(IReadOnlyCollection<McpTransport> mcpTransport)

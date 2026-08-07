@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
@@ -123,6 +124,36 @@ public class McpServerSetupHostTests : IDisposable
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
+    }
+
+    [Fact]
+    public void StdioOnlyHost_RegistersTheBankMaintenanceHostedService()
+    {
+        // Bank maintenance is registered in ALL modes: a stdio process is session-bound,
+        // so its startup + shutdown boundary checkpoints are the only ones it gets.
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is BankMaintenanceHostedService);
+    }
+
+    [Fact]
+    public void HttpHost_RegistersTheBankMaintenanceHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is BankMaintenanceHostedService);
+    }
+
+    [Fact]
+    public void BothTransportsHost_RegistersTheBankMaintenanceHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is BankMaintenanceHostedService);
     }
 
     [Fact]

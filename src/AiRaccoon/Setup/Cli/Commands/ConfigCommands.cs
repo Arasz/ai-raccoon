@@ -29,7 +29,7 @@ internal static class ConfigCommands
         TextWriter stdout, TextWriter stderr, TextReader stdin,
         ISettingsCommands? settings = null, ISyncCommands? sync = null,
         IWatchCommands? watch = null, IEncryptionCommands? encryptionCommands = null,
-        IExtractCommands? extract = null,
+        IExtractCommands? extract = null, IMaintenanceCommands? maintenance = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -72,6 +72,9 @@ internal static class ConfigCommands
                 ["extract", "exclude", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<IExtractCommands>(nameof(extract))).ExcludeListAsync(store, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<IEncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
+                ["maintenance", "interval"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<IMaintenanceCommands>(nameof(maintenance))).SetCheckpointIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
+                ["maintenance", "vacuum-interval"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<IMaintenanceCommands>(nameof(maintenance))).SetVacuumIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
+                ["maintenance", "list"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<IMaintenanceCommands>(nameof(maintenance))).ListAsync(store, stdout, cancellationToken),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

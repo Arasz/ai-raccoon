@@ -13,7 +13,7 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>The root launch --port (shared with the bare launch root); serve reads it
     /// instance-based as its fallback when serve's own --port is absent (R7/R12).</summary>
@@ -53,6 +53,7 @@ internal static class CliCommandTree
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
+        root.Add(MaintenanceCommand());
         root.Add(ServeCommand());
         return root;
     }
@@ -265,6 +266,20 @@ internal static class CliCommandTree
             }
         });
         return option;
+    }
+
+    private static Command MaintenanceCommand()
+    {
+        var maintenance = new Command("maintenance",
+            "Bank maintenance configuration (CLI-only channel): the checkpoint interval bounds the WAL — every process runs wal_checkpoint(TRUNCATE) at startup and shutdown, and the periodic timer on this cadence — and the vacuum interval sets how often VACUUM + ANALYZE run (per-process clock; short-lived processes never vacuum).")
+        {
+            new Command("interval", "Sets the WAL checkpoint interval in minutes (positive integer; default 60)")
+                { new Argument<string>("minutes") { HelpName = "minutes" } },
+            new Command("vacuum-interval", "Sets the VACUUM + ANALYZE interval in days (positive integer; default 7)")
+                { new Argument<string>("days") { HelpName = "days" } },
+            new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval)")
+        };
+        return maintenance;
     }
 
     private static Command ServeCommand()
