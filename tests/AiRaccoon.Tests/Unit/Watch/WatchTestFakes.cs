@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
@@ -381,10 +379,4 @@ internal sealed class RecordingExtension : IMemoryExtension
     public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
-        CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
-
-    public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }

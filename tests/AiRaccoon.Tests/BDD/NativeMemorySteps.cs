@@ -1873,11 +1873,5 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
-
-        public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
