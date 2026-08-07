@@ -17,7 +17,7 @@ public sealed class ShareTools(
     IMemoryStore store,
     IMemoryAccessGuard access,
     ToolCallMetrics observability,
-    SharedExtractionService extraction,
+    SharedExtractionRunner extraction,
     IPromotionQueue queue)
 {
     private const string TnMemoryShare = "memory_share";
@@ -30,6 +30,9 @@ public sealed class ShareTools(
             throw new McpException("invalid-params: project_id is required");
         }
     }
+
+    /// <summary>The activity tag is built before validation, and the protocol layer can still hand us a null array.</summary>
+    private static string JoinProjectIds(string[]? projectIds) => projectIds is null ? string.Empty : string.Join(",", projectIds);
 
     private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken) =>
@@ -83,7 +86,7 @@ public sealed class ShareTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = new ToolExecutionActivity(observability, TnMemoryShareExtract,
-            string.Join(",", projectIds ?? []));
+            JoinProjectIds(projectIds));
         try
         {
             if (projectIds is null || projectIds.Length == 0 || projectIds.Length > 8)
@@ -132,20 +135,11 @@ public sealed class ShareTools(
             var candidates = new List<ShareCandidate>();
             foreach (var projectId in projectIds)
             {
-                var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
-                    .ConfigureAwait(false);
-                var result = extraction.Run(ExtractMode.Propose,
-                    projectId, projectIds, rows,
-                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows, resolvedLimit,
-                    DateTimeOffset.UtcNow);
-                candidates.AddRange(result.Candidates);
-                if (result.Candidates.Count > 0)
-                {
-                    await queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates),
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
+                candidates.AddRange(await extraction.ProposeAsync(projectId, projectIds, sharedIndex,
+                        includeTtlRows, resolvedLimit, cancellationToken)
+                    .ConfigureAwait(false));
             }
+
             var envelope = await WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
 
             activity.RecordInvocation();
@@ -158,21 +152,7 @@ public sealed class ShareTools(
         }
     }
 
-    /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
-    /// ShareCandidate is joined back to its source row for those fields.</summary>
-    private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
-        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
-    {
-        var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
-        return candidates
-            .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
-                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
-            .ToList();
-    }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) => new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ShareResult(bool Shared, string Context);

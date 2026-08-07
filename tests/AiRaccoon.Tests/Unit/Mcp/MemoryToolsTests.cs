@@ -41,7 +41,9 @@ public class MemoryToolsTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
         _tools = new MemoryTools(_store, access, metrics, _queue);
-        _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), _queue);
+        _share = new ShareTools(_store, access, metrics,
+            new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
+                new FakeTimeProvider(FixedNow)), _queue);
         _workspace = new WorkspaceTools(workspaces, access, metrics, _queue);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics, _queue);
         _syncTools = new SyncTools(_sync,

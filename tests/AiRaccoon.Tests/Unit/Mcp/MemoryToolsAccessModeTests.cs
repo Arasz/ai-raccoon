@@ -41,7 +41,9 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
         _tools = new MemoryTools(_store, access, metrics, new FakePromotionQueue());
-        _share = new ShareTools(_store, access, metrics, new SharedExtractionService(), new FakePromotionQueue());
+        _share = new ShareTools(_store, access, metrics,
+            new SharedExtractionRunner(_store, new SharedExtractionService(), new FakePromotionQueue(),
+                new FakeTimeProvider(FixedNow)), new FakePromotionQueue());
         _workspace = new WorkspaceTools(workspaces, access, metrics, new FakePromotionQueue());
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics,
             new FakePromotionQueue());
