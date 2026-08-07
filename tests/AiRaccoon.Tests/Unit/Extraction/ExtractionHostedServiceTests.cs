@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
 using Microsoft.Extensions.Logging;
@@ -17,7 +16,8 @@ public sealed class ExtractionHostedServiceTests
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 6, 12, 0, 0, TimeSpan.Zero);
 
     private static (FakeExtractionStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
-        FakePromotionQueue Queue) NewStack() => NewStack(NullLogger<ExtractionHostedService>.Instance);
+        FakePromotionQueue Queue) NewStack() =>
+        NewStack(NullLogger<ExtractionHostedService>.Instance);
 
     private static (FakeExtractionStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
         FakePromotionQueue Queue) NewStack(ILogger<ExtractionHostedService> logger)
@@ -42,6 +42,34 @@ public sealed class ExtractionHostedServiceTests
             }
 
             await Task.Delay(10, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    ///     Advances until the loop reacts. An advance issued before ExecuteAsync has constructed
+    ///     its PeriodicTimer is simply lost — the timer then waits out a full fresh period — so a
+    ///     single advance cannot be trusted to start the first tick. Re-advancing is safe here
+    ///     because each effective advance yields exactly one tick, and polling stops at the first.
+    /// </summary>
+    private static async Task AdvanceUntilAsync(FakeTimeProvider time, TimeSpan period,
+        Func<bool> condition, CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!condition())
+        {
+            if (timeout.IsCancellationRequested)
+            {
+                throw new TimeoutException("The extraction loop never ran a pass within 30s.");
+            }
+
+            time.Advance(period);
+
+            // Generous next to a pass over in-memory fakes: only re-advance once the loop has
+            // plainly not picked up the last one, so a slow pass cannot provoke a second tick.
+            for (var i = 0; i < 25 && !condition(); i++)
+            {
+                await Task.Delay(10, cancellationToken);
+            }
         }
     }
 
@@ -165,9 +193,8 @@ public sealed class ExtractionHostedServiceTests
 
         // ExecuteAsync must fall back to the default interval and keep looping,
         // not fault (BackgroundService StopHost would kill the whole server).
-        await WaitUntilAsync(() => store.IntervalReads > 0, TestContext.Current.CancellationToken);
-        time.Advance(TimeSpan.FromMinutes(60));
-        await WaitUntilAsync(() => queue.PromoteCalls.Count > 0, TestContext.Current.CancellationToken);
+        await AdvanceUntilAsync(time, TimeSpan.FromMinutes(60), () => queue.PromoteCalls.Count > 0,
+            TestContext.Current.CancellationToken);
 
         run.IsFaulted.ShouldBeFalse();
 
@@ -186,13 +213,12 @@ public sealed class ExtractionHostedServiceTests
         using var cts = new CancellationTokenSource();
         var run = service.StartAsync(cts.Token);
 
-        // Let ExecuteAsync read the interval and create the PeriodicTimer before the clock moves.
-        await WaitUntilAsync(() => store.IntervalReads > 0, TestContext.Current.CancellationToken);
-
-        time.Advance(TimeSpan.FromMinutes(30)); // default interval
-        await WaitUntilAsync(() => queue.PromoteCalls.Count >= 2, TestContext.Current.CancellationToken);
+        // The first advance may land before the timer exists; re-advance until a pass runs.
+        await AdvanceUntilAsync(time, TimeSpan.FromMinutes(30), () => queue.PromoteCalls.Count > 0,
+            TestContext.Current.CancellationToken);
         queue.PromoteCalls.Count.ShouldBe(2); // 2 projects, one pass
 
+        // The timer is demonstrably live now, so one advance is one tick.
         time.Advance(TimeSpan.FromMinutes(30));
         await WaitUntilAsync(() => queue.PromoteCalls.Count >= 4, TestContext.Current.CancellationToken);
         // Second pass proves the loop iterates: 2 passes x 2 projects.
@@ -242,7 +268,7 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_ProposeMode_LogsRankedCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service, queue) = NewStack(logger);
+        var (store, _, service, _) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Candidates["acme"] =
         [
@@ -272,7 +298,7 @@ public sealed class ExtractionHostedServiceTests
     public async Task RunOnce_PromoteMode_LogsCountsOnly_NoCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
-        var (store, _, service, queue) = NewStack(logger);
+        var (store, _, service, _) = NewStack(logger);
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];

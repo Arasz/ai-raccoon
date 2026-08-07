@@ -1,15 +1,27 @@
+using System.Reflection;
+using System.Text.RegularExpressions;
+using AiRaccoon.Access;
+using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Observability;
+using AiRaccoon.Prompts;
+using AiRaccoon.Tools;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
+using ModelContextProtocol.Server;
 using Reqnroll;
 using Shouldly;
 
@@ -28,11 +40,94 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     private Exception? _lastError;
     private IReadOnlyList<MemorySearchResult>? _lastSearch;
 
+    /// <summary>The scenario's last search; throws plainly when no search step has run.</summary>
+    private IReadOnlyList<MemorySearchResult> LastSearch =>
+        _lastSearch ?? throw new InvalidOperationException("no search step has run in this scenario");
+
+    private IReadOnlyList<MemorySearchResult>? _defaultRrfSearch;
+
     private MemoryEntry? _lastWrite;
+
+    private const int ChunkSmallMaxTokens = 50;
+
+    // Larger than a single generated line's token count, so BuildOverlay's per-unit budget check
+    // (used + unit.TokenCount > overlayTokens) actually admits at least one reused line.
+    private const int ChunkOverlayTokens = 20;
+
+    private static readonly IChunker RealChunker = new TokenizerChunker();
+
+    // The body after a known secret prefix is real key material — contiguous base62/underscore,
+    // never natural-language words joined by hyphens (which is what test-fixture ids like
+    // "sk-hub-history-is-user-data" look like, and must not match).
+    private static readonly Regex SecretValuePattern = new(
+        @"AKIA[0-9A-Z]{16}|sk-(proj-|ant-)?[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9]{10,}",
+        RegexOptions.Compiled);
+
+    private static readonly HashSet<string> ScannedExtensions = new(StringComparer.OrdinalIgnoreCase)
+        { ".cs", ".json", ".md", ".yml", ".yaml", ".xml", ".props", ".targets", ".feature", ".sh", ".csproj", ".slnx" };
+
+    private static readonly string[] SkippedDirectories = ["bin", "obj", ".git", "node_modules", "TestResults", ".ai-badger"];
+
+    private ToolGate? _gate;
+
+    private ToolGate Gate => _gate ??= new ToolGate(
+        new MemoryAccessGuard(_store),
+        new PromotionQueueService(
+            new SqlitePromotionQueueStore(_ctx.Factory, _ctx.TimeProvider),
+            _store,
+            new UniformCountEvictionPolicy(),
+            new PromotionQueueMetrics(),
+            NullLogger<PromotionQueueService>.Instance,
+            _ctx.TimeProvider));
 
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
 
     private string ObjectKeyFor(string projectId) => $"memory-{projectId}.db";
+
+    /// <summary>Records a tool error both locally and on the shared scenario context, so a Then bound in another step class (e.g. FileWatcherSteps) can see it too.</summary>
+    private void RecordError(Exception ex)
+    {
+        _lastError = ex;
+        scenarioContext["LastError"] = ex;
+    }
+
+    private static IEnumerable<(Type Class, McpServerToolAttribute Attr)> ToolAttributes() =>
+        typeof(MemoryTools).Assembly.GetTypes()
+            .Where(t => t.Namespace == "AiRaccoon.Tools" && t.IsClass && !t.IsAbstract)
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Select(m => m.GetCustomAttribute<McpServerToolAttribute>())
+                .OfType<McpServerToolAttribute>()
+                .Select(attr => (Class: t, Attr: attr)));
+
+    private static List<string> AllToolNames() =>
+        ToolAttributes()
+            .Select(x => x.Attr.Name ?? throw new InvalidOperationException(
+                $"{x.Class.Name} declares an [McpServerTool] with no explicit Name"))
+            .ToList();
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "AiRaccoon.slnx")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Could not find repo root (AiRaccoon.slnx) walking up from " + AppContext.BaseDirectory);
+    }
+
+    private static IEnumerable<string> ScanTextFiles(string root) =>
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(f => ScannedExtensions.Contains(Path.GetExtension(f))
+                        && !f.Split(Path.DirectorySeparatorChar).Any(SkippedDirectories.Contains));
+
+    private static HashSet<int> ExtractLineNumbers(string chunk) =>
+        Regex.Matches(chunk, @"Line (\d+)").Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
 
     /// <summary>A real copy of the bundled ONNX model under a distinct path (engine fingerprint change).</summary>
     private string EnsureCustomModelCopy()
@@ -224,7 +319,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) => await _store.ConfigureEmbeddingAsync(provider, model, baseUrl, CancellationToken.None);
 
     [Given(@"project ""(.*)"" has no embedding model configured")]
-    public void GivenNoEmbeddingModelConfigured(string projectId) { }
+    public void GivenNoEmbeddingModelConfigured(string projectId)
+    {
+        // No-op: a fresh fixture's settings table has no embedding.* rows until
+        // memory_configure is called — the precondition already holds (MemorySchema does
+        // not seed them).
+    }
 
     [Given(@"project ""(.*)"" has one pending entry")]
     public async Task GivenProjectHasOnePendingEntry(string projectId) =>
@@ -362,7 +462,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenResultsCarryContractFields()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBeGreaterThan(0);
+        LastSearch.Count.ShouldBeGreaterThan(0);
         var r = _lastSearch[0];
         r.Hash.ShouldNotBeNullOrWhiteSpace();
         r.Seq.ShouldBeGreaterThanOrEqualTo(0);
@@ -375,7 +475,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenRankingNormalized()
     {
         _lastSearch.ShouldNotBeNull();
-        foreach (var r in _lastSearch!)
+        foreach (var r in LastSearch)
         {
             r.Ranking.ShouldBeInRange(0.0, 1.0);
         }
@@ -400,7 +500,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenNoResultsReturned()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBe(0);
+        LastSearch.Count.ShouldBe(0);
     }
 
     // ── FR-NM-6/FR-MEM-1.5: Workspaces ──
@@ -805,7 +905,21 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         "memory_write, memory_search, memory_list, memory_stats, memory_share, memory_delete, memory_delete_context, memory_ingest_file, memory_ingest_directory, memory_configure, memory_embed_pending, memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard, memory_sweep and memory_sync are present")]
     public void ThenAll17ToolsPresent()
     {
-        // Verified by ToolInventoryTests
+        // memory_configure is deliberately NOT an MCP tool (CLI-only config channel; see
+        // src/AiRaccoon/README.md) — the owning scenario is @ignore'd for that spec/code drift.
+        // This checks the remaining 16 names against the real [McpServerTool] surface.
+        var toolNames = AllToolNames();
+        string[] expected =
+        [
+            "memory_write", "memory_search", "memory_list", "memory_stats", "memory_share",
+            "memory_delete", "memory_delete_context", "memory_ingest_file", "memory_ingest_directory",
+            "memory_embed_pending", "memory_workspace_begin", "memory_workspace_status",
+            "memory_workspace_consolidate", "memory_workspace_discard", "memory_sweep", "memory_sync"
+        ];
+        foreach (var name in expected)
+        {
+            toolNames.ShouldContain(name);
+        }
     }
 
     [When("I scan project package references")]
@@ -828,16 +942,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("memory-usage-guide is present")]
-    public void ThenMemoryUsageGuidePresent()
-    {
-        /* verified by ToolInventoryTests */
-    }
+    public void ThenMemoryUsageGuidePresent() =>
+        ((List<string?>)scenarioContext["Prompts"]).ShouldContain("memory-usage-guide");
 
     [Then("workspace-consolidation-guide is present")]
-    public void ThenWorkspaceConsolidationGuidePresent()
-    {
-        /* verified by ToolInventoryTests */
-    }
+    public void ThenWorkspaceConsolidationGuidePresent() =>
+        ((List<string?>)scenarioContext["Prompts"]).ShouldContain("workspace-consolidation-guide");
 
     // ── FR-MEM-1.8-1.10: Write, search, delete ──
     [When(@"I write ""(.*)"" to project ""([^""]*)""(?! with)")]
@@ -860,17 +970,23 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then(@"memory_delete with a known hash errors with access-denied")]
-    public async Task ThenMemoryDeleteErrorsWithAccessDenied() => _lastWrite.ShouldNotBeNull();
+    public async Task ThenMemoryDeleteErrorsWithAccessDenied()
+    {
+        _lastWrite.ShouldNotBeNull();
+        var projectId = (string)scenarioContext["ProjectId"];
+        var ex = await Should.ThrowAsync<McpException>(async () =>
+            await Gate.RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete", CancellationToken.None));
+        ex.Message.ShouldContain("access-denied");
+    }
 
-    // Delete requires full mode — in rw mode it would fail at the access guard level
-    // This is validated by the access mode guard tests; here we just verify deletion works
     [Then(@"memory_search for project ""(.*)"" still returns results")]
     public async Task ThenMemorySearchStillReturnsResults(string projectId)
     {
+        // Read is allowed in every mode — the gate must not throw here even while ro denies writes.
+        await Gate.RequireAsync(projectId, AccessRequirement.Read, "memory_search", CancellationToken.None);
         _lastSearch = await _store.SearchAsync(
             new SearchQuery(projectId, "content"),
             CancellationToken.None);
-        // In Reqnroll context this is a no-op; access mode enforced at tool level
         _lastSearch.ShouldNotBeNull();
     }
 
@@ -900,15 +1016,18 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("no memory is written")]
-    public void ThenNoMemoryWritten()
+    public async Task ThenNoMemoryWritten()
     {
-        // Verified by tool-layer validation (project_id required)
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var count = await conn.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM entries");
+        count.ShouldBe(0);
     }
 
     [Then("the tool errors with invalid-params")]
     public void ThenToolErrorsInvalidParams()
     {
-        /* tool-layer validation */
+        var ex = _lastError.ShouldBeOfType<McpException>();
+        ex.Message.ShouldContain("invalid-params");
     }
 
     [Then("a workspace id is returned")]
@@ -971,15 +1090,25 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenBothReturned()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBe(2);
+        LastSearch.Count.ShouldBe(2);
     }
 
-    // ── Catch-all for unused but required step bindings ──
+    // ── FR-NM-2: access-mode-gated write, mirroring MemoryTools.Write's gate-then-store shape ──
     [When("I call memory_write for project \"(.*)\"")]
-    public async Task WhenICallMemoryWrite(string projectId) =>
-        _lastWrite = await _store.WriteAsync(
-            new MemoryWriteRequest(projectId, "generic content"),
-            CancellationToken.None);
+    public async Task WhenICallMemoryWrite(string projectId)
+    {
+        try
+        {
+            await Gate.RequireAsync(projectId, AccessRequirement.Write, "memory_write", CancellationToken.None);
+            _lastWrite = await _store.WriteAsync(
+                new MemoryWriteRequest(projectId, "generic content"),
+                CancellationToken.None);
+        }
+        catch (McpException ex)
+        {
+            RecordError(ex);
+        }
+    }
 
     [When("I promote it to the shared scope")]
     public async Task WhenIPromoteToShared()
@@ -989,12 +1118,29 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await _store.ShareAsync(projectId, _lastWrite!.Hash, CancellationToken.None);
     }
 
-    // ── Tool inventory / MCP surface steps (verified by ToolInventoryTests) ──
+    // ── Tool inventory / MCP surface steps (no current scenario binds this exact text; kept
+    // honest so a future scenario that does gets a real assertion, not a stub) ──
     [Then("memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard are present")]
-    public void ThenWorkspaceToolsPresent() { }
+    public void ThenWorkspaceToolsPresent()
+    {
+        var toolNames = AllToolNames();
+        foreach (var name in new[]
+                 {
+                     "memory_workspace_begin", "memory_workspace_status", "memory_workspace_consolidate",
+                     "memory_workspace_discard"
+                 })
+        {
+            toolNames.ShouldContain(name);
+        }
+    }
 
     [Then("memory_sweep and memory_sync are present")]
-    public void ThenSweepAndSyncPresent() { }
+    public void ThenSweepAndSyncPresent()
+    {
+        var toolNames = AllToolNames();
+        toolNames.ShouldContain("memory_sweep");
+        toolNames.ShouldContain("memory_sync");
+    }
 
     // ── Steps that use "And when..." phrasing (parsed as Then by Gherkin) ──
     [StepDefinition(@"when I search for ""(.*)"" in project ""(.*)"" with scope ""(.*)""")]
@@ -1014,7 +1160,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── Remaining catch-all bindings ──
     [Given("a note containing a fenced code block")]
-    public void GivenFencedCodeBlock() { }
+    public void GivenFencedCodeBlock() =>
+        scenarioContext["FencedNote"] =
+            "# Notes\n\n```csharp\nvar sum = 1 + 2;\nvar result = sum * 3;\nConsole.WriteLine(result);\n```\n\nTrailing prose after the fence.\n";
 
     [Given(@"a project-only fact exists in project ""(.*)""")]
     public async Task GivenProjectOnlyFact(string projectId) => await _store.WriteAsync(new MemoryWriteRequest(projectId, "project-only-fact"), CancellationToken.None);
@@ -1033,25 +1181,61 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenKeywordOnlyContent(string projectId) => await _store.WriteAsync(new MemoryWriteRequest(projectId, "specific-keyword-match"), CancellationToken.None);
 
     [Given(@"no mode is configured for project ""(.*)""")]
-    public void GivenNoModeConfigured(string projectId) { }
+    public void GivenNoModeConfigured(string projectId)
+    {
+        // No-op: a fresh fixture's settings table has no access.mode.* rows until this step's
+        // sibling Givens (GivenProjectMode / GivenGlobalMode*) write one — the precondition
+        // already holds.
+    }
 
     [Given(@"project ""(.*)"" is in mode (.*)")]
-    public void GivenProjectMode(string projectId, string mode) { }
+    public async Task GivenProjectMode(string projectId, string mode) =>
+        await _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, CancellationToken.None);
 
     [Given("the global mode is ro")]
-    public void GivenGlobalModeRo() { }
+    public async Task GivenGlobalModeRo() =>
+        await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "ro", CancellationToken.None);
 
     [Given("the global mode is rw")]
-    public void GivenGlobalModeRw() { }
+    public async Task GivenGlobalModeRw() =>
+        await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "rw", CancellationToken.None);
 
     [Then("FTS5 comes from the bundled SQLite")]
-    public void ThenFtsFromBundledSqlite() { }
+    public async Task ThenFtsFromBundledSqlite()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var ddl = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'");
+        ddl.ShouldNotBeNull();
+        ddl.ToLowerInvariant().ShouldContain("fts5(");
+        // Actually exercising the module (not just its DDL) proves it is operational, not just declared.
+        var count = await conn.ExecuteScalarAsync<long>("SELECT count(*) FROM entries_fts");
+        count.ShouldBeGreaterThanOrEqualTo(0);
+    }
 
     [Then("chunking is deterministic for identical input")]
-    public void ThenChunkingDeterministic() { }
+    public void ThenChunkingDeterministic()
+    {
+        var text = (string)scenarioContext["ChunkSourceText"];
+        var first = (IReadOnlyList<string>)scenarioContext["ChunksSmallBudget"];
+        var second = RealChunker.Chunk(text, ChunkSmallMaxTokens, ChunkOverlayTokens);
+        second.ShouldBe(first);
+    }
 
     [Then("chunks respect max_tokens with the configured overlay")]
-    public void ThenChunksRespectTokens() { }
+    public void ThenChunksRespectTokens()
+    {
+        var small = (IReadOnlyList<string>)scenarioContext["ChunksSmallBudget"];
+        var large = (IReadOnlyList<string>)scenarioContext["ChunksLargeBudget"];
+        small.Count.ShouldBeGreaterThan(1);
+        large.Count.ShouldBe(1);
+        small.Count.ShouldBeGreaterThan(large.Count);
+
+        // Overlay: the second chunk reuses at least one numbered line from the tail of the first.
+        var firstLines = ExtractLineNumbers(small[0]);
+        var secondLines = ExtractLineNumbers(small[1]);
+        firstLines.Intersect(secondLines).ShouldNotBeEmpty();
+    }
 
     [Then("it was never a sweep candidate")]
     public async Task ThenNeverSweepCandidate()
@@ -1067,7 +1251,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("keyword results are returned above the minimum score")]
-    public void ThenKeywordResultsAboveMinScore() { }
+    public void ThenKeywordResultsAboveMinScore()
+    {
+        _lastSearch.ShouldNotBeNull();
+        LastSearch.Count.ShouldBeGreaterThan(0);
+        // 0.7 is SearchQuery.MinScore's default, used by WhenISearchExactPhrase below.
+        _lastSearch.ShouldAllBe(r => r.Ranking >= 0.7);
+    }
 
     [Then("memory_stats for project \"acme-web\" is unchanged")]
     public async Task ThenStatsUnchanged()
@@ -1078,19 +1268,35 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("no chunk boundary falls inside the fence")]
-    public void ThenNoChunkBoundaryInFence() { }
+    public void ThenNoChunkBoundaryInFence()
+    {
+        var chunks = (IReadOnlyList<string>)scenarioContext["Chunks"];
+        var fenceChunks = chunks.Where(c => c.Contains("```csharp", StringComparison.Ordinal)).ToList();
+        fenceChunks.Count.ShouldBe(1, "the fence must land in exactly one chunk, never split across a boundary");
+        var fenceChunk = fenceChunks[0];
+        Regex.Matches(fenceChunk, "```").Count.ShouldBe(2, "both the opening and closing fence markers must be in the same chunk");
+        fenceChunk.ShouldContain("var sum = 1 + 2;");
+        fenceChunk.ShouldContain("Console.WriteLine(result);");
+    }
 
     [Then("no error is raised")]
-    public void ThenNoErrorRaised() { }
+    public void ThenNoErrorRaised() => _lastSearch.ShouldNotBeNull();
 
     [Then("no sqlite-memory, sqlite-vector or sqlite-sync binary is downloaded at first run")]
-    public void ThenNoExtensionDownloaded() { }
+    public void ThenNoExtensionDownloaded()
+    {
+        var files = Directory.EnumerateFiles(_ctx.DataRoot, "*", SearchOption.AllDirectories).ToList();
+        files.ShouldNotContain(f =>
+            f.Contains("sqlite-memory", StringComparison.OrdinalIgnoreCase) ||
+            f.Contains("sqlite-vector", StringComparison.OrdinalIgnoreCase) ||
+            f.Contains("sqlite-sync", StringComparison.OrdinalIgnoreCase));
+    }
 
     [Then("one result is returned")]
     public void ThenOneResultReturned2()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBe(1);
+        LastSearch.Count.ShouldBe(1);
     }
 
     [Then("the entry is deleted")]
@@ -1104,22 +1310,58 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("the forgetting policy is unchanged")]
-    public void ThenForgettingPolicyUnchanged() { }
+    public async Task ThenForgettingPolicyUnchanged()
+    {
+        var ex = (scenarioContext.TryGetValue("LastError", out var stored) ? stored : _lastError) as McpException;
+        ex.ShouldNotBeNull();
+        ex.Message.ShouldContain("access-denied");
+
+        var projectId = (string)scenarioContext["ProjectId"];
+        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
+        (await policy.GetSweepThresholdAsync(projectId, CancellationToken.None))
+            .ShouldBe(ForgettingPolicyService.DefaultSweepThreshold);
+    }
 
     [Then("the forgetting policy reflects the adjustment")]
-    public void ThenForgettingPolicyReflectsAdjustment() { }
+    public async Task ThenForgettingPolicyReflectsAdjustment()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
+        (await policy.GetSweepThresholdAsync(projectId, CancellationToken.None)).ShouldBe(0.5);
+    }
 
     [Then("the provider is configured with that endpoint")]
-    public void ThenProviderConfigured() { }
+    public async Task ThenProviderConfigured()
+    {
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+        var provider = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.provider'");
+        var baseUrl = await conn.QueryFirstOrDefaultAsync<string>(
+            "SELECT value FROM settings WHERE key = 'embedding.baseUrl'");
+        provider.ShouldBe("openai");
+        baseUrl.ShouldBe("http://localhost:1234/v1");
+    }
 
     [Then("the ranking reflects the configured parameters")]
-    public void ThenRankingReflectsParams() { }
+    public void ThenRankingReflectsParams()
+    {
+        _lastSearch.ShouldNotBeNull();
+        _defaultRrfSearch.ShouldNotBeNull();
+        LastSearch.Count.ShouldBeGreaterThan(1);
+        _defaultRrfSearch.Count.ShouldBeGreaterThan(1);
+
+        // The strong (rank-1) match normalizes to 1.0 under any k — the signal is in the
+        // second-ranked entry, whose relative RRF contribution changes with rrf_k.
+        var configuredSecond = _lastSearch.Last().Ranking;
+        var defaultSecond = _defaultRrfSearch.Last().Ranking;
+        configuredSecond.ShouldNotBe(defaultSecond);
+    }
 
     [Then("the result is not returned")]
     public void ThenResultNotReturned2()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBe(0);
+        LastSearch.Count.ShouldBe(0);
     }
 
     [Then("the shared entry is not deleted")]
@@ -1132,7 +1374,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("the tool errors with access-denied")]
-    public void ThenAccessDenied() { }
+    public void ThenAccessDenied()
+    {
+        scenarioContext.TryGetValue("LastError", out var stored);
+        var ex = (stored ?? _lastError) as McpException;
+        ex.ShouldNotBeNull("expected the previous step to record an access-denied tool error");
+        ex.Message.ShouldContain("access-denied");
+    }
 
     [Then("the workspace entry was never part of a sync payload")]
     public async Task ThenWorkspaceNotInSync()
@@ -1153,10 +1401,24 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [When("I adjust the sweep threshold or an entry's ttl_days")]
-    public void WhenIAdjustSweepThreshold() { }
+    public async Task WhenIAdjustSweepThreshold()
+    {
+        var projectId = (string)scenarioContext["ProjectId"];
+        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
+        try
+        {
+            await policy.SetSweepThresholdAsync(projectId, 0.5, CancellationToken.None);
+        }
+        catch (McpException ex)
+        {
+            RecordError(ex);
+        }
+    }
 
     [When(@"I call memory_configure with provider ""openai"" and baseUrl ""http:\/\/localhost:1234\/v1""")]
-    public void WhenIConfigureOpenAiBaseUrl() { }
+    public async Task WhenIConfigureOpenAiBaseUrl() =>
+        await _store.ConfigureEmbeddingAsync("openai", "text-embedding-3-small", "http://localhost:1234/v1",
+            CancellationToken.None);
 
     [When("I call memory_delete with a known hash")]
     public async Task WhenICallMemoryDelete()
@@ -1170,8 +1432,22 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISearchWithRrfK()
     {
         var projectId = (string)scenarioContext["ProjectId"];
+        // A rank-1 (repeated-term, strong FTS match) and a rank-2 (single mention) entry: RRF
+        // normalizes the top hit to 1.0 under any k, so only the rank-2 entry's score moves when
+        // rrf_k changes — that is the observable signal the Then step checks.
+        await _store.WriteAsync(
+            new MemoryWriteRequest(projectId, "rrf fusion weighting rrf fusion weighting rrf fusion weighting"),
+            CancellationToken.None);
+        await _store.WriteAsync(
+            new MemoryWriteRequest(projectId, "rrf fusion weighting appears once here"),
+            CancellationToken.None);
+
+        const string query = "rrf fusion weighting";
+        _defaultRrfSearch = await _store.SearchAsync(
+            new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0),
+            CancellationToken.None);
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, "query", SearchScope.All, null, 20, 0.7, 30, 2),
+            new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0, 30, 2),
             CancellationToken.None);
     }
 
@@ -1186,7 +1462,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [When("I scan the bank and extension directories")]
-    public void WhenIScanBankDirectories() { }
+    public async Task WhenIScanBankDirectories()
+    {
+        // Opening the bank runs the schema migration — everything under DataRoot afterward is
+        // what "first run" actually produced.
+        await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
+    }
 
     [When("I search for that exact keyword phrase")]
     public async Task WhenISearchExactPhrase()
@@ -1198,10 +1479,24 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [When("I ingest a markdown note longer than max_tokens")]
-    public void WhenIIngestLongNote() { }
+    public void WhenIIngestLongNote()
+    {
+        var text = string.Concat(Enumerable.Range(0, 40)
+            .Select(i => $"Line {i:D3} of a markdown note built to exceed the token budget for chunking tests.\n"));
+        scenarioContext["ChunkSourceText"] = text;
+        scenarioContext["ChunksSmallBudget"] = RealChunker.Chunk(text, ChunkSmallMaxTokens, ChunkOverlayTokens);
+        // A budget the whole note comfortably fits under — the control for "respects max_tokens".
+        scenarioContext["ChunksLargeBudget"] = RealChunker.Chunk(text, 4000, ChunkOverlayTokens);
+    }
 
     [When("I ingest it")]
-    public void WhenIIngestIt() { }
+    public void WhenIIngestIt()
+    {
+        var text = (string)scenarioContext["FencedNote"];
+        // A budget smaller than the fence's own token count: a fence-unaware chunker would be
+        // forced to split it.
+        scenarioContext["Chunks"] = RealChunker.Chunk(text, 8, 0);
+    }
 
     [Given(@"workspace ""(.*)"" contains entries ""(.*)"" and ""(.*)""")]
     public async Task GivenWorkspaceContainsTwoEntries(string wsId, string h1, string h2)
@@ -1254,13 +1549,23 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── Merged from AgentMemorySteps (unique bindings, now in same class for shared state) ──
     [When("I call memory_write without a project_id")]
-    public void WhenIWriteWithoutProjectId() { }
+    public async Task WhenIWriteWithoutProjectId()
+    {
+        try
+        {
+            await Gate.RequireAsync(string.Empty, AccessRequirement.Write, "memory_write", CancellationToken.None);
+        }
+        catch (McpException ex)
+        {
+            RecordError(ex);
+        }
+    }
 
     [Then(@"one result is returned with ranking above the minimum score")]
     public void ThenOneResultAboveMinScore()
     {
         _lastSearch.ShouldNotBeNull();
-        _lastSearch!.Count.ShouldBe(1);
+        LastSearch.Count.ShouldBe(1);
         _lastSearch[0].Ranking.ShouldBeGreaterThan(0.0);
     }
 
@@ -1353,13 +1658,44 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [When("I scan tracked files for cloud or embedding keys")]
-    public void WhenIScanForSecrets() { }
+    public void WhenIScanForSecrets()
+    {
+        var root = FindRepoRoot();
+        var matches = ScanTextFiles(root)
+            .SelectMany(file => SecretValuePattern.Matches(File.ReadAllText(file))
+                .Select(m => $"{Path.GetRelativePath(root, file)}: {m.Value}"))
+            .ToList();
+        scenarioContext["SecretScanMatches"] = matches;
+        scenarioContext["RepoRoot"] = root;
+    }
 
     [Then("only environment-variable references are found")]
-    public void ThenOnlyEnvVarReferences() { }
+    public void ThenOnlyEnvVarReferences()
+    {
+        var matches = (List<string>)scenarioContext["SecretScanMatches"];
+        matches.ShouldBeEmpty();
+
+        // Confirm the scan actually covered real content: the env-var name itself is genuinely
+        // referenced in tracked source (not just absent from an empty tree).
+        var root = (string)scenarioContext["RepoRoot"];
+        var envProviderPath = Path.Combine(root, "src", "AiRaccoon.Infrastructure", "Sqlite", "Encryption",
+            "Providers", "EnvEncryptionKeyProvider.cs");
+        File.Exists(envProviderPath).ShouldBeTrue();
+        File.ReadAllText(envProviderPath).ShouldContain("AIRACCOON_DB_PASSPHRASE");
+    }
 
     [When("I list available prompts")]
-    public void WhenIListAvailablePrompts() { }
+    public void WhenIListAvailablePrompts()
+    {
+        var prompts = typeof(MemoryPrompts)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Select(m => m.GetCustomAttribute<McpServerPromptAttribute>())
+            .OfType<McpServerPromptAttribute>()
+            .Select(a => a.Name ?? throw new InvalidOperationException(
+                "MemoryPrompts declares an [McpServerPrompt] with no explicit Name"))
+            .ToList();
+        scenarioContext["Prompts"] = prompts;
+    }
 
     [Given(@"workspace ""(.*)"" for project ""(.*)"" contains an entry")]
     public async Task GivenWorkspaceForProjectContainsEntry(string wsId, string projectId)
@@ -1508,10 +1844,20 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("any user-scope instance correlates with it only through that cloud database")]
-    public void ThenCorrelationThroughCloudOnly()
+    public async Task ThenCorrelationThroughCloudOnly()
     {
-        // Deployment-level statement: the cloud snapshot is the correlation point between
-        // install scopes; the payload assertions above verify the mechanism.
+        var projectId = (string)scenarioContext["ProjectId"];
+        // A second, independent install ("a user-scope instance") that shares nothing with this
+        // fixture except the same cloud object — if it can see the shared entry after a pull,
+        // the cloud database is genuinely the correlation point, not some local mechanism.
+        using var secondInstall = new MemoryFeatureContext();
+        var sync = new SyncService(CloudStore, secondInstall.Factory.OpenBankAsync, OpenSnapshotAsync,
+            OpenReadOnlyAsync, secondInstall.TimeProvider, NullLogger<SyncService>.Instance);
+        await sync.MemorySyncAsync(projectId, ObjectKeyFor(projectId), CancellationToken.None);
+
+        var results = await secondInstall.Store.SearchAsync(
+            new SearchQuery(projectId, "shared payload fact", SearchScope.Shared), CancellationToken.None);
+        results.Count.ShouldBeGreaterThan(0);
     }
 
     private sealed class RecordingExtension(string name, List<string> log) : IMemoryExtension
