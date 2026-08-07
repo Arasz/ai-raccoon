@@ -37,6 +37,26 @@ public class CliCommandTreeTests
     }
 
     [Fact]
+    public void ServeCommand_ExposesObservabilitySubcommand()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+        var observability = serve.Children.OfType<Command>().SingleOrDefault(c => c.Name == "observability");
+        observability.ShouldNotBeNull();
+        observability.Children.OfType<Option>().ShouldContain(CliCommandTree.ObservabilityPortOption);
+    }
+
+    [Fact]
+    public void ServeCommand_DeclaresAnAction_SoBareServeParses()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+        serve.Action.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void LaunchRoot_ExposesLaunchOptionsAndNoVerbs()
     {
         var root = CliCommandTree.BuildLaunchRootCommand();
