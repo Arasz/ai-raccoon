@@ -42,6 +42,10 @@
     <PackageVersion Include="AWSSDK.S3" Version="4.0.101.7"/>
     <PackageVersion Include="Azure.Identity" Version="1.21.0"/>
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.1"/>
+    <!-- OTLP export (ADR 0009): pinned to 1.17.0, confirmed resolvable on nuget.org at that version. -->
+    <PackageVersion Include="OpenTelemetry" Version="1.17.0"/>
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
     <PackageVersion Include="System.CommandLine" Version="2.0.10"/>
   </ItemGroup>
 </Project>

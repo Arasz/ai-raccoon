@@ -1,4 +1,5 @@
 using System.Net;
+using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
 using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tools;
@@ -71,6 +72,9 @@ internal static partial class McpServerSetup
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
         builder.Services.RegisterMemoryServices(config.Options, transports);
+        // Web host only (ADR 0009): stdio hosts recycle roughly every 5 minutes, too
+        // short-lived to pay the exporter's batch delay / provider shutdown grace.
+        builder.Services.AddOtlpExport();
         builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
         if (config.Options.Quiet)
@@ -114,6 +118,7 @@ internal static partial class McpServerSetup
             if (transports.Contains(McpTransport.Http))
             {
                 webApplication.MapMcp("/mcp");
+                webApplication.MapObservability();
             }
 
             return webApplication;
