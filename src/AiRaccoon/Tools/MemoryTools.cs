@@ -17,9 +17,8 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IMemoryStore — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class MemoryTools(
     IMemoryStore store,
-    IMemoryAccessGuard access,
-    ToolCallMetrics observability,
-    IPromotionQueue queue)
+    ToolGate gate,
+    ToolCallMetrics observability)
 {
     private const string TnMemoryWrite = "memory_write";
     private const string TnMemorySearch = "memory_search";
@@ -33,18 +32,6 @@ public sealed class MemoryTools(
 
     private static readonly SearchQuery.Validator SearchQueryValidator = new();
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
-
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
@@ -69,15 +56,14 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryWrite, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
 
             var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
             await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -115,8 +101,7 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemorySearch, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
 
             var parsedScope = scope.ToLowerInvariant() switch
             {
@@ -133,7 +118,7 @@ public sealed class MemoryTools(
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -153,11 +138,10 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryList, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
             var files = await store.ListFilesAsync(projectId, cancellationToken);
             var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -177,11 +161,10 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryStats, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
             var stats = await store.GetStatsAsync(projectId, cancellationToken);
             var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -203,13 +186,12 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryDelete, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
             var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
             var result = new DeletedResult(deleted ? 1 : 0);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -231,13 +213,12 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryDeleteContext, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
             var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
             var result = new DeletedContextResult(deleted);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -261,13 +242,12 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryIngestFile, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
             var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
             var result = new IngestResult(indexed);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -291,13 +271,12 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryIngestDirectory, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
             var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
             var result = new ScannedResult(scanned);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -319,12 +298,11 @@ public sealed class MemoryTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryEmbedPending, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
 
             var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
             var embedResult = new EmbedResult(result.Processed, result.Pending);
-            var envelope = await WrapAsync(embedResult, cancellationToken);
+            var envelope = await gate.WrapAsync(embedResult, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -334,9 +312,6 @@ public sealed class MemoryTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt);

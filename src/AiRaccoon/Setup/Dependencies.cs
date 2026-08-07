@@ -18,6 +18,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Tools;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Observability;
 using Microsoft.Data.Sqlite;
@@ -108,6 +109,7 @@ public static partial class Dependencies
 
             services.AddSingleton<ForgettingPolicyService>();
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(sp.GetRequiredService<IMemoryStore>()));
+            services.AddSingleton<ToolGate>();
             services.AddSingleton<ToolCallMetrics>();
 
             services.RegisterWatchServices();

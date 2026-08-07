@@ -18,23 +18,10 @@ namespace AiRaccoon.Tools;
 public sealed class SweepTools(
     SweepService sweeper,
     ForgettingPolicyService knobs,
-    IMemoryAccessGuard access,
-    ToolCallMetrics observability,
-    IPromotionQueue queue)
+    ToolGate gate,
+    ToolCallMetrics observability)
 {
     private const string TnMemorySweep = "memory_sweep";
-
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnMemorySweep)]
     [Description(
@@ -48,13 +35,12 @@ public sealed class SweepTools(
         using var activity = new ToolExecutionActivity(observability, TnMemorySweep, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
+            await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
 
             var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
             var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
             var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -64,9 +50,6 @@ public sealed class SweepTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SweepResult(IReadOnlyList<SweepCandidate> Candidates, IReadOnlyList<string> Deleted);

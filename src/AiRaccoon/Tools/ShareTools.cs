@@ -15,7 +15,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over the shared-extraction pipeline — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class ShareTools(
     IMemoryStore store,
-    IMemoryAccessGuard access,
+    ToolGate gate,
     ToolCallMetrics observability,
     SharedExtractionRunner extraction,
     IPromotionQueue queue)
@@ -23,20 +23,8 @@ public sealed class ShareTools(
     private const string TnMemoryShare = "memory_share";
     private const string TnMemoryShareExtract = "memory_share_extract";
 
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
     /// <summary>The activity tag is built before validation, and the protocol layer can still hand us a null array.</summary>
     private static string JoinProjectIds(string[]? projectIds) => projectIds is null ? string.Empty : string.Join(",", projectIds);
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnMemoryShare)]
     [Description(
@@ -50,13 +38,12 @@ public sealed class ShareTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryShare, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
             ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -115,8 +102,7 @@ public sealed class ShareTools(
             var promotes = extractMode == ExtractMode.Promote || autoPromote;
             foreach (var projectId in projectIds)
             {
-                RequireProjectId(projectId);
-                await RequireAsync(projectId,
+                await gate.RequireAsync(projectId,
                         promotes ? AccessRequirement.Write : AccessRequirement.Read,
                         TnMemoryShareExtract, cancellationToken)
                     .ConfigureAwait(false);
@@ -126,7 +112,7 @@ public sealed class ShareTools(
             {
                 var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false);
-                var promoteEnvelope = await WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
+                var promoteEnvelope = await gate.WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
                 activity.RecordInvocation();
                 return promoteEnvelope;
             }
@@ -140,7 +126,7 @@ public sealed class ShareTools(
                     .ConfigureAwait(false));
             }
 
-            var envelope = await WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
+            var envelope = await gate.WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
 
             activity.RecordInvocation();
             return envelope;
@@ -151,8 +137,6 @@ public sealed class ShareTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) => new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ShareResult(bool Shared, string Context);

@@ -17,23 +17,10 @@ namespace AiRaccoon.Tools;
 public sealed class SyncTools(
     SyncService sync,
     SyncCloudStoreFactory syncFactory,
-    IMemoryAccessGuard access,
-    ToolCallMetrics observability,
-    IPromotionQueue queue)
+    ToolGate gate,
+    ToolCallMetrics observability)
 {
     private const string TnMemorySync = "memory_sync";
-
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnMemorySync)]
     [Description(
@@ -48,8 +35,7 @@ public sealed class SyncTools(
         using var activity = new ToolExecutionActivity(observability, TnMemorySync, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
 
             var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
             if (!syncSettings.IsConfigured)
@@ -65,7 +51,7 @@ public sealed class SyncTools(
             {
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
                 var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-                var envelope = await WrapAsync(syncResult, cancellationToken);
+                var envelope = await gate.WrapAsync(syncResult, cancellationToken);
                 activity.RecordInvocation();
                 return envelope;
             }
@@ -104,9 +90,6 @@ public sealed class SyncTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SyncToolResult(int Sent, int Received, int Reindexed);

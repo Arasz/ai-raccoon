@@ -13,25 +13,12 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IWatchService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WatchTools(
     IWatchService watch,
-    IMemoryAccessGuard access,
-    ToolCallMetrics observability,
-    IPromotionQueue queue)
+    ToolGate gate,
+    ToolCallMetrics observability)
 {
     private const string TnWatchAdd = "memory_watch_add";
     private const string TnWatchStatus = "memory_watch_status";
     private const string TnWatchRemove = "memory_watch_remove";
-
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
@@ -46,8 +33,7 @@ public sealed class WatchTools(
         using var activity = new ToolExecutionActivity(observability, TnWatchAdd, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
             try
             {
@@ -68,7 +54,7 @@ public sealed class WatchTools(
                 activity.RecordError(ex);
                 throw new McpException($"path-not-found: {ex.Message}");
             }
-            var envelope = await WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
+            var envelope = await gate.WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
 
             activity.RecordInvocation();
             return envelope;
@@ -90,11 +76,10 @@ public sealed class WatchTools(
         using var activity = new ToolExecutionActivity(observability, TnWatchStatus, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
             var states = await watch.StatusAsync(projectId, cancellationToken);
-            var envelope = await WrapAsync(new WatchStatusResult(states), cancellationToken);
+            var envelope = await gate.WrapAsync(new WatchStatusResult(states), cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -116,11 +101,10 @@ public sealed class WatchTools(
         using var activity = new ToolExecutionActivity(observability, TnWatchRemove, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
             await watch.RemoveAsync(projectId, path, cancellationToken);
-            var envelope = await WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
+            var envelope = await gate.WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -130,9 +114,6 @@ public sealed class WatchTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     public sealed record WatchAddResult(string ProjectId, string Path);
 

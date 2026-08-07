@@ -98,7 +98,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaError = new InvalidOperationException("meta boom") };
-        var tools = new MemoryTools(store, new MemoryAccessGuard(store), metrics, queue);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), metrics);
 
         await Should.ThrowAsync<InvalidOperationException>(() =>
             tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken));
@@ -122,7 +122,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
-        var tools = new MemoryTools(store, new MemoryAccessGuard(store), metrics, queue);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), metrics);
 
         await tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -140,7 +140,7 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService(),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new MemoryAccessGuard(store), metrics, new FakePromotionQueue());
+            new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             tools.Sync("acme", TestContext.Current.CancellationToken));
@@ -192,7 +192,7 @@ public class MemoryToolsInstrumentationTests
         SimpleFakeStore store,
         ToolCallMetrics metrics)
     {
-        return new MemoryTools(store, new MemoryAccessGuard(store), metrics, new FakePromotionQueue());
+        return new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
     }
 
     // ── Minimal fake implementations ──
