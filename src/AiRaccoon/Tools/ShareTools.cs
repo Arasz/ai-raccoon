@@ -121,7 +121,7 @@ public sealed class ShareTools(
             var candidates = new List<ShareCandidate>();
             foreach (var projectId in projectIds)
             {
-                candidates.AddRange(await extraction.ProposeAsync(projectId, projectIds, sharedIndex,
+                candidates.AddRange(await extraction.ProposeAsync(projectId, sharedIndex,
                         includeTtlRows, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false));
             }

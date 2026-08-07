@@ -31,7 +31,7 @@ public sealed class SharedExtractionRunnerTests
         var (store, queue, _, runner) = NewStack();
         store.Candidates["acme"] = [Row("h1")];
 
-        var candidates = await runner.ProposeAsync("acme", ["acme", "beta"], EmptyIndex,
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
 
         candidates.Select(c => c.Hash).ShouldBe(["h1"]);
@@ -47,7 +47,7 @@ public sealed class SharedExtractionRunnerTests
         var value = new string('x', 400) + " beta";
         store.Candidates["acme"] = [Row("h1", value, sourceFile: "docs/beta.md")];
 
-        var candidates = await runner.ProposeAsync("acme", ["acme", "beta"], EmptyIndex,
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
 
         candidates[0].ValuePreview.Length.ShouldBeLessThan(value.Length);
@@ -63,7 +63,7 @@ public sealed class SharedExtractionRunnerTests
         var (store, queue, _, runner) = NewStack();
         store.Candidates["acme"] = [];
 
-        var candidates = await runner.ProposeAsync("acme", ["acme"], EmptyIndex,
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
 
         candidates.ShouldBeEmpty();
@@ -77,13 +77,13 @@ public sealed class SharedExtractionRunnerTests
         var (store, _, time, runner) = NewStack();
         store.Candidates["acme"] = [Row("h1", ageDays: 20)];
 
-        var fresh = await runner.ProposeAsync("acme", ["acme", "beta"], EmptyIndex,
+        var fresh = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
         fresh[0].Reasons.ShouldContain("recent");
 
         time.Advance(TimeSpan.FromDays(30));
 
-        var stale = await runner.ProposeAsync("acme", ["acme", "beta"], EmptyIndex,
+        var stale = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
         stale[0].Reasons.ShouldNotContain("recent");
     }
@@ -96,7 +96,7 @@ public sealed class SharedExtractionRunnerTests
             .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
             .ToList();
 
-        var candidates = await runner.ProposeAsync("acme", ["acme", "beta"], EmptyIndex,
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
 
         candidates.Count.ShouldBe(3);
@@ -109,8 +109,7 @@ public sealed class SharedExtractionRunnerTests
         var (store, queue, _, runner) = NewStack();
         store.Candidates["acme"] = [Row("h1")];
 
-        var candidates = await runner.ProposeAsync("acme", ["acme", "beta"],
-            new SharedIndex([], ["shared/h1.md"]),
+        var candidates = await runner.ProposeAsync("acme", new SharedIndex([], ["shared/h1.md"]),
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
 
         candidates.ShouldBeEmpty();
@@ -125,7 +124,7 @@ public sealed class SharedExtractionRunnerTests
         var (_, _, _, runner) = NewStack();
 
         await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
-            runner.ProposeAsync("acme", ["acme"], EmptyIndex, includeTtlRows: false, limit,
+            runner.ProposeAsync("acme", EmptyIndex, includeTtlRows: false, limit,
                 TestContext.Current.CancellationToken));
     }
 
@@ -135,7 +134,7 @@ public sealed class SharedExtractionRunnerTests
         var (_, _, _, runner) = NewStack();
 
         await Should.ThrowAsync<ArgumentException>(() =>
-            runner.ProposeAsync("  ", ["acme"], EmptyIndex, includeTtlRows: false, limit: 20,
+            runner.ProposeAsync("  ", EmptyIndex, includeTtlRows: false, limit: 20,
                 TestContext.Current.CancellationToken));
     }
 }

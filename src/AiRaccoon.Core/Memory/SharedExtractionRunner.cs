@@ -13,23 +13,23 @@ public sealed class SharedExtractionRunner(
     TimeProvider timeProvider)
 {
     /// <summary>Ranks and queues one project's share-worthy entries; the shared index is a per-pass
-    /// input, read once by the caller and reused across the projects in <paramref name="scope" />.</summary>
+    /// input, read once by the caller and reused across projects. Cross-project scoring always
+    /// covers every known project id, fetched here rather than caller-supplied (issue #117 item 3).</summary>
     public async Task<IReadOnlyList<ShareCandidate>> ProposeAsync(
         string projectId,
-        IReadOnlyList<string> scope,
         SharedIndex sharedIndex,
         bool includeTtlRows,
         int limit,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(sharedIndex);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
-        var result = extraction.Run(ExtractMode.Propose, projectId, scope, rows,
+        var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        var result = extraction.Run(ExtractMode.Propose, projectId, allProjectIds, rows,
             sharedIndex.Values, sharedIndex.Paths, includeTtlRows, limit, timeProvider.GetUtcNow());
         if (result.Candidates.Count > 0)
         {
