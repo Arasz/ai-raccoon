@@ -215,6 +215,67 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
+    ///     Decision 2, the half no existing fixture exercised: a bank the legacy key opens, but
+    ///     whose interior pages are damaged, must never be rekeyed — quick_check is the gate that
+    ///     catches it. Deleting the quick_check call would leave every other test green.
+    /// </summary>
+    [Fact]
+    public async Task LegacyKeyedBankFailingQuickCheck_Migrate_Refuses()
+    {
+        InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            // A legacy-keyed bank with enough rows to span multiple pages, checkpointed into the
+            // main file so the corruption below lands on real table data, not the WAL.
+            var legacyFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver(LegacyDerivedRawKey));
+            await using (var connection = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+                for (var i = 0; i < 300; i++)
+                {
+                    await using var insert = connection.CreateCommand();
+                    insert.CommandText = "INSERT INTO t (value) VALUES ($v)";
+                    insert.Parameters.AddWithValue("$v", new string('x', 500));
+                    await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+                }
+
+                await using var checkpoint = connection.CreateCommand();
+                checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+                await checkpoint.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            var clearPoolCsb = new SqliteConnectionStringBuilder { DataSource = BankPath(), Password = LegacyDerivedRawKey };
+            SqliteConnection.ClearPool(new SqliteConnection(clearPoolCsb.ToString()));
+
+            // Flip bytes deep in the file — well past page 1 (header + sqlite_master), which is
+            // all a plain Open() decrypts. This lands inside the table's own pages: the legacy key
+            // still opens the bank (measured), but PRAGMA quick_check reports the damaged pages.
+            var bankPath = BankPath();
+            var bytes = await File.ReadAllBytesAsync(bankPath, TestContext.Current.CancellationToken);
+            for (var offset = bytes.Length - 200; offset < bytes.Length - 100; offset++)
+            {
+                bytes[offset] ^= 0xFF;
+            }
+
+            await File.WriteAllBytesAsync(bankPath, bytes, TestContext.Current.CancellationToken);
+
+            WriteSidecar();
+            var factory = new SqliteConnectionFactory(Options(), Resolver());
+
+            await Should.ThrowAsync<BankKeyMismatchException>(
+                async () => await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken));
+
+            // Refused, not rekeyed: the legacy key — and only the legacy key — still opens it.
+            await using (var stillLegacy = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                stillLegacy.State.ShouldBe(ConnectionState.Open);
+            }
+        });
+    }
+
+    /// <summary>
     ///     Decision 2 in code: a file that opens under neither derivation is refused, not rekeyed
     ///     over. The byte comparison is the real assertion — the exception type alone would not
     ///     prove that nothing was written.
