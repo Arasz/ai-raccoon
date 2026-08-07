@@ -25,5 +25,5 @@ public interface IPromotionQueue
         CancellationToken cancellationToken = default);
 
     /// <summary>What is waiting right now — count, average wait age, per-project breakdown (the envelope meta).</summary>
-    Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default);
+    Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default);
 }
