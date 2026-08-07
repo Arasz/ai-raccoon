@@ -91,7 +91,7 @@ catch (Exception ex)
 metric; `RecordError(ex)` marks it `Error` + `error_type`/`result=error` and
 records the error metric; `Dispose()` stops the activity. No decorator class, no
 interceptor, no AOP — the helper is the single place the tags/status/metrics
-contract lives, so the 19 tools cannot drift apart.
+contract lives, so the 22 tools cannot drift apart.
 
 ### ToolCallMetrics class
 
@@ -131,7 +131,7 @@ EventPipe — no exporter, no collector, no configuration.
   takes the same string.
 - **The helper centralizes the contract**: `ToolExecutionActivity` is the single
   place tags/status/metrics are set (extracted 2026-08-06 from the inline
-  pattern below), so the 20 tools cannot drift apart and adding a 21st tool is
+  pattern below), so the 22 tools cannot drift apart and adding another tool is
   the same 3–5 lines.
 
 ## Non-Goals (explicit)
@@ -169,7 +169,7 @@ implementation:
    collector.
 
 4. **Helper extraction**: done 2026-08-06 — `ToolExecutionActivity` (see
-   *Instrumentation pattern* above) is the shared helper; the 19 tools use it
+   *Instrumentation pattern* above) is the shared helper; all 22 tools use it
    uniformly.
 
 ## Alternatives considered
