@@ -33,14 +33,14 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
   single snapshot to cloud object storage — S3-compatible endpoints (R2, S3, MinIO) or Azure Blob — using VACUUM INTO +
   If-Match CAS + row merge.
 
-## Tools (20) and prompts (2)
+## Tools (22) and prompts (2)
 
 `memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
 `memory_share_extract`, `memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
 `memory_embed_pending`, `memory_workspace_begin`,
 `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
-`memory_sweep`, `memory_sync` — plus the file-watcher trio `memory_watch_add`,
-`memory_watch_status`, `memory_watch_remove` — and the `memory-usage-guide` and
+`memory_sweep`, `memory_sync`, `memory_promotion_list`, `memory_promotion_discard` — plus the file-watcher trio
+`memory_watch_add`, `memory_watch_status`, `memory_watch_remove` — and the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
 Configuration is deliberately NOT an MCP tool: the CLI is the single config channel (see below), so `memory_configure`
@@ -97,6 +97,7 @@ ai-raccoon watch remove {project-id|*}
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
+ai-raccoon encryption migrate
 
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
@@ -105,6 +106,10 @@ ai-raccoon encryption unset
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
+ai-raccoon extract capacity {capacity}
+ai-raccoon extract exclude add {prefix}
+ai-raccoon extract exclude remove {prefix}
+ai-raccoon extract exclude list
 ai-raccoon extract list
 
 # maintenance: bank housekeeping (every process checkpoints the WAL at startup
@@ -114,6 +119,10 @@ ai-raccoon extract list
 ai-raccoon maintenance interval {minutes}
 ai-raccoon maintenance vacuum-interval {days}
 ai-raccoon maintenance list
+
+# serve: run the MCP endpoint over HTTP in the foreground (background it: ai-raccoon serve > serve.log 2>&1 &)
+ai-raccoon serve [--port <n>] [--idle-timeout <span>] [--mcp-entry] [--format hermes|claude|all]
+ai-raccoon serve observability {counters|trace|otlp|pid} [--port <n>]
 ```
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table,

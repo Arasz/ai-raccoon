@@ -73,3 +73,14 @@ rekey has not run.
 construction); `src/AiRaccoon.Infrastructure/Sqlite/Encryption/Providers/BitwardenEncryptionKeyProvider.cs`
 (production call site); `docs/work/archive/2026-08-05-db-passphrase-ssh-and-cloud-vaults.md:22,126`
 (F1's HKDF alternative and the flagged-but-unwritten ADR gap).
+
+> **2026-08-07 update.** The implementation and rekey migration this ADR deferred as a
+> separate work item have shipped, in `63f079b` (#99), per the design in
+> `docs/plans/2026-08-07-hkdf-rekey-migration.md`. `SshKeyDerivation.DeriveRawKey` now
+> derives via `HKDF.DeriveKey(HashAlgorithmName.SHA256, seed, key, salt: default, info:
+> LabelBytes)` as decided above; `DeriveLegacyRawKey` retains the superseded
+> `SHA-256(Label ‖ seed)` construction solely to open pre-migration banks. The migration
+> ships as the explicit `ai-raccoon encryption migrate` CLI verb (not automatic on open —
+> see the plan's Decision 3): it rekeys a bank still on the legacy derivation, no-ops on a
+> bank already on HKDF, and refuses — leaving the file byte-identical — when neither key
+> opens it. See `docs/how-to/rekey-an-encrypted-bank.md` for the user-facing recipe.

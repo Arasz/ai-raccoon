@@ -24,19 +24,14 @@ internal static class OtlpExport
             }
 
             services.AddOpenTelemetry()
-                // Explicit, for the same cleared-sources reason as the endpoint: the environment
-                // detector behind the default resource resolves through DI's IConfiguration, so
-                // OTEL_SERVICE_NAME never reaches it and collectors show "unknown_service:<process>".
+                // Registered after CreateDefault()'s environment detector, so it wins the resource
+                // merge — hence resolving OTEL_SERVICE_NAME here rather than leaving it to the SDK.
                 .ConfigureResource(r => r.AddService(state.ServiceName))
                 .WithMetrics(m => m
                     .AddMeter("AiRaccoon.MemoryTools")
                     .AddMeter("AiRaccoon.PromotionQueue")
                     .AddMeter("System.Runtime")
-                    .AddOtlpExporter((exporterOptions, readerOptions) =>
-                    {
-                        ConfigureExporter(exporterOptions, state, MetricsSignalPath);
-                        ConfigureMetricReader(readerOptions, state);
-                    }))
+                    .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
                     .AddSource("AiRaccoon.MemoryTools")
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
@@ -45,10 +40,12 @@ internal static class OtlpExport
         }
     }
 
-    /// <summary>Explicit endpoint/protocol only (ADR 0009 hazard 1): the settings-clear ruling
-    /// means the SDK's implicit OTEL_* IConfiguration binding never sees these values, which
-    /// also means the SDK's own per-signal path append (AppendSignalPathToEndpoint) never
-    /// fires — <see cref="SignalEndpoint"/> reproduces it for http/protobuf.</summary>
+    /// <summary>Endpoint/protocol/timeout stay explicit even though the SDK now reads OTEL_* from
+    /// config again (ADR 0009 "Configuration channel" 2026-08-07 update): the http/protobuf signal
+    /// path composition (<see cref="SignalEndpoint"/>) and the 5s timeout ceiling are product
+    /// decisions, not values the config channel alone would produce. Headers, compression, resource
+    /// attributes, per-signal overrides, mTLS, and sampler now flow through the SDK's own OTEL_*
+    /// parsing instead.</summary>
     private static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
     {
         options.Endpoint = SignalEndpoint(state, signalPath);
@@ -56,23 +53,6 @@ internal static class OtlpExport
         // Bounds a single unreachable-collector export attempt so a detached serve never
         // hangs on the SDK's 30s default (ADR 0009: measured against the SDK sources).
         options.TimeoutMilliseconds = 5_000;
-    }
-
-    /// <summary>Explicit OTEL_METRIC_EXPORT_INTERVAL/_TIMEOUT only, same reason as
-    /// <see cref="ConfigureExporter"/>: the SDK core resolves PeriodicExportingMetricReaderOptions
-    /// through DI's (cleared) IConfiguration, so its own env-var parsing never reaches the
-    /// reader. Null values are left untouched — the SDK's own default applies.</summary>
-    private static void ConfigureMetricReader(MetricReaderOptions options, OtlpExportState state)
-    {
-        if (state.MetricExportIntervalMilliseconds is { } interval)
-        {
-            options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = interval;
-        }
-
-        if (state.MetricExportTimeoutMilliseconds is { } timeout)
-        {
-            options.PeriodicExportingMetricReaderOptions.ExportTimeoutMilliseconds = timeout;
-        }
     }
 
     /// <summary>Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the

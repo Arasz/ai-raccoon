@@ -27,6 +27,9 @@ internal static class PromotionQueueSql
     public const string Discard = """
                                   DELETE FROM promotion_queue
                                   WHERE project_id = @ProjectId AND (@Hash IS NULL OR hash = @Hash)
+                                  RETURNING project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
+                                            source_file AS SourceFile, score AS Score, reasons AS Reasons,
+                                            created_at AS CreatedAt, updated_at AS UpdatedAt
                                   """;
 
     public const string StatsPerProject = """

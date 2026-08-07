@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using AiRaccoon.Prompts;
 using AiRaccoon.Tools;
 using ModelContextProtocol.Server;
@@ -112,5 +113,30 @@ public class ToolInventoryTests
             .ToList();
 
         missing.ShouldBeEmpty();
+    }
+
+    /// <summary>The packaged README is the nuget.org listing (PackageReadmeFile) — its tool count must track the registry, not go stale.</summary>
+    [Fact]
+    public void PackagedReadme_ToolsHeading_MatchesActualToolCount()
+    {
+        var readme = File.ReadAllText(RepoFile("src/AiRaccoon/README.md"));
+        var match = Regex.Match(readme, @"^## Tools \((\d+)\) and prompts \(\d+\)$", RegexOptions.Multiline);
+
+        match.Success.ShouldBeTrue("Could not find the '## Tools (N) and prompts (N)' heading in src/AiRaccoon/README.md.");
+        int.Parse(match.Groups[1].Value).ShouldBe(ToolMethods().Count());
+    }
+
+    private static string RepoFile(string relative)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, relative);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
     }
 }
