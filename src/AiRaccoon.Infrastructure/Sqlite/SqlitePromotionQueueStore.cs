@@ -12,12 +12,31 @@ public sealed class SqlitePromotionQueueStore(
     public async Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
         CancellationToken cancellationToken = default)
     {
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var affected = 0;
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        // ON CONFLICT DO UPDATE reports a changed row for both an insert and a conflict-update
+        // (SQLite changes() counts both), so the affected-row sum is not a queue-size delta.
+        // A pre-upsert snapshot of which hashes already exist is the simplest way to tell them
+        // apart: only the ones absent here are genuinely new.
+        var hashes = rows.Select(r => r.Hash).Distinct(StringComparer.Ordinal).ToList();
+        var existing = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    PromotionQueueSql.ExistingHashes,
+                    new { ProjectId = projectId, Hashes = hashes },
+                    transaction,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false))
+            .ToHashSet(StringComparer.Ordinal);
+
         foreach (var row in rows)
         {
-            affected += await connection.ExecuteAsync(
+            await connection.ExecuteAsync(
                 new CommandDefinition(
                     PromotionQueueSql.Upsert,
                     new
@@ -32,10 +51,12 @@ public sealed class SqlitePromotionQueueStore(
                         CreatedAt = now,
                         UpdatedAt = now
                     },
+                    transaction,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
 
-        return affected;
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return hashes.Count(h => !existing.Contains(h));
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,

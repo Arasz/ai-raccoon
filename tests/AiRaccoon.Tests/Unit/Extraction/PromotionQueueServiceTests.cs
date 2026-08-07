@@ -76,6 +76,20 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Propose_ReProposingTheSameHash_RecordsZeroDelta_NotAnUpsertCount()
+    {
+        await _service.ProposeAsync("acme", [Candidate("h1", "fact one", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        var outcome = await _service.ProposeAsync("acme",
+            [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
+
+        outcome.Upserted.ShouldBe(0, "h1 already occupied a queue slot; the queue did not grow");
+        _metrics.QueuedDeltas.ShouldBe([("acme", 1), ("acme", 0)],
+            "RecordQueued must report the real queue-size delta, not the SQLite conflict-update count");
+    }
+
+    [Fact]
     public async Task Propose_AtCap_EvictsLowestScoreFromGreatestCountProject()
     {
         await SetCapAsync(4, TestContext.Current.CancellationToken);
