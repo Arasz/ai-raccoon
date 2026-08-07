@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -103,7 +104,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await CreateLegacyBankAsync();
 
         var store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService());
+            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.WriteAsync(new MemoryWriteRequest("acme", "fresh wave two content",
             SourceFile: "docs/adr/0001-legacy-migrated.md"), TestContext.Current.CancellationToken);
 
@@ -137,7 +138,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         // A crash between the migration's DROP/CREATE and its repopulate leaves a
         // new-shape FTS table with no rows and no triggers — it must heal on reopen.
         var store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService());
+            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.WriteAsync(new MemoryWriteRequest("acme", "shell crash recovery content"),
             TestContext.Current.CancellationToken);
 

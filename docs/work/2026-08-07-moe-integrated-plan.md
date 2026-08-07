@@ -258,7 +258,7 @@ anywhere in the solution**. The claim was an artifact of the old reference doc, 
 |---|---|---|
 | WI-4 (Python tests) | 185 test functions, `pyproject.toml` configured, nothing invokes it | [#116](https://github.com/Arasz/ai-raccoon/issues/116) |
 | WI-5 | `grep user_version src/` → empty; no migration marker | — (ADR-0011 owns it) |
-| WI-6a | `SqliteMemoryStore.cs:725` still swallows `SqliteException` → `[]` | — |
+| WI-6a | **Shipped in #123** — the degradation is now logged (EventId 900) | — |
 | WI-6c | no path-containment primitive on the ingest tools | — |
 | WI-7c | `ApiEnvelope` still at Core's root; `IPromotionQueue` still returns `ResponseMeta` | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
 | WI-7e | sweep default still in the host | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |

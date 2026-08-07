@@ -23,10 +23,7 @@ internal static class CliCommandRunner
     public static async Task<int> RunAsync(CliParseResult parsed, ServerConfig config, TextWriter stdout,
         TextWriter stderr, TextReader stdin, CancellationToken cancellationToken = default)
     {
-        using var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        });
+        using var loggerFactory = LoggerFactory.Create(builder => { builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace); });
         var logger = loggerFactory.CreateLogger("EncryptionCommands");
 
         var bankPath = SqliteConnectionFactory.BankPathFor(config.Options);
@@ -35,10 +32,12 @@ internal static class CliCommandRunner
         var resolver = EncryptionKeyResolver.Create(bankPath, bws, sidecar);
         var env = new EnvEncryptionKeyProvider();
         var bank = new SqliteConnectionFactory(config.Options, resolver);
-        var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+        var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService(),
+            loggerFactory.CreateLogger<SqliteMemoryStore>());
 
         var encryptionCommands = new EncryptionCommands(bank, bws, env, sidecar, logger);
 
-        return await new ConfigCommands(settings: new SettingsCommands(), sync: new SyncCommands(), watch: new WatchCommands(new WatchStore(bank)), encryptionCommands: encryptionCommands, extract: new ExtractCommands(), maintenance: new MaintenanceCommands(bank)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin, cancellationToken);
+        return await new ConfigCommands(settings: new SettingsCommands(), sync: new SyncCommands(), watch: new WatchCommands(new WatchStore(bank)), encryptionCommands: encryptionCommands,
+            extract: new ExtractCommands(), maintenance: new MaintenanceCommands(bank)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin, cancellationToken);
     }
 }

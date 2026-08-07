@@ -571,7 +571,7 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService());
+            Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);
             ScanGuard = new WatchScanGuard();

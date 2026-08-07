@@ -24,12 +24,16 @@ internal static partial class SourcePathQuery
             return false;
         }
 
+        // File tokens come from the token regex, so each is a valid FTS5 bareword. The section
+        // is the raw anchor and is always quoted: a markdown anchor like "getting-started"
+        // holds a hyphen, which FTS5 reads as a column filter rather than part of a bareword.
         var tokens = TokenRegex().Matches(match.Groups["file"].Value)
             .Select(t => t.Value.ToLowerInvariant())
+            .Select(t => Reserved.Contains(t) ? $"\"{t}\"" : t)
             .ToList();
         if (match.Groups["section"].Success)
         {
-            tokens.Add(match.Groups["section"].Value.ToLowerInvariant());
+            tokens.Add($"\"{match.Groups["section"].Value.ToLowerInvariant()}\"");
         }
 
         if (tokens.Count == 0)
@@ -39,7 +43,7 @@ internal static partial class SourcePathQuery
         }
 
         var columns = match.Groups["section"].Success ? "{source_file section}" : "{source_file}";
-        var terms = string.Join(" AND ", tokens.Select(t => Reserved.Contains(t) ? $"\"{t}\"" : t));
+        var terms = string.Join(" AND ", tokens);
         ftsExpression = $"{columns} : ({terms})";
         return true;
     }

@@ -41,7 +41,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService());
+        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
@@ -133,7 +133,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SharesTopNFromTheQueue_AndDrains()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService());
+        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         // Queue candidates are committed entries by construction (propose extracts from the
         // project context), so the hashes must exist there for ShareAsync.
         var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact", null, null, null, null, null),
@@ -159,7 +159,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService());
+        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
         var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact", null, null, null, null, null),
@@ -232,7 +232,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Sweep_NeverTouchesTheQueue()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService());
+        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry", null, null, null, null, null),
             TestContext.Current.CancellationToken);
