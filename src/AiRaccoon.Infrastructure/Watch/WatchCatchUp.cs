@@ -71,9 +71,24 @@ public sealed partial class WatchCatchUp(
         var startedAt = timeProvider.GetUtcNow();
         try
         {
+            var nextRenew = startedAt + SqliteWatchScanLease.HeartbeatInterval;
             foreach (var file in EnumerateFiles(path, sinceWatermark))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Renew before enqueueing, never after: a lost lease must add nothing further.
+                var now = timeProvider.GetUtcNow();
+                if (now >= nextRenew)
+                {
+                    if (!await scanLease.TryRenewAsync(projectId, path, cancellationToken).ConfigureAwait(false))
+                    {
+                        Log.ScanLeaseLost(logger, path);
+                        return;
+                    }
+
+                    nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
+                }
+
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Created));
             }
 
@@ -116,5 +131,9 @@ public sealed partial class WatchCatchUp(
         [LoggerMessage(EventId = 311, Level = LogLevel.Information,
             Message = "Watch catch-up scan for {Path} cancelled after {Elapsed}")]
         public static partial void ScanCancelled(ILogger logger, string path, TimeSpan elapsed);
+
+        [LoggerMessage(EventId = 312, Level = LogLevel.Warning,
+            Message = "Watch catch-up scan for {Path} lost its lease to another process and stopped")]
+        public static partial void ScanLeaseLost(ILogger logger, string path);
     }
 }

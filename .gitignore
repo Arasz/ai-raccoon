@@ -3,9 +3,14 @@ obj/
 /packages/
 /.nupkg/
 /.nupkg-local/
+
 /.ai-badger/worktrees/
 /.ai-badger/task-tracking/
+/.ai-badger/prompt-markers/
 /.ai-badger.bckp/
+
+/.claude/worktrees/
+
 riderModule.iml
 /_ReSharper.Caches/
 .DS_Store

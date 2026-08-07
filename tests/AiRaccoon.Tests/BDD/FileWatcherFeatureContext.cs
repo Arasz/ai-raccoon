@@ -190,8 +190,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             new WatchDigestExecutor(Host, WatchStore, Host, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Host,
             TimeProvider, scanGuard, NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
-        CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard, new WatchScanLease(), TimeProvider,
-            NullLogger<WatchCatchUp>.Instance);
+        CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
+            new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance);
         Hosted = new WatchHostedService(Host, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Host, Pipeline, TimeProvider);
