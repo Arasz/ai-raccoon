@@ -527,6 +527,119 @@ public class SyncServiceTests : IDisposable
         }
     }
 
+    //
+    // WI-1a: settings never leave the bank — the table holds cloud credentials and the
+    // embedding API key, so it must be stripped from every pushed snapshot, not just workspace rows.
+    //
+    [Fact]
+    public async Task MemorySync_SettingsRows_NotInSyncPayload()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Seed a settings row holding a secret (the S3 secret key sync itself reads to reach the store).
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = $"""
+                                  INSERT INTO settings (key, value) VALUES ('{SyncSettingsKeys.SecretKey}', 'super-secret-value')
+                                  """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, null!);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        // The cloud object must not contain the settings row (credential exfiltration).
+        var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        cloudObj.ShouldNotBeNull();
+        var remotePath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllBytesAsync(remotePath, cloudObj.Data, TestContext.Current.CancellationToken);
+            await using var remoteConn = new SqliteConnection($"Data Source={remotePath}");
+            await remoteConn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var count = remoteConn.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM settings";
+            var settingsCount = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            settingsCount.ShouldBe(0, "Settings rows (cloud credentials, embedding API key) must never leave the bank.");
+        }
+        finally
+        {
+            File.Delete(remotePath);
+        }
+    }
+
+    //
+    // WI-1a: pulling/merging a snapshot with a stripped (empty) settings table must not error,
+    // and must leave the local settings untouched (nothing in remote.settings to overwrite them with).
+    //
+    [Fact]
+    public async Task MemorySync_MergeWithEmptySettingsRemote_SucceedsAndPreservesLocalSettings()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Remote snapshot as produced by a stripped push: schema present, settings table empty.
+        var remoteBankPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteBankPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            cloud.Set("test-object", await File.ReadAllBytesAsync(remoteBankPath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remoteBankPath);
+        }
+
+        // Local bank keeps its own settings row.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = $"""
+                                  INSERT INTO settings (key, value) VALUES ('{SyncSettingsKeys.SecretKey}', 'local-secret-value')
+                                  """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, null!);
+
+        // Must not throw merging a remote with an empty settings table.
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
+        {
+            await conn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var check = conn.CreateCommand();
+            check.CommandText = $"SELECT value FROM settings WHERE key = '{SyncSettingsKeys.SecretKey}'";
+            var value = (string?)await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            value.ShouldBe("local-secret-value", "Local settings must survive a merge against an empty remote settings table.");
+        }
+    }
+
     [Fact]
     public async Task MemorySync_ResolvesTheCloudStorePerCall()
     {
