@@ -1,5 +1,6 @@
 # Encryption key sources — env (default) + Bitwarden via bws CLI (behavioral contract)
 
+@bdd
 Feature: Encryption key sources
 
     As a user of the encrypted bank
