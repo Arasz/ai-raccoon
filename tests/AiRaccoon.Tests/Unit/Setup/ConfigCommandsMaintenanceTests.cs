@@ -181,6 +181,8 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("on-disk total:");
         outp.ShouldContain("reclaimable:");
         outp.ShouldContain("freelist");
+        // Decimal separator must be invariant (a locale with comma decimals would break parsing).
+        System.Text.RegularExpressions.Regex.IsMatch(outp, @"\d+\.\d+ MB").ShouldBeTrue();
     }
 
     [Fact]

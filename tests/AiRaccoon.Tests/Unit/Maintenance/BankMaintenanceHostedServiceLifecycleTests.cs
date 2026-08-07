@@ -11,7 +11,8 @@ namespace AiRaccoon.Tests.Unit.Maintenance;
 ///     Hosted-service lifecycle contract: a startup pass runs one checkpoint before
 ///     traffic, the periodic timer re-reads its interval after every tick, settings
 ///     failures fall back to defaults without killing the loop, and StopAsync runs a
-///     final best-effort checkpoint.
+///     final best-effort checkpoint. All synchronization is signal-driven (TickSignal
+///     seams on the service) — no polling sleeps; the fake clock drives the timer.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -38,21 +39,29 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 
-    /// <summary>Waits until the logger observed the event at least the given times (deterministic sync point).</summary>
-    private async Task WaitForLogAsync(int eventId, int count, CancellationToken cancellationToken)
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AbsenceWindow = TimeSpan.FromMilliseconds(150);
+
+    private Task<bool> WaitForTicksAsync(long target) =>
+        _service.Ticks.WaitAsync(target, SignalTimeout, TestContext.Current.CancellationToken);
+
+    /// <summary>
+    ///     Advances the fake clock in steps until the tick signal fires: the periodic
+    ///     timer arms only after the startup pass, so a single Advance can race it.
+    /// </summary>
+    private async Task AdvanceUntilTicksAsync(long target, TimeSpan step)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        var deadline = DateTime.UtcNow + SignalTimeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (_logger.Collector.GetSnapshot().Count(r => r.Id.Id == eventId) >= count)
+            _time.Advance(step);
+            if (await _service.Ticks.WaitAsync(target, AbsenceWindow, TestContext.Current.CancellationToken))
             {
                 return;
             }
-
-            await Task.Delay(10, cancellationToken);
         }
 
-        throw new TimeoutException($"EventId {eventId} was not observed {count} time(s) within 5s");
+        throw new TimeoutException($"Tick {target} did not fire within {SignalTimeout}");
     }
 
     private async Task InsertSettingAsync(string key, string value, CancellationToken cancellationToken)
@@ -74,16 +83,14 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        // The startup pass's checkpoint (510) is the sync point: only then write churn
-        // the ticks must reap — a fixed delay would race the bank create + schema ensure.
-        await WaitForLogAsync(510, 1, TestContext.Current.CancellationToken);
+        // The startup pass's completion is the sync point: only then write churn the
+        // ticks must reap (no fixed delays to race the bank create + schema ensure).
+        (await WaitForTicksAsync(1)).ShouldBeTrue();
         await InsertSettingAsync("probe.x", "1", TestContext.Current.CancellationToken);
         var walAfterStartup = new FileInfo(WalPath).Length;
         walAfterStartup.ShouldBeGreaterThan(0);
-        var baseline = _logger.Collector.GetSnapshot().Count(r => r.Id.Id == 510);
 
-        _time.Advance(TimeSpan.FromMinutes(1)); // configured interval
-        await WaitForLogAsync(510, baseline + 1, TestContext.Current.CancellationToken);
+        await AdvanceUntilTicksAsync(2, TimeSpan.FromMinutes(1)); // configured interval
 
         run.IsFaulted.ShouldBeFalse();
         new FileInfo(WalPath).Length.ShouldBe(0);
@@ -100,22 +107,29 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        await WaitForLogAsync(510, 1, TestContext.Current.CancellationToken);
-        var baseline = _logger.Collector.GetSnapshot().Count(r => r.Id.Id == 510);
+        (await WaitForTicksAsync(1)).ShouldBeTrue(); // startup pass
+        var baseline = _service.Ticks.Count;
 
-        // Widen the interval before the first tick: the re-read after that tick (the
-        // timer period is re-read after every run) must defer the next one.
+        // Tick #1 fires at the configured 1-minute period; wait for its re-read to
+        // complete (the seam) so the period is known to be 1 min, then widen the
+        // setting: the NEXT tick must re-read it and defer.
+        await AdvanceUntilTicksAsync(baseline + 1, TimeSpan.FromMinutes(1));
+        (await _service.IntervalReReads.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken))
+            .ShouldBeTrue();
+
         await InsertSettingAsync("maintenance.checkpoint-interval-minutes.global", "1440",
             TestContext.Current.CancellationToken);
 
-        _time.Advance(TimeSpan.FromMinutes(1)); // fires the tick scheduled at the old 1-minute period
-        await WaitForLogAsync(510, baseline + 1, TestContext.Current.CancellationToken);
+        await AdvanceUntilTicksAsync(baseline + 2, TimeSpan.FromMinutes(1)); // old 1-minute period
+        (await _service.IntervalReReads.WaitAsync(2, SignalTimeout, TestContext.Current.CancellationToken))
+            .ShouldBeTrue(); // period re-read as 1440
 
-        _time.Advance(TimeSpan.FromMinutes(1)); // new 1440-minute period: no tick
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromMinutes(1)); // re-read period is 1440: no tick
+        (await _service.Ticks.WaitAsync(baseline + 3, AbsenceWindow, TestContext.Current.CancellationToken))
+            .ShouldBeFalse();
 
         run.IsFaulted.ShouldBeFalse();
-        _logger.Collector.GetSnapshot().Count(r => r.Id.Id == 510).ShouldBe(baseline + 1);
+        _service.Ticks.Count.ShouldBe(baseline + 2);
 
         await _service.StopAsync(TestContext.Current.CancellationToken);
     }
@@ -138,12 +152,13 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        // Startup pass completes, then the pre-timer interval read fails → 514.
-        await WaitForLogAsync(514, 1, TestContext.Current.CancellationToken);
-        _time.Advance(TimeSpan.FromMinutes(60)); // default interval
-        await WaitForLogAsync(514, 2, TestContext.Current.CancellationToken);
+        (await WaitForTicksAsync(1)).ShouldBeTrue(); // startup pass completes
+        (await _service.TimerArmed.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken))
+            .ShouldBeTrue();
+        await AdvanceUntilTicksAsync(2, TimeSpan.FromMinutes(60)); // default interval
 
         run.IsFaulted.ShouldBeFalse();
+        _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 514);
 
         await _service.StopAsync(TestContext.Current.CancellationToken);
     }
@@ -154,7 +169,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        await WaitForLogAsync(510, 1, TestContext.Current.CancellationToken);
+        (await WaitForTicksAsync(1)).ShouldBeTrue();
 
         await _service.StopAsync(TestContext.Current.CancellationToken);
 
