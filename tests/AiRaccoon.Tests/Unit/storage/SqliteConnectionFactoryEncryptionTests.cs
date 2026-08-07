@@ -190,8 +190,12 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
+    /// <summary>
+    ///     Neither the bitwarden source's current nor its legacy derivation opens a bank keyed to
+    ///     something else, so the open is refused. The underlying SQLite code stays reachable.
+    /// </summary>
     [Fact]
-    public async Task OpenBankAsync_ResolverReturnsDifferentKey_ThrowsSqliteException26()
+    public async Task OpenBankAsync_ResolverReturnsDifferentKey_ThrowsKeyMismatchOverSqlite26()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var bankFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-A")));
@@ -208,11 +212,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")))]);
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
 
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [Fact]

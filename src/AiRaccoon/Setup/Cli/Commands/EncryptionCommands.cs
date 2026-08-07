@@ -108,14 +108,17 @@ public sealed partial class EncryptionCommands
         var bankPath = _bank.BankPath;
         if (File.Exists(bankPath))
         {
-            SqliteException? openError = null;
+            Exception? openError = null;
             try
             {
                 using (await _bank.OpenBankAsync(cancellationToken))
                 {
                 }
             }
-            catch (SqliteException ex)
+            // Post-ADR-0012 a bank that does not open under the resolved key surfaces as
+            // BankKeyMismatchException rather than a bare SqliteException. Both mean the same
+            // thing here — it did not open — and the fallbacks below decide what to do about it.
+            catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
             {
                 openError = ex;
             }

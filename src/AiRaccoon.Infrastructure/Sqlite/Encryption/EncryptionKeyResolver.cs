@@ -21,7 +21,10 @@ public sealed class EncryptionKeyResolver(IEncryptionSourceSidecar encryptionSta
             .Select(encryptionKeyProvider => encryptionKeyProvider.GetPassphrase(encryptionData))
             .FirstOrDefault() ?? ThrowHelper.ThrowArgumentNullException<Passphrase>();
 
-        return new ResolvedKey(resolvedPassphrase.Value, resolvedPassphrase.Source);
+        return new ResolvedKey(resolvedPassphrase.Value, resolvedPassphrase.Source)
+        {
+            LegacyPassphrase = resolvedPassphrase.LegacyValue
+        };
     }
 
     /// <summary>Creates a resolver with the standard three-provider chain for one-shot paths (config verbs).</summary>
@@ -39,4 +42,10 @@ public sealed class EncryptionKeyResolver(IEncryptionSourceSidecar encryptionSta
 public sealed record ResolvedKey(string? Passphrase, string SourceName)
 {
     public static readonly ResolvedKey None = new(null, "");
+
+    /// <summary>
+    ///     The same key under the pre-ADR-0012 derivation, or null when the source has no legacy
+    ///     form (env, none). Non-null is what makes a bank eligible for the rekey migration.
+    /// </summary>
+    public string? LegacyPassphrase { get; init; }
 }

@@ -20,10 +20,15 @@ namespace AiRaccoon.Tests.Integration;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(Unit.Encryption.BwsAccessTokenCollection.Name)]
 public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 {
     // §5.1 pinned vector — seed 00 01 … 1e 1f derives to exactly this x'…' (hard-coded, never recomputed).
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
+
+    // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what an installed
+    // user's bank is encrypted with before the migration runs. Independently derived, never recomputed.
+    private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 
     // Owner-default project/secret ids (plan D6). The fake bws serves the synthetic key for SecretId.
     private const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
@@ -91,6 +96,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     /// <summary>Resolver pinned to the derived key, independent of the sidecar (the old StubEnvProvider semantics).</summary>
     private EncryptionKeyResolver DerivedKeyResolver() => new(new FixedState(), [new StubEnvProvider(DerivedRawKey)]);
+
+    /// <summary>Resolver pinned to one key with no legacy form — the env-source shape.</summary>
+    private static EncryptionKeyResolver FixedKeyResolver(string key) => new(new FixedState(), [new StubEnvProvider(key)]);
 
     /// <summary>Writes the fake-bws script + key fixtures next to it (absolute-path executable; no PATH mutation).</summary>
     private void InstallFakeBws()
@@ -163,8 +171,129 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
+    /// <summary>
+    ///     The ADR-0012 migration gate: a bank encrypted under the pre-ADR-0012 derivation is
+    ///     rekeyed to the HKDF key, keeps its data, and stops opening under the old key.
+    /// </summary>
     [Fact]
-    public async Task BankKeyedWithKeyA_FakeBwsServesDifferentKey_OpenFailsWithSqliteCode26()
+    public async Task LegacyKeyedBank_Migrate_RekeysToHkdfKeyAndLegacyKeyStopsWorking()
+    {
+        InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            // An installed user's bank: encrypted with SHA-256(Label ‖ seed), holding real data.
+            var legacyFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver(LegacyDerivedRawKey));
+            await using (var connection = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO t VALUES (1, 'survives')";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            // The sidecar says bitwarden, so the resolver derives both keys from the same seed.
+            WriteSidecar();
+            var factory = new SqliteConnectionFactory(Options(), Resolver());
+
+            await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken);
+
+            // Readable under the HKDF key, with the row intact.
+            await using (var reopened = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var read = reopened.CreateCommand();
+                read.CommandText = "SELECT value FROM t WHERE id = 1";
+                (await read.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe("survives");
+            }
+
+            // And no longer readable under the legacy key — without this half, a bank that was
+            // never encrypted at all would satisfy the assertion above.
+            var stale = await Should.ThrowAsync<SqliteException>(async () =>
+            {
+                await using var conn = await factory.OpenBankWithKeyAsync(LegacyDerivedRawKey, TestContext.Current.CancellationToken);
+            });
+            stale.SqliteErrorCode.ShouldBe(26);
+        });
+    }
+
+    /// <summary>
+    ///     Decision 2 in code: a file that opens under neither derivation is refused, not rekeyed
+    ///     over. The byte comparison is the real assertion — the exception type alone would not
+    ///     prove that nothing was written.
+    /// </summary>
+    [Fact]
+    public async Task CorruptBank_Migrate_RefusesAndLeavesTheFileByteIdentical()
+    {
+        InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            // Deterministic garbage: a valid-looking size, no valid SQLCipher page 1.
+            Directory.CreateDirectory(Path.GetDirectoryName(BankPath())!);
+            File.WriteAllBytes(BankPath(), [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))]);
+            var before = await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken);
+
+            WriteSidecar();
+            var factory = new SqliteConnectionFactory(Options(), Resolver());
+
+            await Should.ThrowAsync<BankKeyMismatchException>(
+                async () => await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken));
+
+            (await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken)).ShouldBe(before);
+        });
+    }
+
+    /// <summary>
+    ///     Decision 3 pinned: the automatic open path detects and refuses, naming the verb. If
+    ///     someone later makes the open path rekey by itself, this test is what fails.
+    /// </summary>
+    [Fact]
+    public async Task OpenBankAsync_LegacyKeyedBank_RefusesWithMigrateGuidanceAndDoesNotRekey()
+    {
+        InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            var legacyFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver(LegacyDerivedRawKey));
+            await using (await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+            }
+
+            WriteSidecar();
+            var factory = new SqliteConnectionFactory(Options(), Resolver());
+
+            var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+            {
+                await using var conn = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+            });
+
+            ex.Message.ShouldContain("ai-raccoon encryption migrate");
+            ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+
+            // The bank was not touched: the legacy key still opens it.
+            await using var untouched = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+            untouched.State.ShouldBe(ConnectionState.Open);
+        });
+    }
+
+    /// <summary>The env source has no legacy derivation, so its failure must surface unchanged.</summary>
+    [Fact]
+    public async Task OpenBankAsync_EnvSourceWrongPassphrase_RethrowsTheOriginalSqliteException()
+    {
+        var createFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("passphrase-a"));
+        await using (await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        // No sidecar → env source, and the env provider never carries a legacy key.
+        var wrongFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("passphrase-b"));
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await wrongFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.SqliteErrorCode.ShouldBe(26);
+    }
+
+    [Fact]
+    public async Task BankKeyedWithKeyA_FakeBwsServesDifferentKey_OpenFailsWithKeyMismatch()
     {
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
@@ -178,16 +307,18 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                 await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
-            // The fake bws now serves key2.pem — a valid key that derives to something else.
+            // The fake bws now serves key2.pem — a valid key that derives to something else. Neither
+            // that key nor its legacy form opens the bank, so this is the same refusal a corrupt
+            // bank gets: we cannot tell the two apart, and refusing is safe for both.
             WriteSidecar(WrongKeySecretId);
             var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
 
-            var ex = await Should.ThrowAsync<SqliteException>(async () =>
+            var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
             {
                 await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
             });
 
-            ex.SqliteErrorCode.ShouldBe(26);
+            ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
         });
     }
 
