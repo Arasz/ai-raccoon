@@ -1,5 +1,6 @@
 # File watcher — part 2 of native-memory (behavioral contract)
 
+@bdd
 Feature: File watcher
 
     As a coding agent

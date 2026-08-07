@@ -1,4 +1,5 @@
 # language: en
+@bdd
 Feature: Native memory store (ai-raccoon MCP server)
     As the ai-raccoon maintainers
     I want the agent memory layer implemented natively in .NET on SQLite + FTS5 + sqlite-vec, with pluggable embeddings and our own single-file sync
