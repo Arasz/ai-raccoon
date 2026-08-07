@@ -1001,6 +1001,36 @@
           "trackingSource": "claude",
           "resumeCommand": "claude --resume 4470297c-c39c-46b6-846e-deac78696f42",
           "resumeAttempts": []
+      },
+      {
+          "taskId": "add-pid-to-serve",
+          "title": "serve observability: emit ready-to-run dotnet-counters/dotnet-trace/OTLP commands with the live server PID",
+          "sessionId": "4c0e6ada-c06d-465c-8470-172c0dc13a5d",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/add-pid-to-serve",
+          "risk": false,
+          "startedAt": "2026-08-07T11:17:27.261525+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
+          "trackingSource": "claude",
+          "resumeCommand": "claude --resume 4c0e6ada-c06d-465c-8470-172c0dc13a5d",
+          "resumeAttempts": []
+      },
+      {
+          "taskId": "full-project-review",
+          "title": "MoE full-project review: .NET architecture + refactor opportunities",
+          "sessionId": "99e91471-e89b-4f30-943b-29bd2e8d0174",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/full-project-review",
+          "risk": false,
+          "startedAt": "2026-08-07T11:26:52.323010+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
+          "trackingSource": "claude",
+          "resumeCommand": "claude --resume 99e91471-e89b-4f30-943b-29bd2e8d0174",
+          "resumeAttempts": []
     }
   ]
 }

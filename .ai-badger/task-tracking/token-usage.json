@@ -4947,6 +4947,11 @@
                   "description": "test-engineer(sonnet): watch test-coverage gap audit + project test idioms",
                   "at": "2026-08-07T11:16:51.877949+00:00",
                   "totalTokens": 145660
+              },
+              {
+                  "description": "architect(opus): WP1-WP5 blueprint, lease design, wave plan, risk table",
+                  "at": "2026-08-07T11:28:21.696590+00:00",
+                  "totalTokens": 147934
               }
           ],
           "grade": null,
@@ -4986,12 +4991,78 @@
               "cacheReadTokens": 0,
               "cacheCreationTokens": 0,
               "cacheEfficiency": null,
-              "subagentTokens": 255628,
+              "subagentTokens": 403562,
               "contextTokensAtStart": 0,
               "contextTokensAtFinish": 0,
               "contextGrowth": 0,
               "mainSessionTotal": 0,
               "grandTotal": 0
+          }
+      },
+      {
+          "taskId": "add-pid-to-serve",
+          "subagents": [],
+          "grade": null,
+          "sessionId": "4c0e6ada-c06d-465c-8470-172c0dc13a5d",
+          "trackingSource": "claude",
+          "checkpoints": {
+              "start": {
+                  "timestamp": "2026-08-07T11:17:27.261177+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "latest": {
+                  "timestamp": "2026-08-07T11:17:27.261177+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              }
+          }
+      },
+      {
+          "taskId": "full-project-review",
+          "subagents": [],
+          "grade": null,
+          "sessionId": "99e91471-e89b-4f30-943b-29bd2e8d0174",
+          "trackingSource": "claude",
+          "checkpoints": {
+              "start": {
+                  "timestamp": "2026-08-07T11:26:52.322486+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "latest": {
+                  "timestamp": "2026-08-07T11:26:52.322486+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              }
           }
     }
   ]
