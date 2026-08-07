@@ -629,7 +629,9 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
-        Directory.CreateDirectory(Path.GetDirectoryName(BankPath())!);
+        var bankDirectory = Path.GetDirectoryName(BankPath());
+        bankDirectory.ShouldNotBeNull();
+        Directory.CreateDirectory(bankDirectory);
         await File.WriteAllBytesAsync(BankPath(), [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))],
             TestContext.Current.CancellationToken);
         var before = await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken);

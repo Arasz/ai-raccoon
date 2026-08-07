@@ -226,7 +226,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         await WithBwsAccessToken(null, async () =>
         {
             // Deterministic garbage: a valid-looking size, no valid SQLCipher page 1.
-            Directory.CreateDirectory(Path.GetDirectoryName(BankPath())!);
+            var bankDirectory = Path.GetDirectoryName(BankPath());
+            bankDirectory.ShouldNotBeNull();
+            Directory.CreateDirectory(bankDirectory);
             File.WriteAllBytes(BankPath(), [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))]);
             var before = await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken);
 
