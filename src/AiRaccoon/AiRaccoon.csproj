@@ -30,9 +30,10 @@
         <None Include="README.md" Pack="true" PackagePath="/"/>
     </ItemGroup>
 
-    <!-- Bundled embedding model (FR-NM-3): the int8 ONNX binary is downloaded by
-         scripts/download-embedding-model.py (gitignored); vocab.txt is committed. Both are
-         copied to the output for tests and packed into the tool package under Models/. -->
+    <!-- Bundled embedding model (FR-NM-3): the int8 ONNX binary and vocab.txt are committed —
+         they never change, and a fresh clone or worktree must be able to build and test without
+         a fetch step. scripts/download-embedding-model.py refreshes them. Both are copied to the
+         output for tests and packed into the tool package under Models/. -->
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
         <None Include="Models/*.onnx" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>

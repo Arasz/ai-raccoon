@@ -17,9 +17,6 @@ __pycache__/
 tests/AiRaccoon.Tests/Unit/Retrieval/assets/*
 !tests/AiRaccoon.Tests/Unit/Retrieval/assets/manifest.json
 !tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json
-# Bundled ONNX embedding model (FR-NM-3): downloaded + SHA-pinned by scripts/download-embedding-model.py.
-# vocab.txt is committed; only the ~23 MB binary is gitignored.
-src/AiRaccoon/Models/*.onnx
 # Reqnroll generated code-behind files (P12)
 **/*.feature.cs
 # SQLite WAL sidecars (journal_mode=WAL is forced by SqliteConnectionFactory)
