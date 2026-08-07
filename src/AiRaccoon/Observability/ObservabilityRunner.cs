@@ -137,16 +137,16 @@ internal static partial class ObservabilityRunner
 
     internal static partial class Log
     {
-        [LoggerMessage(EventId = 610, Level = LogLevel.Warning, Message = "ai-raccoon: no server is listening on port {Port}")]
+        [LoggerMessage(EventId = 620, Level = LogLevel.Warning, Message = "ai-raccoon: no server is listening on port {Port}")]
         public static partial void NoServerListening(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 611, Level = LogLevel.Warning, Message = "ai-raccoon: port {Port} is in use by another process")]
+        [LoggerMessage(EventId = 621, Level = LogLevel.Warning, Message = "ai-raccoon: port {Port} is in use by another process")]
         public static partial void ForeignListener(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 612, Level = LogLevel.Warning, Message = "ai-raccoon: the server on port {Port} does not expose /observability")]
+        [LoggerMessage(EventId = 622, Level = LogLevel.Warning, Message = "ai-raccoon: the server on port {Port} does not expose /observability")]
         public static partial void EndpointMissing(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 613, Level = LogLevel.Warning, Message = "ai-raccoon: OTLP export is not enabled on port {Port}")]
+        [LoggerMessage(EventId = 623, Level = LogLevel.Warning, Message = "ai-raccoon: OTLP export is not enabled on port {Port}")]
         public static partial void OtlpNotEnabled(ILogger logger, int port);
     }
 }
