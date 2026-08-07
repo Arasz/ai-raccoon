@@ -1,3 +1,4 @@
+using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -23,6 +24,10 @@ internal static class OtlpExport
             }
 
             services.AddOpenTelemetry()
+                // Explicit, for the same cleared-sources reason as the endpoint: the environment
+                // detector behind the default resource resolves through DI's IConfiguration, so
+                // OTEL_SERVICE_NAME never reaches it and collectors show "unknown_service:<process>".
+                .ConfigureResource(r => r.AddService(state.ServiceName))
                 .WithMetrics(m => m
                     .AddMeter("AiRaccoon.MemoryTools")
                     .AddMeter("AiRaccoon.PromotionQueue")
