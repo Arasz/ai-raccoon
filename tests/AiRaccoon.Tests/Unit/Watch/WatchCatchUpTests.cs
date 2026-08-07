@@ -240,6 +240,34 @@ public sealed class WatchCatchUpTests
         records.ShouldNotContain(r => r.Id.Id == 310);
     }
 
+    /// <summary>R1: a scan cancelled mid-flight must still release its lease in `finally` with a
+    /// non-cancellable token — otherwise the watch is unscannable until the TTL expires.</summary>
+    [Fact]
+    public async Task ScanCore_WhenTheScanIsCancelled_StillReleasesTheLease()
+    {
+        using var dir = TempDir.New("catchup-cancel-releases-lease");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+        var insideListFiles = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Store.OnListFiles = async () =>
+        {
+            insideListFiles.TrySetResult();
+            await releaseGate.Task;
+        };
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await insideListFiles.Task.WaitAsync(TestContext.Current.CancellationToken);
+        catchUp.CancelAllScans();
+        releaseGate.SetResult();
+        await catchUp.LastScan!;
+
+        stack.ScanLease.ReleaseCalls.ShouldBe(1);
+    }
+
     [Fact]
     public async Task EnqueueInitialScan_WhenTheLeaseIsHeldElsewhere_EnqueuesNothing()
     {

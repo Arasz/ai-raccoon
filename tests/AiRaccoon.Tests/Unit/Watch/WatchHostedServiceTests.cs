@@ -250,6 +250,32 @@ public sealed class WatchHostedServiceTests
     }
 
     /// <summary>
+    ///     R4: without the once-per-process `_active` gate, a watch whose watermark never advances
+    ///     (an empty directory — nothing digests, so UpdateLastChangeAsync never fires) would
+    ///     re-enqueue a full scan on every 1s reconcile poll forever. That is the runaway incident
+    ///     in new clothes; `_active` is what stops a second reconcile from starting a second scan.
+    /// </summary>
+    [Fact]
+    public async Task Reconcile_CalledTwice_EnqueuesOnlyOneScan()
+    {
+        using var dir = TempDir.New("hosted-reconcile-twice");
+        var (stack, source, catchUp, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        var firstScan = catchUp.LastScan.ShouldNotBeNull();
+        await firstScan;
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(1, "a still-registered, still-unwatermarked watch must not restart its scan on every poll");
+        catchUp.LastScan.ShouldBeSameAs(firstScan);
+        source.IsWatching(Project, dir.Path).ShouldBeTrue();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
     ///     Defect 2: host shutdown must cancel a scan that is still walking the tree, not let it
     ///     run to completion after the poll loop has already exited.
     /// </summary>
