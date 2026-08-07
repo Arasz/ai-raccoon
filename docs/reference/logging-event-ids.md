@@ -1,13 +1,13 @@
 # logging-event-ids
 
 `[LoggerMessage]` `EventId` allocation and collision record. `LoggerMessageEventIdTests` guards
-against any new collision; the deferred 1/2/3 reuse is an intentional, tracked exception.
+against any collision, with no allowlist.
 
-## Status: the collisions are fixed; only 1/2/3 remain
+## Status: no duplicates remain
 
-Landed in #89. Measured across `src/` on `main` at 2026-08-07, the **only** duplicate `EventId`s
-left in the assembly are `1`, `2` and `3` — the deliberately deferred set below.
-`LoggerMessageEventIdTests` allowlists exactly those three and fails on any new collision.
+Landed in #89 and finished in #109. The six modules that each started numbering at 1 were moved
+to their own blocks, and the test's `1/2/3` allowlist was deleted with them — measured across
+`src/` on `main`, the assembly holds no duplicate `EventId`.
 
 | Was | Collided with | Now | File |
 |---|---|---|---|
@@ -63,6 +63,7 @@ fails on any duplicate — there is no allowlist.
 | 620-623 | `Setup/Serve/ObservabilityRunner.cs` |
 | 700-704 | `Infrastructure/Promotion/PromotionQueueService.cs` |
 | 800-807 | `Setup/Cli/Commands/EncryptionCommands.cs` |
+| 900 | `Infrastructure/Sqlite/SqliteMemoryStore.cs` |
 
 Six modules previously shared ids 1-8 — `Program`, `HostExtensions`, `McpServerSetup`,
 `EmbeddingAvailability`, `BundledModel` and `EncryptionCommands` — each having started its own

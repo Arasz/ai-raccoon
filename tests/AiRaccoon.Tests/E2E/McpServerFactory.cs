@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -60,7 +61,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
             new SqliteConnectionFactory(options,
                 new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
     }
 

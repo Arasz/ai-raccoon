@@ -10,6 +10,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.workspace;
 
@@ -32,7 +33,8 @@ public sealed class WorkspaceIsolationTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private SqliteMemoryStore CreateStore() => new(_factory, new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService());
+    private SqliteMemoryStore CreateStore() => new(_factory, new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService(),
+            NullLogger<SqliteMemoryStore>.Instance);
 
     [Fact]
     public async Task XORCheck_InsertWithWorkspaceIdAndCommittedScope_Fails()

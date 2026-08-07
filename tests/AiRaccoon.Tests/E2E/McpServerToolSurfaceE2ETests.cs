@@ -12,6 +12,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -194,7 +195,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             new SqliteConnectionFactory(options,
                 new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
         await store.SetSettingAsync(WatchConfigKeys.ScopeProject(ProjectId), WatchConfigKeys.SerializeScope([tempDir]));
     }
