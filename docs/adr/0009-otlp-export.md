@@ -133,6 +133,58 @@ variable while covering exactly one of the roughly ten knobs `OTEL_*`
 already exposes (endpoint, protocol, headers, timeout, per-signal overrides,
 ...).
 
+> **2026-08-07 update.** Reason 2 above claimed the SDK "already parsed"
+> endpoint, protocol, headers, and timeout from `OTEL_*` — that was not true
+> in the running process. `McpServerSetup.CreateWebHost`'s
+> `builder.Configuration.Sources.Clear()` (Ruling 3) emptied the exact
+> `IConfiguration` the SDK's own `OTEL_*` parsing binds through, so only the
+> values this codebase set explicitly in C# (`OtlpExport.ConfigureExporter`'s
+> `Endpoint`/`Protocol`/`TimeoutMilliseconds`, and, after #109, the
+> hand-parsed `OTEL_METRIC_EXPORT_INTERVAL`/`_TIMEOUT`) ever reached the SDK.
+> `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_COMPRESSION`, and
+> `OTEL_RESOURCE_ATTRIBUTES` were silently dropped — a collector requiring an
+> `Authorization` header returned 401 with no visible failure (ADR 0009's own
+> "Failure posture" section, below), and `serve observability otlp` kept
+> reporting "enabled" throughout, because it reads config state, not exporter
+> health.
+>
+> `CreateWebHost` now re-admits only `OTEL_`-prefixed environment variables
+> into the cleared configuration before building the host — every process
+> environment variable starting with `OTEL_` is copied into an in-memory
+> configuration source, nothing else. This restores the SDK's entire
+> `OTEL_*` parsing surface in one place (headers, compression, resource
+> attributes, per-signal endpoint/protocol/timeout, mTLS certificates,
+> `OTEL_TRACES_SAMPLER`/`_ARG`, `OTEL_BSP_*`, metrics temporality) while
+> Ruling 3 stays exactly as strict as before: no non-`OTEL_` variable
+> re-enters config, so the settings table remains the only runtime channel
+> for everything else.
+>
+> `OtlpExport.ConfigureExporter` still sets `Endpoint`/`Protocol`/
+> `TimeoutMilliseconds` explicitly — those are product decisions
+> (`SignalEndpoint`'s http/protobuf path composition, and a 5s timeout
+> ceiling lower than the SDK's own default), not config-parsing gaps. The
+> hand-rolled `OTEL_METRIC_EXPORT_INTERVAL`/`_TIMEOUT` reads added by #109
+> (`OtlpExportState.MetricExportIntervalMilliseconds`/
+> `MetricExportTimeoutMilliseconds`, `OtlpExport.ConfigureMetricReader`) are
+> deleted — the SDK reads them correctly through the restored channel now,
+> and duplicating that parsing was exactly what reason 2 above always meant
+> to avoid.
+>
+> `service.name` also changes, deliberately: `OtlpExportState.ServiceName`
+> (added by #107 to read `OTEL_SERVICE_NAME` by hand, for the same
+> cleared-config reason) is removed. `service.name` is now a fixed product
+> identity — `OtlpExportState.DefaultServiceName`, `"ai-raccoon"` — set via
+> `.ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))`
+> unconditionally. This is registered after
+> `ResourceBuilder.CreateDefault()`'s own environment-variable detector, and
+> resource-builder actions merge later-registered-wins, so the explicit call
+> still wins even now that `OTEL_SERVICE_NAME` reaches that detector too —
+> confirmed by test
+> (`OtlpExportTests.HttpHost_ServiceName_StaysAiRaccoon_EvenWhenOtelServiceNameIsSet`),
+> not assumed. `OTEL_SERVICE_NAME` can therefore no longer rename the
+> reported service; #107's actual goal — no more `unknown_service:<process>`
+> — is unaffected, since that goal never depended on honoring the override.
+
 ### Which host paths get the exporter
 
 | Host path | Exporter wired? | Why |

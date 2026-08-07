@@ -162,18 +162,23 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 
 ## Environment variables
 
-Only one environment variable is read:
-
 | Variable                  | Purpose                                                                                                                             |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (page-level via SQLite3MC, SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet; unset = plaintext) |
 
+Beyond that, the only other environment variables read are the `OTEL_*` ones the
+OpenTelemetry SDK itself reads for OTLP export (serve/HTTP mode only, opt-in) —
+notably `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`,
+`OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_METRIC_EXPORT_TIMEOUT`, and `OTEL_SERVICE_NAME` —
+see [OTLP export](#serve-mode) below and [ADR 0009](../adr/0009-otlp-export.md) for the
+current set and behavior rather than treating this list as exhaustive.
+
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
-environment variables are not read for runtime configuration (single-channel ruling).
-Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are
-stored in the settings table (encrypted at rest when a passphrase is set), never in the
-environment and never in tracked files.
+environment variables are not read for that runtime configuration (single-channel
+ruling). Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection
+string) are stored in the settings table (encrypted at rest when a passphrase is set),
+never in the environment and never in tracked files.
 
 ## Command-line options
 
@@ -286,6 +291,7 @@ ai-raccoon watch remove {project-id|*}
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
+ai-raccoon encryption migrate
 
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
@@ -294,6 +300,10 @@ ai-raccoon encryption unset
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
+ai-raccoon extract capacity {capacity}
+ai-raccoon extract exclude add {prefix}
+ai-raccoon extract exclude remove {prefix}
+ai-raccoon extract exclude list
 ai-raccoon extract list
 
 # maintenance: bank housekeeping (every process checkpoints the WAL at startup
@@ -307,13 +317,24 @@ ai-raccoon maintenance list
 
 **Encryption key sources.** Default: `AIRACCOON_DB_PASSPHRASE` (env). Alternative:
 `encryption bitwarden` fetches an unencrypted ed25519 SSH private key from a Bitwarden
-Secrets Manager secret via the `bws` CLI and derives the raw SQLCipher key
-(`SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'`, no KDF). The command checks
+Secrets Manager secret via the `bws` CLI and derives the raw SQLCipher key with
+`HKDF-SHA-256` (`System.Security.Cryptography.HKDF`, seed as IKM, no salt,
+`"ai-raccoon-db-key/v1"` as `info`) → `x'<64hex>'` — see
+[ADR 0012](../adr/0012-ssh-key-derivation-hkdf-replacement.md). The command checks
 `bws` presence (install guidance when missing), collects project id + secret id
 (owner defaults: `613165e6-7947-49e0-889b-b49d007c5b85` / `f1d3c8e5-5391-4aef-8611-b49d007c8702`),
 accepts a per-run-only `-t <token>`, warns that rotating the secret in the Bitwarden UI
 without `PRAGMA rekey` bricks the bank, then rekeys + persists. Server startup refuses
 loudly when the configured source cannot produce the key.
+
+**`encryption migrate`** rekeys a bank still encrypted under the pre-ADR-0012
+`SHA-256(label ‖ seed)` derivation to the current HKDF key. It affects only the
+Bitwarden/SSH key source — the env-var passphrase path never went through
+`SshKeyDerivation` and is unaffected. It needs exclusive access to the bank (run it
+with the MCP server stopped); one of three outcomes follows: the bank is rekeyed, the
+bank is already on the current derivation (no-op), or the command refuses (wrong
+secret or a damaged bank) and leaves the file byte-identical, so it is safe to retry.
+See [how to rekey an encrypted bank](../how-to/rekey-an-encrypted-bank.md).
 
 The backend is selected by the `sync.provider` settings row (default `s3`): `sync add
 s3` writes `provider=s3`; `sync add azure` writes `provider=azure`. Each clears the

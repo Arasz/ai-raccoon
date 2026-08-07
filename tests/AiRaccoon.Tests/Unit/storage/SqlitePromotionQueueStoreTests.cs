@@ -154,16 +154,16 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             [Candidate("h1", "a", 1.0), Candidate("h2", "b", 2.0)], TestContext.Current.CancellationToken);
 
         var one = await _store.DiscardAsync("acme", "h1", TestContext.Current.CancellationToken);
-        one.ShouldBe(1);
+        one.ShouldHaveSingleItem().Hash.ShouldBe("h1", "DELETE...RETURNING hands back the claimed row");
         (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Select(r => r.Hash)
             .ShouldBe(["h2"]);
 
         var rest = await _store.DiscardAsync("acme", null, TestContext.Current.CancellationToken);
-        rest.ShouldBe(1);
+        rest.ShouldHaveSingleItem().Hash.ShouldBe("h2");
         (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).ShouldBeEmpty();
 
         var absent = await _store.DiscardAsync("acme", "h1", TestContext.Current.CancellationToken);
-        absent.ShouldBe(0);
+        absent.ShouldBeEmpty();
     }
 
     // ------------------------------------------------------------------ stats

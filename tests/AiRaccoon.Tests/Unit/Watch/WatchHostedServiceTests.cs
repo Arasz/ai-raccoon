@@ -219,6 +219,66 @@ public sealed class WatchHostedServiceTests
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     Defect 1: a remove and a re-add that both land between two reconcile polls must still
+    ///     start a fresh scan — the store shows the registration present at the next poll either
+    ///     way, so <c>_active</c> alone cannot tell "still running" from "removed, then re-added".
+    /// </summary>
+    [Fact]
+    public async Task Reconcile_RemoveThenReAddBetweenPolls_StartsANewScan()
+    {
+        using var dir = TempDir.New("hosted-remove-readd");
+        var (stack, source, catchUp, hosted) = NewStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        var firstScan = catchUp.LastScan.ShouldNotBeNull();
+        await firstScan;
+
+        // Both the remove and the re-add complete before the hosted service polls again, so
+        // ListWatchesAsync shows the registration present at the next reconcile either way.
+        await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(2, "the re-add must start a second scan, not join/skip the first");
+        catchUp.LastScan.ShouldNotBeSameAs(firstScan);
+        source.IsWatching(Project, dir.Path).ShouldBeTrue();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     Defect 2: host shutdown must cancel a scan that is still walking the tree, not let it
+    ///     run to completion after the poll loop has already exited.
+    /// </summary>
+    [Fact]
+    public async Task StopAsync_CancelsAnInFlightScan()
+    {
+        using var dir = TempDir.New("hosted-stop-cancels-scan");
+        await File.WriteAllTextAsync(dir.File("a.md"), "zephyrone", TestContext.Current.CancellationToken);
+        var (stack, _, catchUp, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        var insideScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var holdScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Store.OnListFiles = async () =>
+        {
+            insideScan.TrySetResult();
+            await holdScan.Task;
+        };
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        await insideScan.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        await hosted.StopAsync(CancellationToken.None);
+        holdScan.SetResult();
+        await catchUp.LastScan!;
+
+        stack.Store.ListFilesTokens[0].IsCancellationRequested.ShouldBeTrue("host shutdown must cancel an in-flight scan");
+    }
+
     [Fact]
     public async Task ExecuteAsync_ReconcilesOnEachPoll_AndPicksUpNewRegistrations()
     {

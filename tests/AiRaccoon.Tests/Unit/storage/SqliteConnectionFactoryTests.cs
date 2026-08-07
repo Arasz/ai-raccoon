@@ -1,6 +1,8 @@
 using System.Data;
+using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
@@ -77,6 +79,55 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         dbFiles.ShouldBe(["memory.db"]);
     }
 
+    /// <summary>
+    ///     A post-open SqliteException (schema DDL here — a stand-in for SQLITE_BUSY, which
+    ///     cannot be triggered deterministically in-process) must never be diagnosed as a key
+    ///     mismatch: only the actual open step proves whether the key is wrong.
+    /// </summary>
+    [Fact]
+    public async Task OpenBankWithResolvedKeyAsync_PostOpenSchemaFailure_PropagatesSqliteExceptionUnwrapped()
+    {
+        var factory = Factory();
+        SeedBankWithSchemaConflict(factory.BankPath);
+        var resolvedKey = new ResolvedKey(null, "test") { LegacyPassphrase = "unused-legacy-key" };
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await factory.OpenBankWithResolvedKeyAsync(resolvedKey, TestContext.Current.CancellationToken);
+        });
+
+        ex.Message.ShouldNotContain("restore it from a backup");
+    }
+
+    /// <summary>A failed post-open step (extensions, vector load, schema DDL) must dispose the
+    /// connection it was given rather than leak it, open, into the pool.</summary>
+    [Fact]
+    public async Task InitializeAsync_PostOpenStepThrows_DisposesTheConnection()
+    {
+        var bankPath = Path.Combine(_dataRoot, "post-open-failure.db");
+        SeedBankWithSchemaConflict(bankPath);
+
+        var connection = new SqliteConnection($"Data Source={bankPath}");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<SqliteException>(async () =>
+            await SqliteConnectionFactory.InitializeAsync(connection, TestContext.Current.CancellationToken));
+
+        connection.State.ShouldBe(ConnectionState.Closed);
+    }
+
+    /// <summary>Pre-creates an "entries" table missing the columns MemorySchema's DDL indexes
+    /// (scope, project_id) — CREATE TABLE IF NOT EXISTS then skips it, and the later CREATE
+    /// INDEX fails deterministically, giving a non-key SqliteException from schema DDL.</summary>
+    private static void SeedBankWithSchemaConflict(string bankPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        using var seed = new SqliteConnection($"Data Source={bankPath}");
+        seed.Open();
+        using var cmd = seed.CreateCommand();
+        cmd.CommandText = "CREATE TABLE entries (id INTEGER PRIMARY KEY, hash TEXT, value TEXT)";
+        cmd.ExecuteNonQuery();
+    }
 
     private static string CreateTempRoot() =>
         TestData.CreateTempRoot("airaccoon-store-tests");

@@ -71,8 +71,18 @@ public sealed partial class PromotionQueueService(
         {
             var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
                 .Take(limit).ToList();
+            var drained = 0;
             foreach (var row in rows)
             {
+                // Claim before sharing: a concurrent discard may have removed this row since the
+                // ListAsync snapshot above. An empty result means this call lost the race.
+                var claimed = await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
+                if (claimed.Count == 0)
+                {
+                    continue;
+                }
+
+                drained++;
                 if (IsDuplicate(row, sharedIndex))
                 {
                     skipped++;
@@ -84,11 +94,9 @@ public sealed partial class PromotionQueueService(
                     var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
                     metrics.RecordPromoted(projectId, wait);
                 }
-
-                await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
             }
 
-            metrics.RecordQueued(projectId, -rows.Count);
+            metrics.RecordQueued(projectId, -drained);
         }
 
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
@@ -103,13 +111,19 @@ public sealed partial class PromotionQueueService(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         var removed = await queue.DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
-        if (removed > 0)
+        if (removed.Count > 0)
         {
-            metrics.RecordQueued(projectId, -removed);
-            Log.Discarded(logger, projectId, removed);
+            metrics.RecordQueued(projectId, -removed.Count);
+            foreach (var row in removed)
+            {
+                var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
+                metrics.RecordDiscarded(projectId, wait);
+            }
+
+            Log.Discarded(logger, projectId, removed.Count);
         }
 
-        return removed;
+        return removed.Count;
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,

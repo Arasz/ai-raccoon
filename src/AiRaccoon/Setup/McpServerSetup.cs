@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Net;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
@@ -71,6 +72,18 @@ internal static partial class McpServerSetup
     {
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
+        // Re-admit OTEL_*-prefixed environment variables only (ADR 0009): the OpenTelemetry SDK
+        // binds its entire OTEL_* parsing surface (headers, compression, resource attributes,
+        // per-signal endpoint/protocol/timeout, mTLS certs, sampler, OTEL_BSP_*, ...) through this
+        // IConfiguration, not through hand-rolled reads — clearing every source above left the SDK
+        // with nothing to bind, so only the handful of variables this file explicitly re-parsed
+        // ever reached it. Restricting the readmission to the OTEL_ prefix keeps Ruling 3 intact:
+        // no other variable re-enters config.
+        builder.Configuration.AddInMemoryCollection(
+            Environment.GetEnvironmentVariables()
+                .Cast<DictionaryEntry>()
+                .Where(e => e.Key.ToString()!.StartsWith("OTEL_", StringComparison.Ordinal))
+                .ToDictionary(e => e.Key.ToString()!, e => (string?)e.Value?.ToString()));
         builder.Services.RegisterMemoryServices(config.Options, transports);
         // Web host only (ADR 0009): stdio hosts recycle roughly every 5 minutes, too
         // short-lived to pay the exporter's batch delay / provider shutdown grace.

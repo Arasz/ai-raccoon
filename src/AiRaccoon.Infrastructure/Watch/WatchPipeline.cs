@@ -29,6 +29,12 @@ public sealed partial class WatchPipeline(
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>Raised synchronously from <see cref="UnregisterWatch"/> — the one choke point (D-1)
+    /// every removal inherits, so callers with their own "is this watch live" bookkeeping (the
+    /// re-watch loop's started-watchers set) can invalidate it at the same instant instead of
+    /// waiting for a poll to notice the registration went away and came back.</summary>
+    public event Action<string, string>? Unregistered;
+
     /// <summary>Thread-safe entry point for the event source (S5): writes into the single channel.</summary>
     public void Enqueue(WatchEvent evt)
     {
@@ -82,6 +88,7 @@ public sealed partial class WatchPipeline(
 
         retryPolicy.Forget(projectId, normalized);
         scanGuard.Cancel(projectId, normalized);
+        Unregistered?.Invoke(projectId, normalized);
     }
 
     /// <summary>Marks a watch scanning (S5's initial scan) — clears the last error.</summary>

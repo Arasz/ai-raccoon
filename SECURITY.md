@@ -24,9 +24,8 @@ and a fix released as a normal version bump.
 
 ## Supported versions
 
-Only the **latest tagged release** is supported. There are no tagged releases yet — until
-the first tag exists, the supported surface is `main` HEAD. Fixes ship forward; there are
-no backports to older versions.
+Only the **latest tagged release** (the version currently live on nuget.org) is
+supported. Fixes ship forward; there are no backports to older tagged versions.
 
 ## What this project actually is, security-wise
 
@@ -43,7 +42,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
 | Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled)                                                                                                     | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
-| SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet) when `AIRACCOON_DB_PASSPHRASE` is set; FTS5 and vec0 work unchanged           | Passphrase from environment variable          |
+| SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                              | Passphrase from `AIRACCOON_DB_PASSPHRASE`, or an ed25519 SSH key from Bitwarden Secrets Manager via `ai-raccoon encryption bitwarden` (HKDF-derived; ADR 0012) |
 
 **The dangerous direction is the client that launches the process.** A stdio MCP server
 inherits the privileges of whatever starts it and trusts the protocol messages it reads —
@@ -114,10 +113,11 @@ it is still one more thing that port answers.
 
 State plainly, so nobody assumes coverage that does not exist:
 
-- **No automated secret scanning.** This repository has no CI workflow configured yet
-  (no CodeQL, Dependabot, or gitleaks). Secrets are kept out by review and by the
-  "no hardcoded secrets" invariant in [`CLAUDE.md`](CLAUDE.md) — verify with a manual
-  scan (`grep -riE 'api[_-]?key|secret|password' src tests`) before any push.
+- **No automated security scanning.** CI (`.github/workflows/`) builds and runs the
+  fast test suite on every PR, and the full suite nightly — but none of that is a
+  security scan: no CodeQL, no Dependabot, no gitleaks. Secrets are kept out by review
+  and by the "no hardcoded secrets" invariant in [`CLAUDE.md`](CLAUDE.md) — verify with
+  a manual scan (`grep -riE 'api[_-]?key|secret|password' src tests`) before any push.
 - **No release automation.** Versions are set by hand in the csproj; releases are
   traceable per the "releases are traceable" invariant, nothing more.
 
