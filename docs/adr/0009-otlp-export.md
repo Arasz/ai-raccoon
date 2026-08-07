@@ -47,9 +47,11 @@ oversight, so both meter names are registered explicitly with
 `.AddMeter(...)`. The built-in `System.Runtime` Meter is exported alongside
 them — see ".NET runtime metrics" below.
 
-**Known cost, accepted:** `PromotionQueueMetrics` tags all five of its
-instruments with `project_id` (`RecordQueued`, `RecordEviction`,
-`RecordPromoted`, `RecordDiscarded`). `project_id` is unbounded, so every
+**Known cost, accepted:** `PromotionQueueMetrics` tags four of its seven
+instruments with `project_id` — the queued, eviction, promoted and discarded
+counters (`RecordQueued`, `RecordEviction`, `RecordPromoted`,
+`RecordDiscarded`); the wait-seconds histogram and the capacity-utilization
+gauge are untagged. `project_id` is unbounded, so every
 distinct project becomes its own metric time series. That was free while
 collection was local-only over EventPipe, which is the context in which the
 cardinality was originally accepted; exporting changes the cost profile,
