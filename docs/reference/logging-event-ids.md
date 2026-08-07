@@ -1,28 +1,44 @@
 # logging-event-ids
 
-`[LoggerMessage]` `EventId` collision audit for `task/observability-truthfulness` (WI-2).
-`LoggerMessageEventIdTests` pins the two collisions below once they're fixed and guards against
-any *new* one; the deferred 1/2/3 reuse is an intentional, tracked exception.
+`[LoggerMessage]` `EventId` allocation and collision record. `LoggerMessageEventIdTests` guards
+against any new collision; the deferred 1/2/3 reuse is an intentional, tracked exception.
 
-## Status: planned, not yet implemented
+## Status: the collisions are fixed; only 1/2/3 remain
 
-Work was halted before the production fix landed (build machine saturated across four
-concurrent worktree sessions — load average 200+ — so nothing compiled there would have been
-trustworthy evidence). `WatchPipeline.cs` and `ServeRunner.cs` are unmodified as of this commit.
-The table below is the plan for whoever picks this back up.
+Landed in #89. Measured across `src/` on `main` at 2026-08-07, the **only** duplicate `EventId`s
+left in the assembly are `1`, `2` and `3` — the deliberately deferred set below.
+`LoggerMessageEventIdTests` allowlists exactly those three and fails on any new collision.
 
-| EventId(s) | Collides with | Planned new id(s) | File |
+| Was | Collided with | Now | File |
 |---|---|---|---|
-| 200 | `S3CloudStore.cs` (keeps 200/201/205, untouched) | 302 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` |
-| 601, 602, 603 | `PromotionQueueService.cs` (keeps 600–604, untouched) | 700, 701, 702 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` |
+| 200 | `S3CloudStore` (keeps 200/201/205) | 302 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` |
+| 600-604 | `ServeRunner`'s 601/602/603 | 700-704 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` |
 
-`IdleWatchdog.cs` keeps its original 610–612 — not touched by this fix.
+`PromotionQueueService` moved wholesale rather than only the three ids that clashed: two modules
+sharing one block was the actual defect, and moving the whole block leaves `ServeRunner` sole
+owner of the 600s.
 
-**Why 700–702 and not 613–615 (the originally planned numbers):** a concurrent session has taken
-610–613 for a new `ObservabilityRunner` Log class, extending upward from 614 as it needs more —
-i.e. the entire 610s neighborhood is contested right now. Picking well clear of it (700s) avoids
-adding a second collision on top of the one being fixed. Re-check this section before
-implementing, in case the 700s band is also claimed by then.
+## The 600 block, measured
+
+| Ids | Owner |
+|---|---|
+| 601, 602, 603, 605 | `Setup/Serve/ServeRunner.cs` |
+| 610, 611, 612 | `Setup/Serve/IdleWatchdog.cs` |
+| 620-623 | `Setup/Serve/ObservabilityRunner.cs` (reserved by concurrent work, not yet on `main`) |
+
+**`610-613` was never free**, despite being reserved as "above `ServeRunner`'s 601-605" — a
+concurrent session claimed it for a new runner, then found `IdleWatchdog` already owning
+610/611/612 and moved to 620-623.
+
+Worth recording how that surfaced, because it generalises: no test caught it and none could —
+colliding ids compile, log, and pass every assertion. It appeared when someone read real output
+from a live server and saw `IdleWatchdog[610]` scroll past above their own 610. **"Next free"
+has to be measured across the whole assembly, not inferred from the nearest file you happen to be
+reading.** The one-liner that measures it:
+
+```
+grep -rho "EventId = [0-9]\+" src | awk '{print $3}' | sort -n | uniq -d
+```
 
 ## Known and deferred (out of scope for this task)
 
