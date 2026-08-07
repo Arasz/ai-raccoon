@@ -30,9 +30,10 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     // §5.1 pinned vector — seed 00 01 … 1e 1f derives to exactly this x'…' (hard-coded, never recomputed).
     public const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
-    // Owner-default project/secret ids (plan D6) and the synthetic fixtures the fake serves.
-    public const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    public const string SecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+    // Matches EncryptionCommands' fallback placeholder ids (no env override configured), so
+    // scenarios that accept the interactive default via empty stdin still resolve through the fake.
+    public const string ProjectId = "00000000-0000-0000-0000-000000000000";
+    public const string SecretId = "11111111-1111-1111-1111-111111111111";
     public const string WrongKeySecretId = "wrong-key-secret-id"; // serves key2.pem → a different derived key
     public const string BcryptSecretId = "bcrypt-secret-id"; // serves a passphrase-protected key
     public const string RsaSecretId = "rsa-secret-id"; // serves an ssh-rsa key
@@ -66,7 +67,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
                                          if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
                                          if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
                                          case "$ID" in
-                                           f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
+                                           11111111-1111-1111-1111-111111111111) cat "$DIR/key.pem"; exit 0 ;;
+                                           custom-secret-id) cat "$DIR/key.pem"; exit 0 ;;
                                            wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
                                            bcrypt-secret-id) cat "$DIR/key-bcrypt.pem"; exit 0 ;;
                                            rsa-secret-id) cat "$DIR/key-rsa.pem"; exit 0 ;;

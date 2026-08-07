@@ -104,7 +104,12 @@ Pinned test vectors (computed 2026-08-05, macOS; implementer hard-codes these in
 | Seed | Derived `Password` string |
 |---|---|
 | `00 01 02 … 1e 1f` (synthetic fixture) | `x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'` |
-| `6868227276d58fd3a3c67be90bad5cb2cc53ee5f46ec3e03ba483b1eaff2d7e0` (real `ssh-keygen -t ed25519` key) | `x'5944055840d8941e4cb6d5bb0dedfb3e1808bb7b33727107de0e9399054ee83d'` |
+| ASCII `OBVIOUSLY-FAKE-TEST-SEED-32BYTES` (second synthetic fixture) | `x'893d3bed3e9f965ee2dbf4aa296d30bd84de3977c4d5beecfd231dfd2cd32d5f'` |
+
+The second row originally pinned a real `ssh-keygen -t ed25519` seed committed to this doc and to
+`SshKeyDerivationTests`/`OpenSshPrivateKeyParserTests`. Replaced with a synthetic vector during the
+2026-08 encryption hardening review — the "no hardcoded secrets" invariant applies to sample
+vectors too, and determinism was always the point, not provenance.
 
 Parser validation rules (RFC 8709 / OpenSSH `PROTOCOL.key`, all **format decoding — no hand-rolled crypto**; the seed-vs-pub check is a byte comparison, not a point multiply):
 - PEM frame `-----BEGIN OPENSSH PRIVATE KEY-----` … base64 … `-----END…-----`; decode; magic `openssh-key-v1\0`.

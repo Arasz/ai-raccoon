@@ -30,9 +30,10 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     // user's bank is encrypted with before the migration runs. Independently derived, never recomputed.
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 
-    // Owner-default project/secret ids (plan D6). The fake bws serves the synthetic key for SecretId.
-    private const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    private const string SecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+    // Obviously fake sidecar fixture ids — not real Bitwarden vault entries. The fake bws serves
+    // the synthetic key for SecretId.
+    private const string ProjectId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    private const string SecretId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     private const string WrongKeySecretId = "wrong-key-secret-id"; // fake serves key2.pem → a different derived key
     private const string GarbageSecretId = "garbage-secret-id"; // fake prints non-key stdout
     private const string SleepSecretId = "sleep-secret-id"; // fake sleeps (timeout leg)
@@ -60,7 +61,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                                          if [ -z "$TOKEN" ]; then TOKEN="$BWS_ACCESS_TOKEN"; fi
                                          if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
                                          case "$ID" in
-                                           f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
+                                           bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb) cat "$DIR/key.pem"; exit 0 ;;
                                            wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
                                            garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
                                            sleep-secret-id) sleep 30; exit 0 ;;
