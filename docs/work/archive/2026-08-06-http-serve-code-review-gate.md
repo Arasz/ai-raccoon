@@ -2,7 +2,7 @@
 
 Date: 2026-08-06 · Reviewer: code-reviewer (final gate) · Branch: `task/switch-from-stdio-to-http`
 Reviewed range: `7ca448b..HEAD` (WP1 5fa54f5, WP2 5343e59, WP3 c65ee7e, WP4 2ebdea9, + design/plan cc99b0b)
-Contract: `docs/work/2026-08-06-http-serve-design.md` (§4 A1–A16, §6 rulings) · `docs/plans/2026-08-06-http-serve-mode-plan.md` (R1–R17)
+Contract: `docs/work/archive/2026-08-06-http-serve-design.md` (§4 A1–A16, §6 rulings) · `docs/plans/2026-08-06-http-serve-mode-plan.md` (R1–R17)
 Evidence trusted (collected by the lane, not re-run): build 0 warnings; ServeRunnerTests|McpEntryRendererTests|CliArgsTests|CliCommandTreeTests|CliCommandRunnerTests 94/94; IdleWatchdogTests|McpServerSetupHostTests|ExtractionHostedServiceTests 27/27; Category=Unit 899/899; real-process smoke (golden JSON byte-exact, attach exit 0 + ownership, GET /mcp 405); full suite run 1: 1283 passed / 1 failed (FileWatcherSteps flake) / 4 skipped, re-run in progress.
 
 ## Verdict: APPROVE-WITH-CHANGES

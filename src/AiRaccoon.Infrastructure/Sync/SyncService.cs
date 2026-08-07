@@ -67,6 +67,11 @@ public partial class SyncService(
                 await using var del = snap.CreateCommand();
                 del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
                 await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                // Settings never leave the bank: the table holds the cloud credentials this very
+                // push authenticates with, plus the embedding API key.
+                await using var delSettings = snap.CreateCommand();
+                delSettings.CommandText = "DELETE FROM settings";
+                await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 await using var vac = snap.CreateCommand();
                 vac.CommandText = "VACUUM";
                 await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -273,7 +278,8 @@ public partial class SyncService(
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                // Merge settings: updated_at LWW.
+                // Push strips settings, so a current remote carries none. A pre-strip remote still
+                // clobbers local unconditionally — there is no updated_at to arbitrate on.
                 await using (var mergeSettings = conn.CreateCommand())
                 {
                     mergeSettings.CommandText = """

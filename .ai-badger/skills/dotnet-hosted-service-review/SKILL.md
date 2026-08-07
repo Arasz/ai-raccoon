@@ -1,7 +1,6 @@
 ---
 name: dotnet-hosted-service-review
 description: "Use when reviewing a PR that adds or modifies a .NET BackgroundService/IHostedService — background extraction loops, watchers, sync, sweep, or any poll loop. Checklist: ExecuteAsync try/catch coverage (StopHost kills the process), cancellation filtering, PeriodicTimer semantics, store-level idempotency vs TOCTOU, settings-channel parsing, LoggerMessage invariants. Produces numbered findings + severity + file:line."
-description: Use when reviewing .NET hosted/background services.
 version: 1.0.0
 author: ai-badger
 license: MIT

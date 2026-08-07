@@ -1,6 +1,6 @@
 # HTTP serve mode — independent review (dotnet-engineer lane)
 
-Date: 2026-08-06 · Reviewer: dotnet-engineer (independent, MOE) · Input: `docs/work/2026-08-06-http-serve-design.md`
+Date: 2026-08-06 · Reviewer: dotnet-engineer (independent, MOE) · Input: `docs/work/archive/2026-08-06-http-serve-design.md`
 Scope: implementation feasibility against the actual codebase (worktree `switch-from-stdio-to-http`) + cross-repo ai-badger integration.
 Method: every claim below was verified against source in this worktree, against the referenced NuGet packages (decompiled `System.CommandLine` 2.0.10, `Microsoft.Extensions.Hosting.Abstractions` 10.0.10, `Microsoft.AspNetCore` 10.0.10, `ModelContextProtocol.AspNetCore` 2.1.0), and against the ai-badger repo (read-only). No files were modified.
 

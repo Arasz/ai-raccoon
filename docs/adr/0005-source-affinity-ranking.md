@@ -16,7 +16,7 @@ expected ADR-0067 file at rank 2, exact chunk outside the top 10) without regres
 single-chunk invariants (C1/C2/C5 at hybrid rank 1).
 
 The full sweep matrix and per-point gate numbers are in
-docs/work/2026-08-04-wave3-source-affinity-sweep.md.
+docs/work/archive/2026-08-04-wave3-source-affinity-sweep.md.
 
 ## Decision
 

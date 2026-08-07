@@ -16,16 +16,16 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (19)
+## Tools (22)
 
-Every tool requires `projectId` (camelCase — all parameters are camelCase). Writes
-land in `project:<id>` by default; naming a `workspaceId` routes them into that
-workspace's isolated context.
+Every tool requires `projectId` (camelCase — all parameters are camelCase), except
+`memory_promotion_list` where it is optional. Writes land in `project:<id>` by
+default; naming a `workspaceId` routes them into that workspace's isolated context.
 
-17 memory tools plus 3 file-watcher tools. `memory_configure` and
-`memory_set_structure_alpha` were removed by the CLI-config refactor: configuration is
-no longer an MCP tool — the CLI verbs are the single config channel (see
-[Command-line options](#command-line-options)).
+9 memory tools, 4 workspace tools, 3 watch tools, 2 promotion tools, 2 share tools,
+1 sweep tool, 1 sync tool. `memory_configure` and `memory_set_structure_alpha` were
+removed by the CLI-config refactor: configuration is no longer an MCP tool — the CLI
+verbs are the single config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
@@ -49,6 +49,8 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
 | `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
 | `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
 | `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
+| `memory_promotion_list`        | `projectId?`, `limit=50`                                                                                                                                    | `{rows: [PromotionQueueRow]}`                                                                       |
+| `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 
 ### Notes on the less obvious tools
 
@@ -60,6 +62,14 @@ no longer an MCP tool — the CLI verbs are the single config channel (see
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
   `shared`.
+- **`memory_promotion_list` / `memory_promotion_discard`:** the propose tier
+  (ADR-0007) — `memory_share_extract` in `mode=propose` fills a persisted
+  per-project queue (`promotion_queue`) ranked by score; `memory_promotion_list`
+  reads it (omit `projectId` to see every project's queue); `memory_promotion_discard`
+  drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
+  `memory_share_extract` in `mode=promote` drains the top queued candidates into
+  `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
+  in `meta`.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
