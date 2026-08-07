@@ -42,7 +42,7 @@ internal static class CliCommandRunner
         return await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin,
             settings: new SettingsCommands(), sync: new SyncCommands(),
             watch: new WatchCommands(new WatchStore(bank)), encryptionCommands: encryptionCommands,
-            extract: new ExtractCommands(), maintenance: new MaintenanceCommands(),
+            extract: new ExtractCommands(), maintenance: new MaintenanceCommands(bank),
             cancellationToken);
     }
 }
