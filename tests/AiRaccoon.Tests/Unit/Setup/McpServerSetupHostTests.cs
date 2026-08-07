@@ -161,11 +161,28 @@ public class McpServerSetupHostTests : IDisposable
     {
         var config = Config(McpTransport.Http, FreePort());
         var host = McpServerSetup.CreateServerHost(config);
+        var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
         var runTask = host.RunAsync(config, TestContext.Current.CancellationToken);
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        // Wait on the lifetime signal, not on a sleep: a slow machine used to decide this.
+        await WaitForAsync(lifetime.ApplicationStarted, TestContext.Current.CancellationToken);
+        lifetime.ApplicationStopped.IsCancellationRequested.ShouldBeFalse();
+
         await host.StopAsync(TestContext.Current.CancellationToken);
         await runTask;
+
+        lifetime.ApplicationStopped.IsCancellationRequested.ShouldBeTrue();
+    }
+
+    /// <summary>Completes when the token fires, or throws once the test's own timeout elapses.</summary>
+    private static async Task WaitForAsync(CancellationToken signal, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource();
+        await using var registration = signal.Register(() => completion.TrySetResult());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
+        await completion.Task.WaitAsync(linked.Token);
     }
 
     /// <summary>

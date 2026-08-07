@@ -4,49 +4,11 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Pins the S2 port surface (S4 implements, S6 consumes) and its error types.</summary>
+/// <summary>Pins the watch error types the port raises (S2 surface).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchServicePortTests
 {
-    private sealed class StubWatchService : IWatchService
-    {
-        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<WatchStatus>>([]);
-
-        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(false);
-
-        public Task<bool> IsPathAllowedAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
-    }
-
-    [Fact]
-    public async Task Port_StatusAsync_ReturnsEmptyListWhenNoWatches()
-    {
-        var statuses = await new StubWatchService().StatusAsync("acme", TestContext.Current.CancellationToken);
-        statuses.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task Port_AddAndRemove_AreAwaitableWithoutThrowing()
-    {
-        var service = new StubWatchService();
-        await service.AddAsync("acme", "/repo", TestContext.Current.CancellationToken);
-        await service.RemoveAsync("acme", "/repo", TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task Port_IsEnabledAndIsPathAllowed_ReturnBooleans()
-    {
-        var service = new StubWatchService();
-        (await service.IsEnabledAsync("acme", TestContext.Current.CancellationToken)).ShouldBeFalse();
-        (await service.IsPathAllowedAsync("acme", "/repo", TestContext.Current.CancellationToken)).ShouldBeFalse();
-    }
-
     [Fact]
     public void WatchDisabledException_CarriesProjectIdInMessage() =>
         new WatchDisabledException("acme").Message.ShouldContain("acme");
