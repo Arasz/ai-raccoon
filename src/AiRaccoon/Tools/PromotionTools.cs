@@ -15,23 +15,11 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over the propose tier (IPromotionQueue) — no business logic here.</summary>
 public sealed class PromotionTools(
     IPromotionQueue queue,
-    IMemoryAccessGuard access,
+    ToolGate gate,
     ToolCallMetrics observability)
 {
     private const string TnMemoryPromotionList = "memory_promotion_list";
     private const string TnMemoryPromotionDiscard = "memory_promotion_discard";
-
-    private static void RequireProjectId(string? projectId)
-    {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new McpException("invalid-params: project_id is required");
-        }
-    }
-
-    private async Task RequireAsync(string projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken) =>
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
 
     [McpServerTool(Name = TnMemoryPromotionList)]
     [Description(
@@ -53,13 +41,12 @@ public sealed class PromotionTools(
 
             if (projectId is not null)
             {
-                RequireProjectId(projectId);
-                await RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
+                await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
             }
 
             var rows = await queue.ListAsync(projectId, limit, cancellationToken);
             var result = new PromotionListResult(rows);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -82,12 +69,11 @@ public sealed class PromotionTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryPromotionDiscard, projectId);
         try
         {
-            RequireProjectId(projectId);
-            await RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
+            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
 
             var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
             var result = new PromotionDiscardResult(discarded);
-            var envelope = await WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -97,8 +83,6 @@ public sealed class PromotionTools(
             throw;
         }
     }
-
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) => new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRow> Rows);

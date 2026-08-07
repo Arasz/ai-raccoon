@@ -40,14 +40,15 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var metrics = new ToolCallMetrics();
-        _tools = new MemoryTools(_store, access, metrics, _queue);
-        _share = new ShareTools(_store, access, metrics,
+        var gate = new ToolGate(access, _queue);
+        _tools = new MemoryTools(_store, gate, metrics);
+        _share = new ShareTools(_store, gate, metrics,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue);
-        _workspace = new WorkspaceTools(workspaces, access, metrics, _queue);
-        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), access, metrics, _queue);
+        _workspace = new WorkspaceTools(workspaces, gate, metrics);
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate, metrics);
         _syncTools = new SyncTools(_sync,
-            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance), access, metrics, _queue);
+            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance), gate, metrics);
     }
 
     private void SeedSyncSettings(string? objectKey = null)
