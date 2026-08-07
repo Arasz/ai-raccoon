@@ -35,7 +35,7 @@ Add a second encryption key source to the memory bank: Bitwarden Secrets Manager
 - **D3** Secret value = unencrypted ed25519 SSH private key; derived `SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'` raw SQLCipher key (no KDF, measured). RSA and passphrase-protected keys rejected.
 - **D4** Offline behavior: refuse to start, loudly; no cached key copy.
 - **D5** Rotation trap: web-UI rotation without `PRAGMA rekey` bricks the bank — config command warns.
-- **D6** Config flow: (a) bws presence check with actionable install error; (b) collect project id + secret id (owner defaults `613165e6-7947-49e0-889b-b49d007c5b85` / `f1d3c8e5-5391-4aef-8611-b49d007c8702`); (c) optional `-t <token>` for runs without `BWS_ACCESS_TOKEN` — that run only, never persisted.
+- **D6** Config flow: (a) bws presence check with actionable install error; (b) collect project id + secret id (defaults configured via `AIRACCOON_BITWARDEN_PROJECT_ID` / `AIRACCOON_BITWARDEN_SECRET_ID`; absent those, an obviously-fake placeholder id); (c) optional `-t <token>` for runs without `BWS_ACCESS_TOKEN` — that run only, never persisted.
 - **D7** Raw-key-file option REMOVED. Provider family = env + bitwarden; keychain/cloud stay documented future sources (D10).
 - **D8** `encryption show` prints the current source (+ secret id when bitwarden); `encryption unset` returns to the env default.
 - **D9** `IEncryptionKeyProvider` becomes a source-selectable family; the source SELECTION must be resolvable pre-open (settings table is inside the encrypted bank). **This plan pins the D9 implementation shape — see §4.** Everything else in D9 (settings keys `encryption.source`, `encryption.bitwarden.projectId`, `encryption.bitwarden.secretId`) is fixed.

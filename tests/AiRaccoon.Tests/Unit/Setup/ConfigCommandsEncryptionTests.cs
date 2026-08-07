@@ -36,11 +36,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private const string FixtureProjectId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
     private const string FixtureSecretId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 
-    // The ids EncryptionCommands used to bake in as the interactive default — kept here only to
-    // assert they are no longer offered (item 6 of the encryption hardening review).
-    private const string RealOwnerProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    private const string RealOwnerSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
-
     // The obviously-fake placeholders the fix offers instead, absent an env override.
     private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
     private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
@@ -177,8 +172,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         exit.ShouldBe(0);
         stdout.ShouldContain("encryption source set to bitwarden");
         err.ShouldContain("without PRAGMA rekey bricks the bank");
-        err.ShouldNotContain(RealOwnerProjectId);
-        err.ShouldNotContain(RealOwnerSecretId);
         err.ShouldContain($"project id [{FallbackProjectId}]");
         err.ShouldContain($"secret id [{FallbackSecretId}]");
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
