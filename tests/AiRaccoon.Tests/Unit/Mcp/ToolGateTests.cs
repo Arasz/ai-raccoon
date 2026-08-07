@@ -1,4 +1,5 @@
 using AiRaccoon.Access;
+using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
@@ -49,12 +50,16 @@ public sealed class ToolGateTests
     [Fact]
     public async Task WrapAsync_CarriesTheQueueMeta()
     {
-        var (_, _, gate) = NewStack();
+        var (_, queue, gate) = NewStack();
+        queue.Meta = new ResponseMeta(7, 42.5, new Dictionary<string, int> { ["acme"] = 3 });
 
         var envelope = await gate.WrapAsync("payload", TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldBe("payload");
-        envelope.Meta.ShouldNotBeNull();
+        envelope.Meta.WaitingPromotionsCount.ShouldBe(7);
+        envelope.Meta.PromotionsWaitTimeSeconds.ShouldBe(42.5);
+        envelope.Meta.WaitingByProject.ShouldNotBeNull();
+        envelope.Meta.WaitingByProject!["acme"].ShouldBe(3);
     }
 
     private sealed class RecordingGuard : IMemoryAccessGuard
