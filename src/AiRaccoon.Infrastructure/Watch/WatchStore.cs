@@ -44,10 +44,32 @@ public sealed class WatchStore(SqliteConnectionFactory factory) : IWatchStore
     public async Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
         await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
-                    cancellationToken: cancellationToken))
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        try
+        {
+            var pathPrefix = LikePattern.Escape(path) + "/%";
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                        new { projectId, path, pathPrefix }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(
