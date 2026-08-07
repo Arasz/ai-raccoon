@@ -1,25 +1,24 @@
-using System.Globalization;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Access;
 
 /// <summary>
 ///     Forgetting knobs (FR-NM-2; see docs/work/features-native-memory/native-memory.feature): the sweep rating threshold (sweep.ttl_days was removed
-///     by the single-channel ruling — only per-entry TTLs remain, as data not config).
+///     by the single-channel ruling — only per-entry TTLs remain, as data not config). This MCP path enforces
+///     Destructive; the CLI (SettingsCommands) deliberately doesn't, since it's the console that sets access modes.
 /// </summary>
 public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access)
 {
-    public const string SweepThresholdSettingKey = "sweep.threshold";
+    public const string SweepThresholdSettingKey = SweepThreshold.SettingKey;
 
-    public const double DefaultSweepThreshold = 0.3;
+    public const double DefaultSweepThreshold = SweepThreshold.Default;
 
     public async Task<double> GetSweepThresholdAsync(string projectId, CancellationToken cancellationToken = default)
     {
         var raw = await store.GetSettingAsync(SweepThresholdSettingKey, cancellationToken).ConfigureAwait(false);
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold)
-            ? threshold
-            : DefaultSweepThreshold;
+        return SweepThreshold.Parse(raw);
     }
 
 
@@ -30,7 +29,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
                 cancellationToken)
             .ConfigureAwait(false);
         await store.SetSettingAsync(SweepThresholdSettingKey,
-                threshold.ToString(CultureInfo.InvariantCulture), cancellationToken)
+                SweepThreshold.Format(threshold), cancellationToken)
             .ConfigureAwait(false);
     }
 

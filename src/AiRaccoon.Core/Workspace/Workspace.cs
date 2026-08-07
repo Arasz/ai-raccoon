@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using AiRaccoon.Core.Memory;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Workspace;

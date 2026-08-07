@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Setup.Serve;

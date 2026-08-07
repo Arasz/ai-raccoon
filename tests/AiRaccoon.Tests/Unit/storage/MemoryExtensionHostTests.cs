@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;

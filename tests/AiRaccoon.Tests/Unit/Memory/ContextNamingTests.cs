@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Common;
+using AiRaccoon.Core.Memory;
 using Shouldly;
 using Xunit;
 

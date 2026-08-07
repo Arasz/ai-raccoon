@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.Globalization;
-using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sync;
@@ -195,26 +195,23 @@ public sealed class SettingsCommands
     {
         var raw = parseResult.GetValue<string>("threshold")!;
         if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold) ||
-            threshold is < 0.0 or > 1.0)
+            !SweepThreshold.IsValid(threshold))
         {
             await stderr.WriteLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
             return 1;
         }
 
-        await store.SetSettingAsync(ForgettingPolicyService.SweepThresholdSettingKey,
-            threshold.ToString(CultureInfo.InvariantCulture), cancellationToken);
-        await stdout.WriteLineAsync($"sweep threshold set to {threshold.ToString(CultureInfo.InvariantCulture)}");
+        await store.SetSettingAsync(SweepThreshold.SettingKey, SweepThreshold.Format(threshold), cancellationToken);
+        await stdout.WriteLineAsync($"sweep threshold set to {SweepThreshold.Format(threshold)}");
         return 0;
     }
 
     public async Task<int> SweepShowAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        var raw = await store.GetSettingAsync(ForgettingPolicyService.SweepThresholdSettingKey, cancellationToken);
-        var threshold = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : ForgettingPolicyService.DefaultSweepThreshold;
-        await stdout.WriteLineAsync(threshold.ToString(CultureInfo.InvariantCulture));
+        var raw = await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken);
+        var threshold = SweepThreshold.Parse(raw);
+        await stdout.WriteLineAsync(SweepThreshold.Format(threshold));
         return 0;
     }
 

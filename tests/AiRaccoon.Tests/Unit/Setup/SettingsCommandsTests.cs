@@ -1,4 +1,5 @@
 using System.Globalization;
+using AiRaccoon.Access;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
@@ -31,6 +32,7 @@ public class SettingsCommandsTests
             ["model", "show"] => await commands.ModelShowAsync(store, stdout, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "show"] => await commands.RetrievalAlphaShowAsync(store, stdout, TestContext.Current.CancellationToken),
+            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["sweep", "show"] => await commands.SweepShowAsync(store, stdout, TestContext.Current.CancellationToken),
             _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };
@@ -102,5 +104,22 @@ public class SettingsCommandsTests
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("0.3");
+    }
+
+    [Fact]
+    public async Task SweepThresholdSet_RoundTripsThroughCliShowAndForgettingPolicyService()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, _, _) = await Run(["sweep", "threshold", "set", "0.55"], store);
+        var (showExit, showOut, _) = await Run(["sweep", "show"], store);
+
+        setExit.ShouldBe(0);
+        showExit.ShouldBe(0);
+        showOut.Trim().ShouldBe("0.55");
+
+        var policy = new ForgettingPolicyService(store, new MemoryAccessGuard(store));
+        var threshold = await policy.GetSweepThresholdAsync("proj-1", TestContext.Current.CancellationToken);
+        threshold.ShouldBe(0.55);
     }
 }

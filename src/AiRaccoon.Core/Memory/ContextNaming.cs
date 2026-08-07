@@ -1,6 +1,6 @@
 using CommunityToolkit.Diagnostics;
 
-namespace AiRaccoon.Core.Common;
+namespace AiRaccoon.Core.Memory;
 
 /// <summary>Builds the context strings that partition memory inside the bank.</summary>
 public static class ContextNaming

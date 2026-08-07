@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
