@@ -50,7 +50,7 @@ if "--help" in sys.argv or "-h" in sys.argv:
     print(__doc__)
     sys.exit(0)
 
-VERSION = os.environ.get("AI_RACCOON_VERSION", "1.1.0")
+VERSION = os.environ.get("AI_RACCOON_VERSION", "1.1.1")
 SOURCE = os.environ.get("AI_RACCOON_SOURCE", "nuget")  # "nuget" | "local" (.nupkg-local)
 LOCAL_SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".nupkg-local"))
 # Model/vocab sha256 pins are imported from scripts/src/bundle.py — the single source
