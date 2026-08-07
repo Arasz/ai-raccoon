@@ -20,6 +20,7 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<WatchHostedService> _logger;
     private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
+    private readonly HashSet<(string ProjectId, string Path)> _registered = new(WatchKeyComparer.Instance);
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
 
@@ -74,6 +75,7 @@ public sealed partial class WatchHostedService : BackgroundService
     {
         _eventSource.StopAll();
         _active.Clear();
+        _registered.Clear();
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -90,6 +92,7 @@ public sealed partial class WatchHostedService : BackgroundService
             var key = (registration.ProjectId, registration.Path);
             seen.Add(key);
             _pipeline.RegisterWatch(registration.ProjectId, registration.Path);
+            _registered.Add(key);
 
             if (!await IsEnabledAsync(registration.ProjectId, cancellationToken).ConfigureAwait(false))
             {
@@ -117,10 +120,13 @@ public sealed partial class WatchHostedService : BackgroundService
             }
         }
 
-        foreach (var stale in _active.Where(k => !seen.Contains(k)).ToArray())
+        foreach (var stale in _registered.Where(k => !seen.Contains(k)).ToArray())
         {
             _eventSource.Stop(stale.ProjectId, stale.Path);
+            _pipeline.UnregisterWatch(stale.ProjectId, stale.Path);
             _active.Remove(stale);
+            _registered.Remove(stale);
+            Log.StaleRegistrationUnregistered(_logger, stale.ProjectId, stale.Path);
         }
     }
 
@@ -139,5 +145,9 @@ public sealed partial class WatchHostedService : BackgroundService
     {
         [LoggerMessage(EventId = 320, Level = LogLevel.Error, Message = "Watch re-watch reconcile pass failed")]
         public static partial void ReconcileError(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 321, Level = LogLevel.Information,
+            Message = "Stale watch registration for project {ProjectId} at {Path} unregistered from the pipeline")]
+        public static partial void StaleRegistrationUnregistered(ILogger logger, string projectId, string path);
     }
 }

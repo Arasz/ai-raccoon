@@ -131,6 +131,78 @@ public sealed class WatchHostedServiceTests
     }
 
     [Fact]
+    public async Task Reconcile_StaleRegistration_UnregistersFromThePipeline()
+    {
+        using var dir = TempDir.New("hosted-stale-unregister");
+        var (stack, _, _, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await stack.Store.RemoveWatchAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.GetStatuses(Project).ShouldBeEmpty();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Reconcile_StaleRegistration_StopsResolvingItsFilesForDigest()
+    {
+        using var dir = TempDir.New("hosted-stale-digest");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "zephyrone", TestContext.Current.CancellationToken);
+        var (stack, _, _, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await stack.Store.RemoveWatchAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Reconcile_StaleRegistrationOfADisabledProject_UnregistersFromThePipeline()
+    {
+        using var dir = TempDir.New("hosted-stale-disabled");
+        var (stack, _, _, hosted) = NewStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await stack.Store.RemoveWatchAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.GetStatuses(Project).ShouldBeEmpty();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Reconcile_DisableFlip_KeepsThePipelineRegistration()
+    {
+        using var dir = TempDir.New("hosted-flip-keeps-registration");
+        var (stack, _, _, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Settings[WatchConfigKeys.EnabledProject(Project)] = "false";
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.GetStatuses(Project).ShouldHaveSingleItem();
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
     public async Task StopAsync_DisposesAllWatchers()
     {
         using var dir = TempDir.New("hosted-stop");
