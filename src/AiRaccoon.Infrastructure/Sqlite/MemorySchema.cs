@@ -253,6 +253,32 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
         }
 
+        // The scope allowlist bounds every disk-reading surface, not just watching, so its keys
+        // moved from watch.scope.* to ingest.scope.* (1.2). Carrying pre-1.2 rows over is not
+        // cosmetic: the scope is deny-by-default, so a bank that kept the old key would refuse
+        // every ingest and every watch add after the upgrade. Idempotent, and it never
+        // overwrites a row the new key already holds.
+        // Probe first: this runs on every bank open, and an unconditional write would take a
+        // write lock every time — enough to change how a busy bank behaves under maintenance.
+        var legacyScopeRows = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (legacyScopeRows > 0)
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        UPDATE OR IGNORE settings
+                           SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
+                         WHERE key LIKE 'watch.scope.%';
+                        DELETE FROM settings WHERE key LIKE 'watch.scope.%';
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         var ftsSql = await connection.ExecuteScalarAsync<string?>(
                 new CommandDefinition(
                     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
@@ -284,59 +310,59 @@ internal static class MemorySchema
             // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
             // (or with an empty shell) that never heals on reopen.
             await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        try
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        DROP TRIGGER IF EXISTS entries_fts_ai;
-                        DROP TRIGGER IF EXISTS entries_fts_ad;
-                        DROP TRIGGER IF EXISTS entries_fts_au;
-                        DROP TABLE IF EXISTS entries_fts;
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            try
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            DROP TRIGGER IF EXISTS entries_fts_ai;
+                            DROP TRIGGER IF EXISTS entries_fts_ad;
+                            DROP TRIGGER IF EXISTS entries_fts_au;
+                            DROP TABLE IF EXISTS entries_fts;
 
-                        CREATE VIRTUAL TABLE entries_fts USING fts5(
-                            value,
-                            source_file,
-                            section,
-                            content='entries',
-                            content_rowid='id'
-                        );
+                            CREATE VIRTUAL TABLE entries_fts USING fts5(
+                                value,
+                                source_file,
+                                section,
+                                content='entries',
+                                content_rowid='id'
+                            );
 
-                        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                            CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                                INSERT INTO entries_fts(rowid, value, source_file, section)
+                                VALUES (new.id, new.value, new.source_file, new.section);
+                            END;
+
+                            CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                                INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                            END;
+
+                            CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                                INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                                INSERT INTO entries_fts(rowid, value, source_file, section)
+                                VALUES (new.id, new.value, new.source_file, new.section);
+                            END;
+
                             INSERT INTO entries_fts(rowid, value, source_file, section)
-                            VALUES (new.id, new.value, new.source_file, new.section);
-                        END;
-
-                        CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
-                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                        END;
-
-                        CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
-                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                            INSERT INTO entries_fts(rowid, value, source_file, section)
-                            VALUES (new.id, new.value, new.source_file, new.section);
-                        END;
-
-                        INSERT INTO entries_fts(rowid, value, source_file, section)
-                        SELECT id, value, source_file, section FROM entries;
-                        """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-            throw;
-        }
+                            SELECT id, value, source_file, section FROM entries;
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                throw;
+            }
         }
 
         // Bucket-uniqueness indexes (F3; see docs/work/2026-08-06-extraction-followups-plan.md):

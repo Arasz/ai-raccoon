@@ -1,9 +1,11 @@
+using AiRaccoon.Core.Ingestion;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Observability;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -230,7 +232,7 @@ public sealed class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestFile)]
-    [Description("Indexes one file from disk into memory.")]
+    [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
         [Description("The project id.")] string projectId,
         [Description("Path of the file to index.")]
@@ -251,6 +253,11 @@ public sealed class MemoryTools(
             activity.RecordInvocation();
             return envelope;
         }
+        catch (PathOutsideScopeException ex)
+        {
+            activity.RecordError(ex);
+            throw new McpException($"path-outside-scope: {ex.Message}");
+        }
         catch (Exception ex)
         {
             activity.RecordError(ex);
@@ -259,7 +266,7 @@ public sealed class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestDirectory)]
-    [Description("Recursively indexes a directory tree into memory, skipping unchanged files.")]
+    [Description("Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
         [Description("The project id.")] string projectId,
         [Description("Path of the directory to index.")]
@@ -279,6 +286,11 @@ public sealed class MemoryTools(
             var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
+        }
+        catch (PathOutsideScopeException ex)
+        {
+            activity.RecordError(ex);
+            throw new McpException($"path-outside-scope: {ex.Message}");
         }
         catch (Exception ex)
         {

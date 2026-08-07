@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
@@ -116,7 +117,7 @@ public sealed partial class WatchCatchUp(
     {
         foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
         {
-            if (WatchPath.IsWithinScope(file, watchPath) && !File.Exists(file))
+            if (IngestPath.IsWithinScope(file, watchPath) && !File.Exists(file))
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
             }

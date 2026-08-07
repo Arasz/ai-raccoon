@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Diagnostics;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
@@ -631,8 +632,8 @@ public sealed class WatchIntegrationTests
         public Task EnableAsync(CancellationToken cancellationToken) => Memory.SetSettingAsync(WatchConfigKeys.EnabledProject(Project), "true", cancellationToken);
 
         public Task AllowScopeAsync(CancellationToken cancellationToken) =>
-            Memory.SetSettingAsync(WatchConfigKeys.ScopeProject(Project),
-                WatchConfigKeys.SerializeScope([WatchDir]), cancellationToken);
+            Memory.SetSettingAsync(IngestScopeKeys.ScopeProject(Project),
+                IngestScopeKeys.Serialize([WatchDir]), cancellationToken);
 
         public Task AddWatchAsync(CancellationToken cancellationToken) => Service.AddAsync(Project, WatchDir, cancellationToken);
 

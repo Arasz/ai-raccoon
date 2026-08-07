@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
@@ -49,7 +50,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     /// <summary>Adapter-level error events collected by the event source callback (DI wires these to the logger).</summary>
     public List<WatchEventError> Errors { get; } = [];
 
-    private ToolCallMetrics Metrics { get; set; } = null!;
+    private ToolCallMetrics? Metrics { get; set; }
 
     /// <summary>Maps a feature-file path ("/repo", "/repo/docs", "/other") to a real path under this scenario's DataRoot.</summary>
     public string MapPath(string virtualPath)
@@ -71,7 +72,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public void StopWatchStack()
     {
         EventSource.StopAll();
-        Metrics.Dispose();
+        Metrics?.Dispose();
     }
 
     /// <summary>
@@ -151,11 +152,19 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     public Task SetWatchScopeAsync(string projectId, IEnumerable<string> paths,
         CancellationToken cancellationToken = default) =>
-        Store.SetSettingAsync(WatchConfigKeys.ScopeProject(projectId), WatchConfigKeys.SerializeScope(paths),
+        Store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.Serialize(paths),
             cancellationToken);
 
     public Task SetWatchScopeGlobalAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default) =>
-        Store.SetSettingAsync(WatchConfigKeys.ScopeGlobal, WatchConfigKeys.SerializeScope(paths), cancellationToken);
+        Store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize(paths), cancellationToken);
+
+    /// <summary>Adds one path to the global scope, keeping what is already there.</summary>
+    public async Task AddWatchScopeGlobalAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var existing = IngestScopeKeys.Parse(
+            await Store.GetSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken)) ?? [];
+        await SetWatchScopeGlobalAsync(existing.Append(path).Distinct(IngestPath.PathComparer), cancellationToken);
+    }
 
     public Task SetConcurrencyGlobalAsync(int value, CancellationToken cancellationToken = default) =>
         Store.SetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, value.ToString(CultureInfo.InvariantCulture),
@@ -171,7 +180,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         foreach (var key in new[]
                  {
                      WatchConfigKeys.EnabledProject(projectId), WatchConfigKeys.EnabledGlobal,
-                     WatchConfigKeys.ScopeProject(projectId), WatchConfigKeys.ScopeGlobal,
+                     IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.ScopeGlobal,
                      WatchConfigKeys.ConcurrencyProject(projectId), WatchConfigKeys.ConcurrencyGlobal
                  })
         {
@@ -196,7 +205,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Host, Pipeline, TimeProvider);
         Metrics?.Dispose();
-        Metrics = new ToolCallMetrics();
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Host), new FakePromotionQueue()), Metrics);
+        var metrics = new ToolCallMetrics();
+        Metrics = metrics;
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Host), new FakePromotionQueue()), metrics);
     }
 }

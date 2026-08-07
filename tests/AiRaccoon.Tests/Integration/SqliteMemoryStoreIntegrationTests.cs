@@ -1,5 +1,7 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -242,11 +244,17 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         metadata!.TtlDays.ShouldBe(7);
     }
 
+    /// <summary>Ingest is contained by the declared scope, so a test that ingests declares one.</summary>
+    private Task ScopeDataRootAsync() =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]),
+            TestContext.Current.CancellationToken);
+
     [Fact]
     public async Task DeleteSourcePath_RemovesAllChunksOfTheFile_AndSearchStopsReturningIt()
     {
         var file = Path.Combine(_dataRoot, "notes.md");
         await File.WriteAllTextAsync(file, "magnetostrictive mirror content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
         await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
         (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
                 TestContext.Current.CancellationToken))
@@ -266,6 +274,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     {
         var file = Path.Combine(_dataRoot, "shared-source.md");
         await File.WriteAllTextAsync(file, "magnetostrictive cross project content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
         await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
         await _store.IngestFileAsync("beta", file, null, TestContext.Current.CancellationToken);
 
@@ -301,6 +310,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     {
         var file = Path.Combine(_dataRoot, "watched.md");
         await File.WriteAllTextAsync(file, "magnetostrictive watched content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
         await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {

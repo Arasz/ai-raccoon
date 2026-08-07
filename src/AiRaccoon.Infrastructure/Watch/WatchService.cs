@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 
@@ -18,8 +19,8 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
             throw new WatchDisabledException(projectId);
         }
 
-        var normalized = WatchPath.Normalize(path);
-        if (!config.Scope.Any(entry => WatchPath.IsWithinScope(normalized, entry)))
+        var normalized = IngestPath.Normalize(path);
+        if (!config.Scope.Any(entry => IngestPath.IsWithinScope(normalized, entry)))
         {
             throw new PathOutsideScopeException(normalized);
         }
@@ -38,7 +39,7 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
 
     public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        var normalized = WatchPath.Normalize(path);
+        var normalized = IngestPath.Normalize(path);
         await store.RemoveWatchAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
         pipeline.UnregisterWatch(projectId, normalized);
     }
@@ -48,9 +49,9 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
     {
         var registrations = (await store.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
             .Where(r => r.ProjectId == projectId)
-            .OrderBy(r => r.Path, WatchPath.PathComparer)
+            .OrderBy(r => r.Path, IngestPath.PathComparer)
             .ToArray();
-        var runtime = pipeline.GetStatuses(projectId).ToDictionary(s => s.Path, WatchPath.PathComparer);
+        var runtime = pipeline.GetStatuses(projectId).ToDictionary(s => s.Path, IngestPath.PathComparer);
 
         var result = new List<WatchStatus>(registrations.Length);
         foreach (var registration in registrations)
@@ -69,8 +70,8 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
         CancellationToken cancellationToken = default)
     {
         var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
-        var normalized = WatchPath.Normalize(path);
-        return config.Scope.Any(entry => WatchPath.IsWithinScope(normalized, entry));
+        var normalized = IngestPath.Normalize(path);
+        return config.Scope.Any(entry => IngestPath.IsWithinScope(normalized, entry));
     }
 
     private async Task<WatchConfig> ResolveConfigAsync(string projectId, CancellationToken cancellationToken)
@@ -78,7 +79,7 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
         var keys = new[]
         {
             WatchConfigKeys.EnabledProject(projectId), WatchConfigKeys.EnabledGlobal,
-            WatchConfigKeys.ScopeProject(projectId), WatchConfigKeys.ScopeGlobal,
+            IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.ScopeGlobal,
             WatchConfigKeys.ConcurrencyProject(projectId), WatchConfigKeys.ConcurrencyGlobal
         };
         var values = new Dictionary<string, string?>();

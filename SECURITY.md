@@ -54,6 +54,16 @@ unauthenticated `localhost` listener is reachable by any local process.
 (default) adds writes; `full` enables destructive operations (delete, sweep, forget).
 Per-project modes override the global setting, stored in the bank's `settings` table.
 
+**Path-reading tools are contained by the declared scope.** `memory_ingest_file`,
+`memory_ingest_directory` and `memory_watch_add` all take a caller-supplied path, and the
+server reads it with its own privileges — without containment, a malicious client could
+read any file the process can and turn it into searchable memory that cloud sync may then
+push. All three refuse a path outside `ingest.scope.<project>` (falling back to
+`ingest.scope.global`), and the scope is **empty by default**, so a project refuses every
+path until an operator declares one with `ai-raccoon ingest scope add`. Containment is
+enforced in the store, not in the tool layer, so the CLI and the file watcher are bound by
+it too.
+
 ### What leaves the process when OTLP export is on
 
 Spans carry `project_id` in **plaintext**, alongside `tool`, `result`, `error_type`,

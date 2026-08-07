@@ -90,7 +90,7 @@ public class WatchCommandsTests
         var (exit, _, _) = await Run(["watch", "scope", "add", "acme", "/a/../a/b.md"], store);
 
         exit.ShouldBe(0);
-        store.Settings["watch.scope.acme"].ShouldContain("/a/b.md");
+        store.Settings["ingest.scope.acme"].ShouldContain("/a/b.md");
     }
 
     [Fact]

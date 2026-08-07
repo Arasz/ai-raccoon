@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using CommunityToolkit.Diagnostics;
 
@@ -18,8 +19,8 @@ public sealed record WatchConfig(bool Enabled, IReadOnlyList<string> Scope, int 
             ParseBool(settings(WatchConfigKeys.EnabledProject(projectId)))
             ?? ParseBool(settings(WatchConfigKeys.EnabledGlobal))
             ?? false,
-            WatchConfigKeys.ParseScope(settings(WatchConfigKeys.ScopeProject(projectId)))
-            ?? WatchConfigKeys.ParseScope(settings(WatchConfigKeys.ScopeGlobal))
+            IngestScopeKeys.Parse(settings(IngestScopeKeys.ScopeProject(projectId)))
+            ?? IngestScopeKeys.Parse(settings(IngestScopeKeys.ScopeGlobal))
             ?? [],
             ParseInt(settings(WatchConfigKeys.ConcurrencyProject(projectId)))
             ?? ParseInt(settings(WatchConfigKeys.ConcurrencyGlobal))

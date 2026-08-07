@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -23,7 +24,7 @@ internal sealed class WatchKeyComparer : IEqualityComparer<(string ProjectId, st
     public static WatchKeyComparer Instance { get; } = new();
 
     public bool Equals((string ProjectId, string Path) x, (string ProjectId, string Path) y) =>
-        StringComparer.Ordinal.Equals(x.ProjectId, y.ProjectId) && WatchPath.PathComparer.Equals(x.Path, y.Path);
+        StringComparer.Ordinal.Equals(x.ProjectId, y.ProjectId) && IngestPath.PathComparer.Equals(x.Path, y.Path);
 
-    public int GetHashCode((string ProjectId, string Path) obj) => HashCode.Combine(StringComparer.Ordinal.GetHashCode(obj.ProjectId), WatchPath.PathComparer.GetHashCode(obj.Path));
+    public int GetHashCode((string ProjectId, string Path) obj) => HashCode.Combine(StringComparer.Ordinal.GetHashCode(obj.ProjectId), IngestPath.PathComparer.GetHashCode(obj.Path));
 }

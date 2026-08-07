@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
@@ -197,7 +198,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
-        await store.SetSettingAsync(WatchConfigKeys.ScopeProject(ProjectId), WatchConfigKeys.SerializeScope([tempDir]));
+        await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([tempDir]));
     }
 
     private async Task<CallToolResult> CallAsync(string tool, params (string Key, object? Value)[] arguments)
