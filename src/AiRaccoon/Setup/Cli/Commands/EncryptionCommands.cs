@@ -157,6 +157,42 @@ public sealed partial class EncryptionCommands
         return 0;
     }
 
+    /// <summary>
+    ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation. Explicit rather than
+    ///     automatic on open: a rekey needs exclusive access to the bank (plan Decision 3).
+    /// </summary>
+    public async Task<int> MigrateAsync(TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_bank.BankPath))
+        {
+            await stdout.WriteLineAsync("no bank to migrate");
+            return 0;
+        }
+
+        bool rekeyed;
+        try
+        {
+            Log.MigratingBank(_logger, _bank.BankPath);
+            rekeyed = await _bank.MigrateLegacyKeyAsync(cancellationToken);
+        }
+        catch (BankKeyMismatchException ex)
+        {
+            Log.MigrationRefused(_logger, _bank.BankPath, ex);
+            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            return 1;
+        }
+
+        if (rekeyed)
+        {
+            Log.BankMigrated(_logger, _bank.BankPath);
+            await stdout.WriteLineAsync("bank rekeyed to the current key derivation");
+            return 0;
+        }
+
+        await stdout.WriteLineAsync("bank is already on the current key derivation; nothing to do");
+        return 0;
+    }
+
     public async Task<int> ShowAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
@@ -262,5 +298,16 @@ public sealed partial class EncryptionCommands
 
         [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
+
+        // The migration records nothing in the bank or the sidecar (plan Decision 4) — these
+        // events are the whole audit trail.
+        [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Checking the bank at {BankPath} for the pre-ADR-0012 key derivation")]
+        public static partial void MigratingBank(ILogger logger, string bankPath);
+
+        [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
+        public static partial void BankMigrated(ILogger logger, string bankPath);
+
+        [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
+        public static partial void MigrationRefused(ILogger logger, string bankPath, Exception exception);
     }
 }

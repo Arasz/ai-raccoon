@@ -175,6 +175,7 @@ internal static class CliCommandTree
         encryption.Add(bitwarden);
         encryption.Add(new Command("show", "Shows the current encryption source"));
         encryption.Add(new Command("unset", "Returns to the env default (rekeys the bank when AIRACCOON_DB_PASSPHRASE is set)"));
+        encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
         return encryption;
     }
 

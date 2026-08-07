@@ -45,14 +45,15 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     ///     legacy key both opens the bank and passes quick_check — see
     ///     docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2.
     /// </summary>
-    public async Task MigrateLegacyKeyAsync(CancellationToken cancellationToken = default)
+    /// <returns>True when the bank was rekeyed; false when it already opened under the current key.</returns>
+    public async Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default)
     {
         var resolvedKey = keyResolver.Resolve();
 
         try
         {
             await using var alreadyMigrated = await OpenBankWithKeyAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
-            return;
+            return false;
         }
         catch (SqliteException openFailure)
         {
@@ -71,6 +72,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
 
         // Only reached with positive proof that the legacy key opens a healthy bank.
         await RekeyBankAsync(resolvedKey.Passphrase!, resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>
