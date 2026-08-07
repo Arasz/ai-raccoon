@@ -252,81 +252,65 @@ bank never silently falls back. Ship behind the same review as WI-1a; both touch
 **Resolved without work:** EventIds 1/2/3 "reused across six files" — measured, and **no `EventId` 1, 2 or 3 exists
 anywhere in the solution**. The claim was an artifact of the old reference doc, now regenerated from measurement.
 
-### Still open — verified against code 2026-08-07 22:10, each now carrying an issue
+### Shipped overnight — 2026-08-07 22:20 → 2026-08-08 02:30
+
+| PR | Item | Evidence |
+|---|---|---|
+| #123/#124 | Keyword-modality degradation logged (EventId 900); FTS5 section anchors quoted | the hyphenated-anchor regression was RED before the fix |
+| #126 | **WI-6c** — ingest paths contained in the project's declared scope; the scope renamed out of `watch.*` into `Core/Ingestion` | deny-by-default; legacy `watch.scope.*` keys migrated on bank open |
+| #128 | **#117** — queue counter drift, transactions, utilization race | — |
+| #129 | **#115** — sync settings boundary + integrity check on every pushed snapshot | — |
+| #130 | **WI-9 (partial)** — the two `IMemoryExtension` hooks nothing could fire are gone | the host and its four reachable hooks remain |
+| #132 | **WI-7e** + `Core/Common/` retired | — |
+| #133 | `memory_share_extract` scores against all known projects | the runner reads the project list itself, so no caller can narrow it |
+| #134 | **WI-7c (cheap half)** — `PromotionMeta` in Core, `ResponseMeta` gone from the port | — |
+| #136 | **#120** — key material redacted and zeroed, migrate probe side-effect-free | — |
+| #137 | **#119** — all five test-quality gaps, each mutation-proved | Fast 1158 green; two corrections to the issue text recorded in the PR |
+
+**Issues closed against code, not against PR titles:** #115, #117, #119, #120.
+
+### Still open — re-verified against code 2026-08-08 02:30
 
 | WI | State | Issue |
 |---|---|---|
 | WI-4 (Python tests) | **Closed won't-do** — owner ruled 2026-08-07 that these are script tests and stay outside the CI gate | [#116](https://github.com/Arasz/ai-raccoon/issues/116) |
-| WI-5 | `grep user_version src/` → empty; no migration marker | — (ADR-0011 owns it) |
-| WI-6a | **Shipped in #123** — the degradation is now logged (EventId 900) | — |
-| WI-6c | no path-containment primitive on the ingest tools | — |
-| WI-7c | `ApiEnvelope` still at Core's root; `IPromotionQueue` still returns `ResponseMeta` | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
-| WI-7e | sweep default still in the host | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
-| WI-8 | `SqliteMemoryStore` still 1227 lines; `BeginTransaction` still never called | [#117](https://github.com/Arasz/ai-raccoon/issues/117) |
-| WI-9 | extension host present; two hooks structurally unreachable | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
-| WI-11 | 11 worktrees, 48 remote branches | — |
+| WI-5 | still open: `grep user_version src/` → 0 hits, no migration marker | — (ADR-0011 owns it) |
+| WI-6a | **Shipped in #123** | — |
+| WI-6c | **Shipped in #126** | — |
+| WI-7c | **Half shipped in #134** — the port is Core-native now; `ApiEnvelope` itself is still at Core's root, deliberately, until MCP contract tests exist | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-7e | **Shipped in #132** | — |
+| WI-8 | still open: `SqliteMemoryStore` is 1274 lines (was 1227 — it grew) | — |
+| WI-9 | **Half shipped in #130** — the unreachable hooks are gone; whether the extension host itself stays is still the owner's call | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-11 | still open, and worse: 14 worktrees, 51 remote branches | — |
 
 **WI-7c and WI-7e had fallen off this list entirely** — present in neither Shipped, Cancelled, nor Still-open —
 and the previous Still-open list named five items that had already shipped. Both are now reconciled. The lesson
 is the one this document already records about consensus: a tracking list is a claim about the world and goes
 stale like any other, so it gets re-derived from code, not carried forward.
 
-## Backlog — post-integration review, 2026-08-07
+## Backlog — re-derived from code and the issue tracker, 2026-08-08
 
-The 1.2.0 integration review found 10 blockers (all fixed, see the Shipped table) and these residuals. Ordered
-by what a user actually loses, not by effort.
+The 1.2.0 integration review's 10 blockers and most of its residuals have shipped (see the two Shipped tables).
+What is left, ordered by what a user actually loses:
 
-### Next — security and correctness
-
-1. **[#121](https://github.com/Arasz/ai-raccoon/issues/121) Sync pull clobbers local settings.** The counterpart
-   to #114: push is now safe, pull still merges a remote `settings` table unconditionally. A poisoned
-   `embedding.baseUrl` redirects memory content and the API key to an attacker host. Same file, same lane — do
-   this while #114 is fresh.
-2. **[#115](https://github.com/Arasz/ai-raccoon/issues/115) `quick_check` never runs on the pushed bytes.** The
-   merge and retry paths upload without the integrity gate that exists for exactly that. Small, same lane as #121.
-3. **[#117](https://github.com/Arasz/ai-raccoon/issues/117) Promotion queue.** Queue gauge drifts upward forever
-   on re-propose (SQLite counts a conflict-update as a changed row); no transactions anywhere; scoring diverges
-   by caller so a tool call can rewrite a row's score and make it the eviction victim. Carries **WI-8d**.
-
-### Then — enforcement, so these stop recurring
-
-
-4. **[#119](https://github.com/Arasz/ai-raccoon/issues/119) Test-quality gaps.** Nothing resolves `ToolGate`
-   from a real container, so dropping its registration breaks all 23 MCP tools with ~1580 tests still green.
-   The EventId guard hardcodes two assemblies and misses Core. Four named watch risk-tests were never written,
-   including the one gating the `_active` check the design doc calls "this incident in new clothes".
-
-### Then — the deferred rulings
-
-6. **[#118](https://github.com/Arasz/ai-raccoon/issues/118) Architecture drift.** Carries **WI-7c**, **WI-7e**
-   and **WI-9**. The cheap half of 7c (a Core-native `PromotionMeta`) breaks the port coupling for ~4 files with
-   no wire-format risk; moving `ApiEnvelope` itself should wait for MCP contract tests. WI-9 still needs the
-   owner: two extension hooks have no dispatcher at all, so they are unreachable rather than merely no-op.
-7. **[#120](https://github.com/Arasz/ai-raccoon/issues/120) Encryption residuals.** The derivation and the rekey
-   gate are sound; what remains is a `ToString()` that would print key material if anyone ever interpolates the
-   record, unzeroed seed bytes, a migrate verb that runs DDL on a bank it reports untouched, and the untested
-   `quick_check` half of the gate.
-8. **[#82](https://github.com/Arasz/ai-raccoon/issues/82) SEP-2640 skill discovery** — pre-existing feature work,
-   unrelated to this review; sequenced last only because everything above is a defect.
+1. **[#118](https://github.com/Arasz/ai-raccoon/issues/118) Architecture drift — the remainder.** Items 2, 3 and 4
+   shipped (#130, #132); item 1's cheap half shipped (#134). Left: whether `ApiEnvelope` leaves Core's root, which
+   is gated on MCP contract tests, and whether the extension host itself stays now that its unreachable hooks are
+   gone (WI-9, still the owner's call — removing it reverses a ratified spec section).
+2. **[#135](https://github.com/Arasz/ai-raccoon/issues/135) Re-propose overwrites score unconditionally.** Opened
+   out of #117 item 3: the scoring inputs are consistent now, but `ON CONFLICT DO UPDATE SET score = excluded.score`
+   still means the newest propose wins outright. Needs a ruling on what a re-score means for eviction.
+3. **WI-5 — schema versioning.** `grep user_version src/` still returns nothing; ADR-0011 states the problem and
+   owns it. Every bank migration so far has been a probe-and-patch on open, which does not scale.
+4. **WI-8 — `SqliteMemoryStore` decomposition.** 1274 lines, up from the 1227 the review measured. Gated on the
+   WI-9 ruling, since removing the extension host changes what the store has to dispatch.
+5. **WI-11 — branch and worktree hygiene.** 14 worktrees and 51 remote branches on this machine, several belonging
+   to agent lanes that have already merged. Mechanical, but it is now actively confusing: two lanes opened
+   competing PRs for #119 on 2026-08-08 (#137 and #138) because neither could see the other.
+6. **[#82](https://github.com/Arasz/ai-raccoon/issues/82) SEP-2640 skill discovery** — pre-existing feature work,
+   unrelated to this review; last because everything above is a defect.
 
 ### Not tracked as issues
 
-WI-5 (schema versioning) stays with ADR-0011, which already states the problem. WI-6a/6c and WI-11 are recorded
-above; file them when someone picks them up rather than opening issues nobody has scoped.
-
-### What the execution actually cost
-
-Four implementation lanes were dispatched concurrently onto a machine already running two other sessions.
-Load average reached **226**; symptoms ran from slow builds to `MSB4166` child-node deaths to a build
-reporting `exit 0` with one line of output. Three agents spent ~700k tokens between them and produced one
-commit; the work was finished by hand faster than they were finishing it. **Isolated worktrees prevent file
-collisions, not CPU collisions** — that distinction was measured and communicated by a peer session before the
-fan-out was sized, and ignored.
-
-One instruction ("kill any build you have running") was executed as `pkill -f "dotnet build"`, which is
-unscoped and killed other sessions' compiles. Scope destructive commands to PIDs you started.
-
-Two findings were nearly mis-called and were settled by reading a file rather than reasoning about it: the
-six-interfaces deletion (two experts agreed, both wrong) and a 49-failure test run that was neither a known
-condition nor a regression — the embedding model arrived on disk mid-run. Consensus between reviewers sharing
-a premise is correlated error, not corroboration.
+WI-5 stays with ADR-0011. WI-8 and WI-11 are recorded above; file them when someone picks them up rather than
+opening issues nobody has scoped.
