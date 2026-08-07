@@ -53,7 +53,7 @@ internal static partial class ObservabilityRunner
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
-            if (IsResetByAnExistingListener(ex))
+            if (!IsNothingListening(ex))
             {
                 return await ReportForeignListenerAsync(logger, port, stderr);
             }
@@ -118,17 +118,29 @@ internal static partial class ObservabilityRunner
         return ExitCode.PortInUse;
     }
 
-    /// <summary>True when the exception chain shows an existing listener accepted the
-    /// connection and then reset it (ECONNRESET) — as opposed to nobody listening
-    /// (ECONNREFUSED) or a timeout, both of which mean "no server" rather than "a foreign
-    /// one squatting the port".</summary>
-    private static bool IsResetByAnExistingListener(Exception exception)
+    /// <summary>True when nothing is listening: the connect itself was refused, or it never
+    /// completed. Anything else means a listener accepted us and then failed to behave like
+    /// ai-raccoon, which is a foreign listener.</summary>
+    private static bool IsNothingListening(Exception exception)
     {
+        if (exception is OperationCanceledException or TaskCanceledException)
+        {
+            return true;
+        }
+
         for (var current = exception; current is not null; current = current.InnerException)
         {
-            if (current is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+            if (current is SocketException socket)
             {
-                return true;
+                // Keyed on refusal rather than reset: a foreign listener that accepts and
+                // closes surfaces as ECONNRESET on macOS but a clean EOF (no SocketException
+                // at all) on Linux, so treating reset as the foreign-listener signal reports
+                // "nothing listening" there. Refusal is the portable negative.
+                return socket.SocketErrorCode is SocketError.ConnectionRefused
+                    or SocketError.HostUnreachable
+                    or SocketError.NetworkUnreachable
+                    or SocketError.HostNotFound
+                    or SocketError.TimedOut;
             }
         }
 
