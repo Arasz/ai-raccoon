@@ -30,9 +30,10 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     // user's bank is encrypted with before the migration runs. Independently derived, never recomputed.
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 
-    // Owner-default project/secret ids (plan D6). The fake bws serves the synthetic key for SecretId.
-    private const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    private const string SecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+    // Obviously fake sidecar fixture ids — not real Bitwarden vault entries. The fake bws serves
+    // the synthetic key for SecretId.
+    private const string ProjectId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    private const string SecretId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     private const string WrongKeySecretId = "wrong-key-secret-id"; // fake serves key2.pem → a different derived key
     private const string GarbageSecretId = "garbage-secret-id"; // fake prints non-key stdout
     private const string SleepSecretId = "sleep-secret-id"; // fake sleeps (timeout leg)
@@ -60,7 +61,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                                          if [ -z "$TOKEN" ]; then TOKEN="$BWS_ACCESS_TOKEN"; fi
                                          if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
                                          case "$ID" in
-                                           f1d3c8e5-5391-4aef-8611-b49d007c8702) cat "$DIR/key.pem"; exit 0 ;;
+                                           bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb) cat "$DIR/key.pem"; exit 0 ;;
                                            wrong-key-secret-id) cat "$DIR/key2.pem"; exit 0 ;;
                                            garbage-secret-id) echo "definitely not an ssh private key"; exit 0 ;;
                                            sleep-secret-id) sleep 30; exit 0 ;;
@@ -211,6 +212,67 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                 await using var conn = await factory.OpenBankWithKeyAsync(LegacyDerivedRawKey, TestContext.Current.CancellationToken);
             });
             stale.SqliteErrorCode.ShouldBe(26);
+        });
+    }
+
+    /// <summary>
+    ///     Decision 2, the half no existing fixture exercised: a bank the legacy key opens, but
+    ///     whose interior pages are damaged, must never be rekeyed — quick_check is the gate that
+    ///     catches it. Deleting the quick_check call would leave every other test green.
+    /// </summary>
+    [Fact]
+    public async Task LegacyKeyedBankFailingQuickCheck_Migrate_Refuses()
+    {
+        InstallFakeBws();
+        await WithBwsAccessToken(null, async () =>
+        {
+            // A legacy-keyed bank with enough rows to span multiple pages, checkpointed into the
+            // main file so the corruption below lands on real table data, not the WAL.
+            var legacyFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver(LegacyDerivedRawKey));
+            await using (var connection = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+                for (var i = 0; i < 300; i++)
+                {
+                    await using var insert = connection.CreateCommand();
+                    insert.CommandText = "INSERT INTO t (value) VALUES ($v)";
+                    insert.Parameters.AddWithValue("$v", new string('x', 500));
+                    await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+                }
+
+                await using var checkpoint = connection.CreateCommand();
+                checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+                await checkpoint.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            var clearPoolCsb = new SqliteConnectionStringBuilder { DataSource = BankPath(), Password = LegacyDerivedRawKey };
+            SqliteConnection.ClearPool(new SqliteConnection(clearPoolCsb.ToString()));
+
+            // Flip bytes deep in the file — well past page 1 (header + sqlite_master), which is
+            // all a plain Open() decrypts. This lands inside the table's own pages: the legacy key
+            // still opens the bank (measured), but PRAGMA quick_check reports the damaged pages.
+            var bankPath = BankPath();
+            var bytes = await File.ReadAllBytesAsync(bankPath, TestContext.Current.CancellationToken);
+            for (var offset = bytes.Length - 200; offset < bytes.Length - 100; offset++)
+            {
+                bytes[offset] ^= 0xFF;
+            }
+
+            await File.WriteAllBytesAsync(bankPath, bytes, TestContext.Current.CancellationToken);
+
+            WriteSidecar();
+            var factory = new SqliteConnectionFactory(Options(), Resolver());
+
+            await Should.ThrowAsync<BankKeyMismatchException>(
+                async () => await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken));
+
+            // Refused, not rekeyed: the legacy key — and only the legacy key — still opens it.
+            await using (var stillLegacy = await legacyFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+                stillLegacy.State.ShouldBe(ConnectionState.Open);
+            }
         });
     }
 

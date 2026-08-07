@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Encryption;
@@ -12,13 +13,23 @@ namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
 ///     encryption bitwarden/show/unset handlers: bws presence check, interactive id
-///     collection with owner defaults, per-run-only -t token, reachability validation, and the
-///     rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
+///     collection with configurable defaults, per-run-only -t token, reachability validation, and
+///     the rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
 /// </summary>
 public sealed partial class EncryptionCommands
 {
-    private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+    /// <summary>Env vars an operator can set to offer their own project/secret id as the interactive default, instead of the fallback placeholder.</summary>
+    public const string ProjectIdEnvVar = "AIRACCOON_BITWARDEN_PROJECT_ID";
+
+    public const string SecretIdEnvVar = "AIRACCOON_BITWARDEN_SECRET_ID";
+
+    // Obviously fake — no default should identify a real vault entry (no hardcoded secrets).
+    private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
+    private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
+
+    private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
+
+    private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
     private const string RotationWarning =
         "ai-raccoon: warning: rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — rotate the secret and rekey the bank together";
@@ -101,7 +112,7 @@ public sealed partial class EncryptionCommands
             return 1;
         }
 
-        var derived = SshKeyDerivation.DeriveRawKey(seed);
+        var derived = DeriveAndZeroSeed(seed);
 
         await stderr.WriteLineAsync(RotationWarning);
 
@@ -266,6 +277,19 @@ public sealed partial class EncryptionCommands
         await stderr.WriteAsync($"{label}: ");
         var value = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
         return string.IsNullOrEmpty(value) ? fallback : value;
+    }
+
+    /// <summary>Derives the raw key from the seed, then zeroes it — the seed must not outlive this call.</summary>
+    internal static string DeriveAndZeroSeed(byte[] seed)
+    {
+        try
+        {
+            return SshKeyDerivation.DeriveRawKey(seed);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(seed);
+        }
     }
 
     private static async Task<bool> TryOpenAsync(SqliteConnectionFactory bank, string key,

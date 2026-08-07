@@ -137,6 +137,38 @@ public sealed class EncryptionKeyResolverTests : IDisposable
         resolved.Passphrase.ShouldBe(DerivedRawKey);
     }
 
+    /// <summary>A bank key in a log line is the leak this guards: no call site interpolates the record today, but the compiler-generated ToString would print it.</summary>
+    [Fact]
+    public void ResolvedKey_ToString_DoesNotContainThePassphraseOrLegacyPassphrase()
+    {
+        var resolvedKey = new ResolvedKey(DerivedRawKey, "bitwarden")
+        {
+            LegacyPassphrase = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'"
+        };
+
+        var text = resolvedKey.ToString();
+
+        text.ShouldNotContain("72d23870");
+        text.ShouldNotContain("277bf737");
+        text.ShouldContain("bitwarden");
+    }
+
+    [Fact]
+    public void Passphrase_ToString_DoesNotContainValueOrLegacyValue()
+    {
+        var passphrase = new Passphrase("bitwarden")
+        {
+            Value = DerivedRawKey,
+            LegacyValue = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'"
+        };
+
+        var text = passphrase.ToString();
+
+        text.ShouldNotContain("72d23870");
+        text.ShouldNotContain("277bf737");
+        text.ShouldContain("bitwarden");
+    }
+
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
     {
         public string Source => "env";

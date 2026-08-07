@@ -74,10 +74,11 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
             return true;
         }
 
-        // The current key opened the bank; nothing to migrate. A post-open failure here
-        // (extensions, vector load, schema DDL) is not key-related and must propagate
-        // unchanged, never be diagnosed as a key mismatch.
-        await using var alreadyMigrated = await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        // The current key already opened the bank — that alone proves there is nothing to
+        // migrate. Dispose the bare probe connection without ever calling InitializeAsync: this
+        // path must not run MemorySchema.EnsureAsync, or "nothing to do" would be a lie for a
+        // bank that had no schema yet.
+        await connection.DisposeAsync().ConfigureAwait(false);
         return false;
     }
 

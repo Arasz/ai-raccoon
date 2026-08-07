@@ -35,7 +35,7 @@ Add a second encryption key source to the memory bank: Bitwarden Secrets Manager
 - **D3** Secret value = unencrypted ed25519 SSH private key; derived `SHA-256("ai-raccoon-db-key/v1" ‖ seed)` → `x'<64hex>'` raw SQLCipher key (no KDF, measured). RSA and passphrase-protected keys rejected.
 - **D4** Offline behavior: refuse to start, loudly; no cached key copy.
 - **D5** Rotation trap: web-UI rotation without `PRAGMA rekey` bricks the bank — config command warns.
-- **D6** Config flow: (a) bws presence check with actionable install error; (b) collect project id + secret id (owner defaults `613165e6-7947-49e0-889b-b49d007c5b85` / `f1d3c8e5-5391-4aef-8611-b49d007c8702`); (c) optional `-t <token>` for runs without `BWS_ACCESS_TOKEN` — that run only, never persisted.
+- **D6** Config flow: (a) bws presence check with actionable install error; (b) collect project id + secret id (defaults configured via `AIRACCOON_BITWARDEN_PROJECT_ID` / `AIRACCOON_BITWARDEN_SECRET_ID`; absent those, an obviously-fake placeholder id); (c) optional `-t <token>` for runs without `BWS_ACCESS_TOKEN` — that run only, never persisted.
 - **D7** Raw-key-file option REMOVED. Provider family = env + bitwarden; keychain/cloud stay documented future sources (D10).
 - **D8** `encryption show` prints the current source (+ secret id when bitwarden); `encryption unset` returns to the env default.
 - **D9** `IEncryptionKeyProvider` becomes a source-selectable family; the source SELECTION must be resolvable pre-open (settings table is inside the encrypted bank). **This plan pins the D9 implementation shape — see §4.** Everything else in D9 (settings keys `encryption.source`, `encryption.bitwarden.projectId`, `encryption.bitwarden.secretId`) is fixed.
@@ -104,7 +104,12 @@ Pinned test vectors (computed 2026-08-05, macOS; implementer hard-codes these in
 | Seed | Derived `Password` string |
 |---|---|
 | `00 01 02 … 1e 1f` (synthetic fixture) | `x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'` |
-| `6868227276d58fd3a3c67be90bad5cb2cc53ee5f46ec3e03ba483b1eaff2d7e0` (real `ssh-keygen -t ed25519` key) | `x'5944055840d8941e4cb6d5bb0dedfb3e1808bb7b33727107de0e9399054ee83d'` |
+| ASCII `OBVIOUSLY-FAKE-TEST-SEED-32BYTES` (second synthetic fixture) | `x'893d3bed3e9f965ee2dbf4aa296d30bd84de3977c4d5beecfd231dfd2cd32d5f'` |
+
+The second row originally pinned a real `ssh-keygen -t ed25519` seed committed to this doc and to
+`SshKeyDerivationTests`/`OpenSshPrivateKeyParserTests`. Replaced with a synthetic vector during the
+2026-08 encryption hardening review — the "no hardcoded secrets" invariant applies to sample
+vectors too, and determinism was always the point, not provenance.
 
 Parser validation rules (RFC 8709 / OpenSSH `PROTOCOL.key`, all **format decoding — no hand-rolled crypto**; the seed-vs-pub check is a byte comparison, not a point multiply):
 - PEM frame `-----BEGIN OPENSSH PRIVATE KEY-----` … base64 … `-----END…-----`; decode; magic `openssh-key-v1\0`.
