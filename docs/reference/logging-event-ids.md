@@ -40,49 +40,40 @@ reading.** The one-liner that measures it:
 grep -rho "EventId = [0-9]\+" src | awk '{print $3}' | sort -n | uniq -d
 ```
 
-## Known and deferred (out of scope for this task)
+## The full allocation
 
-`EventId`s 1, 2, and 3 are each independently reused by six unrelated `Log` classes:
+Every `[LoggerMessage]` id in the assemblies, one block per module. `LoggerMessageEventIdTests`
+fails on any duplicate — there is no allowlist.
 
-- `src/AiRaccoon/Program.cs` (1, 2, 3)
-- `src/AiRaccoon/HostExtensions.cs` (2)
-- `src/AiRaccoon/Setup/McpServerSetup.cs` (1)
-- `src/AiRaccoon/Setup/EmbeddingAvailability.cs` (1, 2)
-- `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` (1, 2, 3, 4, 5)
-- `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` (1, 2, 3)
-
-**Not fixed here, deliberately.** `McpServerSetup.cs` is under active edit in a concurrent
-session (adding an OTLP exporter and a `GET /observability` endpoint); renumbering it now would
-collide with that in-flight work for a purely cosmetic gain. Duplicate `EventId`s across
-*unrelated* `Log` classes are untidy rather than broken (most sinks disambiguate on category +
-id), so this is a real finding but not urgent. `LoggerMessageEventIdTests` allowlists exactly
-these three ids so the test still catches any *new* collision. Scheduled as its own cross-cutting
-renumber once the concurrent work lands.
-
-## Range plan (for the deferred renumber)
-
-| Range | Owner (file) |
+| Ids | Owner |
 |---|---|
-| 1–9 | `src/AiRaccoon/Program.cs` |
-| 10–19 | `src/AiRaccoon/HostExtensions.cs` |
-| 20–29 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
-| 30–39 | `src/AiRaccoon/Setup/EmbeddingAvailability.cs` |
-| 40–49 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
-| 50–59 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
-| 100–149 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` |
-| 200–201, 205 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
-| 202–204 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
-| 300–302 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` (300–301), `WatchPipeline.cs` (302, planned) |
-| 310 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
-| 320 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
-| 330 | `src/AiRaccoon/Setup/Dependencies.cs` (one-off; unrelated to Watch despite the neighboring number) |
-| 400 | `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs` |
-| 500–507 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` |
-| 510–516 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` |
-| 600–604 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` |
-| 610–612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
-| 610–613+ | contested: also claimed by a concurrent session's `ObservabilityRunner` — resolve before relying on this row |
-| 700–702 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (planned) |
+| 10-12 | `Program.cs` |
+| 20 | `HostExtensions.cs` |
+| 30 | `Setup/McpServerSetup.cs` |
+| 40-41 | `Setup/EmbeddingAvailability.cs` |
+| 100 | `Access` |
+| 200-205 | `Infrastructure/Sync/S3CloudStore.cs` |
+| 300-302 | `Infrastructure/Watch` (event source, pipeline) |
+| 310-312, 320-321, 330 | `Infrastructure/Watch` (catch-up, scheduler, store) |
+| 400 | `Infrastructure/Embedding` |
+| 410-412 | `Infrastructure/Embedding/BundledModel.cs` |
+| 500-507, 510-516 | `Infrastructure/Maintenance` |
+| 601-605 | `Setup/Serve/ServeRunner.cs` |
+| 610-612 | `Setup/Serve/IdleWatchdog.cs` |
+| 620-623 | `Setup/Serve/ObservabilityRunner.cs` |
+| 700-704 | `Infrastructure/Promotion/PromotionQueueService.cs` |
+| 800-807 | `Setup/Cli/Commands/EncryptionCommands.cs` |
 
-*Note: this file needs an index row added to `docs/reference/README.md`; that file is owned by
-another lane right now, so it isn't edited here.*
+Six modules previously shared ids 1-8 — `Program`, `HostExtensions`, `McpServerSetup`,
+`EmbeddingAvailability`, `BundledModel` and `EncryptionCommands` — each having started its own
+numbering at 1. They now hold the blocks above.
+
+**Before reserving a range, measure it across the whole assembly**, not from the nearest file:
+
+```
+grep -rho "EventId = [0-9]\+" src | awk '{print $3}' | sort -n | uniq -d
+```
+
+That prints nothing today. If it prints anything, a block was picked by inference rather than
+measurement — which is exactly how `610-613` was once reserved while `IdleWatchdog` already held
+610/611/612.

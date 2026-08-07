@@ -23,7 +23,7 @@ public sealed class EmbeddingAvailabilityTests
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Warning);
-        record.Id.Id.ShouldBe(1);
+        record.Id.Id.ShouldBe(40);
         record.Message.ShouldContain("model set local");
         record.Message.ShouldContain("e1");
     }
@@ -52,7 +52,7 @@ public sealed class EmbeddingAvailabilityTests
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Error);
-        record.Id.Id.ShouldBe(2);
+        record.Id.Id.ShouldBe(41);
         record.Message.ShouldContain("model set local");
     }
 

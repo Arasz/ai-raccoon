@@ -172,13 +172,13 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
 
     public static partial class Log
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Downloading bundled model asset {Name} to {Path}")]
+        [LoggerMessage(EventId = 410, Level = LogLevel.Information, Message = "Downloading bundled model asset {Name} to {Path}")]
         public static partial void DownloadingBundledModelAsset(ILogger logger, string name, string path);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to download bundled model asset {Name}: {Error}")]
+        [LoggerMessage(EventId = 411, Level = LogLevel.Error, Message = "Failed to download bundled model asset {Name}: {Error}")]
         public static partial void FailedToDownloadBundledModelAsset(ILogger logger, string name, string error);
 
-        [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Bundled model assets verified")]
+        [LoggerMessage(EventId = 412, Level = LogLevel.Debug, Message = "Bundled model assets verified")]
         public static partial void BundledModelAssetsVerified(ILogger logger);
     }
 }

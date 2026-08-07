@@ -226,7 +226,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
-        _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 2 && r.Level == LogLevel.Information
+        _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 801 && r.Level == LogLevel.Information
                                                                              && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
         await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -459,7 +459,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
         var logRecord = _lastLogger!.Collector.LatestRecord;
         logRecord.ShouldNotBeNull();
-        logRecord.Id.Id.ShouldBe(4);
+        logRecord.Id.Id.ShouldBe(803);
         logRecord.Level.ShouldBe(LogLevel.Warning);
         // The sidecar + rows stay (source remains bitwarden) so the documented retry works.
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");

@@ -31,10 +31,10 @@ internal sealed partial class EmbeddingAvailability(ILogger<EmbeddingAvailabilit
 
     public static partial class Log
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bundled embedding model unavailable ({Errors}); run 'ai-raccoon model set local' to restore it")]
+        [LoggerMessage(EventId = 40, Level = LogLevel.Warning, Message = "Bundled embedding model unavailable ({Errors}); run 'ai-raccoon model set local' to restore it")]
         public static partial void BundledEmbedingModuleUnavailable(ILogger logger, string errors);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Bundled embedding model check failed; run 'ai-raccoon model set local' to restore it")]
+        [LoggerMessage(EventId = 41, Level = LogLevel.Error, Message = "Bundled embedding model check failed; run 'ai-raccoon model set local' to restore it")]
         public static partial void BundledEmbedingModuleCheckFailed(ILogger logger, Exception exception);
     }
 }
