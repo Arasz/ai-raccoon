@@ -7,7 +7,6 @@ When adding a new Cosmos-backed entity to this project, follow this exact multi-
 ### 1. Domain Layer (pure C#, no Azure deps)
 
 Ensure these exist under `src/JobSearchAiAssistant.Domain/<Feature>/`:
-
 - **Entity** — `sealed record` with `required string Id`, `required string UserId` (partition key), `required DateTimeOffset CreatedAt`, and domain behavior methods
 - **Repository interface** — `I<Feature>Repository` with `CancellationToken ct` as last param, `string userId` for partition scoping, `IReadOnlyList<T>` for collections, nullable return for single-entity lookups
 - **Enum/value objects** — any status enums, classification records, etc.
@@ -36,7 +35,6 @@ public abstract class <Feature>RepositoryContract
 ```
 
 **Conventions:**
-
 - Use `Guid.CreateVersion7().ToString()` for IDs (matches ADR-0004)
 - Use `TestContext.Current.CancellationToken` (xUnit v3)
 - Use Shouldly assertions
@@ -65,7 +63,6 @@ public sealed class InMemory<Feature>Repository : I<Feature>Repository
 File: `tests/JobSearchAiAssistant.Infrastructure.Tests/InMemory/InMemoryContractTests.cs`
 
 Add:
-
 ```csharp
 public sealed class InMemory<Feature>RepositoryContractTests : <Feature>RepositoryContract
 {
@@ -81,7 +78,6 @@ Add `using JobSearchAiAssistant.Domain.<Feature>;` to the imports.
 File: `src/JobSearchAiAssistant.Infrastructure/Cosmos/CosmosOptions.cs`
 
 Add property following the existing pattern:
-
 ```csharp
 public string <Feature>Container { get; init; } = "<camelCaseName>";
 ```
@@ -107,7 +103,6 @@ public sealed class Cosmos<Feature>Repository(CosmosClient client, CosmosOptions
 ```
 
 **Key patterns:**
-
 - All queries partitioned by userId
 - Client-side sort is authoritative (Cosmos offset-string ordering is unreliable)
 - `CosmosQueryOrdering.Ordinal` for string tie-breaking
@@ -118,7 +113,6 @@ public sealed class Cosmos<Feature>Repository(CosmosClient client, CosmosOptions
 File: `src/JobSearchAiAssistant.Infrastructure/InfrastructureDependencies.cs`
 
 Add after existing repository registrations:
-
 ```csharp
 using JobSearchAiAssistant.Domain.<Feature>;  // if not already imported
 services.AddSingleton<I<Feature>Repository, Cosmos<Feature>Repository>();
@@ -129,13 +123,11 @@ services.AddSingleton<I<Feature>Repository, Cosmos<Feature>Repository>();
 File: `infra/cosmos.tf`
 
 Add to `local.cosmos_containers` map:
-
 ```hcl
 <camelCaseName> = ["/largeField1/*", "/largeField2/?"]
 ```
 
 **Excluded paths:** List large embedded collections/strings that are NOT query predicates:
-
 - `/*` for embedded object collections (e.g., `/classification/*`)
 - `/?` for large string fields (e.g., `/rawExcerpt/?`, `/redactedBody/?`)
 
@@ -186,7 +178,6 @@ public sealed class CosmosEncrypted<Feature>Repository(
 ```
 
 ### Save Path
-
 ```csharp
 var json = JsonSerializer.Serialize(entity, JsonOptions);
 var encrypted = await secretCipher.EncryptAsync(json, userId, ct);
@@ -195,7 +186,6 @@ await Container.UpsertItemAsync(doc, new PartitionKey(userId), cancellationToken
 ```
 
 ### Read Path
-
 ```csharp
 var response = await Container.ReadItemAsync<CosmosEncrypted<Feature>Document>(id, new PartitionKey(userId), ...);
 var json = await secretCipher.DecryptAsync(response.Resource.EncryptedPayload, userId, ct);
@@ -286,7 +276,6 @@ public async Task<string> SaveAsync(string userId, string entityId, T entity, st
 ### Contract Test Pattern
 
 Following `UserConfigurationRepositoryContract.cs`:
-
 - `Get_returns_null_when_unconfigured`
 - `Save_then_get_round_trips_with_the_returned_etag`
 - `Save_with_null_etag_on_already_exists_throws_ConcurrencyConflictException`
@@ -326,7 +315,6 @@ public sealed class CosmosMonitoringConfigRepository(CosmosClient client, Cosmos
 **When to use:** The domain entity has no separate `Id` — the `UserId` serves as both the document id and partition key. There's exactly one document per user. No ordering, no listing, no filtering — just get-or-null and save.
 
 **Conventions:**
-
 - Use `ReadItemAsync` with `userId` as both the item id and partition key
 - Use `UpsertItemAsync` for save (idempotent create-or-replace)
 - No ETag concurrency needed — last-write-wins is acceptable for single-user config
@@ -357,7 +345,6 @@ public async Task UpsertAsync(ProfileUpdateProposal proposal, string etag, Cance
 **When to use:** The caller needs both blind upserts (first save, no existing document) and optimistic concurrency (subsequent saves with a known ETag). The `"*"` sentinel means "don't check ETag."
 
 **Key distinctions from VersionedDocument pattern:**
-
 - Uses `UpsertItemAsync` (not Create/Replace) — single code path for insert and update
 - ETag is a plain `string` parameter, not wrapped in `VersionedDocument<T>`
 - Catch both `PreconditionFailed` (stale ETag) and `Conflict` (duplicate create race)
@@ -377,7 +364,6 @@ public async Task UpsertAsync(ProfileUpdateProposal proposal, string etag, Cance
 Beyond repository registrations, the Infrastructure DI setup also registers:
 
 ### Options Records
-
 ```csharp
 // Options with no configuration section — direct instantiation with defaults
 services.AddSingleton(new ChannelMonitoringOptions());
@@ -388,7 +374,6 @@ services.AddSingleton(cosmosOptions);
 ```
 
 ### Extension-Point Implementations
-
 ```csharp
 // Register the primary MVP implementation for an extension-point interface
 services.AddSingleton<IProfileSink, ExportSink>();
@@ -401,15 +386,13 @@ if (services.Any(d => d.ServiceType == typeof(IGmailTransport)))
 ```
 
 **When to use `new OptionsRecord()` vs config binding:**
-
 - Config section exists and is required → `configuration.GetSection(...).Get<T>() ?? ThrowHelper.Throw...`
 - Config section is optional with sensible defaults → `configuration.GetSection(...).Get<T>() ?? new T()`
 - No config section needed (pure tuning knobs) → `new ChannelMonitoringOptions()`
 
 ## Global Container Sub-Pattern (Non-userId Partition Key)
 
-When a container's data is **not per-user** (e.g., a global allowlist, a shared lookup table), the partition key differs from the standard `/userId` pattern. This means it **cannot** be added to the `local.cosmos_containers` map in
-`cosmos.tf` — that map hardcodes `partition_key_paths = ["/userId"]` via the `for_each` resource.
+When a container's data is **not per-user** (e.g., a global allowlist, a shared lookup table), the partition key differs from the standard `/userId` pattern. This means it **cannot** be added to the `local.cosmos_containers` map in `cosmos.tf` — that map hardcodes `partition_key_paths = ["/userId"]` via the `for_each` resource.
 
 ### Terraform: Separate Resource
 
@@ -448,10 +431,10 @@ await Container.UpsertItemAsync(entry, new PartitionKey(entry.Id), cancellationT
 
 ### Pitfall
 
-| Pitfall                                                          | Fix                                                                                                                                                    |
-|------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Adding a non-userId container to `local.cosmos_containers` map   | The `for_each` resource hardcodes `/userId` partition key. Create a separate `azurerm_cosmosdb_sql_container` resource with the correct partition key. |
-| ProvisionCosmosEmulator doesn't know about the separate resource | Still add the container name to `CosmosContainers.Names` — the emulator provisioner doesn't care about partition keys, only container names.           |
+| Pitfall | Fix |
+|---|---|
+| Adding a non-userId container to `local.cosmos_containers` map | The `for_each` resource hardcodes `/userId` partition key. Create a separate `azurerm_cosmosdb_sql_container` resource with the correct partition key. |
+| ProvisionCosmosEmulator doesn't know about the separate resource | Still add the container name to `CosmosContainers.Names` — the emulator provisioner doesn't care about partition keys, only container names. |
 
 ## DI Audit and Remediation
 
@@ -495,7 +478,6 @@ public sealed class StubDmaApiClient : IDmaApiClient
 ```
 
 Register alongside real implementations:
-
 ```csharp
 services.AddSingleton<ILinkedInConnectionRepository, CosmosLinkedInConnectionRepository>();
 services.AddSingleton<IDmaApiClient, StubDmaApiClient>();  // stub until issue #184
@@ -503,8 +485,7 @@ services.AddSingleton<IDmaApiClient, StubDmaApiClient>();  // stub until issue #
 
 ### Using Directive Pitfall
 
-When adding a registration for an interface in a namespace not already imported in `InfrastructureDependencies.cs`, the `using` directive must be added. Common miss: `Domain.LinkedIn` is a different namespace from
-`Domain.LinkedInProfileUpdate` — both exist and both are needed.
+When adding a registration for an interface in a namespace not already imported in `InfrastructureDependencies.cs`, the `using` directive must be added. Common miss: `Domain.LinkedIn` is a different namespace from `Domain.LinkedInProfileUpdate` — both exist and both are needed.
 
 **Detection:** `CS0246: The type or namespace name 'IFoo' could not be found`
 
@@ -512,14 +493,14 @@ When adding a registration for an interface in a namespace not already imported 
 
 ## Common Pitfalls
 
-| Pitfall                                                                     | Fix                                                                                                                                                      |
-|-----------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Forgot to update `CosmosContainers.Names`                                   | Add the container name; the contract test catches this                                                                                                   |
-| Client-side sort missing                                                    | Always re-sort after draining Cosmos iterator                                                                                                            |
-| No user isolation test                                                      | Every contract suite must test cross-user visibility                                                                                                     |
-| `IEnumerable<T>` instead of `IReadOnlyList<T>` in interface                 | Use `IReadOnlyList<T>` for async repository methods                                                                                                      |
-| Missing `CancellationToken`                                                 | Every async method must accept `CancellationToken ct` as last param                                                                                      |
-| Query not partitioned                                                       | Always set `PartitionKey` in `QueryRequestOptions`                                                                                                       |
-| `ShouldNotContain(string, string)` on Shouldly strings                      | The `(string, string)` overload doesn't exist — second arg matches `Expression<Func<char, bool>>`. Use `ShouldNotContain(marker)` without custom message |
-| Encrypted doc test needs `ISecretCipher` but CosmosEmulatorFixture has none | Create ephemeral cipher: `DataProtectionProvider.Create("scope")` + `new DataProtectionSecretCipher(provider)` — no blob/key-vault setup                 |
-| `CosmosCompensationProfileDocument` is `internal` but tests need it         | Infrastructure.csproj has `InternalsVisibleTo` for test project — `internal` is fine                                                                     |
+| Pitfall | Fix |
+|---|---|
+| Forgot to update `CosmosContainers.Names` | Add the container name; the contract test catches this |
+| Client-side sort missing | Always re-sort after draining Cosmos iterator |
+| No user isolation test | Every contract suite must test cross-user visibility |
+| `IEnumerable<T>` instead of `IReadOnlyList<T>` in interface | Use `IReadOnlyList<T>` for async repository methods |
+| Missing `CancellationToken` | Every async method must accept `CancellationToken ct` as last param |
+| Query not partitioned | Always set `PartitionKey` in `QueryRequestOptions` |
+| `ShouldNotContain(string, string)` on Shouldly strings | The `(string, string)` overload doesn't exist — second arg matches `Expression<Func<char, bool>>`. Use `ShouldNotContain(marker)` without custom message |
+| Encrypted doc test needs `ISecretCipher` but CosmosEmulatorFixture has none | Create ephemeral cipher: `DataProtectionProvider.Create("scope")` + `new DataProtectionSecretCipher(provider)` — no blob/key-vault setup |
+| `CosmosCompensationProfileDocument` is `internal` but tests need it | Infrastructure.csproj has `InternalsVisibleTo` for test project — `internal` is fine |

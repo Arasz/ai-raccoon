@@ -143,5 +143,7 @@ No environment-specific gotchas known.
 
 ## Files
 
-- `references/form-template.html` — the generator template, parameterised by `DECISIONS`; read it **when writing the form**.
-- `references/result-template.md` — the exact markdown shape the form emits, so the parser knows what to expect; read it **when reconciling a saved result**.
+- `references/form-template.html` — the generator template, parameterised by `DECISIONS`; read
+  it **when writing the form**.
+- `references/result-template.md` — the exact markdown shape the form emits, so the parser knows
+  what to expect; read it **when reconciling a saved result**.

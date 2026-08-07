@@ -1,7 +1,6 @@
 ## Constructor-Validated Records
 
-When a record must reject invalid input **at construction** (blank ids, out-of-range limits), use an explicit constructor with guards plus get-only auto-properties. Optional params get defaults in the constructor signature; callers use
-named arguments.
+When a record must reject invalid input **at construction** (blank ids, out-of-range limits), use an explicit constructor with guards plus get-only auto-properties. Optional params get defaults in the constructor signature; callers use named arguments.
 
 ```csharp
 public sealed record MemoryWriteRequest
@@ -39,13 +38,12 @@ public sealed record MemoryWriteRequest
 
 Why not the alternatives:
 
-| Shape                                                                               | Problem                                                                                    |
-|-------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| Positional primary ctor + same-signature chaining ctor (`: this(...)` + validation) | Legal but easy to get wrong (defaults on both ctors, ambiguity risk)                       |
-| `required ... init` properties                                                      | Compile-time presence, but cannot run validation logic                                     |
-| Hand-rolled `?? throw` / `if (x == null) throw` inline                              | Repo invariants prefer a guard helper — reads as intent, consistent exception type/message |
+| Shape | Problem |
+|---|---|
+| Positional primary ctor + same-signature chaining ctor (`: this(...)` + validation) | Legal but easy to get wrong (defaults on both ctors, ambiguity risk) |
+| `required ... init` properties | Compile-time presence, but cannot run validation logic |
+| Hand-rolled `?? throw` / `if (x == null) throw` inline | Repo invariants prefer a guard helper — reads as intent, consistent exception type/message |
 
-Key nuance: **computed (expression-bodied) properties are NOT part of record value equality** — they have no backing field, so the synthesized `Equals`/`GetHashCode` skip them. A derived property (e.g.
-`Context => ContextNaming.WorkspaceContext(Id)`) can therefore live inside a value-equality record safely. Stored auto-properties ARE compared.
+Key nuance: **computed (expression-bodied) properties are NOT part of record value equality** — they have no backing field, so the synthesized `Equals`/`GetHashCode` skip them. A derived property (e.g. `Context => ContextNaming.WorkspaceContext(Id)`) can therefore live inside a value-equality record safely. Stored auto-properties ARE compared.
 
 Guard exception types: `ArgumentException` for blank strings, `ArgumentOutOfRangeException` for out-of-range numerics. Tests assert the specific type, not the base.

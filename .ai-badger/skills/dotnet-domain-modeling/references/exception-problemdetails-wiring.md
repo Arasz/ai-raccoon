@@ -1,5 +1,6 @@
 # Exception → ProblemDetails Wiring
 
+
 When domain exceptions need HTTP error responses, each exception requires a **triple** of changes in `DomainExceptionProblemMapper`:
 
 ### 1. Add a problem-type constant
@@ -48,3 +49,4 @@ return await req.HttpContext.WriteProblemAsync(problem, ct);
 await req.HttpContext.WriteProblemAsync(problem, ct);
 return req.HttpContext.Response;
 ```
+

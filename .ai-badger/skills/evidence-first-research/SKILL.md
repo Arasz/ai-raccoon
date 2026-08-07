@@ -42,7 +42,9 @@ grades badly** rather than producing a page that looks finished.
 | `UNVERIFIED` | You did not check | Nothing. Saying so *is* the finding |
 
 `MEASURED` and `READ` are refused without an `**Evidence:**` line. `UNVERIFIED` is deliberately
-free: demanding a citation for "nobody looked" pushes writers to leave the gap silent instead, which is the failure this is built to prevent. Full rules in `references/provenance.md` — read it when grading or when a grade is disputed.
+free: demanding a citation for "nobody looked" pushes writers to leave the gap silent instead,
+which is the failure this is built to prevent. Full rules in `references/provenance.md` — read it when
+grading or when a grade is disputed.
 
 **The grade is about you, not the claim.** A true fact you did not check is `UNVERIFIED`. A number
 someone else measured and you copied is `READ`, not `MEASURED` — and if you cannot cite where you
@@ -117,5 +119,6 @@ No environment-specific gotchas known.
 ## Files
 
 - `references/provenance.md` — what each grade means, what disqualifies one, worked examples. **Read it when grading a finding, or when a grade is disputed.**
-- `references/report-template.md` — the record shape the renderer parses. **Read it when writing the record (step 3).**
+- `references/report-template.md` — the record shape the renderer parses. **Read it when
+  writing the record (step 3).**
 - `scripts/render_report.py` — record → self-contained HTML. No network, inline SVG, no scripts.

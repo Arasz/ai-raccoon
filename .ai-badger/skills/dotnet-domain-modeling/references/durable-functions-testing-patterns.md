@@ -29,15 +29,15 @@ private static (FakeLlmClient LlmClient, FakeLlmClientFactory LlmClientFactory, 
 
 ### Assertions to Include
 
-| Assertion                                                                    | What it proves                |
-|------------------------------------------------------------------------------|-------------------------------|
-| `sentRequest.Tier.ShouldBe(ModelTier.Strong)`                                | Correct model tier            |
-| `sentRequest.JsonSchema.ShouldBe(MySchemas.X)`                               | Correct schema contract       |
-| `sentRequest.StepType.ShouldBe(MyStepTypes.X)`                               | Correct step type             |
-| `sentContent.ShouldContain(...)` on each content part label                  | All inputs reach the LLM      |
-| `sentRequest.ContentParts[i].ShouldContain(JsonSerializer.Serialize(input))` | Inputs are compact JSON       |
-| `llmClientFactory.RequestedUserIds.ShouldBe([UserId])`                       | UserId threading              |
-| `Should.ThrowAsync<LlmResponseValidationException>(...)`                     | Invalid LLM output propagates |
+| Assertion | What it proves |
+|---|---|
+| `sentRequest.Tier.ShouldBe(ModelTier.Strong)` | Correct model tier |
+| `sentRequest.JsonSchema.ShouldBe(MySchemas.X)` | Correct schema contract |
+| `sentRequest.StepType.ShouldBe(MyStepTypes.X)` | Correct step type |
+| `sentContent.ShouldContain(...)` on each content part label | All inputs reach the LLM |
+| `sentRequest.ContentParts[i].ShouldContain(JsonSerializer.Serialize(input))` | Inputs are compact JSON |
+| `llmClientFactory.RequestedUserIds.ShouldBe([UserId])` | UserId threading |
+| `Should.ThrowAsync<LlmResponseValidationException>(...)` | Invalid LLM output propagates |
 
 ### Fixture Convention
 
@@ -46,7 +46,6 @@ Fixtures create the domain objects, then configure `FakeLlmClient` with a contra
 ### Content Parts Convention
 
 Each content part is labeled with `## Source N — description` and contains compact JSON. Tests verify:
-
 1. The total count matches expectations
 2. Each part contains the relevant input data
 3. Optional parts (e.g. prior scores) are omitted when empty/null
@@ -94,13 +93,13 @@ private static async Task<(InMemoryApplicationRepository, Application)> SeedAppl
 
 ### Test Categories
 
-| Category                 | Pattern                                                              |
-|--------------------------|----------------------------------------------------------------------|
-| Happy path (2xx)         | Assert status code + orchestration scheduling call                   |
-| Unknown resource         | Assert domain exception thrown with correct properties               |
-| Invalid state transition | Assert `InvalidXxxTransitionException` with `From`/`To`              |
-| Missing prerequisite     | Assert specific exception type and ID properties                     |
-| Concurrency guard        | Setup `GetInstanceAsync` to return active instance, assert exception |
+| Category | Pattern |
+|---|---|
+| Happy path (2xx) | Assert status code + orchestration scheduling call |
+| Unknown resource | Assert domain exception thrown with correct properties |
+| Invalid state transition | Assert `InvalidXxxTransitionException` with `From`/`To` |
+| Missing prerequisite | Assert specific exception type and ID properties |
+| Concurrency guard | Setup `GetInstanceAsync` to return active instance, assert exception |
 
 ### Orchestration Scheduling Assertion
 
@@ -151,25 +150,25 @@ private static void SetupGenerateSuccess(ctx, result) { ... }
 
 ### Test Scenarios (minimum)
 
-| Scenario                | What to assert                                                |
-|-------------------------|---------------------------------------------------------------|
-| Happy path              | Outcome fields, final application state, intervention cleared |
-| Idempotent early return | No save/load calls for skipped scenarios                      |
-| Failure → park          | `Intervention.IsRequired == true`, `StepStatus.AwaitingUser`  |
-| Retry → complete        | Activity called N+1 times, final state correct                |
-| Skip                    | No side effects, outcome `Generated/Prepared == false`        |
-| Outer catch             | Intervention set, exception re-thrown                         |
-| Max retries exceeded    | Step ends `Failed`, not left `AwaitingUser`                   |
+| Scenario | What to assert |
+|---|---|
+| Happy path | Outcome fields, final application state, intervention cleared |
+| Idempotent early return | No save/load calls for skipped scenarios |
+| Failure → park | `Intervention.IsRequired == true`, `StepStatus.AwaitingUser` |
+| Retry → complete | Activity called N+1 times, final state correct |
+| Skip | No side effects, outcome `Generated/Prepared == false` |
+| Outer catch | Intervention set, exception re-thrown |
+| Max retries exceeded | Step ends `Failed`, not left `AwaitingUser` |
 
 ### Non-Step Orchestrations
 
 Some orchestrations (scoring, feedback summary) don't use `ExecuteStepAsync` — they call activities directly and have a simpler try/catch + `TryMarkOrchestrationAsFailedAsync` pattern. For these:
 
-| Scenario                    | What to assert                           |
-|-----------------------------|------------------------------------------|
-| Happy path                  | Outcome, saved application state         |
-| Early return (wrong status) | No activity calls, no save               |
-| Failure                     | Intervention marked, exception re-thrown |
+| Scenario | What to assert |
+|---|---|
+| Happy path | Outcome, saved application state |
+| Early return (wrong status) | No activity calls, no save |
+| Failure | Intervention marked, exception re-thrown |
 
 ## 4. Exception Mapping Tests
 
@@ -206,21 +205,21 @@ dotnet test
 
 ## Pitfalls
 
-| Pitfall                                                                         | Fix                                                                                                                                                                                      |
-|---------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `FakeLlmClient` throws "no fixture configured"                                  | Forgetting `SetJsonResult` — configure the fixture before exercising                                                                                                                     |
-| `InMemoryApplicationRepository.SaveAsync` throws `ConcurrencyConflictException` | First save uses `etag: null`; subsequent saves must pass the returned etag                                                                                                               |
-| Orchestration test passes but wrong `context.NewGuid()` sequence                | Use explicit Guid sequence: `context.NewGuid().Returns(guid1, guid2)` — the order matters for session IDs vs step IDs                                                                    |
-| `DefaultHttpContext.Response.Body` is null                                      | Initialize with `Body = new MemoryStream()` in the helper                                                                                                                                |
-| `FunctionContext.UserId` not set                                                | Extension property sets `context.Items["UserId"]`; substitute needs `Items.Returns(new Dictionary<object, object>())`                                                                    |
-| Testing wrong orchestration instance ID                                         | Use `ApplicationOrchestrationInstanceIds.ForXxx(...)` to derive expected ID                                                                                                              |
-| `ThrowsAsync` on abstract method returning `Task<T>`                            | NSubstitute can't intercept `.ThrowsAsync()` on the return value of an abstract method stub. Use `.Returns(Task.FromException<T>(exception))` instead                                    |
-| `Arg.Any<string>()` for `TaskName` parameter                                    | `ScheduleNewOrchestrationInstanceAsync` takes `TaskName` (not `string`). Use `Arg.Any<TaskName>()`. The implicit conversion from `string` doesn't help NSubstitute matchers              |
-| `Arg.Any<object>()` for nullable parameter                                      | When the method signature has `object?`, use `Arg.Any<object?>()` — NSubstitute respects nullable annotations and `Arg.Any<object>()` won't match `null`                                 |
-| `Arg.Is<T>(o => o?.Prop == val)` — CS8072                                       | Expression tree lambdas can't contain null-propagulating operators. Use `o != null && o.Prop == val` instead                                                                             |
-| `StartOrchestrationOptions` not found                                           | It's in `Microsoft.DurableTask` (Abstractions), NOT `Microsoft.DurableTask.Client`. Add `using Microsoft.DurableTask;` alongside `using Microsoft.DurableTask.Client;`                   |
-| `OrchestrationAlreadyExistsException` not found                                 | It's in `DurableTask.Core.Exceptions`, not in `Microsoft.DurableTask.Client`. Add `using DurableTask.Core.Exceptions;`                                                                   |
-| CS8619/CS8604 on NSubstitute `.Returns()` with nullable args                    | When `Task.FromResult(callInfo.Arg<T>())` fails nullability because `T` is `T?`, use `Task.FromResult<T>(callInfo.Arg<T>()!)` — explicit generic type argument + null-forgiving operator |
+| Pitfall | Fix |
+|---|---|
+| `FakeLlmClient` throws "no fixture configured" | Forgetting `SetJsonResult` — configure the fixture before exercising |
+| `InMemoryApplicationRepository.SaveAsync` throws `ConcurrencyConflictException` | First save uses `etag: null`; subsequent saves must pass the returned etag |
+| Orchestration test passes but wrong `context.NewGuid()` sequence | Use explicit Guid sequence: `context.NewGuid().Returns(guid1, guid2)` — the order matters for session IDs vs step IDs |
+| `DefaultHttpContext.Response.Body` is null | Initialize with `Body = new MemoryStream()` in the helper |
+| `FunctionContext.UserId` not set | Extension property sets `context.Items["UserId"]`; substitute needs `Items.Returns(new Dictionary<object, object>())` |
+| Testing wrong orchestration instance ID | Use `ApplicationOrchestrationInstanceIds.ForXxx(...)` to derive expected ID |
+| `ThrowsAsync` on abstract method returning `Task<T>` | NSubstitute can't intercept `.ThrowsAsync()` on the return value of an abstract method stub. Use `.Returns(Task.FromException<T>(exception))` instead |
+| `Arg.Any<string>()` for `TaskName` parameter | `ScheduleNewOrchestrationInstanceAsync` takes `TaskName` (not `string`). Use `Arg.Any<TaskName>()`. The implicit conversion from `string` doesn't help NSubstitute matchers |
+| `Arg.Any<object>()` for nullable parameter | When the method signature has `object?`, use `Arg.Any<object?>()` — NSubstitute respects nullable annotations and `Arg.Any<object>()` won't match `null` |
+| `Arg.Is<T>(o => o?.Prop == val)` — CS8072 | Expression tree lambdas can't contain null-propagulating operators. Use `o != null && o.Prop == val` instead |
+| `StartOrchestrationOptions` not found | It's in `Microsoft.DurableTask` (Abstractions), NOT `Microsoft.DurableTask.Client`. Add `using Microsoft.DurableTask;` alongside `using Microsoft.DurableTask.Client;` |
+| `OrchestrationAlreadyExistsException` not found | It's in `DurableTask.Core.Exceptions`, not in `Microsoft.DurableTask.Client`. Add `using DurableTask.Core.Exceptions;` |
+| CS8619/CS8604 on NSubstitute `.Returns()` with nullable args | When `Task.FromResult(callInfo.Arg<T>())` fails nullability because `T` is `T?`, use `Task.FromResult<T>(callInfo.Arg<T>()!)` — explicit generic type argument + null-forgiving operator |
 
 ## NSubstitute + DurableTaskClient Reference
 

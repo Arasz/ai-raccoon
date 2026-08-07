@@ -4,7 +4,9 @@ Reusable test helpers and techniques for testing policy objects that depend on a
 
 ## Walking a State Machine Forward in Tests
 
-When testing a policy that needs an `Application` in a specific state, build a helper that walks the happy path forward. This avoids creating separate factory methods for each state and stays aligned with the real transition rules.
+When testing a policy that needs an `Application` in a specific state, build a helper
+that walks the happy path forward. This avoids creating separate factory methods for
+each state and stays aligned with the real transition rules.
 
 ```csharp
 private static Application NewApplication(ApplicationState state = ApplicationState.Draft)
@@ -34,11 +36,14 @@ private static Application NewApplication(ApplicationState state = ApplicationSt
 }
 ```
 
-**Pitfall:** Terminal states like `Failed` and `Declined` are not on the forward path. To reach them, walk to the desired active state first, then apply the terminal transition explicitly. The helper above only handles forward-path states.
+**Pitfall:** Terminal states like `Failed` and `Declined` are not on the forward path.
+To reach them, walk to the desired active state first, then apply the terminal transition
+explicitly. The helper above only handles forward-path states.
 
 ## Ordinal "At or Past" Comparison
 
-For idempotent / out-of-order signal detection, compare ordinal positions on the forward path. This is cheaper than consulting the state machine and gives a clear
+For idempotent / out-of-order signal detection, compare ordinal positions on the
+forward path. This is cheaper than consulting the state machine and gives a clear
 "skip" signal.
 
 ```csharp
@@ -68,22 +73,26 @@ private static bool IsAtOrPast(ApplicationState current, ApplicationState target
 }
 ```
 
-**Use when:** A signal may arrive out of order and you need to detect whether the aggregate has already progressed past the proposed state.
+**Use when:** A signal may arrive out of order and you need to detect whether the
+aggregate has already progressed past the proposed state.
 
-**Pitfall:** `Array.IndexOf` returns -1 for states not in the array (Failed, Declined). Always guard against negative indices — returning `false` means "not comparable on the forward path", which is correct because Failed/Declined are
-always-reachable from any active state and should be handled by a separate rule.
+**Pitfall:** `Array.IndexOf` returns -1 for states not in the array (Failed, Declined).
+Always guard against negative indices — returning `false` means "not comparable on the
+forward path", which is correct because Failed/Declined are always-reachable from any
+active state and should be handled by a separate rule.
 
 ## Testing Policy Objects
 
-Policy objects (like `SignalTransitionPolicy`) take domain inputs and return a decision record. Test each decision branch independently:
+Policy objects (like `SignalTransitionPolicy`) take domain inputs and return a decision
+record. Test each decision branch independently:
 
 ### Decision Categories
 
-| Decision | When                                                                 | Test focus                                                   |
-|----------|----------------------------------------------------------------------|--------------------------------------------------------------|
-| NoOp     | Signal irrelevant, aggregate already advanced, state machine rejects | All NoOp reasons are distinct — test each one                |
-| Apply    | Allowed transition + high confidence                                 | Verify `TargetState` set, note includes signal identity      |
-| Propose  | Allowed transition + low confidence, OR terminal target              | Always propose for terminal targets regardless of confidence |
+| Decision | When | Test focus |
+|----------|------|------------|
+| NoOp | Signal irrelevant, aggregate already advanced, state machine rejects | All NoOp reasons are distinct — test each one |
+| Apply | Allowed transition + high confidence | Verify `TargetState` set, note includes signal identity |
+| Propose | Allowed transition + low confidence, OR terminal target | Always propose for terminal targets regardless of confidence |
 
 ### Test Helper: Configurable Signal Factory
 
@@ -133,9 +142,11 @@ public void Apply_transition_records_signal_in_note()
 }
 ```
 
-This ensures the note carries enough context for audit trails without being brittle about exact formatting.
+This ensures the note carries enough context for audit trails without being brittle
+about exact formatting.
 
-**Pitfall — nullable `Reason` field:** `SignalTransitionDecision.Reason` is `string?`. Shouldly's `ShouldContain` expects non-null `string`. Always assert non-null first:
+**Pitfall — nullable `Reason` field:** `SignalTransitionDecision.Reason` is `string?`.
+Shouldly's `ShouldContain` expects non-null `string`. Always assert non-null first:
 
 ```csharp
 // ❌ CS8604: Possible null reference argument
@@ -146,11 +157,14 @@ decision.Reason.ShouldNotBeNull();
 decision.Reason!.ShouldContain("below threshold", Case.Insensitive);
 ```
 
-Use `Case.Insensitive` when matching formatted numbers or locale-dependent strings to avoid brittle assertions.
+Use `Case.Insensitive` when matching formatted numbers or locale-dependent strings
+to avoid brittle assertions.
 
 ## Transition Matrix Theory Test
 
-When a policy evaluates multiple dimensions (app state × target state × confidence), use a `[Theory]` with `[InlineData]` for the full matrix. This catches regressions across the entire decision space:
+When a policy evaluates multiple dimensions (app state × target state × confidence),
+use a `[Theory]` with `[InlineData]` for the full matrix. This catches regressions
+across the entire decision space:
 
 ```csharp
 [Theory]
@@ -179,11 +193,14 @@ public void Transition_matrix(ApplicationState appState, ApplicationState target
 }
 ```
 
-**Minimum coverage:** ≥ 12 rows covering Apply/Propose/NoOp decisions across at least 3 different app states. Always include terminal-target rows (Failed) at multiple confidence levels to prove the no-regret guarantee.
+**Minimum coverage:** ≥ 12 rows covering Apply/Propose/NoOp decisions across at least
+3 different app states. Always include terminal-target rows (Failed) at multiple
+confidence levels to prove the no-regret guarantee.
 
 ### Late Rejection Tests
 
-A rejection arriving after the app has progressed is a special case — it should still Propose (not NoOp) because the target is terminal:
+A rejection arriving after the app has progressed is a special case — it should still
+Propose (not NoOp) because the target is terminal:
 
 ```csharp
 [Fact]

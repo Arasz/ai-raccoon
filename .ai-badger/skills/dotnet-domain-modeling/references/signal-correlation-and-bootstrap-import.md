@@ -33,7 +33,6 @@ A static class that matches an inbound signal to existing data using a waterfall
 ### Ambiguity Rule
 
 When fuzzy matching produces **more than one** candidate:
-
 - Return `None` (equivalent to null) — the correlator **never guesses**.
 - The signal enters as `Proposed` with a descriptive summary.
 
@@ -65,23 +64,22 @@ public sealed record {Platform}CorrelationResult
 
 ### Test Matrix (8 tests minimum)
 
-| Test                            | Input                                       | Expected                                         |
-|---------------------------------|---------------------------------------------|--------------------------------------------------|
-| Exact match with application    | Signal JobId matches offer URL + app exists | `Exact`, correct OfferId + ApplicationId         |
-| Exact match without application | Signal JobId matches offer URL, no app      | `Exact`, OfferId set, ApplicationId null         |
-| Fuzzy match (single candidate)  | Company+title match one app                 | `Fuzzy`, correct ApplicationId                   |
-| No match                        | Company+title don't match anything          | `None`, all fields null                          |
-| Multiple fuzzy matches          | Company+title match two apps                | `Multiple`, CandidateCount=2, ApplicationId null |
-| Empty company                   | Signal with empty Company                   | `None` (no fuzzy match possible)                 |
-| Empty lists                     | No offers, no apps                          | `None`                                           |
-| Case insensitivity              | "ACME"/"dev" vs "acme"/"Dev"                | `Fuzzy` match                                    |
+| Test | Input | Expected |
+|---|---|---|
+| Exact match with application | Signal JobId matches offer URL + app exists | `Exact`, correct OfferId + ApplicationId |
+| Exact match without application | Signal JobId matches offer URL, no app | `Exact`, OfferId set, ApplicationId null |
+| Fuzzy match (single candidate) | Company+title match one app | `Fuzzy`, correct ApplicationId |
+| No match | Company+title don't match anything | `None`, all fields null |
+| Multiple fuzzy matches | Company+title match two apps | `Multiple`, CandidateCount=2, ApplicationId null |
+| Empty company | Signal with empty Company | `None` (no fuzzy match possible) |
+| Empty lists | No offers, no apps | `None` |
+| Case insensitivity | "ACME"/"dev" vs "acme"/"Dev" | `Fuzzy` match |
 
 ## Bootstrap Importer
 
 ### Pattern
 
 A static class with two methods:
-
 - **`DryRun`** — pure computation that classifies each snapshot record as Import/Skip/Proposal against existing data. NO writes.
 - **`Import`** — creates Application + JobOffer records for accepted records, using delegate injection for domain purity.
 
@@ -90,13 +88,13 @@ A static class with two methods:
 For each record, evaluate a dedup chain:
 
 1. **Offer URL dedup** — extract job ID from URL; if matching offer exists:
-    - Existing application for that offer → `Skip` ("Already tracked")
-    - Existing signal with matching ExternalId → `Skip` ("Already ingested")
-2. **Fuzzy conflict detection** — company+title match existing application (s):
-    - State beyond CvSent → `Skip` ("already in state")
-    - CvSent with different date (>1 day) → `Proposal` ("different applied date")
-    - Draft/CvReady → `Proposal` ("manual review needed")
-    - Multiple candidates → `Proposal` ("Multiple applications match")
+   - Existing application for that offer → `Skip` ("Already tracked")
+   - Existing signal with matching ExternalId → `Skip` ("Already ingested")
+2. **Fuzzy conflict detection** — company+title match existing application(s):
+   - State beyond CvSent → `Skip` ("already in state")
+   - CvSent with different date (>1 day) → `Proposal` ("different applied date")
+   - Draft/CvReady → `Proposal` ("manual review needed")
+   - Multiple candidates → `Proposal` ("Multiple applications match")
 3. **No match** → `Import`
 
 ### Preview/Result Types
@@ -175,48 +173,48 @@ Key properties: state is `CvSent` (already submitted), `AppliedAt` sourced from 
 
 #### DryRun tests (12 tests minimum)
 
-| Test                                    | Input                                                 | Expected                             |
-|-----------------------------------------|-------------------------------------------------------|--------------------------------------|
-| Imports all when no existing data       | N records, empty existing                             | N `Import`, counts correct           |
-| Skips when offer+app exist (URL dedup)  | Record URL matches existing offer+app                 | `Skip`, "Already tracked"            |
-| Skips when signal exists (signal dedup) | Record URL matches existing signal                    | `Skip`, "Already ingested"           |
-| Skips when app beyond CvSent            | Fuzzy match to `Interview` state app                  | `Skip`, "already in state"           |
-| Proposes when app in Draft              | Fuzzy match to `Draft` state app                      | `Proposal`, "manual review"          |
-| Proposes on multiple fuzzy matches      | Company+title match 2 apps                            | `Proposal`, "Multiple"               |
-| Proposes on date mismatch               | CvSent app with different date                        | `Proposal`, "different applied date" |
-| Skips CvSent same date (via dedup)      | URL with job ID matching existing offer+app in CvSent | `Skip` (dedup chain, NOT fuzzy)      |
-| Handles missing company+title           | Empty Company/Title                                   | `Import` (no fuzzy match possible)   |
-| Handles null URL                        | Null URL                                              | `Import` (no exact match possible)   |
-| Empty preview on no records             | Empty list                                            | 0 items, 0 all counts                |
-| Deterministic                           | Same input twice                                      | Identical output                     |
+| Test | Input | Expected |
+|---|---|---|
+| Imports all when no existing data | N records, empty existing | N `Import`, counts correct |
+| Skips when offer+app exist (URL dedup) | Record URL matches existing offer+app | `Skip`, "Already tracked" |
+| Skips when signal exists (signal dedup) | Record URL matches existing signal | `Skip`, "Already ingested" |
+| Skips when app beyond CvSent | Fuzzy match to `Interview` state app | `Skip`, "already in state" |
+| Proposes when app in Draft | Fuzzy match to `Draft` state app | `Proposal`, "manual review" |
+| Proposes on multiple fuzzy matches | Company+title match 2 apps | `Proposal`, "Multiple" |
+| Proposes on date mismatch | CvSent app with different date | `Proposal`, "different applied date" |
+| Skips CvSent same date (via dedup) | URL with job ID matching existing offer+app in CvSent | `Skip` (dedup chain, NOT fuzzy) |
+| Handles missing company+title | Empty Company/Title | `Import` (no fuzzy match possible) |
+| Handles null URL | Null URL | `Import` (no exact match possible) |
+| Empty preview on no records | Empty list | 0 items, 0 all counts |
+| Deterministic | Same input twice | Identical output |
 
 #### Import tests (4 tests minimum)
 
-| Test                          | Input                              | Expected                                              |
-|-------------------------------|------------------------------------|-------------------------------------------------------|
-| Creates application and offer | One accepted record                | App at CvSent with history, Offer with correct Source |
-| Reuses existing offer         | Record matching existing offer     | App created referencing existing offer                |
-| Idempotent re-import          | Run import, then dry-run same data | Second dry-run: all `Skip`                            |
-| Records errors                | Delegate that throws on 2nd call   | Error recorded, other records succeed                 |
+| Test | Input | Expected |
+|---|---|---|
+| Creates application and offer | One accepted record | App at CvSent with history, Offer with correct Source |
+| Reuses existing offer | Record matching existing offer | App created referencing existing offer |
+| Idempotent re-import | Run import, then dry-run same data | Second dry-run: all `Skip` |
+| Records errors | Delegate that throws on 2nd call | Error recorded, other records succeed |
 
 #### Application factory tests (6 tests minimum)
 
-| Test                  | Assertion                                  |
-|-----------------------|--------------------------------------------|
-| State is CvSent       | `State == CvSent`                          |
-| AppliedAt set         | `AppliedAt == appliedAt parameter`         |
-| Single history entry  | `StateHistory.Count == 1`, correct from/to |
-| TriggeredBy is System | `History[0].TriggeredBy == System`         |
-| No GeneratedCv        | `GeneratedCvId == null`                    |
-| No UsedCv             | `UsedCv == null`                           |
+| Test | Assertion |
+|---|---|
+| State is CvSent | `State == CvSent` |
+| AppliedAt set | `AppliedAt == appliedAt parameter` |
+| Single history entry | `StateHistory.Count == 1`, correct from/to |
+| TriggeredBy is System | `History[0].TriggeredBy == System` |
+| No GeneratedCv | `GeneratedCvId == null` |
+| No UsedCv | `UsedCv == null` |
 
 ## Pitfalls
 
-| Pitfall                                                      | Fix                                                                                                                                                                                                                                                                                             |
-|--------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SkipReason` is `string?` → Shouldly `ShouldContain` CS8604  | Use `SkipReason!.ShouldContain(...)` — the `!` null-forgiving operator satisfies the analyzer since the test assertion IS the null check                                                                                                                                                        |
-| `Note` is `string?` → same CS8604                            | Same fix: `Note!.ShouldContain(...)`                                                                                                                                                                                                                                                            |
-| `ExtractJobId` is `internal` but test project can't see it   | Add `<InternalsVisibleTo Include="JobSearchAiAssistant.Domain.Tests"/>` to the Domain `.csproj`. The project does NOT have this by default.                                                                                                                                                     |
-| "CvSent same date" test fails if no URL with job ID          | The dedup chain requires URL → job ID → existing offer → existing app. Without a URL, the fuzzy match finds the app but falls through (same date = no date mismatch, CvSent = not beyond CvSent, not Draft/CvReady). Fix: use a record URL with job ID so the offer-URL dedup chain catches it. |
-| Delegate-based Import method: how to test error recording    | Use a mutable `callCount` counter in the delegate. On the Nth call, throw. Assert `result.Errors` has exactly 1 entry with the correct RecordIndex.                                                                                                                                             |
-| BootstrapImporter.Import creates new offers for every record | The "reuse existing offer" logic lives in the API/orchestration layer (dry-run detects duplicates, passes the existing offer ID). The domain Import method always creates offer + app per record.                                                                                               |
+| Pitfall | Fix |
+|---|---|
+| `SkipReason` is `string?` → Shouldly `ShouldContain` CS8604 | Use `SkipReason!.ShouldContain(...)` — the `!` null-forgiving operator satisfies the analyzer since the test assertion IS the null check |
+| `Note` is `string?` → same CS8604 | Same fix: `Note!.ShouldContain(...)` |
+| `ExtractJobId` is `internal` but test project can't see it | Add `<InternalsVisibleTo Include="JobSearchAiAssistant.Domain.Tests"/>` to the Domain `.csproj`. The project does NOT have this by default. |
+| "CvSent same date" test fails if no URL with job ID | The dedup chain requires URL → job ID → existing offer → existing app. Without a URL, the fuzzy match finds the app but falls through (same date = no date mismatch, CvSent = not beyond CvSent, not Draft/CvReady). Fix: use a record URL with job ID so the offer-URL dedup chain catches it. |
+| Delegate-based Import method: how to test error recording | Use a mutable `callCount` counter in the delegate. On the Nth call, throw. Assert `result.Errors` has exactly 1 entry with the correct RecordIndex. |
+| BootstrapImporter.Import creates new offers for every record | The "reuse existing offer" logic lives in the API/orchestration layer (dry-run detects duplicates, passes the existing offer ID). The domain Import method always creates offer + app per record. |

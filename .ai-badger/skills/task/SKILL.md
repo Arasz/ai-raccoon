@@ -240,7 +240,8 @@ project's docs against the merged code, fix small drift, and report gaps needing
 
 ## Gotchas
 
-- **`start` with `--no-worktree` records a branch name nothing creates.** `status` then reports a branch that does not exist (2026-08-01: two commits landed on `main`).
+- **`start` with `--no-worktree` records a branch name nothing creates.** `status` then reports a
+  branch that does not exist (2026-08-01: two commits landed on `main`).
 - **`finish` refuses and keeps the worktree when it holds work that exists nowhere else.** Read the
   `worktree.keptBecause` field; a kept worktree is unmerged or uncommitted work, not failed cleanup.
 - **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.**

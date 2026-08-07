@@ -147,26 +147,26 @@ public static class LinkedInSignalToChannelSignal
 
 ### Parser tests (7 tests minimum)
 
-| Test                                          | What it proves                                                        |
-|-----------------------------------------------|-----------------------------------------------------------------------|
-| Parse application-sent email                  | Happy path: event type, company, title, job ID extraction             |
-| Parse recruiter InMail                        | Message-type event: excerpt captured, company/title empty             |
-| Parse rejection from ATS (not LinkedIn)       | Returns `null` — rejections come from employer ATSs, not the platform |
-| Unknown event type degrades to Unknown        | Unrecognized pattern still produces a signal, not an exception        |
-| Non-LinkedIn email returns null               | Sender whitelist works                                                |
-| Application without job ID has null JobId     | Graceful degradation when platform ID is missing                      |
-| Null body returns Unknown for platform sender | Subject-only classification works                                     |
+| Test | What it proves |
+|---|---|
+| Parse application-sent email | Happy path: event type, company, title, job ID extraction |
+| Parse recruiter InMail | Message-type event: excerpt captured, company/title empty |
+| Parse rejection from ATS (not LinkedIn) | Returns `null` — rejections come from employer ATSs, not the platform |
+| Unknown event type degrades to Unknown | Unrecognized pattern still produces a signal, not an exception |
+| Non-LinkedIn email returns null | Sender whitelist works |
+| Application without job ID has null JobId | Graceful degradation when platform ID is missing |
+| Null body returns Unknown for platform sender | Subject-only classification works |
 
 ### Mapper tests (6 tests minimum)
 
-| Test                                            | What it proves                                     |
-|-------------------------------------------------|----------------------------------------------------|
-| ExternalId set from platform identifier         | Dedup key is present and deterministic             |
-| Different signals produce different ExternalIds | No hash collisions for distinct inputs             |
-| Same signal produces same ExternalId            | Deterministic (no random component in dedup key)   |
-| Deterministic classification mapping            | e.g., ApplicationSent → CvSent with 1.0 confidence |
-| Uncertain events produce null classification    | LLM classifier will handle these                   |
-| Full pipeline: parse → map → ChannelSignal      | End-to-end integration test                        |
+| Test | What it proves |
+|---|---|
+| ExternalId set from platform identifier | Dedup key is present and deterministic |
+| Different signals produce different ExternalIds | No hash collisions for distinct inputs |
+| Same signal produces same ExternalId | Deterministic (no random component in dedup key) |
+| Deterministic classification mapping | e.g., ApplicationSent → CvSent with 1.0 confidence |
+| Uncertain events produce null classification | LLM classifier will handle these |
+| Full pipeline: parse → map → ChannelSignal | End-to-end integration test |
 
 ### Full pipeline integration test
 
@@ -198,17 +198,17 @@ public void Full_pipeline_parse_map_produces_valid_ChannelSignal()
 
 ## Pitfalls
 
-| Pitfall                                                       | Fix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-|---------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Combining subject + body for regex                            | Try subject first, then body separately. Combined strings cause greedy matches across boundaries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Returning `null` for unrecognized patterns from known senders | Return `Unknown` event type — the sender IS from the platform, the pattern is just unrecognized. `null` means "not this platform's email."                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Using random GUIDs for ExternalId                             | Use the platform's stable identifier (job ID, message ID) or a deterministic hash. Random IDs defeat deduplication.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Classifying uncertain events deterministically                | Only map event types where classification is 100% certain. Return `null` from the classification mapper for uncertain types.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Hardcoding sender emails in logic                             | Use a `HashSet<string>` at the top of the parser class. Easy to extend, easy to test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Forgetting the `Unknown` enum member                          | Always include `Unknown` as the fallback. New event types from the platform won't crash the parser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Test email subjects don't match parser regex                  | When writing integration tests for the channel monitor, the email subject/snippet must match what the parser's `ClassifyEventType` + regex patterns actually recognize. Read the parser's patterns before writing test data. E.g., "Your application for X at Y was sent" does NOT match `Contains("applied")` or `Contains("application sent")` — use "You applied for X at Y" instead. Mismatched test data causes the parser to return `Unknown` (no deterministic classification) and tests fail with unexpected `RawExcerpt` values like "LinkedIn notification: Unknown". |
-| `Guid.NewGuid()` in mapper code                               | Use `Guid.CreateVersion7()` per ADR-0004, not `Guid.NewGuid()`. V7 is time-ordered for Cosmos partition efficiency.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Asserting on subject content in RecruiterMessage tests        | For `RecruiterMessage` events, `RawExcerpt` is built from the body snippet (`MessageExcerpt`), not the subject. Test assertions like `signal.RawExcerpt.ShouldContain("CompanyName")` will fail if the company name only appears in the subject. Ensure the test snippet contains the data you're asserting on.                                                                                                                                                                                                                                                                 |
+| Pitfall | Fix |
+|---|---|
+| Combining subject + body for regex | Try subject first, then body separately. Combined strings cause greedy matches across boundaries. |
+| Returning `null` for unrecognized patterns from known senders | Return `Unknown` event type — the sender IS from the platform, the pattern is just unrecognized. `null` means "not this platform's email." |
+| Using random GUIDs for ExternalId | Use the platform's stable identifier (job ID, message ID) or a deterministic hash. Random IDs defeat deduplication. |
+| Classifying uncertain events deterministically | Only map event types where classification is 100% certain. Return `null` from the classification mapper for uncertain types. |
+| Hardcoding sender emails in logic | Use a `HashSet<string>` at the top of the parser class. Easy to extend, easy to test. |
+| Forgetting the `Unknown` enum member | Always include `Unknown` as the fallback. New event types from the platform won't crash the parser. |
+| Test email subjects don't match parser regex | When writing integration tests for the channel monitor, the email subject/snippet must match what the parser's `ClassifyEventType` + regex patterns actually recognize. Read the parser's patterns before writing test data. E.g., "Your application for X at Y was sent" does NOT match `Contains("applied")` or `Contains("application sent")` — use "You applied for X at Y" instead. Mismatched test data causes the parser to return `Unknown` (no deterministic classification) and tests fail with unexpected `RawExcerpt` values like "LinkedIn notification: Unknown". |
+| `Guid.NewGuid()` in mapper code | Use `Guid.CreateVersion7()` per ADR-0004, not `Guid.NewGuid()`. V7 is time-ordered for Cosmos partition efficiency. |
+| Asserting on subject content in RecruiterMessage tests | For `RecruiterMessage` events, `RawExcerpt` is built from the body snippet (`MessageExcerpt`), not the subject. Test assertions like `signal.RawExcerpt.ShouldContain("CompanyName")` will fail if the company name only appears in the subject. Ensure the test snippet contains the data you're asserting on. |
 
 ## Spike Research Notes
 

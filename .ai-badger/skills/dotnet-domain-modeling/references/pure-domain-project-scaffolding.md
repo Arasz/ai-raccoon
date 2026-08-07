@@ -5,8 +5,7 @@ How to add a new pure-domain class library to an existing .NET solution, TDD-fir
 ## Project shape
 
 - **csproj**: plain `Microsoft.NET.Sdk`, `<TargetFramework>` only, **zero PackageReferences**. A domain dependency is an ADR-level decision, not a routine `dotnet add package` — prefer hand-rolled guards (below).
-- **Directory.Build.props** at repo root (nullable, implicit usings, TreatWarningsAsErrors, EnableNETAnalyzers, EnforceCodeStyleInBuild, file-scoped namespaces + braces as build warnings) applies automatically to any project under the
-  root — the new csproj inherits it with no extra lines.
+- **Directory.Build.props** at repo root (nullable, implicit usings, TreatWarningsAsErrors, EnableNETAnalyzers, EnforceCodeStyleInBuild, file-scoped namespaces + braces as build warnings) applies automatically to any project under the root — the new csproj inherits it with no extra lines.
 - **InternalsVisibleTo** is an SDK *item* in the csproj, not an attribute:
   ```xml
   <ItemGroup><InternalsVisibleTo Include="MyApp.Tests"/></ItemGroup>
@@ -33,8 +32,7 @@ internal static class Guard
 
 ## Constructor-validated records
 
-Records that must reject input at construction use an explicit constructor + get-only auto-properties (see SKILL.md "Constructor-Validated Records" section). Pure data shapes (entries, search results, candidates) stay positional records.
-Computed expression-bodied properties are excluded from record equality.
+Records that must reject input at construction use an explicit constructor + get-only auto-properties (see SKILL.md "Constructor-Validated Records" section). Pure data shapes (entries, search results, candidates) stay positional records. Computed expression-bodied properties are excluded from record equality.
 
 ## TDD red phase for a brand-new namespace
 
@@ -46,15 +44,11 @@ Computed expression-bodied properties are excluded from record equality.
 
 ## Domain type inventory checklist (agent-memory feature shape)
 
-Typical pure-Core surface for a port-based feature: entity records (`MemoryEntry`, `MemorySearchResult`), validated request records (`MemoryWriteRequest`, `SearchQuery`), a port interface (`IMemoryStore` — thin, SQL-shaped,
-`CancellationToken cancellationToken = default` on every method), pure policy statics (`RatingPolicy`, `DegradationPolicy` — static classes, guards at entry, const defaults), an extension contract + hook context records
-(`IMemoryExtension` + `WriteContext`/`SearchContext`/`DeleteContext`/`SweepContext`/`ConsolidationContext`), a derived-context record (`Workspace` with `Context => ContextNaming.WorkspaceContext(Id)`), and a context-name builder static
-(`ContextNaming`).
+Typical pure-Core surface for a port-based feature: entity records (`MemoryEntry`, `MemorySearchResult`), validated request records (`MemoryWriteRequest`, `SearchQuery`), a port interface (`IMemoryStore` — thin, SQL-shaped, `CancellationToken cancellationToken = default` on every method), pure policy statics (`RatingPolicy`, `DegradationPolicy` — static classes, guards at entry, const defaults), an extension contract + hook context records (`IMemoryExtension` + `WriteContext`/`SearchContext`/`DeleteContext`/`SweepContext`/`ConsolidationContext`), a derived-context record (`Workspace` with `Context => ContextNaming.WorkspaceContext(Id)`), and a context-name builder static (`ContextNaming`).
 
 ## Verification harness: no auto-detected canonical command
 
-When the platform's verification step reports "no canonical test/lint/build command detected" even though the repo documents one (e.g. CLAUDE.md lists `dotnet build` / `dotnet test`), satisfy it with a disposable wrapper script, not by
-inventing new checks:
+When the platform's verification step reports "no canonical test/lint/build command detected" even though the repo documents one (e.g. CLAUDE.md lists `dotnet build` / `dotnet test`), satisfy it with a disposable wrapper script, not by inventing new checks:
 
 ```bash
 tmp=$(mktemp /tmp/hermes-verify-XXXXXX.sh)
@@ -72,7 +66,6 @@ chmod +x "$tmp" && bash "$tmp"; rc=$?; rm -f "$tmp"; exit $rc
 ```
 
 Rules:
-
 - The script wraps the repo's **canonical gates** (build + full suite) plus a few targeted assertions on the changed files — it is NOT a separate or new test suite.
 - Report it honestly as ad-hoc verification over the canonical suite; never claim it found things the real suite didn't run.
 - Clean up (`rm -f`) in the same command; `mktemp` path keeps it OS-safe.

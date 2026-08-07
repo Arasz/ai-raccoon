@@ -36,8 +36,9 @@ public static class EmailClassificationStepTypes
 
 ## JSON Schema Contract (Hand-Composed)
 
-Nullable enums with `JsonStringEnumMemberName` attributes don't auto-generate correctly with `JsonSchema.Net.Generation` — the output wraps them in `oneOf` and the enum values may not honor the camelCase overrides. Hand-compose for
-predictable output:
+Nullable enums with `JsonStringEnumMemberName` attributes don't auto-generate correctly
+with `JsonSchema.Net.Generation` — the output wraps them in `oneOf` and the enum values
+may not honor the camelCase overrides. Hand-compose for predictable output:
 
 ```csharp
 using Json.Schema;
@@ -118,7 +119,8 @@ var document = JsonDocument.Parse($$"""{"confidence": {{confidenceStr}}}""");
 
 #### Pitfall: Nullable enum schema uses oneOf
 
-The generated/hand-composed schema wraps nullable enums in `oneOf: [enum, null]`. Tests navigating the schema must handle this:
+The generated/hand-composed schema wraps nullable enums in `oneOf: [enum, null]`.
+Tests navigating the schema must handle this:
 
 ```csharp
 // ❌ THROWS — "transitionTo" is an object with oneOf, not an array
@@ -213,13 +215,13 @@ public sealed class LlmEmailClassifier(
 
 ### Key Design Decisions
 
-| Decision                                           | Rationale                                                                                                                                           |
-|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Decision | Rationale |
+|---|---|
 | Budget params as method args, not constructor deps | Keeps the classifier testable without coupling to budget state management. The caller (orchestration layer) fetches monthToDateUsd from the ledger. |
-| `ILlmCostTracker` NOT injected                     | Cost tracking is infrastructure-layer transparent via `ILlmCostTracker` decorator on `ILlmClient`. The classifier just uses the right `StepType`.   |
-| `ModelTier.Cheap`                                  | Email classification is a straightforward categorization task — doesn't need strong-tier reasoning.                                                 |
-| Max excerpt truncation                             | Google data policy: send least text that supports the decision. 2000 chars captures subject + opening paragraphs.                                   |
-| Wire DTO is private nested record                  | The `EmailClassificationResponse` is a deserialization target, not a public contract. Keep it private.                                              |
+| `ILlmCostTracker` NOT injected | Cost tracking is infrastructure-layer transparent via `ILlmCostTracker` decorator on `ILlmClient`. The classifier just uses the right `StepType`. |
+| `ModelTier.Cheap` | Email classification is a straightforward categorization task — doesn't need strong-tier reasoning. |
+| Max excerpt truncation | Google data policy: send least text that supports the decision. 2000 chars captures subject + opening paragraphs. |
+| Wire DTO is private nested record | The `EmailClassificationResponse` is a deserialization target, not a public contract. Keep it private. |
 
 ## Classifier Tests
 
@@ -297,7 +299,7 @@ public async Task LLM_request_uses_correct_step_type_and_tier()
 }
 ```
 
-### Integration: CheapClassifier (null) → LLM → Classified
+### Integration: CheapClassifier(null) → LLM → Classified
 
 ```csharp
 [Fact]
@@ -366,7 +368,6 @@ Keep the prompt short — the schema enforces structure, the prompt just sets cl
 ## docs/flows.md Update
 
 When adding the LLM fallback to a mermaid flowchart, include:
-
 - Budget guard decision node (`BUDGET{"LlmBudgetGuard authorize?"}`)
 - Budget deny path → `LlmBudgetExceededException → no-op`
 - Confidence gate node (`LOW{"confidence ≥ 0.8?"}`)

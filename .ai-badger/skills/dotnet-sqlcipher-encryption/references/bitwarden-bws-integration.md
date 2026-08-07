@@ -1,6 +1,8 @@
 # Bitwarden Secrets Manager + bws — integration record (2026-08-05)
 
-Owner-decision facts and measured findings from an encryption-key-source work package. Source of truth documents (repo): the project's work docs (owner decisions section supersedes report F28 where they differ).
+Owner-decision facts and measured findings from an encryption-key-source work package.
+Source of truth documents (repo): the project's work docs (owner decisions section
+supersedes report F28 where they differ).
 
 ## Provisioned environment (owner-managed store)
 

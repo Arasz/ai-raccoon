@@ -84,7 +84,8 @@ Scripts are small deterministic helpers. They should:
 - avoid LLM calls,
 - avoid network calls,
 - read the agent-instructions model (path resolved via `AGENT_INSTRUCTIONS_DIR`, default
-  `.ai-badger/agent-instructions`; read `references/agent-instruction-model.md` **when writing a script that reads the model**),
+  `.ai-badger/agent-instructions`; read `references/agent-instruction-model.md` **when writing a
+  script that reads the model**),
 - report precise file/rule failures,
 - exit non-zero on errors,
 - keep warnings separate from errors,

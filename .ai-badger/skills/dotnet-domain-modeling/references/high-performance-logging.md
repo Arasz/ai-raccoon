@@ -21,7 +21,6 @@ public sealed partial class MyChannelMonitor(...) : IMyMonitor
 ```
 
 **Conventions:**
-
 - Outer class must be `partial` (required by source generator)
 - Nested class: `private static partial class Log` — always named `Log`
 - Sequential `EventId` starting at 1 within each class

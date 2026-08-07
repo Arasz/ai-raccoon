@@ -9,7 +9,6 @@ public enum SignalDisposition { Proposed, Applied, Dismissed }
 ### Transition Methods
 
 Each valid transition is a method that:
-
 1. Guards preconditions (current state must be valid source)
 2. Returns new instance with target state set
 3. Throws `InvalidOperationException` on invalid source state

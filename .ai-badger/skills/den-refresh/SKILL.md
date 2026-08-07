@@ -157,7 +157,8 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
 - **Preserved regions survive.** Managed agent files (`CLAUDE.md`,
   `.ai-badger/CLAUDE.md`, `AGENTS.md`, the Copilot and Hermes files) are
   regenerated in full, so project-authored content in them is dropped *unless*
-  it sits between `<!-- ai-badger:keep-start -->` and `<!-- ai-badger:keep-end -->`. When a refresh reports dropped content, that is the fix to offer (Why — see Gotchas.).
+  it sits between `<!-- ai-badger:keep-start -->` and `<!-- ai-badger:keep-end -->`.
+  When a refresh reports dropped content, that is the fix to offer (Why — see Gotchas.).
 - **Stack ignore list.** If `.ai-badger/stack-ignore.json` exists, stacks
   listed in its `ignore` array are excluded from `newStacks` detection.
   Use this to suppress false-positive stack detection (e.g. `python`
@@ -185,10 +186,13 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
 
 ## Gotchas
 
-- **Seed-once files survive.** `state.json`, `markers-context.json` and `model.json` are preserved across re-scaffolds — a refresh never resets them.
-- **Preserved regions are the only survival path.** Managed agent files are regenerated in full; project-authored content in them is dropped unless it sits between
+- **Seed-once files survive.** `state.json`, `markers-context.json` and `model.json` are
+  preserved across re-scaffolds — a refresh never resets them.
+- **Preserved regions are the only survival path.** Managed agent files are regenerated in
+  full; project-authored content in them is dropped unless it sits between
   `<!-- ai-badger:keep-start -->` and `<!-- ai-badger:keep-end -->`.
-- **Absence is not a declaration.** A deleted skill, persona, invariant or instruction comes back on the next refresh — add its name to `exclude` in `config.json` to decline it for good.
+- **Absence is not a declaration.** A deleted skill, persona, invariant or instruction comes
+  back on the next refresh — add its name to `exclude` in `config.json` to decline it for good.
 
 ## Notes
 
@@ -200,7 +204,8 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
 - den-refresh delegates to the same `scaffold.py` that `welcome-ai-badger`
   uses — the re-scaffold is identical to an initial scaffold, just driven by
   an existing config.
-- A deleted skill, persona, invariant or instruction comes back: absence is not a declaration (Why — see Gotchas.). To decline one for good, add its name to `exclude` in `config.json`
+- A deleted skill, persona, invariant or instruction comes back: absence is not a
+  declaration (Why — see Gotchas.). To decline one for good, add its name to `exclude` in `config.json`
   (`{"skills": ["mcp-index"]}`) and re-run den-refresh — the edit is self-executing
   (`drift.configChanged`, #128), so no separate step is needed. The refresh then stops
   delivering it and removes the discovery symlinks ai-badger placed for it. The same applies
@@ -227,7 +232,8 @@ recovery before surfacing the failure to the user.
    fixed and continue with the normal flow (review diff, commit).
 
 3. **Recovery failed — offer to create a GitHub issue.** Follow
-   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix does not recover the failure**: ask
+   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix
+   does not recover the failure**: ask
    permission first, gate on `gh` being installed and authenticated, sanitize the config
    before including it. **Never create the issue without explicit user approval** — that rule
    holds even if the reference file is not present.

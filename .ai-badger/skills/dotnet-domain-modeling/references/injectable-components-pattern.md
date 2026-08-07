@@ -1,19 +1,22 @@
 # Injectable Components (Static-Class Policy)
 
-Rule (the project project convention): **the only allowed static classes are extensions and const/readonly value sources. Any class that contains logic must be an injectable component with an interface** — easy to mock in unit tests.
+Rule (the project project convention): **the only allowed static classes are extensions and
+const/readonly value sources. Any class that contains logic must be an injectable component
+with an interface** — easy to mock in unit tests.
 
 ## What's allowed as static
 
-| Allowed                                          | Example                                                |
-|--------------------------------------------------|--------------------------------------------------------|
-| Extension methods                                | `CliOptionsExtensions.ToServerConfig(this CliOptions)` |
-| Constants / settings keys                        | `EncryptionSettingsKeys.Source = "encryption.source"`  |
-| Pure-data records (not static)                   | `sealed record EncryptionData(string Source)`          |
-| `Dependencies` extension on `IServiceCollection` | `extension(IServiceCollection services)`               |
+| Allowed | Example |
+|---------|---------|
+| Extension methods | `CliOptionsExtensions.ToServerConfig(this CliOptions)` |
+| Constants / settings keys | `EncryptionSettingsKeys.Source = "encryption.source"` |
+| Pure-data records (not static) | `sealed record EncryptionData(string Source)` |
+| `Dependencies` extension on `IServiceCollection` | `extension(IServiceCollection services)` |
 
 ## What must be injectable
 
-Any class whose methods contain non-trivial logic (control flow, I/O, decisions, state machines, or call external dependencies) must:
+Any class whose methods contain non-trivial logic (control flow, I/O, decisions, state machines,
+or call external dependencies) must:
 
 1. Be an instance class (not static)
 2. Have a corresponding interface (e.g. `the encryption command interface`)
@@ -23,7 +26,6 @@ Any class whose methods contain non-trivial logic (control flow, I/O, decisions,
 ## Conversion pattern: static → injectable
 
 Before:
-
 ```csharp
 internal static partial class the config dispatcher
 {
@@ -41,7 +43,6 @@ internal static partial class the config dispatcher
 ```
 
 After:
-
 ```csharp
 public interface the encryption command interface
 {
@@ -80,7 +81,6 @@ internal sealed class EncryptionCommands : IEncryptionCommands
 ```
 
 Benefits:
-
 - Tests can mock `the encryption command interface` instead of threading nullable params
 - Dependencies are explicit at construction, not scattered through nullable optional params
 - Adding a dependency doesn't change the public interface's parameter list
@@ -88,17 +88,22 @@ Benefits:
 
 ## Relationship to existing patterns
 
-This rule applies to **service/component classes** — classes that hold dependencies, manage state, or coordinate I/O. It does NOT apply to:
+This rule applies to **service/component classes** — classes that hold dependencies, manage
+state, or coordinate I/O. It does NOT apply to:
 
 - **Pure static utility functions** (e.g., `EmbeddingMath.CosineSimilarity`, `ContentHash.Compute`)
-  These are computations with no dependencies, no state, and trivial testability. They should eventually be converted to injectable components too, but the priority is on classes that orchestrate dependencies (command handlers, resolvers,
-  composition roots).
+  These are computations with no dependencies, no state, and trivial testability. They should
+  eventually be converted to injectable components too, but the priority is on classes that
+  orchestrate dependencies (command handlers, resolvers, composition roots).
 
-- **Pipeline stages in the Deterministic Classification Pipeline pattern** — these are pure functions with Guard.IsNotNull at entry. When they grow dependencies, convert them to injectable components.
+- **Pipeline stages in the Deterministic Classification Pipeline pattern** — these are pure
+  functions with Guard.IsNotNull at entry. When they grow dependencies, convert them to
+  injectable components.
 
 ## Migration priority
 
-1. Command/verb handlers (e.g., `the config dispatcher`, `EncryptionCommands`) — highest priority, these have the most dependencies threaded through parameters
+1. Command/verb handlers (e.g., `the config dispatcher`, `EncryptionCommands`) — highest priority,
+   these have the most dependencies threaded through parameters
 2. CLI infrastructure (`CliArgs`, `CliRendering`) — parsing and rendering logic
 3. Composition roots (`ConfigVerbRunner`) — thin wrapper that becomes an injectable orchestrator
 4. Pure utility classes (`EmbeddingMath`, `ContentHash`, etc.) — lowest priority, least benefit

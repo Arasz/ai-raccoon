@@ -17,7 +17,6 @@ var sessionId = context.NewGuid().ToString("n");
 The analyzer emits: `DURABLE0002: The method 'X' uses 'Guid.NewGuid()' that may cause non-deterministic behavior when invoked from orchestration 'Y'`
 
 Other non-deterministic APIs to avoid in orchestrators:
-
 - `DateTime.UtcNow` → `context.CurrentUtcDateTime`
 - `Random.Next()` → use `context.NewGuid()` or pre-compute in an activity
 - `Task.Delay()` → `context.CreateTimer()`
@@ -35,12 +34,12 @@ using JobSearchAiAssistant.Domain.Workflows.Steps;    // StepType, StepExecution
 
 ### Common build errors when these are missing:
 
-| Missing Type                         | Using Needed                                       | Error  |
-|--------------------------------------|----------------------------------------------------|--------|
-| `LlmStepRetry`                       | `JobSearchAiAssistant.Api.Workflow`                | CS0103 |
-| `InterventionCause`                  | `JobSearchAiAssistant.Domain.Workflows`            | CS0103 |
-| `StepResolutionEvent`                | `JobSearchAiAssistant.Api.Workflow.Orchestrations` | CS0246 |
-| `CustomStatuses` (no, this is local) | N/A                                                | N/A    |
+| Missing Type | Using Needed | Error |
+|---|---|---|
+| `LlmStepRetry` | `JobSearchAiAssistant.Api.Workflow` | CS0103 |
+| `InterventionCause` | `JobSearchAiAssistant.Domain.Workflows` | CS0103 |
+| `StepResolutionEvent` | `JobSearchAiAssistant.Api.Workflow.Orchestrations` | CS0246 |
+| `CustomStatuses` (no, this is local) | N/A | N/A |
 
 ## `JsonNode.Deserialize<T>()` Requires System.Text.Json
 
@@ -129,13 +128,11 @@ await gate.ScheduleWithConcurrencyGuardAsync(client, instanceId,
     id => new CoverLetterGenerationInProgressException(appId), ct);
 ```
 
-Implementation: try to schedule with a deterministic instance ID. If `OrchestrationAlreadyExistsException`, check runtime status — throw the domain exception if still active (Pending/Running/Suspended), return normally if terminal
-(Completed/Failed/Terminated).
+Implementation: try to schedule with a deterministic instance ID. If `OrchestrationAlreadyExistsException`, check runtime status — throw the domain exception if still active (Pending/Running/Suspended), return normally if terminal (Completed/Failed/Terminated).
 
 ### Conflict-Aware Step Merging
 
-When `SaveWithConflictRetryAsync` retries on `ConcurrencyConflictException`, it re-runs the mutation function against a freshly reloaded document. This naturally merges non-overlapping step updates because `AddOrReplaceStep(stepId)` only
-touches the target step — all other steps from the reloaded document are preserved. The existing pattern is correct for this; no special merge logic is needed beyond re-running the mutation against the reloaded document.
+When `SaveWithConflictRetryAsync` retries on `ConcurrencyConflictException`, it re-runs the mutation function against a freshly reloaded document. This naturally merges non-overlapping step updates because `AddOrReplaceStep(stepId)` only touches the target step — all other steps from the reloaded document are preserved. The existing pattern is correct for this; no special merge logic is needed beyond re-running the mutation against the reloaded document.
 
 Key invariant: every mutation function used with `SaveWithConflictRetryAsync` must be safe to re-run against a document that may have changed (idempotent with respect to the mutation's own step IDs, additive for other steps).
 
@@ -201,8 +198,7 @@ public sealed class LoadDryRunResultActivity(DurableTaskClient client, ILogger l
 
 ### Partial Failure Handling
 
-The apply orchestration processes records sequentially. Each record's write is atomic — a failure on record N doesn't roll back records 1..N-1. Failed records become interventions (logged, surfaced in the result's `errors` array). The
-orchestration still completes — unlike LLM-step failures that park the orchestration, import errors are non-recoverable per-record.
+The apply orchestration processes records sequentially. Each record's write is atomic — a failure on record N doesn't roll back records 1..N-1. Failed records become interventions (logged, surfaced in the result's `errors` array). The orchestration still completes — unlike LLM-step failures that park the orchestration, import errors are non-recoverable per-record.
 
 ## API-Layer Type Mapping Through Activities
 
@@ -215,10 +211,8 @@ API LinkedInImportPreview (PreviewId as RecordIndex.ToString(), OperationId, Sum
 ```
 
 The activity:
-
 1. Calls the domain's pure function (e.g., `BootstrapImporter.DryRun(...)`)
 2. Maps domain types to API types (int → string for IDs, add OperationId, compute Summary)
 3. Returns the API type as the orchestration output
 
-**Pitfall:** Don't duplicate domain types in the API layer. Use the domain types as-is in activities and only create API-layer wrappers when the contract genuinely differs (adding OperationId, wrapping in Summary, converting IDs from int to
-string).
+**Pitfall:** Don't duplicate domain types in the API layer. Use the domain types as-is in activities and only create API-layer wrappers when the contract genuinely differs (adding OperationId, wrapping in Summary, converting IDs from int to string).

@@ -42,7 +42,6 @@ private static decimal RoundZloty(decimal value) =>
 **Pitfall:** `Math.Round(value, 2)` defaults to `MidpointRounding.ToEven` (banker's rounding), which rounds 94.3884 → 94.39 instead of 94.38. For financial calculations, always specify the rounding mode explicitly.
 
 **Rounding stages:**
-
 1. Social contributions → grosze (RoundGrosze)
 2. Health contribution → grosze (RoundGrosze)
 3. Tax base → full zloty (RoundZloty / Math.Floor)
@@ -63,8 +62,7 @@ var annualPit = CalculateProgressivePit(annualTaxBase, rates);
 var monthlyNet = (annualGross - annualSocial - annualHealth - annualPit) / 12m;
 ```
 
-**Why annual-first:** The 30× pension cap and the 12%→32% threshold crossing both depend on cumulative annual income. Computing month-by-month is more accurate but requires tracking cumulative state. Annual-average gives a deterministic,
-reproducible result.
+**Why annual-first:** The 30× pension cap and the 12%→32% threshold crossing both depend on cumulative annual income. Computing month-by-month is more accurate but requires tracking cumulative state. Annual-average gives a deterministic, reproducible result.
 
 **Trade-off:** Monthly net varies throughout the year (higher after the cap/threshold is hit). The annual average hides this variation. For V1, this is acceptable; add month-by-month projection as a follow-up.
 

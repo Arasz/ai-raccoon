@@ -19,10 +19,10 @@ This is the "pieces pass alone, fail together" case: pack ✓, push ✓, install
 
 With `PackAsTool=true`, `dotnet pack -p:RuntimeIdentifiers=<host-rid> --no-build` emits TWO packages:
 
-| File                     | Size                      | Contents                                                                                         |
-|--------------------------|---------------------------|--------------------------------------------------------------------------------------------------|
-| `Id.Version.nupkg`       | ~4 KB (binary-free SHELL) | nuspec, README, `.mcp/server.json`, `tools/net10.0/any/DotnetToolSettings.xml` ONLY              |
-| `Id.<rid>.Version.nupkg` | hundreds of KB (payload)  | `tools/net10.0/<rid>/<exe>` + `the project.deps.json`, `runtimeconfig.json`, all dependency DLLs |
+| File | Size | Contents |
+|---|---|---|
+| `Id.Version.nupkg` | ~4 KB (binary-free SHELL) | nuspec, README, `.mcp/server.json`, `tools/net10.0/any/DotnetToolSettings.xml` ONLY |
+| `Id.<rid>.Version.nupkg` | hundreds of KB (payload) | `tools/net10.0/<rid>/<exe>` + `the project.deps.json`, `runtimeconfig.json`, all dependency DLLs |
 
 The shell's `DotnetToolSettings.xml` redirects the installer to the companion:
 
@@ -35,7 +35,8 @@ The shell's `DotnetToolSettings.xml` redirects the installer to the companion:
 </DotNetCliTool>
 ```
 
-`dotnet tool install` therefore resolves `ai-raccon.osx-arm64` from the same feed (s). Pushing only the shell (e.g. `dotnet nuget push "$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg"`)
+`dotnet tool install` therefore resolves `ai-raccon.osx-arm64` from the same feed(s).
+Pushing only the shell (e.g. `dotnet nuget push "$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg"`)
 guarantees the install fails.
 
 Note the RID name slots between the id and version: `ai-raccon.osx-arm64.0.1.0-beta.nupkg`.
@@ -67,5 +68,7 @@ dotnet tool install ai-raccon --version 0.1.0-beta --add-source ./.nupkg-local -
 
 - `dotnet run` with no `--launch-profile` uses the FIRST profile in `launchSettings.json` — list
   `stdio` first so plain `dotnet run` serves stdio.
-- From a src/ layout repo root, `dotnet run` fails "Couldn't find a project to run" — always pass `--project src/<Proj>`.
-- MSBuild env-var gates are case-insensitive: `Condition="'$(DOTNET_ENV)' == 'local'"` fires when the shell exports `dotnet_env=local` (verified on macOS).
+- From a src/ layout repo root, `dotnet run` fails "Couldn't find a project to run" — always
+  pass `--project src/<Proj>`.
+- MSBuild env-var gates are case-insensitive: `Condition="'$(DOTNET_ENV)' == 'local'"` fires when
+  the shell exports `dotnet_env=local` (verified on macOS).

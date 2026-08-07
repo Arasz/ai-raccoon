@@ -155,19 +155,18 @@ private static string ExtractDomain(string email)
 
 ## Correlation Strategies
 
-| Strategy              | How it works                                                     | When it fires                            |
-|-----------------------|------------------------------------------------------------------|------------------------------------------|
-| Recipient alias       | `user+app-42@gmail.com` → extract `app-42` after `+`             | Emails routed through +alias forwarding  |
-| Channel email match   | Sender email matches a `ContactChannel.Value` on the application | Direct reply from a known recruiter      |
-| Domain match          | Sender domain matches a channel's domain                         | Different person at same company replies |
-| In-Reply-To threading | `InReplyTo` header matches a stored message ID                   | Reply to a previously tracked outbound   |
+| Strategy | How it works | When it fires |
+|---|---|---|
+| Recipient alias | `user+app-42@gmail.com` → extract `app-42` after `+` | Emails routed through +alias forwarding |
+| Channel email match | Sender email matches a `ContactChannel.Value` on the application | Direct reply from a known recruiter |
+| Domain match | Sender domain matches a channel's domain | Different person at same company replies |
+| In-Reply-To threading | `InReplyTo` header matches a stored message ID | Reply to a previously tracked outbound |
 
 **Priority:** Alias match > exact email match > domain match. Return first hit.
 
 ## Pitfall: Application doesn't carry company name directly
 
-The `Application` aggregate has `OfferId` pointing to a `JobOffer` with `Company`, but the correlator shouldn't load that cross-aggregate. Instead, use the `ContactChannel` values on the application — the channel email's domain IS the
-company domain for correlation purposes. If no channel email exists, domain matching is skipped (not an error).
+The `Application` aggregate has `OfferId` pointing to a `JobOffer` with `Company`, but the correlator shouldn't load that cross-aggregate. Instead, use the `ContactChannel` values on the application — the channel email's domain IS the company domain for correlation purposes. If no channel email exists, domain matching is skipped (not an error).
 
 ## CheapClassifier Pattern-Matching Rules
 
@@ -192,8 +191,7 @@ private static readonly string[] AutoAckPatterns =
 
 **Order matters:** Check rejection before auto-ack — "we regret to inform you that we received your application" should classify as rejection, not ack.
 
-**Confidence value:** Use 0.90 for deterministic rejection (terminal — always proposed per no-regret guarantee). Use 0.85–0.90 for non-terminal pattern matches. These sit above the default auto-apply threshold (0.8), so the policy will
-Auto-Apply for non-terminal high-confidence matches.
+**Confidence value:** Use 0.90 for deterministic rejection (terminal — always proposed per no-regret guarantee). Use 0.85–0.90 for non-terminal pattern matches. These sit above the default auto-apply threshold (0.8), so the policy will Auto-Apply for non-terminal high-confidence matches.
 
 ### Expanding the CheapClassifier
 
@@ -209,12 +207,12 @@ When adding new signal classes (offer, interview, human reply), follow this sequ
 
 Prefer specific phrases over conversational fragments:
 
-| Pattern                   | Problem                                                                        |
-|---------------------------|--------------------------------------------------------------------------------|
-| `"available for a call"`  | Matches "are you available for a call?" (uncertain inquiry, not a human reply) |
-| `"schedule a call"`       | More specific — implies recruiter-initiated scheduling                         |
-| `"next steps"`            | Generic but acceptable — rarely appears in non-job emails                      |
-| `"would like to discuss"` | Good — professional follow-up language                                         |
+| Pattern | Problem |
+|---|---|
+| `"available for a call"` | Matches "are you available for a call?" (uncertain inquiry, not a human reply) |
+| `"schedule a call"` | More specific — implies recruiter-initiated scheduling |
+| `"next steps"` | Generic but acceptable — rarely appears in non-job emails |
+| `"would like to discuss"` | Good — professional follow-up language |
 
 When a new pattern breaks the "uncertain returns null" test, remove or narrow the pattern rather than changing the test — the test is the specification.
 

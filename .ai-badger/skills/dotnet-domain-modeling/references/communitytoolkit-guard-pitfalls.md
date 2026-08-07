@@ -27,7 +27,6 @@ conversion from 'MyEnum' to 'System.IEquatable<MyEnum>'.
 ## Root Cause
 
 `CommunityToolkit.Diagnostics.Guard.IsEqualTo<T>` has the constraint:
-
 ```csharp
 public static void IsEqualTo<T>(T value, T target, [CallerArgumentExpression(nameof(value))] string? name = null)
     where T : notnull, IEquatable<T>

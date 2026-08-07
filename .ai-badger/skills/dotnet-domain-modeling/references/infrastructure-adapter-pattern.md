@@ -1,6 +1,7 @@
 # Infrastructure Adapter Pattern (Transport Adapters)
 
-When implementing a new external-service integration (Gmail API, LinkedIn, etc.), follow this pattern. Distinct from Cosmos persistence — this is about wrapping an external HTTP API behind a clean boundary.
+When implementing a new external-service integration (Gmail API, LinkedIn, etc.), follow this pattern.
+Distinct from Cosmos persistence — this is about wrapping an external HTTP API behind a clean boundary.
 
 ## Architecture Layers
 
@@ -14,14 +15,14 @@ Tests:              FakeGmailTransport (test double)
                     GmailTokenRefresherTests
 ```
 
-**Key invariant:** Domain never sees Google/LinkedIn/etc. wire types. The transport interface (`IGmailTransport`) lives in Infrastructure, not Domain. Only `IChannelMonitor` lives in Domain.
+**Key invariant:** Domain never sees Google/LinkedIn/etc. wire types. The transport interface
+(`IGmailTransport`) lives in Infrastructure, not Domain. Only `IChannelMonitor` lives in Domain.
 
 ## Step-by-Step
 
 ### 1. Read existing patterns first
 
 Before writing any code, read 3–5 files:
-
 - The domain interface (`IChannelMonitor`, `IChannelSignalRepository`)
 - An existing infrastructure implementation (e.g. `CosmosChannelSignalRepository`, `AnthropicLlmClient`)
 - The `DataProtectionSecretCipher` for secret-handling patterns
@@ -77,14 +78,14 @@ public sealed class FakeGmailTransport : IGmailTransport
 }
 ```
 
-**Key:** The fake records `LastRequestedHistoryId` so tests can verify watermark passthrough. The `Fault` property lets tests simulate transport errors.
+**Key:** The fake records `LastRequestedHistoryId` so tests can verify watermark passthrough.
+The `Fault` property lets tests simulate transport errors.
 
 ### 4. Write tests FIRST (TDD Red)
 
 Write the test file referencing types that don't exist yet. Verify build fails with CS0246.
 
 **Essential test cases:**
-
 - Happy path: messages map to domain signals with correct fields
 - Empty result: returns empty list
 - Watermark passthrough: transport receives the correct historyId/watermark
@@ -159,10 +160,10 @@ public sealed partial class GmailTokenRefresher(
 }
 ```
 
-**Key:** Deterministic IDs enable upsert idempotency — raising the same intervention twice produces the same signal, so the repository upsert overwrites rather than duplicates.
+**Key:** Deterministic IDs enable upsert idempotency — raising the same intervention twice
+produces the same signal, so the repository upsert overwrites rather than duplicates.
 
 **Token refresher test cases:**
-
 - Expired token raises intervention signal
 - Revoked consent raises intervention with clear message
 - Deterministic IDs: same intervention raised twice produces one signal (idempotent)
@@ -199,7 +200,6 @@ public sealed partial class GmailChannelMonitor(...) : IChannelMonitor
 ```
 
 **Conventions:**
-
 - Class must be `partial` (the outer class too)
 - `static partial class Log` — nested, private, always named `Log`
 - Sequential `EventId` starting at 1 within each class
@@ -208,18 +208,18 @@ public sealed partial class GmailChannelMonitor(...) : IChannelMonitor
 
 ## Common Pitfalls
 
-| Pitfall                                             | Fix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Transport interface in Domain layer                 | Keep it in Infrastructure — Domain only sees the monitor interface                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Logging message bodies or tokens                    | Log IDs, counts, outcomes only — ADR-0026 §6 compliance                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Non-deterministic intervention IDs                  | Use SHA-256 hash of (userId, interventionType) → Guid for upsert idempotency                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Forgetting dedup on transport results               | Always `GroupBy(ExternalId).Select(First())` before mapping                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Using `IEnumerable<T>` in transport interface       | Use `IReadOnlyList<T>` for async methods                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Missing `CancellationToken`                         | Every async method must accept `CancellationToken ct` as last param                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Fake transport doesn't record inputs                | Add `LastRequestedHistoryId` etc. so tests can verify passthrough                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Fake needed by multiple test projects               | Move to shared `Testing` project; add Infrastructure project reference to `Testing.csproj`                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Conditional DI registration for optional transports | When the monitor depends on a transport (e.g. `IGmailTransport`) that requires OAuth/credentials and may not be registered, guard the registration: `if (services.Any(d => d.ServiceType == typeof(IGmailTransport))) { services.AddSingleton<IChannelMonitor, LinkedInChannelMonitor>(); }`. Without this guard, `ValidateOnBuild` fails with "Unable to resolve service for type 'IGmailTransport'."                                                                                                       |
-| Test data doesn't match domain parser regex         | When the monitor's integration tests use email subjects/snippets that the domain parser's regex can't recognize, the parser returns `Unknown` or `null` and the test assertions fail with unexpected raw excerpts. Before writing test data, read the domain parser's `ClassifyEventType` + regex patterns to find subjects that actually match. E.g., "Your application for X at Y was sent" does NOT match `Contains("applied")` or `Contains("application sent")` — use "You applied for X at Y" instead. |
+| Pitfall | Fix |
+|---|---|
+| Transport interface in Domain layer | Keep it in Infrastructure — Domain only sees the monitor interface |
+| Logging message bodies or tokens | Log IDs, counts, outcomes only — ADR-0026 §6 compliance |
+| Non-deterministic intervention IDs | Use SHA-256 hash of (userId, interventionType) → Guid for upsert idempotency |
+| Forgetting dedup on transport results | Always `GroupBy(ExternalId).Select(First())` before mapping |
+| Using `IEnumerable<T>` in transport interface | Use `IReadOnlyList<T>` for async methods |
+| Missing `CancellationToken` | Every async method must accept `CancellationToken ct` as last param |
+| Fake transport doesn't record inputs | Add `LastRequestedHistoryId` etc. so tests can verify passthrough |
+| Fake needed by multiple test projects | Move to shared `Testing` project; add Infrastructure project reference to `Testing.csproj` |
+| Conditional DI registration for optional transports | When the monitor depends on a transport (e.g. `IGmailTransport`) that requires OAuth/credentials and may not be registered, guard the registration: `if (services.Any(d => d.ServiceType == typeof(IGmailTransport))) { services.AddSingleton<IChannelMonitor, LinkedInChannelMonitor>(); }`. Without this guard, `ValidateOnBuild` fails with "Unable to resolve service for type 'IGmailTransport'." |
+| Test data doesn't match domain parser regex | When the monitor's integration tests use email subjects/snippets that the domain parser's regex can't recognize, the parser returns `Unknown` or `null` and the test assertions fail with unexpected raw excerpts. Before writing test data, read the domain parser's `ClassifyEventType` + regex patterns to find subjects that actually match. E.g., "Your application for X at Y was sent" does NOT match `Contains("applied")` or `Contains("application sent")` — use "You applied for X at Y" instead. |
 
 ## Sharing Fakes Across Test Projects
 
@@ -231,5 +231,4 @@ When a fake (e.g. `FakeGmailTransport`) is needed by both Infrastructure.Tests a
 4. Update the original test project: `using JobSearchAiAssistant.Testing.Fakes;`
 5. Delete or empty the original file in Infrastructure.Tests
 
-**Why Infrastructure reference in Testing:** The Testing project originally only references Domain. Fakes for Infrastructure interfaces (transport, service boundaries) need the Infrastructure project. This is a one-time setup — all
-subsequent Infrastructure-interface fakes go directly in Testing.
+**Why Infrastructure reference in Testing:** The Testing project originally only references Domain. Fakes for Infrastructure interfaces (transport, service boundaries) need the Infrastructure project. This is a one-time setup — all subsequent Infrastructure-interface fakes go directly in Testing.

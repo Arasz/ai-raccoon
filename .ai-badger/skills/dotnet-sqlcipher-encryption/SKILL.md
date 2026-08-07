@@ -60,7 +60,6 @@ Pattern for any encrypted store with multiple key sources (env / keychain / vaul
   ~7 MB native binary — prefer the CLI when available.
 
 ## Gotchas
-
 - SecureString: deprecated (DE0001), no in-memory encryption on .NET Core — NOT a solution for key handling or storage.
 - Env vars: visible via `/proc/<pid>/environ` on Linux (macOS hides them from `ps`); the bigger exposure is plaintext client configs and backups.
 - Offline behavior for network sources: refuse to start loudly; an offline cache is an explicit opt-in, never a default.

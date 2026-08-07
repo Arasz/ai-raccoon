@@ -109,11 +109,14 @@ their own worktrees — the common case for this kind of fan-out.
 
 ## Gotchas
 
-- **The escalation bar is three *new highs*, not three commands over a span of time.** An agent that edits the same five files repeatedly is never asked twice.
-- **Anything that lowers the count clears the unanswered counter.** `git stash` or a cleaned build directory clears it exactly like a commit; the hook cannot tell them apart.
+- **The escalation bar is three *new highs*, not three commands over a span of time.** An agent
+  that edits the same five files repeatedly is never asked twice.
+- **Anything that lowers the count clears the unanswered counter.** `git stash` or a cleaned
+  build directory clears it exactly like a commit; the hook cannot tell them apart.
 - **The hook only ever adds `additionalContext`** — no `decision`/`permissionDenied`/`continue`
   on any code path (changelog 0.33.0: the third-party-interception incident).
-- **`ensure_committed.py` exits 0 even when work is at risk** — and on malformed state; a crash would be worse than the report a parent must read.
+- **`ensure_committed.py` exits 0 even when work is at risk** — and on malformed state; a crash
+  would be worse than the report a parent must read.
 
 ## Configuration
 

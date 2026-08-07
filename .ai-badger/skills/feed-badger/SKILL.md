@@ -80,8 +80,10 @@ back to `ai-badger` as a **draft PR** for human review.
 ## Gotchas
 
 - **Draft PR, always.** A human reviews and merges; never auto-merge.
-- **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty file cannot ride along in the PR.
-- **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is not a certificate.
+- **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty
+  file cannot ride along in the PR.
+- **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is
+  not a certificate.
 - **The agnostic bar is high.** When unsure, keep it in the project, not the framework.
 
 ## Error Recovery
@@ -108,7 +110,8 @@ non-zero or emits an error, attempt recovery before surfacing the failure.
    succeeds, report what was fixed.
 
 3. **Recovery failed — offer to create a GitHub issue.** Follow
-   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix does not recover the failure**: ask
+   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix
+   does not recover the failure**: ask
    permission first, gate on `gh` being installed and authenticated, sanitize the config
    before including it. **Never create the issue without explicit user approval** — that rule
    holds even if the reference file is not present.

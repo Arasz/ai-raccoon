@@ -81,13 +81,13 @@ options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 
 **All enum values serialize as camelCase (first letter lowercase):**
 
-| C# Enum Value                         | JSON String            |
-|---------------------------------------|------------------------|
-| `TakeHomeOutcome.Computed`            | `"computed"`           |
-| `TakeHomeOutcome.UnsupportedTaxYear`  | `"unsupportedTaxYear"` |
-| `RecommendationSource.Deterministic`  | `"deterministic"`      |
-| `CompensationContractType.Employment` | `"employment"`         |
-| `ApplicationState.CvReady`            | `"cvReady"`            |
+| C# Enum Value | JSON String |
+|---|---|
+| `TakeHomeOutcome.Computed` | `"computed"` |
+| `TakeHomeOutcome.UnsupportedTaxYear` | `"unsupportedTaxYear"` |
+| `RecommendationSource.Deterministic` | `"deterministic"` |
+| `CompensationContractType.Employment` | `"employment"` |
+| `ApplicationState.CvReady` | `"cvReady"` |
 
 **In tests, assert lowercase:**
 
@@ -163,8 +163,7 @@ public sealed class InMemoryMyRepository : IMyRepository
 
 ## Status Endpoint Testing (DurableTaskClient.GetInstanceAsync)
 
-When testing `GET /status` endpoints that read orchestration metadata, inject `DurableTaskClient` via constructor (not `[DurableClient]` method attribute) for testability. Mock `GetInstanceAsync` with different `OrchestrationMetadata`
-states:
+When testing `GET /status` endpoints that read orchestration metadata, inject `DurableTaskClient` via constructor (not `[DurableClient]` method attribute) for testability. Mock `GetInstanceAsync` with different `OrchestrationMetadata` states:
 
 ```csharp
 // Constructor injection pattern for status endpoints:
@@ -262,7 +261,8 @@ In tests, pass `null` (or omit) for no-body requests, and pass the DTO for body 
 ## Middleware Testing (AuditMiddleware, PrincipalResolutionMiddleware, etc.)
 
 When testing `IFunctionsWorkerMiddleware` that calls `context.GetHttpContext()`, the mock
-`FunctionContext` needs the `HttpContext` in its `Items` dictionary under `"HttpRequestContext"`. NSubstitute cannot intercept extension methods — see pitfall #28 in `refactoring-fix`.
+`FunctionContext` needs the `HttpContext` in its `Items` dictionary under `"HttpRequestContext"`.
+NSubstitute cannot intercept extension methods — see pitfall #28 in `refactoring-fix`.
 
 ```csharp
 // HTTP trigger context — GetHttpContext() returns the HttpContext
@@ -277,7 +277,6 @@ context.Items.Returns(new Dictionary<object, object>());
 ```
 
 Binding metadata for `IsHttpTrigger()`:
-
 ```csharp
 var binding = Substitute.For<BindingMetadata>();
 binding.Type.Returns("httpTrigger");
@@ -291,11 +290,11 @@ context.FunctionDefinition.Returns(definition);
 
 ## Common Pitfalls
 
-| Pitfall                            | Fix                                                                                      |
-|------------------------------------|------------------------------------------------------------------------------------------|
-| ---                                | ---                                                                                      |
-| Response body is empty             | `DefaultHttpContext.Response.Body` defaults to `NullStream`; set to `new MemoryStream()` |
-| Can't read response body           | Reset `Position = 0` before reading                                                      |
-| Enum assertion case mismatch       | Use camelCase string values (see table above)                                            |
-| Missing CancellationToken in tests | Use `TestContext.Current.CancellationToken` (xunit v3)                                   |
-| Wrong JSON options in request body | Use `ApiJsonOptions.Pinned` (or project equivalent) for request serialization            |
+| Pitfall | Fix |
+| --- | --- |
+|---|---|
+| Response body is empty | `DefaultHttpContext.Response.Body` defaults to `NullStream`; set to `new MemoryStream()` |
+| Can't read response body | Reset `Position = 0` before reading |
+| Enum assertion case mismatch | Use camelCase string values (see table above) |
+| Missing CancellationToken in tests | Use `TestContext.Current.CancellationToken` (xunit v3) |
+| Wrong JSON options in request body | Use `ApiJsonOptions.Pinned` (or project equivalent) for request serialization |

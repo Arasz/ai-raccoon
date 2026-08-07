@@ -1,6 +1,7 @@
 # Recommendation Engine Pattern
 
-When a domain feature needs to produce a recommendation from multiple deterministic heuristics, with optional LLM prose framing but **never LLM-authored numbers**.
+When a domain feature needs to produce a recommendation from multiple deterministic
+heuristics, with optional LLM prose framing but **never LLM-authored numbers**.
 
 ## Structure
 
@@ -14,7 +15,9 @@ SalaryRecommendation (record)     ← output with rationale, source tag
 
 ### Static Heuristics Class
 
-Each heuristic is a `public static` method operating on pre-computed domain results (e.g. `TakeHomeResult`). Heuristics NEVER call the LLM — they extract, transform, or combine deterministic figures.
+Each heuristic is a `public static` method operating on pre-computed domain results
+(e.g. `TakeHomeResult`). Heuristics NEVER call the LLM — they extract, transform,
+or combine deterministic figures.
 
 ```csharp
 public static class NegotiationHeuristics
@@ -59,7 +62,8 @@ public sealed record RiskFactors
 }
 ```
 
-Each enum value maps to an additive adjustment percentage. Default values produce 0% total. This makes the default-risk test trivial and edge cases easy to enumerate.
+Each enum value maps to an additive adjustment percentage. Default values produce 0% total.
+This makes the default-risk test trivial and edge cases easy to enumerate.
 
 ### Engine: Orchestrate + Clamp + Refuse
 
@@ -112,13 +116,15 @@ public sealed record SalaryRecommendation
 ```
 
 **The `Source` field is the NFR enforcement point.** Tests assert `Source == Deterministic`
-to prove no LLM touched the figures. Even when LLM framing is added later, the numeric source remains `Deterministic` — `LlmFramed` means "LLM wrote the prose, not the numbers."
+to prove no LLM touched the figures. Even when LLM framing is added later, the numeric
+source remains `Deterministic` — `LlmFramed` means "LLM wrote the prose, not the numbers."
 
 ## Testing Strategy
 
 ### Per-Heuristic Unit Tests (H1-H5)
 
-Each heuristic gets 2+ tests with known inputs. Use pre-built `TakeHomeResult` fixtures (avoid round-tripping through the full calculator for unit tests):
+Each heuristic gets 2+ tests with known inputs. Use pre-built `TakeHomeResult` fixtures
+(avoid round-tripping through the full calculator for unit tests):
 
 ```csharp
 private static TakeHomeResult ComputedResult(decimal monthlyNet) => new()
@@ -135,15 +141,15 @@ private static TakeHomeResult ComputedResult(decimal monthlyNet) => new()
 
 Use the real `TakeHomeCalculator` + `PolishCompProfile` + known rate table:
 
-| Test                                         | Asserts                                                              |
-|----------------------------------------------|----------------------------------------------------------------------|
-| Source is always `Deterministic`             | `rec.Source.ShouldBe(RecommendationSource.Deterministic)`            |
-| Rationale always non-empty                   | `rec.Rationale.ShouldNotBeNullOrWhiteSpace()`                        |
-| Unsupported contract → refuse                | `rec.IsRefused.ShouldBeTrue()`, `rec.RecommendedAmount.ShouldBe(0m)` |
-| Different contract types → different amounts | B2B ryczałt > UoP for same gross                                     |
-| With current comp → floor in rationale       | `rec.Rationale.ShouldContain("floor", Case.Insensitive)`             |
-| With risk factors → adjusts amount           | High risk < no risk                                                  |
-| Breakdown comes from calculator              | `rec.TakeHomeBreakdown.RateTableVersion.ShouldBe("PL-2026.1")`       |
+| Test | Asserts |
+|------|---------|
+| Source is always `Deterministic` | `rec.Source.ShouldBe(RecommendationSource.Deterministic)` |
+| Rationale always non-empty | `rec.Rationale.ShouldNotBeNullOrWhiteSpace()` |
+| Unsupported contract → refuse | `rec.IsRefused.ShouldBeTrue()`, `rec.RecommendedAmount.ShouldBe(0m)` |
+| Different contract types → different amounts | B2B ryczałt > UoP for same gross |
+| With current comp → floor in rationale | `rec.Rationale.ShouldContain("floor", Case.Insensitive)` |
+| With risk factors → adjusts amount | High risk < no risk |
+| Breakdown comes from calculator | `rec.TakeHomeBreakdown.RateTableVersion.ShouldBe("PL-2026.1")` |
 
 ### StepType + InterventionSource Tests
 
@@ -160,21 +166,21 @@ public void StepType_has_ComputeTakeHome()
 
 ## Conventions
 
-| Convention                                  | Rationale                                                   |
-|---------------------------------------------|-------------------------------------------------------------|
-| Static heuristics, not instance methods     | No state, no DI — pure function signatures                  |
-| Heuristics take pre-computed results        | Calculator owns the math; heuristics own the strategy       |
-| Default risk factors → 0% adjustment        | Makes "no risk info" a no-op, not a guess                   |
-| `Refuse()` factory on output record         | Explicit refusal > null or exception for unsupported inputs |
-| Clamping between floor and stretch          | Prevents recommendations below floor or above stretch       |
-| Rationale built from numbers, not templates | Each figure appears in the text — auditable                 |
+| Convention | Rationale |
+|---|---|
+| Static heuristics, not instance methods | No state, no DI — pure function signatures |
+| Heuristics take pre-computed results | Calculator owns the math; heuristics own the strategy |
+| Default risk factors → 0% adjustment | Makes "no risk info" a no-op, not a guess |
+| `Refuse()` factory on output record | Explicit refusal > null or exception for unsupported inputs |
+| Clamping between floor and stretch | Prevents recommendations below floor or above stretch |
+| Rationale built from numbers, not templates | Each figure appears in the text — auditable |
 
 ## Pitfalls
 
-| Pitfall                                          | Fix                                                                          |
-|--------------------------------------------------|------------------------------------------------------------------------------|
-| Heuristic calls calculator directly              | Heuristic should receive pre-computed `TakeHomeResult` — engine orchestrates |
-| LLM produces numeric figures                     | Enforce via `Source` field + test assertion; LLM fills prose slots only      |
-| Default risk factors produce non-zero adjustment | Design enum mappings so `(Medium, Established, Stable)` = 0%                 |
-| Missing `IsRefused` check downstream             | Always check `IsRefused` before using `RecommendedAmount`                    |
-| Rationale doesn't mention key figures            | Include floor, target, stretch, risk adjustment in rationale text            |
+| Pitfall | Fix |
+|---|---|
+| Heuristic calls calculator directly | Heuristic should receive pre-computed `TakeHomeResult` — engine orchestrates |
+| LLM produces numeric figures | Enforce via `Source` field + test assertion; LLM fills prose slots only |
+| Default risk factors produce non-zero adjustment | Design enum mappings so `(Medium, Established, Stable)` = 0% |
+| Missing `IsRefused` check downstream | Always check `IsRefused` before using `RecommendedAmount` |
+| Rationale doesn't mention key figures | Include floor, target, stretch, risk adjustment in rationale text |

@@ -2,12 +2,17 @@
 
 ## The trap
 
-`services.AddHostedService<T>()` registers ONLY `IHostedService → T` — the concrete type is NOT resolvable from the container. Decompiled Microsoft.Extensions.Hosting 10.0.10: `TryAddEnumerable(Singleton<IHostedService, T>)`.
+`services.AddHostedService<T>()` registers ONLY `IHostedService → T` — the concrete
+type is NOT resolvable from the container. Decompiled Microsoft.Extensions.Hosting
+10.0.10: `TryAddEnumerable(Singleton<IHostedService, T>)`.
 
 Symptom: a DI component that resolves `T` directly — e.g. ASP.NET middleware calling
 `context.RequestServices.GetRequiredService<IdleWatchdog>()` — throws
-`InvalidOperationException: No service for type 'T' has been registered` on the FIRST request. All unit tests still pass (they construct T by hand); the E2E/first-request path is where it explodes. Verified live on an MCP server host: the
-watchdog was registered only via `AddHostedService`, the activity middleware died on the first tools/call.
+`InvalidOperationException: No service for type 'T' has been registered` on the FIRST
+request. All unit tests still pass (they construct T by hand); the E2E/first-request
+path is where it explodes. Verified live on an MCP server host: the watchdog was
+registered only via `AddHostedService`, the activity middleware died on the first
+tools/call.
 
 ## The fix: three registrations, one instance
 
@@ -28,4 +33,5 @@ var services = provider.GetServices<IHostedService>().OfType<IdleWatchdog>().Sho
 provider.GetRequiredService<IActivitySignaler>().ShouldBeSameAs(services);
 ```
 
-Gate condition: registering via `AddHostedService<T>()` only, then resolving `T`, must FAIL this test.
+Gate condition: registering via `AddHostedService<T>()` only, then resolving `T`,
+must FAIL this test.

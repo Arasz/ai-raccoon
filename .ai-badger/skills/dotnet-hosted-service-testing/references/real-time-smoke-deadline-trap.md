@@ -10,8 +10,7 @@ An idle watchdog arms its deadline at CONSTRUCTION (ctor sets the baseline times
 2. waits for a post-startup output line (e.g. the serve URL, printed only after `StartAsync`),
 3. asserts the host shuts down within a bound.
 
-The deadline is ticking during step 2's wait — the STARTUP phase (temp-bank/SQLite creation, bundled-model SHA-256 verification of a multi-MB file, Kestrel bind, hosted-service start) runs INSIDE the timeout window. If startup exceeds the
-short timeout (2s in the reviewed test), the host dies BEFORE the output line is printed → the line-wait times out → flake, even though the feature is correct.
+The deadline is ticking during step 2's wait — the STARTUP phase (temp-bank/SQLite creation, bundled-model SHA-256 verification of a multi-MB file, Kestrel bind, hosted-service start) runs INSIDE the timeout window. If startup exceeds the short timeout (2s in the reviewed test), the host dies BEFORE the output line is printed → the line-wait times out → flake, even though the feature is correct.
 
 ## Rules of thumb
 
@@ -22,13 +21,9 @@ short timeout (2s in the reviewed test), the host dies BEFORE the output line is
 
 ## Verified mechanics that make the seam work
 
-- Host seam: optional `TimeProvider?` param on the host builder; register `AddSingleton(timeProvider ?? TimeProvider.System)` AFTER the framework/Dependencies registration — Microsoft DI resolves the LAST descriptor for a service type, so
-  the fake overrides `TimeProvider.System`. (Verified: the fake clock drove the watchdog through the real middleware + real MCP tool call.)
-- Real-host tests with `Trait(Unit/Fast)` and no `[Collection]` run in the DEFAULT PARALLEL collection. They add wall time + CPU spikes that can starve timing-sensitive step-poll tests in other collections (e.g. BDD `StepUntilAsync` with a
-  5s real-time bound: digest pipeline + real embedding under parallel load can exceed it). When triaging an unrelated suite flake: name the real-host tests "plausible load contributor, not cause" unless code paths overlap; mitigations are
-  serializing the real-host tests or lengthening the poll bounds.
+- Host seam: optional `TimeProvider?` param on the host builder; register `AddSingleton(timeProvider ?? TimeProvider.System)` AFTER the framework/Dependencies registration — Microsoft DI resolves the LAST descriptor for a service type, so the fake overrides `TimeProvider.System`. (Verified: the fake clock drove the watchdog through the real middleware + real MCP tool call.)
+- Real-host tests with `Trait(Unit/Fast)` and no `[Collection]` run in the DEFAULT PARALLEL collection. They add wall time + CPU spikes that can starve timing-sensitive step-poll tests in other collections (e.g. BDD `StepUntilAsync` with a 5s real-time bound: digest pipeline + real embedding under parallel load can exceed it). When triaging an unrelated suite flake: name the real-host tests "plausible load contributor, not cause" unless code paths overlap; mitigations are serializing the real-host tests or lengthening the poll bounds.
 
 ## Concrete case
 
-the project `ServeRunnerTests.IdleTimeout_ShutsTheHostDown_AfterTheSpanWithoutActivity`: `--idle-timeout 2s`, real time; pre-URL phase measured ≈0.2–0.3s (temp bank + SHA-256 of the 23MB bundled ONNX model + Kestrel) ≈ 10× margin → low
-risk, but the review still recommended `2s/10s → 5s/15s` as one-line CI insurance (finding F1, SHOULD-FIX low).
+the project `ServeRunnerTests.IdleTimeout_ShutsTheHostDown_AfterTheSpanWithoutActivity`: `--idle-timeout 2s`, real time; pre-URL phase measured ≈0.2–0.3s (temp bank + SHA-256 of the 23MB bundled ONNX model + Kestrel) ≈ 10× margin → low risk, but the review still recommended `2s/10s → 5s/15s` as one-line CI insurance (finding F1, SHOULD-FIX low).
