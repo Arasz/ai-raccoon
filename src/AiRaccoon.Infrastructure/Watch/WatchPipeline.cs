@@ -253,7 +253,7 @@ public sealed partial class WatchPipeline(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 200, Level = LogLevel.Error, Message = "Watch pipeline loop iteration failed")]
+        [LoggerMessage(EventId = 302, Level = LogLevel.Error, Message = "Watch pipeline loop iteration failed")]
         public static partial void PipelineLoopError(ILogger logger, Exception exception);
     }
 }

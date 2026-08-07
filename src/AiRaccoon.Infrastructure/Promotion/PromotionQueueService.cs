@@ -142,24 +142,24 @@ public sealed partial class PromotionQueueService(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 600, Level = LogLevel.Debug,
+        [LoggerMessage(EventId = 700, Level = LogLevel.Debug,
             Message = "Propose for {ProjectId}: {Upserted} upserted, {Evicted} evicted")]
         public static partial void Proposed(ILogger logger, string projectId, int upserted, int evicted);
 
-        [LoggerMessage(EventId = 601, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 701, Level = LogLevel.Warning,
             Message = "Propose-tier eviction from {ProjectId}: {VictimHash} (score {Score}, {Reason})")]
         public static partial void Evicted(ILogger logger, string projectId, string victimHash, double score,
             string reason);
 
-        [LoggerMessage(EventId = 602, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 702, Level = LogLevel.Information,
             Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Skipped} duplicate-skipped")]
         public static partial void Promoted(ILogger logger, string projectIds, int promoted, int skipped);
 
-        [LoggerMessage(EventId = 603, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 703, Level = LogLevel.Information,
             Message = "Discarded {Count} queued row(s) for {ProjectId}")]
         public static partial void Discarded(ILogger logger, string projectId, int count);
 
-        [LoggerMessage(EventId = 604, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 704, Level = LogLevel.Warning,
             Message = "Queue-capacity read failed; falling back to the default")]
         public static partial void CapReadFailed(ILogger logger, Exception exception);
     }
