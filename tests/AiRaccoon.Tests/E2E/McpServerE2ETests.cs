@@ -258,8 +258,8 @@ public class McpServerE2ETests : IAsyncLifetime
                 new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService());
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null,
-            new SettingsCommands(), new SyncCommands(), cancellationToken: CancellationToken.None);
+        var exit = await new ConfigCommands(new SettingsCommands(), new SyncCommands())
+            .RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

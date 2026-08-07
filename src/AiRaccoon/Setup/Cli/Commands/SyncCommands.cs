@@ -8,7 +8,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot sync verb handlers: interactive secrets, delete-before-write provider swap.</summary>
-public sealed class SyncCommands : ISyncCommands
+public sealed class SyncCommands
 {
     public async Task<int> AddS3Async(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin,

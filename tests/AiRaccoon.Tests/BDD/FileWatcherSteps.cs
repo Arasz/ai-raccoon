@@ -86,9 +86,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null,
-            new SettingsCommands(), new SyncCommands(),
-            new WatchCommands(Ctx.WatchStore));
+        var exit = await new ConfigCommands(new SettingsCommands(), new SyncCommands(), new WatchCommands(Ctx.WatchStore))
+            .RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null);
         _lastCliMessage = stdout.ToString() + stderr.ToString();
         if (exit != 0)
         {

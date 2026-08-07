@@ -9,7 +9,7 @@ using AiRaccoon.Infrastructure.Sync;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot settings verb handlers: access modes, embedding model, retrieval alpha, sweep threshold.</summary>
-public sealed class SettingsCommands : ISettingsCommands
+public sealed class SettingsCommands
 {
     public async Task<int> AccessDefaultSetAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)

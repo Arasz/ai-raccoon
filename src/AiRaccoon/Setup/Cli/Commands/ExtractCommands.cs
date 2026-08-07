@@ -4,7 +4,7 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot extract-config verb handlers: enable, mode, list — the CLI-only channel for the background extraction service.</summary>
-public sealed class ExtractCommands : IExtractCommands
+public sealed class ExtractCommands
 {
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
