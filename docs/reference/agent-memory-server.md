@@ -69,7 +69,9 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
   `memory_share_extract` in `mode=promote` drains the top queued candidates into
   `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
-  in `meta`.
+  in `meta`; while the queue holds rows, `meta.capacityByProject` also carries each
+  occupying project's `reserved`/`used`/`borrowing` share of the cap (ADR-0007's
+  fair-share promise, made observable).
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`

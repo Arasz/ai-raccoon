@@ -105,7 +105,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         var second = await _store.UpsertAsync("acme",
             [Candidate("h1", "fact one refreshed", 3.0), Candidate("h2", "fact two", 2.0)],
             TestContext.Current.CancellationToken);
-        second.ShouldBe(2);
+        second.ShouldBe(1, "h1 already existed (a refresh, not a new row); only h2 is genuinely new");
 
         var rows = await _store.ListAsync("acme", TestContext.Current.CancellationToken);
         rows.Count.ShouldBe(2);
@@ -114,6 +114,36 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         h1.Value.ShouldBe("fact one refreshed");
         h1.CreatedAt.ShouldBe(FixedNow.ToUnixTimeSeconds(), "the first proposed_at must survive re-propose");
         h1.UpdatedAt.ShouldBe(FixedNow.AddDays(1).ToUnixTimeSeconds());
+    }
+
+    [Fact]
+    public async Task Upsert_ReProposingTheSameHash_ReturnsZero_NotTheConflictUpdateCount()
+    {
+        var first = await _store.UpsertAsync("acme",
+            [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+        first.ShouldBe(1);
+
+        var second = await _store.UpsertAsync("acme",
+            [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
+
+        second.ShouldBe(0, "h1 already occupied a queue slot; re-proposing it must not report queue growth");
+    }
+
+    [Fact]
+    public async Task Upsert_MidBatchFailure_RollsBackTheWholeBatch()
+    {
+        var candidates = new List<QueueCandidate>
+        {
+            Candidate("h1", "would-be-inserted-first", 1.0),
+            new("h2", "h2.md", null!, null, 2.0, []), // value NOT NULL violation
+            Candidate("h3", "never-reached", 3.0)
+        };
+
+        await Should.ThrowAsync<SqliteException>(() =>
+            _store.UpsertAsync("acme", candidates, TestContext.Current.CancellationToken));
+
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken))
+            .ShouldBeEmpty("a mid-batch failure must roll back h1 too, not leave a partial propose queued");
     }
 
     // ------------------------------------------------------------------ list

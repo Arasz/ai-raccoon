@@ -185,9 +185,11 @@ The LLM Wiki v2 describes:
 We have:
 - ✅ `OnWriteAsync` — fires on every write
 - ✅ `OnSearchAsync` — fires on every search
-- ✅ `OnDeleteAsync` — fires on every delete
-- ✅ `OnSweepAsync` — fires on sweep (returns candidates)
-- ✅ `OnConsolidateAsync` — fires on workspace consolidation
+- ✅ `OnDeleteAsync` — fires on every delete, including sweep- and consolidation-driven deletes
+- ❌ `OnSweepAsync` / `OnConsolidateAsync` — this was wrong even at the time this doc was
+  written: neither hook ever had a dispatcher in `MemoryExtensionHost`, so neither could
+  fire. Both were removed per ADR-0013; sweep and consolidation stay observable through
+  `OnDeleteAsync` above.
 - ❌ No auto-ingest trigger (filesystem watcher deferred to part 2)
 - ❌ No session-start context injection
 - ❌ No session-end compression
