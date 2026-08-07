@@ -50,10 +50,10 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     {
         var resolvedKey = keyResolver.Resolve();
 
+        SqliteConnection connection;
         try
         {
-            await using var alreadyMigrated = await OpenBankWithKeyAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
-            return false;
+            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
         }
         catch (SqliteException openFailure)
         {
@@ -68,11 +68,17 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
             {
                 throw NotLegacyKeyed(resolvedKey, openFailure);
             }
+
+            // Only reached with positive proof that the legacy key opens a healthy bank.
+            await RekeyBankAsync(resolvedKey.Passphrase!, resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false);
+            return true;
         }
 
-        // Only reached with positive proof that the legacy key opens a healthy bank.
-        await RekeyBankAsync(resolvedKey.Passphrase!, resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false);
-        return true;
+        // The current key opened the bank; nothing to migrate. A post-open failure here
+        // (extensions, vector load, schema DDL) is not key-related and must propagate
+        // unchanged, never be diagnosed as a key mismatch.
+        await using var alreadyMigrated = await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        return false;
     }
 
     /// <summary>
@@ -83,14 +89,19 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     public async Task<SqliteConnection> OpenBankWithResolvedKeyAsync(ResolvedKey resolvedKey,
         CancellationToken cancellationToken = default)
     {
+        SqliteConnection connection;
         try
         {
-            return await OpenBankWithKeyAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
         }
         catch (SqliteException openFailure) when (resolvedKey.LegacyPassphrase is not null)
         {
             throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false);
         }
+
+        // Post-open failures (extensions, vector load, schema DDL) are not key-related and
+        // must propagate unchanged — only the open above proves whether the key is wrong.
+        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -187,17 +198,39 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
     public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
     {
+        var connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Opens the connection under the given key (null = unencrypted) with the shared
+    /// pragmas — the step that fails on a wrong key.</summary>
+    private async Task<SqliteConnection> OpenConnectionAsync(string? key, CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(BankDirectoryFor(options));
 
         var connection = new SqliteConnection(BuildConnectionString(key));
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        connection.EnableExtensions();
-        // vec0 ships in the NuGet package — always available, no provisioning.
-        connection.LoadVector();
-        await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
-
         return connection;
+    }
+
+    /// <summary>Loads vec0 and ensures the schema on an already-open connection. Disposes and
+    /// rethrows on failure so a failed post-open step never leaks a pooled, checked-out
+    /// connection.</summary>
+    internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            connection.EnableExtensions();
+            // vec0 ships in the NuGet package — always available, no provisioning.
+            connection.LoadVector();
+            await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private string BuildConnectionString(string? key)
