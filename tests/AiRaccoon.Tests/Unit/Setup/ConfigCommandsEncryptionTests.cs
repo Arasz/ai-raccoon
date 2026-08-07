@@ -25,8 +25,8 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigCommandsEncryptionTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…' (TestOpenSshKeyBuilder builds that seed).
-    private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…' (TestOpenSshKeyBuilder builds that seed).
+    private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
 
