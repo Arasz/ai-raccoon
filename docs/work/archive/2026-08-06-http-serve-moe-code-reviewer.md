@@ -1,6 +1,6 @@
 # MOE code-reviewer report — HTTP serve-mode design
 
-Review of: `docs/work/2026-08-06-http-serve-design.md` (394 lines)
+Review of: `docs/work/archive/2026-08-06-http-serve-design.md` (394 lines)
 Reviewer lane: architecture, security, robustness, honesty of claims
 Date: 2026-08-06 · Branch: `task/switch-from-stdio-to-http`
 

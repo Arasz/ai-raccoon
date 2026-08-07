@@ -3,7 +3,7 @@
 **Date:** 2026-08-05
 **Question:** Can an existing SSH private key replace the DB passphrase as the source of the SQLCipher raw key, and how do Azure Key Vault / AWS Secrets Manager compare as key-source integrations for a local-first macOS MCP server — which should rank where, and what does the implementation look like?
 
-> Companion to `docs/work/2026-08-05-db-passphrase-options.md` (keychain / raw-key file / Bitwarden / prompt / SecureString; F3 there MEASURED the raw-key channel: `Password = "x'<64-hex>'"` keys the bank with NO KDF through e_sqlite3mc). This record adds SSH-key derivation and the two cloud vaults; it does not restate the shared channel findings.
+> Companion to `docs/work/archive/2026-08-05-db-passphrase-options.md` (keychain / raw-key file / Bitwarden / prompt / SecureString; F3 there MEASURED the raw-key channel: `Password = "x'<64-hex>'"` keys the bank with NO KDF through e_sqlite3mc). This record adds SSH-key derivation and the two cloud vaults; it does not restate the shared channel findings.
 
 ```chart:matrix
 title: option resistance by threat (1 = weak, 3 = strong) — new options vs existing report

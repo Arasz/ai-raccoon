@@ -20,7 +20,7 @@ minScore {0.0, 0.3, 0.5, 0.7} × candidate window {max(limit×3, 100), max(limit
 (SearchAsync → FTS/vector batches → RRF → source-affinity ranker → merger) over the
 eleven expected-source queries with the Wave 3 parameters fixed (λ = 0.1,
 threshold = 0.1, Max). The full matrix is in
-docs/work/2026-08-04-wave4-rrf-sweep.md.
+docs/work/archive/2026-08-04-wave4-rrf-sweep.md.
 
 ## Decision
 

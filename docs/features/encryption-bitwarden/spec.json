@@ -5,8 +5,8 @@
     "specFile": "docs/features/encryption-bitwarden/encryption-bitwarden.feature",
     "gate": {
         "ownerGateReview": {
-            "form": "owner rulings f: 2026-08-05 (docs/work/2026-08-05-db-passphrase-options.md 'Owner decisions' section, superseding report F28)",
-            "feedback": "docs/work/2026-08-05-db-passphrase-options.md",
+            "form": "owner rulings f: 2026-08-05 (docs/work/archive/2026-08-05-db-passphrase-options.md 'Owner decisions' section, superseding report F28)",
+            "feedback": "docs/work/archive/2026-08-05-db-passphrase-options.md",
             "answered": 9,
             "open": 0,
             "note": "All decisions ruled inline by the owner during the 2026-08-05 research follow-ups: env kept, bws CLI (not SDK), SSH-key secret value with measured derivation, refuse-to-start offline, rotation warning, raw-key file removed."
@@ -70,7 +70,7 @@
         {
             "id": "D10",
             "decision": "Keychain / SSH-key-direct / Azure Key Vault / AWS Secrets Manager providers",
-            "fallback": "Documented future sources behind the same IEncryptionKeyProvider interface (research: docs/work/2026-08-05-db-passphrase-options.md + ssh-and-cloud-vaults.md)",
+            "fallback": "Documented future sources behind the same IEncryptionKeyProvider interface (research: docs/work/archive/2026-08-05-db-passphrase-options.md + ssh-and-cloud-vaults.md)",
             "tag": "deferred"
         }
     ]

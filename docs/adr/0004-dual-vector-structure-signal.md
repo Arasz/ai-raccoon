@@ -16,12 +16,12 @@ both content-vector and FTS space (its 15 KB body dilutes the identifier
 tokens past the model's 256-token window; the OR-normalized FTS list ranks
 the file's shorter siblings above it).
 
-The retrieval-improvement-cont research (docs/research/2026-08-04-dual-vector-vs-plan-findings.md,
+The retrieval-improvement-cont research (docs/work/archive/2026-08-04-dual-vector-vs-plan-findings.md,
 prototype branch prototype/dual-vector-alpha) measured a dual-vector mechanism
 — a second embedding over the chunk's heading-path string, fused with the
 content embedding at a fixed alpha — that lifted section hits on the old
 corpus. The pre-gate comparison on the clean Wave 0 corpus
-(docs/work/2026-08-04-comparison-clean.md) confirmed it: V:fixed-a0.5 beats
+(docs/work/archive/2026-08-04-comparison-clean.md) confirmed it: V:fixed-a0.5 beats
 V:content-only per the pre-registered rule (file hit@5 9/10 vs 8/10, MRR(file)
 0.820 vs 0.675, section hit@5 5/6), so Wave 6 proceeded.
 

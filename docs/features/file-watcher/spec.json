@@ -5,8 +5,8 @@
     "specFile": "docs/features/file-watcher/file-watcher.feature",
     "gate": {
         "ownerGateReview": {
-            "form": "inline elicitation rulings 2026-08-04 (working draft: docs/work/features-file-watcher/file-watcher.feature, provenance comments)",
-            "feedback": "docs/work/features-file-watcher/file-watcher.feature",
+            "form": "inline elicitation rulings 2026-08-04 (working draft: docs/work/archive/features-file-watcher/file-watcher.feature, provenance comments)",
+            "feedback": "docs/work/archive/features-file-watcher/file-watcher.feature",
             "answered": 10,
             "open": 0,
             "note": "All decision cards ruled inline by the owner during elicitation; a formal owner-gate ceremony was offered and deferred. Closes D9 (file-watcher tools, part 2) of the part-1 native-memory gate."
@@ -49,7 +49,7 @@
             "Stale status state (removed; catch-up replaces it)",
             "env/args config channels for watch settings (--watch-enable / --watch-scope) — converted by the CLI-config task (f: single channel)",
             "memory_inspect introspection tool and metrics/tracing (part-2 siblings, already deferred in part-1)",
-            "Full CLI config surface for all server options — separate task (design subagent 2026-08-04, docs/work/2026-08-04-cli-config-findings.md)"
+            "Full CLI config surface for all server options — separate task (design subagent 2026-08-04, docs/work/archive/2026-08-04-cli-config-findings.md)"
         ]
     },
     "nonFunctional": [
@@ -88,7 +88,7 @@
         {
             "id": "D12",
             "decision": "Full CLI command surface for all server config options (sync, access modes, model, data root, ...)",
-            "fallback": "Separate task fed by the CLI-config design subagent findings (docs/work/2026-08-04-cli-config-findings.md)",
+            "fallback": "Separate task fed by the CLI-config design subagent findings (docs/work/archive/2026-08-04-cli-config-findings.md)",
             "tag": "deferred"
         }
     ]
