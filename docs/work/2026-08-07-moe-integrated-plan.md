@@ -256,7 +256,7 @@ anywhere in the solution**. The claim was an artifact of the old reference doc, 
 
 | WI | State | Issue |
 |---|---|---|
-| WI-4 (Python tests) | 185 test functions, `pyproject.toml` configured, nothing invokes it | [#116](https://github.com/Arasz/ai-raccoon/issues/116) |
+| WI-4 (Python tests) | **Closed won't-do** — owner ruled 2026-08-07 that these are script tests and stay outside the CI gate | [#116](https://github.com/Arasz/ai-raccoon/issues/116) |
 | WI-5 | `grep user_version src/` → empty; no migration marker | — (ADR-0011 owns it) |
 | WI-6a | **Shipped in #123** — the degradation is now logged (EventId 900) | — |
 | WI-6c | no path-containment primitive on the ingest tools | — |
@@ -290,10 +290,8 @@ by what a user actually loses, not by effort.
 
 ### Then — enforcement, so these stop recurring
 
-4. **[#116](https://github.com/Arasz/ai-raccoon/issues/116) Python tests in CI.** Release-relevant: the tests
-   covering `patch-tool-shell.py` and `verify-tool-package.py` — both of which run inside `publish.yml` — are
-   the untested ones. Smallest fix on this list.
-5. **[#119](https://github.com/Arasz/ai-raccoon/issues/119) Test-quality gaps.** Nothing resolves `ToolGate`
+
+4. **[#119](https://github.com/Arasz/ai-raccoon/issues/119) Test-quality gaps.** Nothing resolves `ToolGate`
    from a real container, so dropping its registration breaks all 23 MCP tools with ~1580 tests still green.
    The EventId guard hardcodes two assemblies and misses Core. Four named watch risk-tests were never written,
    including the one gating the `_active` check the design doc calls "this incident in new clothes".
