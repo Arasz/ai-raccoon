@@ -56,8 +56,9 @@ public sealed class WorkspaceTools(
 
             var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
             var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -82,8 +83,9 @@ public sealed class WorkspaceTools(
 
             var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
             var result = new WorkspaceStatusResult(entries, entries.Count);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -112,8 +114,9 @@ public sealed class WorkspaceTools(
 
             var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
             var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
+            var envelope = await WrapAsync(toolResult, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(toolResult, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -138,8 +141,9 @@ public sealed class WorkspaceTools(
 
             var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
             var result = new WorkspaceDiscardResult(discarded);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {

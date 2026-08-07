@@ -67,6 +67,8 @@ public sealed class FakePromotionQueue : IPromotionQueue
     public int? LastLimit { get; private set; }
     public PromoteOutcome PromoteOutcome { get; set; } = new([], 0, new Dictionary<string, int>());
     public Exception? PromoteError { get; set; }
+    public Exception? GetMetaError { get; set; }
+    public TimeSpan GetMetaDelay { get; set; }
 
     public Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
@@ -97,6 +99,18 @@ public sealed class FakePromotionQueue : IPromotionQueue
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
 
-    public Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new ResponseMeta(0, null, null));
+    public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    {
+        if (GetMetaDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(GetMetaDelay, cancellationToken);
+        }
+
+        if (GetMetaError is not null)
+        {
+            throw GetMetaError;
+        }
+
+        return new ResponseMeta(0, null, null);
+    }
 }
