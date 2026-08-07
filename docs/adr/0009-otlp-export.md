@@ -47,6 +47,19 @@ oversight, so both meter names are registered explicitly with
 `.AddMeter(...)`. The built-in `System.Runtime` Meter is exported alongside
 them — see ".NET runtime metrics" below.
 
+**Known cost, accepted:** `PromotionQueueMetrics` tags all five of its
+instruments with `project_id` (`RecordQueued`, `RecordEviction`,
+`RecordPromoted`, `RecordDiscarded`). `project_id` is unbounded, so every
+distinct project becomes its own metric time series. That was free while
+collection was local-only over EventPipe, which is the context in which the
+cardinality was originally accepted; exporting changes the cost profile,
+because hosted collectors generally bill per series. The tag stays — a
+promotion-queue metric without the project dimension answers almost nothing —
+but an operator pointing this at a paid backend should know the series count
+grows with their project count. This is a *separate* question from the
+plaintext/hashing one settled below: cardinality is about cost, plaintext is
+about disclosure, and only the latter was superseded by this ADR.
+
 ### .NET runtime metrics (GC, memory, CPU) — in scope; ASP.NET auto-instrumentation stays out
 
 The owner asked for GC/memory/CPU telemetry alongside the tool metrics, while
