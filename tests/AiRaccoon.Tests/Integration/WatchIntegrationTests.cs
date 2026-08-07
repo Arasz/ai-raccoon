@@ -510,12 +510,14 @@ public sealed class WatchIntegrationTests
             Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService());
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);
+            var scanGuard = new WatchScanGuard();
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(host, WatchStore, host, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Memory, Time,
-                NullLogger<WatchPipeline>.Instance);
+                scanGuard, NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);
-            CatchUp = new WatchCatchUp(Pipeline, WatchStore, NullLogger<WatchCatchUp>.Instance);
+            CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard, new WatchScanLease(), Time,
+                NullLogger<WatchCatchUp>.Instance);
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 NullLogger<WatchHostedService>.Instance);
             Service = new WatchService(WatchStore, Memory, Pipeline, Time);
