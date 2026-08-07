@@ -40,6 +40,10 @@ internal static class CliCommandTree
 
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
+    /// <summary>observability's own --port, read instance-based like ServePortOption (R12):
+    /// unlike serve's --port, 0 is not legal here — there is no "any free port" to dial.</summary>
+    internal static readonly Option<int> ObservabilityPortOption = CreateObservabilityPortOption();
+
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
     {
@@ -290,8 +294,56 @@ internal static class CliCommandTree
             ServePortOption,
             ServeIdleTimeoutOption,
             ServeMcpEntryOption,
-            ServeFormatOption
+            ServeFormatOption,
+            ObservabilityCommand()
         };
+        // Adding the observability subcommand makes System.CommandLine require one of
+        // serve's subcommands unless serve declares its own action — without this, a bare
+        // "ai-raccoon serve" fails to parse ("Required command was not provided."). Nothing
+        // invokes this action; Program.cs routes on CommandPath. Do not remove.
+        serve.SetAction(_ => ExitCode.Success);
         return serve;
+    }
+
+    private static Command ObservabilityCommand()
+    {
+        var kind = new Argument<string>("kind") { HelpName = "counters|trace|otlp|pid" };
+        kind.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && value is not ("counters" or "trace" or "otlp" or "pid"))
+            {
+                result.AddError($"Cannot parse argument '{value}' as an observability kind: expected counters|trace|otlp|pid.");
+            }
+        });
+
+        return new Command("observability", "Prints a ready-to-run monitoring command for the live server, with its PID filled in")
+        {
+            kind,
+            ObservabilityPortOption
+        };
+    }
+
+    private static Option<int> CreateObservabilityPortOption()
+    {
+        var option = new Option<int>("--port")
+        {
+            Description = "Port of the running serve process to query",
+            HelpName = "port",
+            DefaultValueFactory = _ => 7721
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<int>();
+            if (value == 0)
+            {
+                result.AddError("Cannot parse argument '0' as --port: 0 means \"any free port\" and cannot be dialled; pass the port of the running serve process.");
+            }
+            else if (value is < 1 or > 65535)
+            {
+                result.AddError($"Cannot parse argument '{value}' as --port: expected 1-65535.");
+            }
+        });
+        return option;
     }
 }

@@ -1,6 +1,7 @@
 using AiRaccoon;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Serve;
@@ -15,6 +16,13 @@ if (!CliArgs.TryParse(args, out var cliParseResult))
 var cancellationTokenSource = new CancellationTokenSource();
 
 var serverConfig = cliParseResult.Options.ToServerConfig();
+if (cliParseResult.CommandPath is ["serve", "observability"])
+{
+    // Routes above the generic "serve" branch: observability queries a running serve
+    // process and needs none of the bank/encryption/embedding setup serve itself performs.
+    return await ObservabilityRunner.RunAsync(cliParseResult, Console.Out, Console.Error, cancellationTokenSource.Token);
+}
+
 if (cliParseResult.CommandPath is ["serve"])
 {
     // R11: serve routes to ServeRunner BEFORE the generic verb branch — CliCommandRunner's
