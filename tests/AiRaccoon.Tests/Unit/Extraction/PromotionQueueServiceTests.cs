@@ -200,6 +200,20 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Discard_RecordsDiscarded_WithTheSameWaitShapeAsPromote()
+    {
+        await _service.ProposeAsync("acme", [Candidate("h1", "a", 1.0)],
+            TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromSeconds(45));
+
+        await _service.DiscardAsync("acme", "h1", TestContext.Current.CancellationToken);
+
+        _metrics.Discarded.ShouldBe([("acme", 45.0)],
+            "RecordDiscarded must fire on the discard path, the same way RecordPromoted fires on the promote path — " +
+            "otherwise ai_raccoon_queue_discarded_total ships permanently flat");
+    }
+
+    [Fact]
     public async Task GetMeta_ReflectsTheQueue()
     {
         (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
@@ -241,13 +255,14 @@ public sealed class PromotionQueueServiceTests : IDisposable
         public List<(string ProjectId, int Delta)> QueuedDeltas { get; } = [];
         public List<(string ProjectId, double Score, string Reason)> Evictions { get; } = [];
         public List<(string ProjectId, double Wait)> Promoted { get; } = [];
+        public List<(string ProjectId, double Wait)> Discarded { get; } = [];
         public List<double> Utilization { get; } = [];
 
         public void RecordQueued(string projectId, int delta) => QueuedDeltas.Add((projectId, delta));
         public void RecordEviction(string projectId, double victimScore, string reason) =>
             Evictions.Add((projectId, victimScore, reason));
         public void RecordPromoted(string projectId, double waitSeconds) => Promoted.Add((projectId, waitSeconds));
-        public void RecordDiscarded(string projectId, double waitSeconds) { }
+        public void RecordDiscarded(string projectId, double waitSeconds) => Discarded.Add((projectId, waitSeconds));
         public void RecordUtilization(double ratio) => Utilization.Add(ratio);
     }
 

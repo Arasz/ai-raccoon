@@ -82,7 +82,7 @@ public sealed class PromotionQueueServiceGuardTests
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<int> DiscardAsync(string projectId, string? hash,
+        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
