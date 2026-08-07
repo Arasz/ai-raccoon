@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Common;
-using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
@@ -161,19 +160,6 @@ public sealed class MemoryExtensionHostTests
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
-            CancellationToken cancellationToken)
-        {
-            Calls.Add("OnSweepAsync");
-            return Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
-        }
-
-        public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken)
-        {
-            Calls.Add("OnConsolidateAsync");
-            return Task.CompletedTask;
-        }
-
         public Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken)
         {
             Calls.Add("OnSourceChangedAsync");
@@ -192,13 +178,6 @@ public sealed class MemoryExtensionHostTests
         public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<SweepCandidate>> OnSweepAsync(SweepContext context,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<SweepCandidate>>([]);
-
-        public Task OnConsolidateAsync(ConsolidationContext context, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
     }
 
     private sealed class StubStore(IReadOnlyList<MemorySearchResult>? results = null) : IMemoryStore
