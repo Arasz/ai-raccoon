@@ -14,12 +14,12 @@ namespace AiRaccoon.Infrastructure.Extraction;
 public sealed partial class ExtractionHostedService : BackgroundService
 {
     private readonly IMemoryStore _store;
-    private readonly SharedExtractionService _extraction;
+    private readonly SharedExtractionRunner _extraction;
     private readonly IPromotionQueue _queue;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExtractionHostedService> _logger;
 
-    public ExtractionHostedService(IMemoryStore store, SharedExtractionService extraction,
+    public ExtractionHostedService(IMemoryStore store, SharedExtractionRunner extraction,
         IPromotionQueue queue, TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
     {
         _store = store;
@@ -110,28 +110,19 @@ public sealed partial class ExtractionHostedService : BackgroundService
                     continue;
                 }
 
-                var rows = await _store.ExtractCandidatesAsync(projectId, includeTtlRows: false, cancellationToken)
+                var candidates = await _extraction.ProposeAsync(projectId, projects, sharedIndex,
+                        includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
-                var result = _extraction.Run(ExtractMode.Propose, projectId, projects, rows,
-                    sharedIndex.Values, sharedIndex.Paths, includeTtlRows: false,
-                    SharedExtractionService.DefaultCandidateLimit,
-                    _timeProvider.GetUtcNow());
-                if (result.Candidates.Count > 0)
-                {
-                    await _queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates),
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
 
                 // The loop's review surface: ranked candidates, one log line each (S4).
-                for (var i = 0; i < result.Candidates.Count; i++)
+                for (var i = 0; i < candidates.Count; i++)
                 {
-                    var candidate = result.Candidates[i];
+                    var candidate = candidates[i];
                     Log.Candidate(_logger, i + 1, projectId, candidate.Path,
                         string.Join(", ", candidate.Reasons), candidate.ValuePreview);
                 }
 
-                Log.Pass(_logger, projectId, mode, result.Candidates.Count, 0);
+                Log.Pass(_logger, projectId, mode, candidates.Count, 0);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -144,19 +135,6 @@ public sealed partial class ExtractionHostedService : BackgroundService
         }
 
         Log.RunCompleted(_logger, projects.Count, promotedTotal);
-    }
-
-    /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
-    /// ShareCandidate is joined back to its source row for those fields.</summary>
-    private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
-        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
-    {
-        var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
-        return candidates
-            .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
-                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
-            .ToList();
     }
 
     private async Task<TimeSpan> ReadIntervalAsync(CancellationToken cancellationToken)

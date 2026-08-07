@@ -1,4 +1,5 @@
 using AiRaccoon.Core;
+using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -113,4 +114,132 @@ public sealed class FakePromotionQueue : IPromotionQueue
 
         return new ResponseMeta(0, null, null);
     }
+}
+
+/// <summary>In-memory store fake for the shared-extraction path: settings, project ids, candidate rows and the shared index.</summary>
+public sealed class FakeExtractionStore : IMemoryStore
+{
+    public Dictionary<string, string?> Settings { get; } = new(StringComparer.Ordinal);
+
+    public List<string> Projects { get; } = ["acme", "beta"];
+
+    public Dictionary<string, List<ExtractionCandidateRow>> Candidates { get; } = new();
+
+    public SharedIndex Index { get; set; } = new([], []);
+
+    public List<(string ProjectId, string Hash)> Shared { get; } = [];
+
+    public Exception? ExtractionError { get; set; }
+
+    public int ExtractionCalls { get; private set; }
+
+    public Exception? IntervalReadError { get; set; }
+
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(Projects);
+
+    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        bool includeTtlRows, CancellationToken cancellationToken = default)
+    {
+        ExtractionCalls++;
+        if (ExtractionError is not null && projectId == "acme")
+        {
+            throw ExtractionError;
+        }
+
+        return Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>(
+            Candidates.GetValueOrDefault(projectId) ?? []);
+    }
+
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(Index);
+
+    public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default)
+    {
+        Shared.Add((projectId, hash));
+        var row = Candidates.Values.SelectMany(x => x).First(r => r.Hash == hash);
+        Index = new SharedIndex(
+            Index.Values.Append(row.Value).ToArray(),
+            Index.Paths.Append($"shared/{row.Path}").ToArray());
+        return Task.FromResult(new MemoryEntry(hash, row.Path, ContextNaming.SharedContext, row.Value, 1));
+    }
+
+    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        if (IntervalReadError is not null && key == ExtractionConfigKeys.IntervalMinutesGlobal)
+        {
+            throw IntervalReadError;
+        }
+
+        return Task.FromResult(Settings.GetValueOrDefault(key));
+    }
+
+    public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+    {
+        Settings[key] = value;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, string>>(Settings
+            .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Value is not null)
+            .ToDictionary(kv => kv.Key, kv => kv.Value!));
+
+    public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        Settings.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    public Task<int> DeleteContextAsync(string projectId, string context,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    public Task<int> IngestFileAsync(string projectId, string path, string? context,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
+    public Task<int> DeleteSourcePathAsync(string projectId, string path,
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
 }

@@ -99,9 +99,11 @@ public static partial class Dependencies
 
                 return csb.ToString();
             }
+
             services.AddSingleton<WorkspaceService>();
             services.AddSingleton<SweepService>();
             services.AddSingleton<SharedExtractionService>();
+            services.AddSingleton<SharedExtractionRunner>();
 
 
             services.AddSingleton<ForgettingPolicyService>();

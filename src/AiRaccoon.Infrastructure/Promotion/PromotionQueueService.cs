@@ -22,6 +22,9 @@ public sealed partial class PromotionQueueService(
     public async Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNull(candidates);
+
         var upserted = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
         metrics.RecordQueued(projectId, upserted);
 
@@ -57,6 +60,10 @@ public sealed partial class PromotionQueueService(
     public async Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(projectIds);
+        ArgumentOutOfRangeException.ThrowIfZero(projectIds.Count);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         var promoted = new List<string>();
         var skipped = 0;
@@ -93,6 +100,8 @@ public sealed partial class PromotionQueueService(
     public async Task<int> DiscardAsync(string projectId, string? hash,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+
         var removed = await queue.DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
         if (removed > 0)
         {
@@ -104,9 +113,13 @@ public sealed partial class PromotionQueueService(
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,
-        CancellationToken cancellationToken = default) =>
-        (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
-        .Take(limit).ToList();
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+
+        return (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+            .Take(limit).ToList();
+    }
 
     public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {

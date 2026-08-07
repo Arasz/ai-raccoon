@@ -46,6 +46,11 @@ public sealed class PromotionTools(
         using var activity = new ToolExecutionActivity(observability, TnMemoryPromotionList, projectId ?? "all");
         try
         {
+            if (limit < 1)
+            {
+                throw new McpException("invalid-params: limit must be at least 1");
+            }
+
             if (projectId is not null)
             {
                 RequireProjectId(projectId);
@@ -93,8 +98,7 @@ public sealed class PromotionTools(
         }
     }
 
-    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
+    private async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) => new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRow> Rows);
