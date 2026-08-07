@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
@@ -52,6 +53,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
     [Fact]
     public async Task IngestFile_ChunksNeverExceedTheEngineContextWindow()
     {
+        await AllowIngestScopeAsync();
         var file = Path.Combine(_dataRoot, "long-note.md");
         await File.WriteAllTextAsync(file, BuildLongNote(), TestContext.Current.CancellationToken);
 
@@ -76,4 +78,10 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
 
     private static string CreateTempRoot() =>
         TestData.CreateTempRoot("airaccoon-store-tests");
+
+    /// <summary>Declares _dataRoot as the project's ingest scope; ingest is deny-by-default, so every ingest test must opt in.</summary>
+    private Task AllowIngestScopeAsync(string projectId = "acme") =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId),
+            IngestScopeKeys.Serialize([_dataRoot]), TestContext.Current.CancellationToken);
+
 }

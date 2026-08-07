@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
@@ -402,6 +403,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task IngestFile_ChunksContent_ThroughTheChunker_AndReturnsIndexedCount()
     {
+        await AllowIngestScopeAsync();
         var file = Path.Combine(_dataRoot, "long-note.md");
         await File.WriteAllTextAsync(file, "first chunk\n\nsecond chunk\n\nthird chunk",
             TestContext.Current.CancellationToken);
@@ -420,6 +422,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task IngestDirectory_IndexesMarkdownFiles_AndSkipsUnchanged()
     {
+        await AllowIngestScopeAsync();
         var dir = Path.Combine(_dataRoot, "docs");
         Directory.CreateDirectory(dir);
         await File.WriteAllTextAsync(Path.Combine(dir, "a.md"), "alpha content", TestContext.Current.CancellationToken);
@@ -742,6 +745,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task IngestFileAsync_ConcurrentSameFile_SingleChunkSet()
     {
+        await AllowIngestScopeAsync();
         var file = Path.Combine(_dataRoot, "multi.md");
         await File.WriteAllTextAsync(file, "chunk one\n\nchunk two\n\nchunk three",
             TestContext.Current.CancellationToken);
@@ -799,4 +803,10 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
+
+    /// <summary>Declares _dataRoot as the project's ingest scope; ingest is deny-by-default, so every ingest test must opt in.</summary>
+    private Task AllowIngestScopeAsync(string projectId = "acme") =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId),
+            IngestScopeKeys.Serialize([_dataRoot]), TestContext.Current.CancellationToken);
+
 }
