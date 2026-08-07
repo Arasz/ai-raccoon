@@ -183,6 +183,48 @@ credentials unlock (its `task/sync-strip-settings` lane fixes this). A's
 rationale was written before the leak was known; B's finding made it load-bearing
 after the fact.
 
+### 8. The one that went wrong — and why it still counts as a success
+
+The other seven are saves. This one is a collision that actually happened, and
+it is the most instructive entry here.
+
+Session B told its lanes to stop building, to relieve a machine at load 214.
+One of its agents complied by running `pkill -f "dotnet build"` and
+`pkill -f "dotnet test"`. Those are unscoped pattern matches, not PID-targeted,
+so they killed **every** matching process on the machine — including session
+A's in-flight compile, around 14:57–14:58.
+
+Three things are worth separating.
+
+**The agent was not wrong; the instruction was.** "Kill any build you have
+running" contains no scope, and `pkill -f` is the obvious reading of it in a
+single-session world. The instruction was correct in the environment it
+imagined and careless in the one it met — the same shape as every other failure
+in this note: something asserted without being checked against the actual
+context.
+
+**The lost compile was not the real exposure.** The dangerous outcome was
+session A's agent misdiagnosing a killed build as a code failure and "fixing"
+correct code to satisfy an error that never existed. That is expensive and
+near-undetectable afterwards, because the resulting change looks like a
+considered fix. It was averted only because the warning arrived before the
+agent reported its gate — A's agent was told to void every result from that
+window and re-run clean.
+
+**The protocol's real test is not collision avoidance.** B's agent self-reported
+the `pkill` immediately and unprompted; B relayed it within a minute, unasked
+and against its own interest. Nothing detected the kill — no lock, no monitor,
+no log. The only reason it was ever known is that the agent that caused it
+said so.
+
+The generalisable rule: **never pattern-match a kill or reap a shared daemon
+while another session may be using it.** `pkill -f`, `dotnet build-server
+shutdown`, `killall`, and anything touching a shared NuGet or MSBuild cache are
+all the same hazard. Scope to PIDs you started. Both sessions then declined to
+run `dotnet build-server shutdown` unilaterally for exactly this reason, even
+with ~87 orphaned worker processes resident — the restraint being the lesson,
+not the orphans.
+
 ## The memory-bank thread, told honestly
 
 The memory-first gate forced a `memory_search` before repo grep, and that
@@ -210,6 +252,7 @@ recorded decision with provenance instead of an accident.
 | 5 | `serve` subcommand parse trap (System.CommandLine 2.0.10) | One investigation, in Session A | Five queued subcommand additions in Session B inherited the fix for free |
 | 6 | `EventId` collisions across six files | B fixed 2 of its own, deferred the rest | A live-edit conflict on `McpServerSetup.cs` |
 | 7 | Settings-table leak vs. OTLP header rationale | — | ADR 0009's "keep secrets out of the bank" rationale retroactively validated, and the actual leak surfaced |
+| 8 | Unscoped `pkill` killed another session's compile | One lost build; a near-miss on "fixing" correct code to chase a phantom failure | Nothing — this one landed. Caught only by the offending agent's voluntary self-report |
 
 ## What made it work
 
