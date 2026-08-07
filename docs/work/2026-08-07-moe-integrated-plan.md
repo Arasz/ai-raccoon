@@ -235,14 +235,86 @@ bank never silently falls back. Ship behind the same review as WI-1a; both touch
   `SshKeyDerivation` must move to platform `HKDF`. ADR-0012 records the decision; implementation pending and
   must carry a `PRAGMA rekey` migration or existing encrypted banks stop opening.
 
-### Still open
+### Shipped since the first status pass — 2026-08-07 evening
 
-WI-3 (MCP-thin: the duplicated propose pipeline) · WI-4 (test gate: 42 empty BDD bindings, the CI filter,
-Python tests unenforced) · WI-5 (schema versioning — ADR-0011 states the problem; the concurrent watch work
-demonstrates the `ALTER TABLE` column-sniffing workaround) · WI-6 (silent failure paths) · WI-7d · WI-8
-(`SqliteMemoryStore` decomposition) · WI-9 (extension host) · WI-12 · `_evictedScore` histogram with no writer
-(record it **untagged**, matching the sibling `_waitSeconds`) · EventIds 1/2/3 reused across six files
-(deferred while a concurrent session owns `McpServerSetup.cs`).
+| PR | Item | Evidence |
+|---|---|---|
+| #93/#94/#95/#101/#104 | Watch catch-up runaway: stale-sweep unregister, fingerprint cascade, cancellable single-flighted scan, SQLite scan lease | Watch suite 339 green |
+| #97 | **WI-7d** — `ConfigCommands` injectable, six single-use interfaces deleted | CI green |
+| #99 | **WI-12** — platform HKDF + rekey migration for legacy-keyed banks | derivation re-verified against an independent RFC 5869 implementation; both pinned vectors match |
+| #105/#107 | `serve observability` verbs, OTLP export, explicit `service.name` | live E2E against a running server |
+| #109 | `_evictedScore` histogram now recorded; every `Log` class its own EventId block | 66 EventIds measured unique |
+| #110 | **WI-3** — one propose pipeline; promotion-queue argument guards | coverage preserved, verified method-by-method |
+| #111 | One `ToolGate` replacing seven duplicated helper copies | all 23 call sites keep envelope-before-record ordering |
+| #112/#113/#122 | **WI-4 (partial)** — tests that could not fail deleted, 30 empty BDD bindings implemented, BDD gated in its own CI job | — |
+| #114 | Sync strip applied to the merge and retry push paths, not just the first | RED verified by reverting the fix |
+
+**Resolved without work:** EventIds 1/2/3 "reused across six files" — measured, and **no `EventId` 1, 2 or 3 exists
+anywhere in the solution**. The claim was an artifact of the old reference doc, now regenerated from measurement.
+
+### Still open — verified against code 2026-08-07 22:10, each now carrying an issue
+
+| WI | State | Issue |
+|---|---|---|
+| WI-4 (Python tests) | 185 test functions, `pyproject.toml` configured, nothing invokes it | [#116](https://github.com/Arasz/ai-raccoon/issues/116) |
+| WI-5 | `grep user_version src/` → empty; no migration marker | — (ADR-0011 owns it) |
+| WI-6a | `SqliteMemoryStore.cs:725` still swallows `SqliteException` → `[]` | — |
+| WI-6c | no path-containment primitive on the ingest tools | — |
+| WI-7c | `ApiEnvelope` still at Core's root; `IPromotionQueue` still returns `ResponseMeta` | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-7e | sweep default still in the host | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-8 | `SqliteMemoryStore` still 1227 lines; `BeginTransaction` still never called | [#117](https://github.com/Arasz/ai-raccoon/issues/117) |
+| WI-9 | extension host present; two hooks structurally unreachable | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-11 | 11 worktrees, 48 remote branches | — |
+
+**WI-7c and WI-7e had fallen off this list entirely** — present in neither Shipped, Cancelled, nor Still-open —
+and the previous Still-open list named five items that had already shipped. Both are now reconciled. The lesson
+is the one this document already records about consensus: a tracking list is a claim about the world and goes
+stale like any other, so it gets re-derived from code, not carried forward.
+
+## Backlog — post-integration review, 2026-08-07
+
+The 1.2.0 integration review found 10 blockers (all fixed, see the Shipped table) and these residuals. Ordered
+by what a user actually loses, not by effort.
+
+### Next — security and correctness
+
+1. **[#121](https://github.com/Arasz/ai-raccoon/issues/121) Sync pull clobbers local settings.** The counterpart
+   to #114: push is now safe, pull still merges a remote `settings` table unconditionally. A poisoned
+   `embedding.baseUrl` redirects memory content and the API key to an attacker host. Same file, same lane — do
+   this while #114 is fresh.
+2. **[#115](https://github.com/Arasz/ai-raccoon/issues/115) `quick_check` never runs on the pushed bytes.** The
+   merge and retry paths upload without the integrity gate that exists for exactly that. Small, same lane as #121.
+3. **[#117](https://github.com/Arasz/ai-raccoon/issues/117) Promotion queue.** Queue gauge drifts upward forever
+   on re-propose (SQLite counts a conflict-update as a changed row); no transactions anywhere; scoring diverges
+   by caller so a tool call can rewrite a row's score and make it the eviction victim. Carries **WI-8d**.
+
+### Then — enforcement, so these stop recurring
+
+4. **[#116](https://github.com/Arasz/ai-raccoon/issues/116) Python tests in CI.** Release-relevant: the tests
+   covering `patch-tool-shell.py` and `verify-tool-package.py` — both of which run inside `publish.yml` — are
+   the untested ones. Smallest fix on this list.
+5. **[#119](https://github.com/Arasz/ai-raccoon/issues/119) Test-quality gaps.** Nothing resolves `ToolGate`
+   from a real container, so dropping its registration breaks all 23 MCP tools with ~1580 tests still green.
+   The EventId guard hardcodes two assemblies and misses Core. Four named watch risk-tests were never written,
+   including the one gating the `_active` check the design doc calls "this incident in new clothes".
+
+### Then — the deferred rulings
+
+6. **[#118](https://github.com/Arasz/ai-raccoon/issues/118) Architecture drift.** Carries **WI-7c**, **WI-7e**
+   and **WI-9**. The cheap half of 7c (a Core-native `PromotionMeta`) breaks the port coupling for ~4 files with
+   no wire-format risk; moving `ApiEnvelope` itself should wait for MCP contract tests. WI-9 still needs the
+   owner: two extension hooks have no dispatcher at all, so they are unreachable rather than merely no-op.
+7. **[#120](https://github.com/Arasz/ai-raccoon/issues/120) Encryption residuals.** The derivation and the rekey
+   gate are sound; what remains is a `ToString()` that would print key material if anyone ever interpolates the
+   record, unzeroed seed bytes, a migrate verb that runs DDL on a bank it reports untouched, and the untested
+   `quick_check` half of the gate.
+8. **[#82](https://github.com/Arasz/ai-raccoon/issues/82) SEP-2640 skill discovery** — pre-existing feature work,
+   unrelated to this review; sequenced last only because everything above is a defect.
+
+### Not tracked as issues
+
+WI-5 (schema versioning) stays with ADR-0011, which already states the problem. WI-6a/6c and WI-11 are recorded
+above; file them when someone picks them up rather than opening issues nobody has scoped.
 
 ### What the execution actually cost
 
