@@ -6,7 +6,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 /// </summary>
 internal sealed class TickSignal
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<(long Target, TaskCompletionSource<bool> Completion)> _waiters = [];
     private long _count;
 
