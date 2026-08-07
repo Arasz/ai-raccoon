@@ -123,3 +123,38 @@ endless re-resolution that fed it, but if entry-level dedup is independently bro
 set is not the whole story. `RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries` asserting
 exactly one entry per file is what would expose that. If it still fails once all five WPs land,
 that is a separate defect and needs its own report — not a patch folded in here.
+
+## Outcome
+
+Shipped as four PRs, each verified green before merge:
+
+| PR | Work package | Evidence at merge |
+|---|---|---|
+| #93 | WP1 — stale sweep unregisters from the pipeline | 297 Watch tests, 0 fail |
+| #94 | WP5 — removal cascades to fingerprints | 302 Watch tests, 0 fail |
+| #95 | WP2 + WP3 + lease schema/SQL | 318 Watch tests, 0 fail |
+| #101 | WP4 — `SqliteWatchScanLease` + renewal wiring | 337 Watch tests, 0 fail |
+
+### Two things the analysis missed
+
+**The stale sweep iterated `_active`, not registrations.** `_active` only ever holds *enabled*
+watches, so a watch registered while its project was disabled could never be swept at all — the
+missing `UnregisterWatch` call was only half the defect. Caught while planning WP1, fixed in #93.
+
+**`ScanCoreAsync` acquired and released the lease but never renewed it.** The blueprint specified
+inline renewal; the implementation that landed in #95 dropped it. Any scan outliving the 60s TTL
+would silently lose its lease to a live process and keep enqueueing — the runaway shape again, one
+step removed. Caught while wiring WP4, fixed in #101 with the renewal check placed *before* each
+enqueue so a lost lease adds nothing further.
+
+### Still open
+
+The assumption above is **not yet settled**: `RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries`
+was specified in wave 3 and never written, because the waves were reorganised into per-PR branches
+when concurrent agents collided in a shared worktree. Entry-level dedup across a remove→re-add
+cycle therefore remains unverified. If duplicates recur after all five WPs, that test is what would
+expose it, and it is a separate defect.
+
+Wave 3's other cross-cutting test — `RemoveThenReAdd_WhileTheFirstScanIsRunning_CancelsItAndRunsExactlyOneNewScan`
+— is likewise unwritten. The individual behaviours it composes are each pinned; their interaction
+is not.
