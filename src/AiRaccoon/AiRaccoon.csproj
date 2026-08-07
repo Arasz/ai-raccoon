@@ -43,6 +43,7 @@
         <PackageReference Include="DotNext"/>
         <PackageReference Include="DotNext.Threading"/>
         <PackageReference Include="FluentValidation"/>
+        <PackageReference Include="JetBrains.Annotations"/>
         <PackageReference Include="ModelContextProtocol"/>
         <PackageReference Include="ModelContextProtocol.AspNetCore"/>
         <PackageReference Include="System.CommandLine"/>
