@@ -106,6 +106,14 @@ ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
 ai-raccoon extract list
+
+# maintenance: bank housekeeping (every process checkpoints the WAL at startup
+# and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
+# default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
+# config changes apply live, no server restart needed)
+ai-raccoon maintenance interval {minutes}
+ai-raccoon maintenance vacuum-interval {days}
+ai-raccoon maintenance list
 ```
 
 Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are stored in the settings table,
