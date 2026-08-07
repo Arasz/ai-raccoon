@@ -138,8 +138,19 @@ public sealed partial class PromotionQueueService(
     public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {
         var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyDictionary<string, PromotionCapacityInfo>? capacityByProject = null;
+        if (stats.PerProject.Count > 0)
+        {
+            // projectCount = occupying projects (stats.PerProject.Count), not the full project
+            // roster: that is the population UniformCountEvictionPolicy actually competes over,
+            // and it avoids an extra store round-trip on every meta read for projects that have
+            // never proposed anything.
+            var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
+            capacityByProject = PromotionCapacityPolicy.CapacityInfo(cap, stats.PerProject.Count, stats.PerProject);
+        }
+
         return new ResponseMeta(stats.TotalCount, stats.AvgWaitSeconds,
-            stats.PerProject.Count > 0 ? stats.PerProject : null);
+            stats.PerProject.Count > 0 ? stats.PerProject : null, capacityByProject);
     }
 
     private const string EvictionReason = "capacity";

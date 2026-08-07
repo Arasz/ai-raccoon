@@ -244,6 +244,30 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetMeta_SurfacesPerProjectCapacityInfo()
+    {
+        await SetCapAsync(100, TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("acme",
+            [Candidate("a1", "a1", 1.0), Candidate("a2", "a2", 2.0), Candidate("a3", "a3", 3.0)],
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("other",
+            [Candidate("o1", "o1", 1.0)], TestContext.Current.CancellationToken);
+
+        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
+
+        meta.CapacityByProject.ShouldNotBeNull();
+        meta.CapacityByProject!["acme"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 3, Borrowing: false));
+        meta.CapacityByProject["other"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 1, Borrowing: false));
+    }
+
+    [Fact]
+    public async Task GetMeta_EmptyQueue_HasNoCapacityInfo()
+    {
+        (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
+            .CapacityByProject.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Sweep_NeverTouchesTheQueue()
     {
         var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
