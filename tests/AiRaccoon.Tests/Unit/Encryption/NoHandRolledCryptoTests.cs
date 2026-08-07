@@ -46,13 +46,56 @@ public sealed class NoHandRolledCryptoTests
             + "add the file to ContentAddressingSites; if it derives a key, use System.Security.Cryptography.HKDF.");
     }
 
+    /// <summary>
+    ///     Scoped to DeriveRawKey's own body, not the whole file — a whole-file search would stay
+    ///     green if DeriveRawKey reverted to a hash while DeriveLegacyRawKey (the pre-ADR-0012
+    ///     path, kept only to rekey old banks) still called HKDF.DeriveKey somewhere else in the
+    ///     file. The pinned vectors in SshKeyDerivationTests are the real behavioural guard; this
+    ///     is the source-shape guard that should fail for the same reason they would.
+    /// </summary>
     [Fact]
-    public void BankKeyDerivation_UsesThePlatformKdf()
+    public void BankKeyDerivation_RawKeyMethodSpecifically_UsesThePlatformKdf()
     {
         var derivation = ProductionSources().Single(f => f.Relative == KeyDerivationSite);
+        var source = File.ReadAllText(derivation.FullPath);
 
-        File.ReadAllText(derivation.FullPath).ShouldContain("HKDF.DeriveKey",
-            customMessage: "The bank key must come from the platform KDF (ADR-0012), not a hand-assembled hash.");
+        var body = ExtractMethodBody(source, "DeriveRawKey");
+
+        body.ShouldContain("HKDF.DeriveKey",
+            customMessage: "DeriveRawKey — the derivation new banks actually use — must call the platform KDF "
+            + "(ADR-0012), not a hand-assembled hash. An HKDF.DeriveKey call elsewhere in the file (e.g. only in "
+            + "DeriveLegacyRawKey) does not satisfy this.");
+    }
+
+    /// <summary>The method's own brace-balanced `{ … }` block, comments stripped — never the next method's leading doc comment.</summary>
+    private static string ExtractMethodBody(string source, string methodName)
+    {
+        var signatureIndex = source.IndexOf($"string {methodName}(", StringComparison.Ordinal);
+        signatureIndex.ShouldBeGreaterThanOrEqualTo(0, $"{methodName} not found — has it been renamed or moved?");
+
+        var braceStart = source.IndexOf('{', signatureIndex);
+        braceStart.ShouldBeGreaterThanOrEqualTo(0, $"{methodName}'s opening brace not found");
+
+        var depth = 0;
+        for (var i = braceStart; i < source.Length; i++)
+        {
+            switch (source[i])
+            {
+                case '{':
+                    depth++;
+                    break;
+                case '}':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return StripComments(source[braceStart..(i + 1)]);
+                    }
+
+                    break;
+            }
+        }
+
+        throw new InvalidOperationException($"{methodName}'s closing brace not found — unbalanced braces?");
     }
 
     [Fact]
