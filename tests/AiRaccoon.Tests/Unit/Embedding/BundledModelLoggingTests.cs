@@ -28,9 +28,9 @@ public sealed class BundledModelLoggingTests
             result.AllPresent.ShouldBeFalse();
             result.Errors.ShouldNotBeEmpty();
             var records = logger.Collector.GetSnapshot();
-            records.ShouldContain(r => r.Id.Id == 1 && r.Level == LogLevel.Information
+            records.ShouldContain(r => r.Id.Id == 410 && r.Level == LogLevel.Information
                                        && r.Message.Contains("Downloading bundled model asset", StringComparison.Ordinal));
-            records.ShouldContain(r => r.Id.Id == 2 && r.Level == LogLevel.Error
+            records.ShouldContain(r => r.Id.Id == 411 && r.Level == LogLevel.Error
                                        && r.Message.Contains("Failed to download bundled model asset", StringComparison.Ordinal));
         }
         finally
@@ -57,7 +57,7 @@ public sealed class BundledModelLoggingTests
         result.AllPresent.ShouldBeTrue();
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
-        record.Id.Id.ShouldBe(3);
+        record.Id.Id.ShouldBe(412);
         record.Level.ShouldBe(LogLevel.Debug);
         record.Message.ShouldContain("Bundled model assets verified");
     }

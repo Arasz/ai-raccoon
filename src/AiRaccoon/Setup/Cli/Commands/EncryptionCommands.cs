@@ -284,30 +284,30 @@ public sealed partial class EncryptionCommands
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Rekeying the bank to the {Source} encryption key")]
+        [LoggerMessage(EventId = 800, Level = LogLevel.Information, Message = "Rekeying the bank to the {Source} encryption key")]
         public static partial void RekeyingBank(ILogger logger, string source);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Bank rekeyed to the {Source} encryption key")]
+        [LoggerMessage(EventId = 801, Level = LogLevel.Information, Message = "Bank rekeyed to the {Source} encryption key")]
         public static partial void BankRekeyed(ILogger logger, string source);
 
-        [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "bws invocation failed")]
+        [LoggerMessage(EventId = 802, Level = LogLevel.Error, Message = "bws invocation failed")]
         public static partial void BwsInvocationFailed(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
+        [LoggerMessage(EventId = 803, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
         public static partial void UnsetSkippedRekey(ILogger logger);
 
-        [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
+        [LoggerMessage(EventId = 804, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
 
         // The migration records nothing in the bank or the sidecar (plan Decision 4) — these
         // events are the whole audit trail.
-        [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Checking the bank at {BankPath} for the pre-ADR-0012 key derivation")]
+        [LoggerMessage(EventId = 805, Level = LogLevel.Information, Message = "Checking the bank at {BankPath} for the pre-ADR-0012 key derivation")]
         public static partial void MigratingBank(ILogger logger, string bankPath);
 
-        [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
+        [LoggerMessage(EventId = 806, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
         public static partial void BankMigrated(ILogger logger, string bankPath);
 
-        [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
+        [LoggerMessage(EventId = 807, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
         public static partial void MigrationRefused(ILogger logger, string bankPath, Exception exception);
     }
 }

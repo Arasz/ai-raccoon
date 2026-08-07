@@ -58,4 +58,27 @@ public class PromotionQueueMetricsTests
         var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
         measurement.Tags["project_id"].ShouldBe("acme");
     }
+
+    [Fact]
+    public void RecordEviction_RecordsTheVictimScore()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_evicted_score");
+
+        metrics.RecordEviction("acme", 0.42, "capacity");
+
+        collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Value.ShouldBe(0.42);
+    }
+
+    /// <summary>Histograms here stay untagged (the wait-seconds sibling does too); the counters carry project_id.</summary>
+    [Fact]
+    public void RecordEviction_LeavesTheScoreHistogramUntagged()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_evicted_score");
+
+        metrics.RecordEviction("acme", 0.42, "capacity");
+
+        collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Tags.ShouldBeEmpty();
+    }
 }

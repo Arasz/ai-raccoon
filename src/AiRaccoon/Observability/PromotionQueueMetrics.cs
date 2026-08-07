@@ -52,8 +52,11 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
     public void RecordQueued(string projectId, int delta) =>
         _queued.Add(delta, new TagList { { "project_id", projectId } });
 
-    public void RecordEviction(string projectId, double victimScore, string reason) =>
+    public void RecordEviction(string projectId, double victimScore, string reason)
+    {
         _evictions.Add(1, new TagList { { "project_id", projectId }, { "reason", reason } });
+        _evictedScore.Record(victimScore);
+    }
 
     public void RecordPromoted(string projectId, double waitSeconds)
     {

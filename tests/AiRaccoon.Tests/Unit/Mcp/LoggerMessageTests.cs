@@ -20,7 +20,7 @@ public class LoggerMessageTests
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Warning);
-        record.Id.Id.ShouldBe(1);
+        record.Id.Id.ShouldBe(30);
         record.Message.ShouldContain("https transport is not supported");
     }
 }

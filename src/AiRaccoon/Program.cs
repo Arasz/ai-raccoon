@@ -110,13 +110,13 @@ namespace AiRaccoon
 {
     public static partial class Log
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
+        [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
         public static partial void FailedToResolveEncryptionKey(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key: {Error}")]
+        [LoggerMessage(EventId = 11, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key: {Error}")]
         public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, string error, Exception exception);
 
-        [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "ai-raccoon: SQLite engine {LibVersion} ({EngineVersion})")]
+        [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "ai-raccoon: SQLite engine {LibVersion} ({EngineVersion})")]
         public static partial void SqliteEngineVersion(ILogger logger, string libVersion, string engineVersion);
     }
 }

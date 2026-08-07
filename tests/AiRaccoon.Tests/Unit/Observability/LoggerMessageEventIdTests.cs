@@ -8,18 +8,15 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
-///     [LoggerMessage] EventIds must be unique per Log class, except the deferred 1/2/3 reuse
-///     tracked in docs/reference/logging-event-ids.md (cross-cutting renumber, out of this task's
-///     lane). Any other duplicate is a regression this test catches.
+///     [LoggerMessage] EventIds must be unique across the assemblies — no exceptions. Ownership
+///     of each block is recorded in docs/reference/logging-event-ids.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class LoggerMessageEventIdTests
 {
-    private static readonly HashSet<int> DeferredDuplicateEventIds = [1, 2, 3];
-
     [Fact]
-    public void EventIds_AreUniqueAcrossTheAssemblies_ExceptTheDeferredIds()
+    public void EventIds_AreUniqueAcrossTheAssemblies()
     {
         Assembly[] assemblies =
         [
@@ -39,7 +36,7 @@ public class LoggerMessageEventIdTests
 
         var duplicates = entries
             .GroupBy(e => e.EventId)
-            .Where(g => g.Count() > 1 && !DeferredDuplicateEventIds.Contains(g.Key))
+            .Where(g => g.Count() > 1)
             .Select(g => $"EventId {g.Key}: {string.Join(", ", g.Select(e => e.Location))}")
             .ToList();
 
