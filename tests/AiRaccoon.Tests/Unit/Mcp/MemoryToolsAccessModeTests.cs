@@ -338,4 +338,17 @@ public sealed class MemoryToolsAccessModeTests
             _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("access-denied: memory_promotion_discard requires mode rw (current ro)");
     }
+
+    // Scenario: a bad limit is an invalid-params answer to the agent, not an internal error.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task PromotionList_RejectsANonPositiveLimit(int limit)
+    {
+        SetMode(perProject: "rw");
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _promotion.List("acme-web", limit, TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("invalid-params: limit must be at least 1");
+    }
 }
