@@ -17,6 +17,20 @@ public sealed class BitwardenEncryptionKeyProviderTests
 {
     // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…'
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
+    private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+
+    /// <summary>The seed is held for the process lifetime otherwise; DeriveAndZeroSeed is the one call site free to clear it.</summary>
+    [Fact]
+    public void DeriveAndZeroSeed_DerivesBothKeysThenZeroesTheSeed()
+    {
+        var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+
+        var (value, legacyValue) = BitwardenEncryptionKeyProvider.DeriveAndZeroSeed(seed);
+
+        value.ShouldBe(DerivedRawKey);
+        legacyValue.ShouldBe(LegacyDerivedRawKey);
+        seed.ShouldAllBe(b => b == 0);
+    }
 
     [Fact]
     public void GetPassphrase_ValidPem_ReturnsDerivedRawKeyAndRunsSecretGetWithoutToken()

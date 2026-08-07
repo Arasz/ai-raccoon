@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Encryption;
@@ -101,7 +102,7 @@ public sealed partial class EncryptionCommands
             return 1;
         }
 
-        var derived = SshKeyDerivation.DeriveRawKey(seed);
+        var derived = DeriveAndZeroSeed(seed);
 
         await stderr.WriteLineAsync(RotationWarning);
 
@@ -266,6 +267,19 @@ public sealed partial class EncryptionCommands
         await stderr.WriteAsync($"{label}: ");
         var value = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
         return string.IsNullOrEmpty(value) ? fallback : value;
+    }
+
+    /// <summary>Derives the raw key from the seed, then zeroes it — the seed must not outlive this call.</summary>
+    internal static string DeriveAndZeroSeed(byte[] seed)
+    {
+        try
+        {
+            return SshKeyDerivation.DeriveRawKey(seed);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(seed);
+        }
     }
 
     private static async Task<bool> TryOpenAsync(SqliteConnectionFactory bank, string key,
