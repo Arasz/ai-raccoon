@@ -229,9 +229,12 @@ but the server has no OTLP export configured. `--port 0` is a parse error — un
 `serve --port 0`, there is no "any free port" to dial. Failures write nothing to
 stdout, so command substitution yields an empty string rather than an error message.
 
-OTLP export itself is opt-in and configured only through the standard
-`OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_PROTOCOL` variables, read at
-host-build time; unset means no exporter is constructed. Exported: the
+OTLP export is **serve/HTTP mode only** — a stdio server is a per-connection
+process on a ~5-minute recycle, too short-lived for a batch exporter to be worth
+its schedule delay and shutdown grace. It is opt-in and configured only through
+the standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_PROTOCOL`
+variables, read at host-build time; unset means no exporter is constructed.
+Exported: the
 `AiRaccoon.MemoryTools` meter and ActivitySource, the `AiRaccoon.PromotionQueue`
 meter, and the built-in `System.Runtime` meter. See
 [ADR 0008](../adr/0008-live-pid-discovery-for-monitoring.md) and

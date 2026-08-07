@@ -123,7 +123,7 @@ already exposes (endpoint, protocol, headers, timeout, per-signal overrides,
 | Host path | Exporter wired? | Why |
 |---|---|---|
 | `CreateWebHost` (`serve`, HTTP) | Yes | The long-lived process an operator actually wants to watch. |
-| `CreateAppHost` (stdio) | Yes | Symmetric with `CreateWebHost`, and free when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset. |
+| `CreateAppHost` (stdio) | **No** | A stdio server is a per-connection process that recycles roughly every 5 minutes — the recycle `serve` mode exists to avoid. Against that lifetime the exporter's 5 s batch schedule delay plus the non-configurable 5 s per-provider shutdown grace is mostly overhead, and much of what it buffers would never flush. Owner decision, 2026-08-07, reversing an earlier symmetric call. |
 | `CliCommandRunner` (one-shot CLI verbs) | No | A one-shot command would either exit before the batch exporter flushed, or block shutdown waiting for a flush that serves no one. |
 | `ObservabilityRunner` (the new `observability` verb) | No | Same reasoning as `CliCommandRunner` — it queries a running server, it does not itself need to be observed. |
 
