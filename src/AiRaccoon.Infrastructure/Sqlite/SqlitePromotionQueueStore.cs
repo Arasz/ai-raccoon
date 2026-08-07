@@ -51,16 +51,17 @@ public sealed class SqlitePromotionQueueStore(
         return rows.Select(ToRow).ToList();
     }
 
-    public async Task<int> DiscardAsync(string projectId, string? hash,
+    public async Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.ExecuteAsync(
+        var removed = await connection.QueryAsync<PromotionQueueRowRow>(
                 new CommandDefinition(
                     PromotionQueueSql.Discard,
                     new { ProjectId = projectId, Hash = hash },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        return removed.Select(ToRow).ToList();
     }
 
     public async Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default)

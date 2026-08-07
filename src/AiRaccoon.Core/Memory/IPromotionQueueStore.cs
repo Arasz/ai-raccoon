@@ -16,8 +16,8 @@ public interface IPromotionQueueStore
     Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Removes one row (hash given) or the whole project's queue (hash null); returns the removed count.</summary>
-    Task<int> DiscardAsync(string projectId, string? hash,
+    /// <summary>Removes and returns one row (hash given) or the whole project's queue (hash null) — a DELETE...RETURNING claim, so a row is only ever removed by exactly one caller.</summary>
+    Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
         CancellationToken cancellationToken = default);
 
     /// <summary>Total count, per-project counts, and average wait age (now − created_at) over the queue.</summary>
