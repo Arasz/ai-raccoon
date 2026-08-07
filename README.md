@@ -67,11 +67,12 @@ error shapes) is in [docs/reference/agent-memory-server.md](docs/reference/agent
 
 ## Configuration
 
-One environment variable:
-
 | Variable | Purpose |
 |---|---|
 | `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (optional; unset = plaintext) |
+
+Plus the `OTEL_*` variables the OpenTelemetry SDK itself reads for OTLP export (serve
+mode only, opt-in — see [OTLP export](#otlp-export) below).
 
 Everything else lives in the settings table of the install's `memory.db` and is
 changed with `ai-raccoon` verb commands. The CLI is the single config channel.

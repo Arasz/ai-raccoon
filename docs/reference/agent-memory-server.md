@@ -162,18 +162,23 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 
 ## Environment variables
 
-Only one environment variable is read:
-
 | Variable                  | Purpose                                                                                                                             |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `AIRACCOON_DB_PASSPHRASE` | SQLite encryption passphrase (page-level via SQLite3MC, SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet; unset = plaintext) |
 
+Beyond that, the only other environment variables read are the `OTEL_*` ones the
+OpenTelemetry SDK itself reads for OTLP export (serve/HTTP mode only, opt-in) —
+notably `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`,
+`OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_METRIC_EXPORT_TIMEOUT`, and `OTEL_SERVICE_NAME` —
+see [OTLP export](#serve-mode) below and [ADR 0009](../adr/0009-otlp-export.md) for the
+current set and behavior rather than treating this list as exhaustive.
+
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
-environment variables are not read for runtime configuration (single-channel ruling).
-Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection string) are
-stored in the settings table (encrypted at rest when a passphrase is set), never in the
-environment and never in tracked files.
+environment variables are not read for that runtime configuration (single-channel
+ruling). Secrets (OpenAI API key, S3 access/secret keys or the Azure Blob connection
+string) are stored in the settings table (encrypted at rest when a passphrase is set),
+never in the environment and never in tracked files.
 
 ## Command-line options
 
