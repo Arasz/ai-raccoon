@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using Dapper;
 using Shouldly;
 using Xunit;
 
@@ -105,6 +107,43 @@ public sealed class WatchStoreCascadeTests
         remaining.ShouldContain(decoy);
     }
 
+    /// <summary>
+    ///     R6 in the fix plan: the removal's cascade takes a write lock while the digest path is
+    ///     still writing. Pinned against a real held write transaction, because `busy_timeout` is
+    ///     only observable when the lock is genuinely held when the remove asks for it.
+    /// </summary>
+    [Fact]
+    public async Task RemoveWatchAsync_WhileFingerprintsAreBeingWritten_Succeeds()
+    {
+        using var stack = new Stack();
+        var watchPath = stack.Dir("busy");
+        await stack.Store.AddWatchAsync(Project, watchPath, 1, 1, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, Path.Combine(watchPath, "a.md"), "hash-a", 1,
+            TestContext.Current.CancellationToken);
+
+        await using var holder = await stack.Factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using var held = await holder.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await holder.ExecuteAsync(new CommandDefinition(
+            "UPDATE watch_files SET file_hash = 'held' WHERE project_id = @Project",
+            new { Project }, held, cancellationToken: TestContext.Current.CancellationToken));
+
+        // Task.Run, not a bare call: Microsoft.Data.Sqlite's *Async methods run synchronously, so
+        // an un-offloaded remove would block this thread and the release below would never happen.
+        var startedAt = Stopwatch.GetTimestamp();
+        var remove = Task.Run(() => stack.Store.RemoveWatchAsync(Project, watchPath,
+            TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        await held.CommitAsync(TestContext.Current.CancellationToken);
+        await remove;
+
+        // The elapsed time is the assertion that contention actually happened: a remove that
+        // slipped in before the UPDATE took the lock would return in milliseconds.
+        Stopwatch.GetElapsedTime(startedAt).ShouldBeGreaterThan(TimeSpan.FromSeconds(1.5));
+
+        var watches = await stack.Store.ListWatchesAsync(TestContext.Current.CancellationToken);
+        watches.ShouldNotContain(w => w.ProjectId == Project && w.Path == watchPath);
+    }
+
     /// <summary>Real-SQLite bank under a throwaway temp DataRoot; disposed at test end.</summary>
     private sealed class Stack : IDisposable
     {
@@ -118,9 +157,11 @@ public sealed class WatchStoreCascadeTests
             {
                 DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
             };
-            var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-            Store = new WatchStore(factory);
+            Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+            Store = new WatchStore(Factory);
         }
+
+        public SqliteConnectionFactory Factory { get; }
 
         public WatchStore Store { get; }
 

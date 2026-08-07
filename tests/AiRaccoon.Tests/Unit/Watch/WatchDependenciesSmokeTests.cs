@@ -38,4 +38,28 @@ public sealed class WatchDependenciesSmokeTests : IDisposable
         provider.GetRequiredService<WatchEventSource>().ShouldNotBeNull();
         provider.GetServices<IHostedService>().OfType<WatchHostedService>().ShouldHaveSingleItem();
     }
+
+    /// <summary>
+    ///     The scan guard single-flights per (project, path) and the lease is one owner identity per
+    ///     process — both only hold if every consumer shares one instance. A transient registration
+    ///     leaves the guard guarding nothing and gives each consumer its own lease owner.
+    /// </summary>
+    [Fact]
+    public void RegisterMemoryServices_SharesOneScanGuard_AndOneScanLease()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.RegisterMemoryServices(new InfrastructureOptions
+        {
+            DataRoot = _dataRoot,
+            Scope = InstallScope.User
+        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<WatchScanGuard>()
+            .ShouldBeSameAs(provider.GetRequiredService<WatchScanGuard>());
+        provider.GetRequiredService<IWatchScanLease>()
+            .ShouldBeSameAs(provider.GetRequiredService<IWatchScanLease>());
+    }
 }

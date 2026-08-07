@@ -368,4 +368,30 @@ public sealed class WatchCatchUpTests
         stack.ScanGuard.StartedScans.ShouldBe(2, "one scan before removal, one after the re-add — never three");
         stack.Memory.Ingested.Count.ShouldBe(2, "each file must be ingested exactly once");
     }
+
+
+    /// <summary>R1 in the fix plan: a lease that survives a cancelled scan parks the watch for a
+    /// full TTL, so the release must run on the cancellation path too.</summary>
+    [Fact]
+    public async Task ScanCore_WhenTheScanIsCancelled_StillReleasesTheLease()
+    {
+        using var dir = TempDir.New("catchup-cancel-release");
+        await WriteAllTextAsync(dir.File("a.md"), "zephyrone", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+        using var cts = new CancellationTokenSource();
+        // Cancel the instant the lease is taken: the scan is then guaranteed to be inside the
+        // try, before the first file, so cancellation lands after the acquire and before the exit.
+        stack.ScanLease.OnAcquire = cts.Cancel;
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, cts.Token);
+        await catchUp.LastScan!;
+
+        stack.ScanLease.ReleaseCalls.ShouldBe(1);
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldBeEmpty();
+    }
 }
