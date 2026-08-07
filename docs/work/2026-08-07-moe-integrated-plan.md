@@ -170,11 +170,93 @@ Wave 3  WI-8  SqliteMemoryStore decomposition — single serial lane
 **Why WI-8 is last:** it is the only item whose blast radius is the whole store, and three other
 items (WI-5, WI-6a, WI-9) change files it will rewrite. Doing it first means doing it twice.
 
-## Decisions owed before Wave 2
+## Owner decisions — settled 2026-08-07
 
-1. **WI-9** — delete the extension host, or keep it? Reverses a ratified decision; either way an ADR.
-2. **WI-1a shape** — strip the whole `settings` table from the push snapshot, or allowlist the
-   non-secret keys? The allowlist keeps cross-machine settings sync working; the strip is safer and
-   simpler.
-3. **WI-10e** — approve the 45-archive / 7-delete sweep of `docs/work/`?
-4. **WI-6d** — `GenerateAsync` on provider outage: fail the write, or leave the entry `pending`?
+1. **WI-9 — delete the extension host.** Reverses spec-issue-1 §6.2; ADR required. Unblocks WI-8.
+2. **WI-1a — strip the whole `settings` table.** Owner asked which settings would be lost; the
+   inventory is below. Selective propagation is deferred to WI-1b, because the merge clobbers
+   local unconditionally today.
+3. **WI-10e — sweep approved** (keep 7 / promote 1 / archive 45 / delete 7).
+4. **WI-6d — leave the entry `pending`** on embedding-provider outage; do not fail the write.
+5. **WI-12 — remove the hand-made crypto.** Owner reaffirmed the invariant after being shown the
+   migration cost. See below.
+
+### Settings inventory (answers the WI-1a question)
+
+| Class | Keys | Sync? |
+|---|---|---|
+| **Secret** | `sync.secretKey`, `sync.accessKey`, `sync.connectionString`, `embedding.apiKey` | never |
+| **Machine-specific** | remaining `sync.*` (this machine's target — propagating is circular); `encryption.source`, `encryption.bitwarden.*` (how *this* machine unlocks its bank — syncing can lock the other one out); `watch.scope\|enabled\|concurrency.*` (absolute local paths) | never |
+| **Machine-agnostic** | `access.mode.global`, `sweep.threshold`, 5× `extract.*`, 2× `maintenance.*`, `embedding.provider\|model\|baseUrl` | **deferred to WI-1b** |
+
+`embedding.model` is the one that arguably *should* propagate: a mismatch across machines yields
+incompatible vectors, and `vec0` is hardcoded `float[384]` with no dimension validation (B9). That
+makes it a guarded feature, not a side effect of a security fix.
+
+### WI-12 — replace the hand-made KDF with platform HKDF · **High** · lane: `SshKeyDerivation.cs`
+
+**This reverses the B8 arbitration above, on owner instruction.** The arbitration was correct that
+plain SHA-256 was a sanctioned option and carries no practical weakness for a 32-byte uniform seed.
+The owner's ruling is that the invariant ("never implement key derivation yourself — delegate to an
+audited platform library") is not subject to a cost/benefit trade, and that is theirs to make.
+
+- 12a Replace `SHA256.HashData(label ‖ seed)` with `HKDF.DeriveKey(SHA256, ikm: seed, info: label)`.
+- 12b **Mandatory migration.** The derived key changes, so every existing encrypted bank becomes
+  unopenable without one. Version the label (`…/v1` → `…/v2`); on open, try v2, fall back to v1, and
+  on a successful v1 open `PRAGMA rekey` to v2 and record the version. Rekey-including-WAL is
+  already the best-covered subsystem in the suite, so the primitive exists.
+- 12c ADR recording the replacement (folded into WI-10f).
+
+**Gate:** a bank created with the v1 derivation opens, migrates, and reopens under v2 — and a v2
+bank never silently falls back. Ship behind the same review as WI-1a; both touch user data at rest.
+
+## Execution status — 2026-08-07
+
+### Shipped
+
+| PR | Item | Evidence |
+|---|---|---|
+| #88 | **WI-1a** — sync strips the `settings` table | CI green; 2 tests added |
+| #89 | **WI-2a/2c** — tool outcome recorded after the call; `PromotionQueueService` → EventIds 700-704, `WatchPipeline` → 302 | red→green proven; CI green |
+| #90 | **WI-7a/7b** — 167 lines of dead code; `JetBrains.Annotations` off Core | CI green |
+| #91 | **WI-10** — tool count → 22 in 5 docs; 45 archived / 7 deleted; ADR-0010/0011/0012; foreign design doc removed | CI green; Reqnroll paths verified intact |
+| #92 | 10 scaffolded `SKILL.md` files carrying duplicate `description:` keys | YAML parse verified |
+
+### Cancelled or changed on ruling
+
+- **WI-2b cancelled.** `project_id` stays on `PromotionQueueMetrics`; owner accepted the cardinality cost so a
+  concurrent OTLP exporter keeps the per-project dimension. Note the cost basis changed after the ruling:
+  local EventPipe (free) → OTLP export (one billable series per project, opt-in and off by default).
+- **WI-7d changed.** Both expert reviews recommended deleting the six `I*Commands` interfaces. Both were wrong:
+  `ConfigCommands` is a static dispatcher taking them as optional parameters — the invariant's one sanctioned
+  exception. Owner ruled to refactor `ConfigCommands` into an injectable component instead, so the exception is
+  not needed. **Not started.**
+- **WI-12 added.** Owner reaffirmed the no-hand-rolled-crypto invariant after being shown the migration cost:
+  `SshKeyDerivation` must move to platform `HKDF`. ADR-0012 records the decision; implementation pending and
+  must carry a `PRAGMA rekey` migration or existing encrypted banks stop opening.
+
+### Still open
+
+WI-3 (MCP-thin: the duplicated propose pipeline) · WI-4 (test gate: 42 empty BDD bindings, the CI filter,
+Python tests unenforced) · WI-5 (schema versioning — ADR-0011 states the problem; the concurrent watch work
+demonstrates the `ALTER TABLE` column-sniffing workaround) · WI-6 (silent failure paths) · WI-7d · WI-8
+(`SqliteMemoryStore` decomposition) · WI-9 (extension host) · WI-12 · `_evictedScore` histogram with no writer
+(record it **untagged**, matching the sibling `_waitSeconds`) · EventIds 1/2/3 reused across six files
+(deferred while a concurrent session owns `McpServerSetup.cs`).
+
+### What the execution actually cost
+
+Four implementation lanes were dispatched concurrently onto a machine already running two other sessions.
+Load average reached **226**; symptoms ran from slow builds to `MSB4166` child-node deaths to a build
+reporting `exit 0` with one line of output. Three agents spent ~700k tokens between them and produced one
+commit; the work was finished by hand faster than they were finishing it. **Isolated worktrees prevent file
+collisions, not CPU collisions** — that distinction was measured and communicated by a peer session before the
+fan-out was sized, and ignored.
+
+One instruction ("kill any build you have running") was executed as `pkill -f "dotnet build"`, which is
+unscoped and killed other sessions' compiles. Scope destructive commands to PIDs you started.
+
+Two findings were nearly mis-called and were settled by reading a file rather than reasoning about it: the
+six-interfaces deletion (two experts agreed, both wrong) and a 49-failure test run that was neither a known
+condition nor a regression — the embedding model arrived on disk mid-run. Consensus between reviewers sharing
+a premise is correlated error, not corroboration.
