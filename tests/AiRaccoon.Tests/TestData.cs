@@ -99,7 +99,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
 
-    public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    public async Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {
         if (GetMetaDelay > TimeSpan.Zero)
         {
@@ -111,7 +111,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
             throw GetMetaError;
         }
 
-        return new ResponseMeta(0, null, null);
+        return new PromotionMeta(0, null, null);
     }
 }
 

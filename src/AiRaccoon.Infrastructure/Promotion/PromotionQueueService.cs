@@ -135,7 +135,7 @@ public sealed partial class PromotionQueueService(
             .Take(limit).ToList();
     }
 
-    public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    public async Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {
         var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyDictionary<string, PromotionCapacityInfo>? capacityByProject = null;
@@ -149,8 +149,11 @@ public sealed partial class PromotionQueueService(
             capacityByProject = PromotionCapacityPolicy.CapacityInfo(cap, stats.PerProject.Count, stats.PerProject);
         }
 
-        return new ResponseMeta(stats.TotalCount, stats.AvgWaitSeconds,
-            stats.PerProject.Count > 0 ? stats.PerProject : null, capacityByProject);
+        return new PromotionMeta(stats.TotalCount, stats.AvgWaitSeconds,
+            stats.PerProject.Count > 0 ? stats.PerProject : null)
+        {
+            CapacityByProject = capacityByProject
+        };
     }
 
     private const string EvictionReason = "capacity";
