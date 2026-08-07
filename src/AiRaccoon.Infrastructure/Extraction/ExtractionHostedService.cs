@@ -110,7 +110,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
                     continue;
                 }
 
-                var candidates = await _extraction.ProposeAsync(projectId, projects, sharedIndex,
+                var candidates = await _extraction.ProposeAsync(projectId, sharedIndex,
                         includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
 
