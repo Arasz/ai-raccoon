@@ -227,6 +227,33 @@ recorded decision with provenance instead of an accident.
 - Stating what you are *not* touching. That is what let both sides move
   without locks.
 
+### The one method that actually caught things
+
+Every error corrected across the afternoon was caught the same way: **someone
+re-read the source instead of trusting a claim about the source.** Not a
+better-informed agent, not a more senior model — a fresh read.
+
+The failures all have one shape too — a claim about a file made from something
+other than the file:
+
+| Claim | Made from | Caught by |
+|---|---|---|
+| "Metrics carry no `project_id`" | generalising from `ToolCallMetrics` | reading `PromotionQueueMetrics.cs` |
+| "All five instruments are tagged" | session A's own brief, twice committed | a subagent reading the file rather than the brief |
+| F-02 exposure "five instruments" (to the owner) | session B's review notes | session A's correction, then B re-reading source |
+| Tool count 17 / 19 / 20 across five documents | each other | counting the actual tool surface (22) |
+| "Delete these six `I*Commands` interfaces" | two independent expert reviewers | reading `ConfigCommands.cs`, where the static-dispatcher invariant sanctions them |
+
+That last row is the sharpest, and it is session B's: **two independent expert
+opinions agreeing did not make them right.** Agreement between agents that
+share a premise is not corroboration — it is correlated error, and it reads
+exactly like consensus. The only thing that broke it was opening the file.
+
+Note the direction of B's own overstatement: it inflated the exposure in the
+direction that argued for B's own finding. Worth flagging in any process built
+on agent review — the errors that survive longest are the ones that flatter the
+reviewer's thesis.
+
 ## Limits and failure modes
 
 - Coordination was entirely voluntary and ad hoc. No lock, no registry, no
