@@ -35,5 +35,10 @@ public static class PromotionCapacityPolicy
     }
 }
 
-/// <summary>One project's position against its reservation: borrowing = used exceeds reserved.</summary>
+/// <summary>
+///     One project's position against its reservation: borrowing = used exceeds reserved.
+///     Shipped on the wire as-is (via PromotionMeta) — three primitives with no behavior, so a
+///     DTO/mapper pair was not worth adding; a wire-only shape can still split off later if this
+///     record ever needs to diverge (see #118).
+/// </summary>
 public sealed record PromotionCapacityInfo(int Reserved, int Used, bool Borrowing);

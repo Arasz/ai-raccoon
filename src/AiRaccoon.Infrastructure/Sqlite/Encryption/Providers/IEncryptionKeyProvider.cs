@@ -24,4 +24,10 @@ public sealed record Passphrase(string Source)
     ///     only thing that authorises a rekey. Null when the source has no legacy form (env, none).
     /// </summary>
     public string? LegacyValue { get; init; }
+
+    /// <summary>Redacted: the default record ToString would print the bank key verbatim.</summary>
+    public override string ToString() =>
+        $"Passphrase {{ Source = {Source}, Value = {Redacted(Value)}, LegacyValue = {Redacted(LegacyValue)} }}";
+
+    private static string Redacted(string? value) => value is null ? "null" : "[redacted]";
 }

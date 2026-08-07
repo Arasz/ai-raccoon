@@ -1,6 +1,6 @@
 using AiRaccoon.Access;
-using AiRaccoon.Core;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -53,7 +53,7 @@ public sealed class ToolGateTests
         var (_, queue, gate) = NewStack();
         // Every field carries a value the queue alone could have supplied: a fabricated empty
         // meta would still satisfy ShouldNotBeNull on a non-nullable record.
-        queue.Meta = new ResponseMeta(7, 42.5, new Dictionary<string, int> { ["acme"] = 7 });
+        queue.Meta = new PromotionMeta(7, 42.5, new Dictionary<string, int> { ["acme"] = 7 });
 
         var envelope = await gate.WrapAsync("payload", TestContext.Current.CancellationToken);
 

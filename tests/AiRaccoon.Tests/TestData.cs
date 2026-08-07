@@ -69,7 +69,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
     public Exception? PromoteError { get; set; }
     public Exception? GetMetaError { get; set; }
     public TimeSpan GetMetaDelay { get; set; }
-    public ResponseMeta Meta { get; set; } = new(0, null, null);
+    public PromotionMeta Meta { get; set; } = new(0, null, null);
 
     public Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
@@ -100,7 +100,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
 
-    public async Task<ResponseMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    public async Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {
         if (GetMetaDelay > TimeSpan.Zero)
         {

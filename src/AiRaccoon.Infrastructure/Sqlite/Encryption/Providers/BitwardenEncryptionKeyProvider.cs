@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using CommunityToolkit.Diagnostics;
@@ -30,10 +31,24 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
         }
 
         var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());
+        var (value, legacyValue) = DeriveAndZeroSeed(seed);
         return new Passphrase(Source)
         {
-            Value = SshKeyDerivation.DeriveRawKey(seed),
-            LegacyValue = SshKeyDerivation.DeriveLegacyRawKey(seed)
+            Value = value,
+            LegacyValue = legacyValue
         };
+    }
+
+    /// <summary>Derives both keys from the seed, then zeroes it — the seed must not outlive this call.</summary>
+    internal static (string Value, string LegacyValue) DeriveAndZeroSeed(byte[] seed)
+    {
+        try
+        {
+            return (SshKeyDerivation.DeriveRawKey(seed), SshKeyDerivation.DeriveLegacyRawKey(seed));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(seed);
+        }
     }
 }

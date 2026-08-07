@@ -245,6 +245,69 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     The migrate verb's current-key probe must report "nothing to do" without touching the
+    ///     bank — see docs/plans/2026-08-07-hkdf-rekey-migration.md item 3. A bank with no
+    ///     application schema at all proves InitializeAsync (and its MemorySchema.EnsureAsync) was
+    ///     never invoked on the success path.
+    /// </summary>
+    [Fact]
+    public async Task MigrateLegacyKeyAsync_BankAlreadyOnCurrentKey_CreatesNoSchemaObjects()
+    {
+        const string passphrase = "current-key";
+        var factory = Factory(passphrase);
+        Directory.CreateDirectory(Path.GetDirectoryName(factory.BankPath)!);
+
+        // Keyed correctly but never opened through the factory, so it carries no application schema.
+        await using (var raw = new SqliteConnection($"Data Source={factory.BankPath};Password={passphrase};Mode=ReadWriteCreate"))
+        {
+            await raw.OpenAsync(TestContext.Current.CancellationToken);
+        }
+
+        var rekeyed = await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken);
+
+        rekeyed.ShouldBeFalse();
+        await using var check = new SqliteConnection($"Data Source={factory.BankPath};Password={passphrase};Pooling=false");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+        await using var cmd = check.CreateCommand();
+        cmd.CommandText = "SELECT count(*) FROM sqlite_master";
+        var tableCount = (long)(await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+        tableCount.ShouldBe(0L, "the current-key probe must not run MemorySchema.EnsureAsync — it only proves the key is already current");
+    }
+
+    /// <summary>
+    ///     RekeyBankAsync's explicit-current-key overload must refuse before attempting any rekey —
+    ///     see docs/plans/2026-08-07-hkdf-rekey-migration.md test 10.
+    /// </summary>
+    [Fact]
+    public async Task RekeyBankAsync_WrongCurrentKey_ThrowsBeforeAnyRekeyIsAttempted()
+    {
+        var factory = Factory("actual-current-key");
+        await using (var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+            await factory.RekeyBankAsync(DerivedRawKey, "wrong-current-key", TestContext.Current.CancellationToken));
+        ex.SqliteErrorCode.ShouldBe(26);
+
+        // Nothing was rekeyed: the real current key still opens the bank...
+        await using (var stillCurrent = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            stillCurrent.State.ShouldBe(ConnectionState.Open);
+        }
+
+        // ...and the key that would have been the rekey target does not.
+        var newKeyFactory = new SqliteConnectionFactory(Options(), Resolver(Options(), new StubEncryptionKeyProvider(DerivedRawKey)));
+        await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await newKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+    }
+
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     /// <summary>Valid unencrypted ed25519 openssh-key-v1 PEM built from synthetic bytes (seed 00..1f).</summary>

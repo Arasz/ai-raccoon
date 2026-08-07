@@ -16,6 +16,13 @@ public sealed class SshKeyDerivationTests
 {
     private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
 
+    // A second, independently-derived synthetic vector — the ASCII bytes of an obviously fake
+    // 32-byte string, not real ssh-keygen output. Distinct from Seed00To1F so the two vectors
+    // don't coincide; determinism is the point, not provenance (see item 6 of the encryption
+    // hardening review — the seed this replaced was genuine ssh-keygen output committed to a
+    // tracked file).
+    private static readonly byte[] SecondSyntheticSeed = "OBVIOUSLY-FAKE-TEST-SEED-32BYTES"u8.ToArray();
+
     [Fact]
     public void DeriveRawKey_SyntheticSeed00To1F_ReturnsPinnedVector()
     {
@@ -25,13 +32,11 @@ public sealed class SshKeyDerivationTests
     }
 
     [Fact]
-    public void DeriveRawKey_RealSshKeygenSeed_ReturnsPinnedVector()
+    public void DeriveRawKey_SecondSyntheticSeed_ReturnsPinnedVector()
     {
-        var seed = Convert.FromHexString("6868227276d58fd3a3c67be90bad5cb2cc53ee5f46ec3e03ba483b1eaff2d7e0");
+        var key = SshKeyDerivation.DeriveRawKey(SecondSyntheticSeed);
 
-        var key = SshKeyDerivation.DeriveRawKey(seed);
-
-        key.ShouldBe("x'ab4b0145bfaefc0a323267391971ab2b1540cbd546494171d9cdadf5f973a985'");
+        key.ShouldBe("x'98d20eba2badea13601acb2aca71c8d0c55ab793bd90ab19f96023b601c533f1'");
     }
 
     [Fact]
@@ -73,13 +78,11 @@ public sealed class SshKeyDerivationTests
     }
 
     [Fact]
-    public void DeriveLegacyRawKey_RealSshKeygenSeed_ReturnsPreAdr0012Vector()
+    public void DeriveLegacyRawKey_SecondSyntheticSeed_ReturnsPreAdr0012Vector()
     {
-        var seed = Convert.FromHexString("6868227276d58fd3a3c67be90bad5cb2cc53ee5f46ec3e03ba483b1eaff2d7e0");
+        var key = SshKeyDerivation.DeriveLegacyRawKey(SecondSyntheticSeed);
 
-        var key = SshKeyDerivation.DeriveLegacyRawKey(seed);
-
-        key.ShouldBe("x'5944055840d8941e4cb6d5bb0dedfb3e1808bb7b33727107de0e9399054ee83d'");
+        key.ShouldBe("x'893d3bed3e9f965ee2dbf4aa296d30bd84de3977c4d5beecfd231dfd2cd32d5f'");
     }
 
     [Fact]

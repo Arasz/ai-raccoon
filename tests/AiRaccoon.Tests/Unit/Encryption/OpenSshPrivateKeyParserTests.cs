@@ -15,16 +15,11 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class OpenSshPrivateKeyParserTests
 {
-    // Randomly generated test fixture, never used as a real secret.
-    private const string RealKeyPem = """
-                                      -----BEGIN OPENSSH PRIVATE KEY-----
-                                      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-                                      QyNTUxOQAAACCq0GckZdGdBfT9GruIF54nfPj7YJBaTHHgGQCO5OCmygAAAIinuAM0p7gD
-                                      NAAAAAtzc2gtZWQyNTUxOQAAACCq0GckZdGdBfT9GruIF54nfPj7YJBaTHHgGQCO5OCmyg
-                                      AAAEBMjrtOXMwX3QeeWNxOFgB50ioPx660+4icJtYSvttC6qrQZyRl0Z0F9P0au4gXnid8
-                                      +PtgkFpMceAZAI7k4KbKAAAAAAECAwQF
-                                      -----END OPENSSH PRIVATE KEY-----
-                                      """;
+    // A second, distinct synthetic seed/pub pair — the ASCII bytes of obviously fake strings, not
+    // real ssh-keygen output. Replaces a genuine ed25519 key that was committed here (item 6 of
+    // the encryption hardening review); the point of a pinned vector is determinism, not provenance.
+    private static readonly byte[] SecondSeed = "FAKE-PARSER-TEST-SEED-NOT-REAL00"u8.ToArray();
+    private static readonly byte[] SecondPublicKey = "FAKE-PARSER-TEST-PUBKEY-NOTREAL0"u8.ToArray();
 
     private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
     private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
@@ -79,14 +74,13 @@ public sealed class OpenSshPrivateKeyParserTests
     }
 
     [Fact]
-    public void ParseSeed_RealSshKeygenEd25519Key_ReturnsSeedAndDerivesPinnedKey()
+    public void ParseSeed_SecondSyntheticEd25519Key_ReturnsSeedAndDerivesPinnedKey()
     {
-        // Throwaway key generated 2026-08-05 with `ssh-keygen -t ed25519 -N '' -C ''` purely as a parser fixture.
-        var seed = OpenSshPrivateKeyParser.ParseSeed(RealKeyPem);
+        var pem = new TestOpenSshKeyBuilder().Build(SecondSeed, SecondPublicKey);
 
-        seed.ShouldBe(Convert.FromHexString("4c8ebb4e5ccc17dd079e58dc4e160079d22a0fc7aeb4fb889c26d612bedb42ea"));
-        SshKeyDerivation.DeriveRawKey(seed).ShouldBe("x'c7374dda8c04f79a6f71197552af1d2ed09e941e9156af13866d366a2466a674'");
+        var seed = OpenSshPrivateKeyParser.ParseSeed(pem);
+
+        seed.ShouldBe(SecondSeed);
+        SshKeyDerivation.DeriveRawKey(seed).ShouldBe("x'f8173a40b39ab1f36295c56d52da87200bc1dc20e633042620422c1e1e091fee'");
     }
-
-
 }

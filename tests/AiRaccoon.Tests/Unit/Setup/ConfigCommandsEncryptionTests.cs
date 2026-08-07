@@ -31,8 +31,14 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what the migrate
     // verb has to find on disk and rekey away from.
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
-    private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
-    private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
+    // Obviously fake sidecar fixture ids, unrelated to the interactive-default behaviour below —
+    // not real Bitwarden vault entries.
+    private const string FixtureProjectId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    private const string FixtureSecretId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+
+    // The obviously-fake placeholders the fix offers instead, absent an env override.
+    private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
+    private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
 
     private const string BwsNotFoundText =
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
@@ -96,7 +102,44 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
+    private static async Task<T> WithBitwardenIdEnvVars<T>(string? projectId, string? secretId, Func<Task<T>> action)
+    {
+        TestData.EnvVarGate.Wait();
+        try
+        {
+            var originalProjectId = Environment.GetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar);
+            var originalSecretId = Environment.GetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar);
+            try
+            {
+                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, projectId);
+                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, secretId);
+                return await action();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, originalProjectId);
+                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, originalSecretId);
+            }
+        }
+        finally
+        {
+            TestData.EnvVarGate.Release();
+        }
+    }
+
     // ── encryption bitwarden: presence, collection, token, validation ──
+
+    /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
+    [Fact]
+    public void DeriveAndZeroSeed_DerivesTheRawKeyThenZeroesTheSeed()
+    {
+        var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+
+        var value = EncryptionCommands.DeriveAndZeroSeed(seed);
+
+        value.ShouldBe(DerivedRawKey);
+        seed.ShouldAllBe(b => b == 0);
+    }
 
     [Fact]
     public async Task Bitwarden_BwsMissing_ReturnsInstallErrorAndChangesNothing()
@@ -113,32 +156,54 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         File.Exists(SidecarPath()).ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     No env override configured: the interactive default must be an obviously fake
+    ///     placeholder, never a baked-in id that identifies a real Bitwarden vault entry.
+    /// </summary>
     [Fact]
-    public async Task Bitwarden_InteractiveOwnerDefaults_PersistsSourceAndWarns()
+    public async Task Bitwarden_InteractiveDefaults_NoEnvOverride_AreObviouslyFakePlaceholdersNotOwnerIds()
     {
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
-        var (exit, stdout, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
+        var (exit, stdout, err, _) = await WithBitwardenIdEnvVars(null, null, () =>
+            Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
 
         exit.ShouldBe(0);
         stdout.ShouldContain("encryption source set to bitwarden");
         err.ShouldContain("without PRAGMA rekey bricks the bank");
-        err.ShouldContain($"project id [{DefaultProjectId}]");
-        err.ShouldContain($"secret id [{DefaultSecretId}]");
+        err.ShouldContain($"project id [{FallbackProjectId}]");
+        err.ShouldContain($"secret id [{FallbackSecretId}]");
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
-        store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe(DefaultProjectId);
-        store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(DefaultSecretId);
+        store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe(FallbackProjectId);
+        store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe(FallbackSecretId);
         var sidecar = new EncryptionSourceSidecar(BankPath()).Read();
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
-        sidecar.ProjectId.ShouldBe(DefaultProjectId);
-        sidecar.SecretId.ShouldBe(DefaultSecretId);
+        sidecar.ProjectId.ShouldBe(FallbackProjectId);
+        sidecar.SecretId.ShouldBe(FallbackSecretId);
         runner.Calls.Count.ShouldBe(2);
         runner.Calls[0].Args.ShouldBe(["--version"]);
         runner.Calls[0].Token.ShouldBeNull();
-        runner.Calls[1].Args.ShouldBe(["secret", "get", DefaultSecretId]);
+        runner.Calls[1].Args.ShouldBe(["secret", "get", FallbackSecretId]);
         runner.Calls[1].Token.ShouldBeNull();
+    }
+
+    /// <summary>Configured env ids are offered as the interactive default instead of the fallback placeholder.</summary>
+    [Fact]
+    public async Task Bitwarden_InteractiveDefaults_EnvOverrideConfigured_OffersTheConfiguredIds()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+
+        var (exit, _, err, _) = await WithBitwardenIdEnvVars("env-project-id", "env-secret-id", () =>
+            Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
+
+        exit.ShouldBe(0);
+        err.ShouldContain("project id [env-project-id]");
+        err.ShouldContain("secret id [env-secret-id]");
+        store.Settings[EncryptionSettingsKeys.ProjectId].ShouldBe("env-project-id");
+        store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe("env-secret-id");
     }
 
     [Fact]
@@ -269,7 +334,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         // Amendment 1 (unset crash window): bank rekeyed back to env, sidecar never deleted.
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
@@ -295,7 +360,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     {
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
@@ -337,8 +402,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             Settings =
             {
                 [EncryptionSettingsKeys.Source] = "bitwarden",
-                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
-                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+                [EncryptionSettingsKeys.ProjectId] = FixtureProjectId,
+                [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
@@ -347,8 +412,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         exit.ShouldBe(0);
         stdout.ShouldContain("source: bitwarden");
-        stdout.ShouldContain($"projectId: {DefaultProjectId}");
-        stdout.ShouldContain($"secretId: {DefaultSecretId}");
+        stdout.ShouldContain($"projectId: {FixtureProjectId}");
+        stdout.ShouldContain($"secretId: {FixtureSecretId}");
     }
 
     [Fact]
@@ -376,12 +441,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             Settings =
             {
                 [EncryptionSettingsKeys.Source] = "bitwarden",
-                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
-                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+                [EncryptionSettingsKeys.ProjectId] = FixtureProjectId,
+                [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
 
         var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
 
@@ -401,12 +466,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             Settings =
             {
                 [EncryptionSettingsKeys.Source] = "bitwarden",
-                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
-                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+                [EncryptionSettingsKeys.ProjectId] = FixtureProjectId,
+                [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
@@ -439,12 +504,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             Settings =
             {
                 [EncryptionSettingsKeys.Source] = "bitwarden",
-                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
-                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+                [EncryptionSettingsKeys.ProjectId] = FixtureProjectId,
+                [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
@@ -483,12 +548,12 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             Settings =
             {
                 [EncryptionSettingsKeys.Source] = "bitwarden",
-                [EncryptionSettingsKeys.ProjectId] = DefaultProjectId,
-                [EncryptionSettingsKeys.SecretId] = DefaultSecretId
+                [EncryptionSettingsKeys.ProjectId] = FixtureProjectId,
+                [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
@@ -589,7 +654,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
 
         var (exit, output, _, bank) = await Run(["encryption", "migrate"], store, runner);
 
@@ -614,7 +679,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
 
         var (exit, output, _, _) = await Run(["encryption", "migrate"], store, runner);
 
@@ -636,7 +701,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             TestContext.Current.CancellationToken);
         var before = await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken);
 
-        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+        WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
 
         var (exit, _, err, _) = await Run(["encryption", "migrate"], store, runner);
 

@@ -48,4 +48,10 @@ public sealed record ResolvedKey(string? Passphrase, string SourceName)
     ///     form (env, none). Non-null is what makes a bank eligible for the rekey migration.
     /// </summary>
     public string? LegacyPassphrase { get; init; }
+
+    /// <summary>Redacted: the default record ToString would print the bank key verbatim.</summary>
+    public override string ToString() =>
+        $"ResolvedKey {{ SourceName = {SourceName}, Passphrase = {Redacted(Passphrase)}, LegacyPassphrase = {Redacted(LegacyPassphrase)} }}";
+
+    private static string Redacted(string? value) => value is null ? "null" : "[redacted]";
 }

@@ -16,8 +16,9 @@ Feature: Encryption key sources
     # - Offline behavior: refuse to start, loudly.
     # - Rotation in the Bitwarden UI without PRAGMA rekey bricks the bank — config warns.
     # - Raw-key-file option REMOVED; keychain/cloud sources documented but not implemented.
-    # - The project/secret defaults are the owner's: project 613165e6-7947-49e0-889b-b49d007c5b85,
-    #   secret f1d3c8e5-5391-4aef-8611-b49d007c8702 (IDs are stable; names change).
+    # - The interactive prompt's default project/secret id is an obviously fake placeholder
+    #   unless AIRACCOON_BITWARDEN_PROJECT_ID / AIRACCOON_BITWARDEN_SECRET_ID is set — no default
+    #   may identify a real vault entry (encryption hardening review, item 6).
 
     Rule: The env variable remains the default key source
         Scenario: The bank opens with AIRACCOON_DB_PASSPHRASE when no encryption source is configured
@@ -36,7 +37,7 @@ Feature: Encryption key sources
     Rule: encryption bitwarden collects project id, secret id, and an optional token
         Scenario: Interactive config persists project and secret ids
             Given bws is installed
-            When the user runs encryption bitwarden with project 613165e6-7947-49e0-889b-b49d007c5b85 and secret f1d3c8e5-5391-4aef-8611-b49d007c8702
+            When the user runs encryption bitwarden with project custom-project-id and secret custom-secret-id
             Then the encryption source is bitwarden
             And the project id and secret id are persisted
 

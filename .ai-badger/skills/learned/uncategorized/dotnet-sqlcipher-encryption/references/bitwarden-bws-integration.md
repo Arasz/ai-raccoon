@@ -6,8 +6,8 @@ docs/work/2026-08-05-db-passphrase-ssh-and-cloud-vaults.md.
 ## Provisioned environment (owner-managed store)
 
 - bws CLI installed, access token configured by the user (BWS_ACCESS_TOKEN in their env).
-- Project: `613165e6-7947-49e0-889b-b49d007c5b85` (the "raccoon project").
-- Secret: `ai-raccoon-encryption`, id `f1d3c8e5-5391-4aef-8611-b49d007c8702`.
+- Project: id configured via `AIRACCOON_BITWARDEN_PROJECT_ID` / `AIRACCOON_BITWARDEN_SECRET_ID`.
+- Secret: referenced by id, not name (names change).
 - ALWAYS use the secret ID, not the name (IDs are stable; names change).
 - The secret's VALUE is an unencrypted ed25519 SSH private key (per owner f:); the provider derives the SQLCipher raw key with the measured scheme.
 
