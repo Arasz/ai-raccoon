@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -753,16 +754,16 @@ public sealed partial class SqliteMemoryStore(
         // One connection for both keys: opening the bank runs the whole schema-ensure pass,
         // and this sits on the per-file ingest path the watcher drives.
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var scope = WatchConfigKeys.ParseScope(
-                        await ReadSettingAsync(connection, WatchConfigKeys.ScopeProject(projectId), cancellationToken)
+        var scope = IngestScopeKeys.Parse(
+                        await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken)
                             .ConfigureAwait(false))
-                    ?? WatchConfigKeys.ParseScope(
-                        await ReadSettingAsync(connection, WatchConfigKeys.ScopeGlobal, cancellationToken)
+                    ?? IngestScopeKeys.Parse(
+                        await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken)
                             .ConfigureAwait(false))
                     ?? [];
 
-        var normalized = WatchPath.Normalize(path);
-        if (!scope.Any(entry => WatchPath.IsWithinScope(normalized, entry)))
+        var normalized = IngestPath.Normalize(path);
+        if (!scope.Any(entry => IngestPath.IsWithinScope(normalized, entry)))
         {
             throw new PathOutsideScopeException(normalized);
         }

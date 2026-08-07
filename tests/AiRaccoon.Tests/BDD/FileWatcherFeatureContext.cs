@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
@@ -151,18 +152,18 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     public Task SetWatchScopeAsync(string projectId, IEnumerable<string> paths,
         CancellationToken cancellationToken = default) =>
-        Store.SetSettingAsync(WatchConfigKeys.ScopeProject(projectId), WatchConfigKeys.SerializeScope(paths),
+        Store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.Serialize(paths),
             cancellationToken);
 
     public Task SetWatchScopeGlobalAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default) =>
-        Store.SetSettingAsync(WatchConfigKeys.ScopeGlobal, WatchConfigKeys.SerializeScope(paths), cancellationToken);
+        Store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize(paths), cancellationToken);
 
     /// <summary>Adds one path to the global scope, keeping what is already there.</summary>
     public async Task AddWatchScopeGlobalAsync(string path, CancellationToken cancellationToken = default)
     {
-        var existing = WatchConfigKeys.ParseScope(
-            await Store.GetSettingAsync(WatchConfigKeys.ScopeGlobal, cancellationToken)) ?? [];
-        await SetWatchScopeGlobalAsync(existing.Append(path).Distinct(WatchPath.PathComparer), cancellationToken);
+        var existing = IngestScopeKeys.Parse(
+            await Store.GetSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken)) ?? [];
+        await SetWatchScopeGlobalAsync(existing.Append(path).Distinct(IngestPath.PathComparer), cancellationToken);
     }
 
     public Task SetConcurrencyGlobalAsync(int value, CancellationToken cancellationToken = default) =>
@@ -179,7 +180,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         foreach (var key in new[]
                  {
                      WatchConfigKeys.EnabledProject(projectId), WatchConfigKeys.EnabledGlobal,
-                     WatchConfigKeys.ScopeProject(projectId), WatchConfigKeys.ScopeGlobal,
+                     IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.ScopeGlobal,
                      WatchConfigKeys.ConcurrencyProject(projectId), WatchConfigKeys.ConcurrencyGlobal
                  })
         {

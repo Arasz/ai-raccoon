@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
@@ -43,7 +44,7 @@ internal sealed class WatchTestStack
 
     public void Enable(string projectId = "acme") => Memory.Settings[WatchConfigKeys.EnabledProject(projectId)] = "true";
 
-    public void AllowScope(string path, string projectId = "acme") => Memory.Settings[WatchConfigKeys.ScopeProject(projectId)] = WatchConfigKeys.SerializeScope([path]);
+    public void AllowScope(string path, string projectId = "acme") => Memory.Settings[IngestScopeKeys.ScopeProject(projectId)] = IngestScopeKeys.Serialize([path]);
 }
 
 /// <summary>Unique disposable temp directory for digest tests (files must exist on disk for the executor).</summary>
@@ -113,7 +114,7 @@ internal sealed class FakeWatchStore : IWatchStore
         Watches.Remove((projectId, path));
         foreach (var key in FileHashes.Keys
                      .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal) &&
-                                 WatchPath.IsWithinScope(k[(projectId.Length + 1)..], path))
+                                 IngestPath.IsWithinScope(k[(projectId.Length + 1)..], path))
                      .ToArray())
         {
             FileHashes.Remove(key);

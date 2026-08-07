@@ -58,9 +58,9 @@ Per-project modes override the global setting, stored in the bank's `settings` t
 `memory_ingest_directory` and `memory_watch_add` all take a caller-supplied path, and the
 server reads it with its own privileges — without containment, a malicious client could
 read any file the process can and turn it into searchable memory that cloud sync may then
-push. All three refuse a path outside `watch.scope.<project>` (falling back to
-`watch.scope.global`), and the scope is **empty by default**, so a project refuses every
-path until an operator declares one with `ai-raccoon watch scope add`. Containment is
+push. All three refuse a path outside `ingest.scope.<project>` (falling back to
+`ingest.scope.global`), and the scope is **empty by default**, so a project refuses every
+path until an operator declares one with `ai-raccoon ingest scope add`. Containment is
 enforced in the store, not in the tool layer, so the CLI and the file watcher are bound by
 it too.
 

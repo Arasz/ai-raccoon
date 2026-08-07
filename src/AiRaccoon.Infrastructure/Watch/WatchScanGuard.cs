@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -21,7 +22,7 @@ public sealed class WatchScanGuard : IDisposable
     public Task Run(string projectId, string path, Func<CancellationToken, Task> scan,
         CancellationToken cancellationToken = default)
     {
-        var key = (projectId, WatchPath.Normalize(path));
+        var key = (projectId, IngestPath.Normalize(path));
         Entry entry;
         lock (_gate)
         {
@@ -66,7 +67,7 @@ public sealed class WatchScanGuard : IDisposable
         Entry? entry;
         lock (_gate)
         {
-            _entries.TryGetValue((projectId, WatchPath.Normalize(path)), out entry);
+            _entries.TryGetValue((projectId, IngestPath.Normalize(path)), out entry);
         }
 
         entry?.Cts.Cancel();
@@ -91,7 +92,7 @@ public sealed class WatchScanGuard : IDisposable
     {
         lock (_gate)
         {
-            return _entries.ContainsKey((projectId, WatchPath.Normalize(path)));
+            return _entries.ContainsKey((projectId, IngestPath.Normalize(path)));
         }
     }
 

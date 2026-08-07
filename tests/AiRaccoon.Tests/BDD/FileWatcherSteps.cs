@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -104,7 +105,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     /// <summary>Resolves a step path: virtual paths start with '/', bare names are relative to the watched repo dir.</summary>
     private string Resolve(string pathOrName) => pathOrName.StartsWith('/') ? Map(pathOrName) : Path.Combine(Ctx.RepoDir, pathOrName);
 
-    private string Normalized(string path) => WatchPath.Normalize(path);
+    private string Normalized(string path) => IngestPath.Normalize(path);
 
     private async Task<List<MemorySearchResult>> SearchAsync(string projectId, string token) => [.. await Ctx.SearchAsync(projectId, token)];
 

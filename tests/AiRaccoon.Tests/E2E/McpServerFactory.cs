@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
@@ -67,8 +68,8 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
         // Ingest is contained by the declared scope, so the E2E server is configured with one
         // just as a real deployment is; the surface tests ingest from temp paths.
-        await store.SetSettingAsync(WatchConfigKeys.ScopeGlobal,
-            WatchConfigKeys.SerializeScope([Path.GetTempPath(), DataRoot]));
+        await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal,
+            IngestScopeKeys.Serialize([Path.GetTempPath(), DataRoot]));
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

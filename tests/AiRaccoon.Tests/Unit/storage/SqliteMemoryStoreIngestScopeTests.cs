@@ -1,4 +1,6 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Chunking;
+using Dapper;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -23,6 +25,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-ingest-scope");
     private readonly string _contentRoot = TestData.CreateTempRoot("airaccoon-ingest-content");
+    private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
 
     public SqliteMemoryStoreIngestScopeTests()
@@ -31,9 +34,9 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         {
             DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
         };
-        _store = new SqliteMemoryStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)),
-            new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance);
+        _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
     }
 
     public void Dispose()
@@ -60,7 +63,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     public async Task IngestFile_InsideTheProjectScope_IsIndexed()
     {
         var file = await WriteFileAsync("notes.md");
-        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), _contentRoot);
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), _contentRoot);
 
         var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
@@ -73,7 +76,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         var outside = await WriteFileAsync("notes.md");
         var scoped = Path.Combine(_contentRoot, "scoped");
         Directory.CreateDirectory(scoped);
-        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), scoped);
 
         await Should.ThrowAsync<PathOutsideScopeException>(() =>
             _store.IngestFileAsync("acme", outside, null, TestContext.Current.CancellationToken));
@@ -86,7 +89,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         await WriteFileAsync("notes.md");
         var scoped = Path.Combine(_contentRoot, "scoped");
         Directory.CreateDirectory(scoped);
-        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), scoped);
 
         var traversal = Path.Combine(scoped, "..", "notes.md");
 
@@ -98,7 +101,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     public async Task IngestFile_UnderTheGlobalScope_IsIndexed()
     {
         var file = await WriteFileAsync("notes.md");
-        await SetScopeAsync(WatchConfigKeys.ScopeGlobal, _contentRoot);
+        await SetScopeAsync(IngestScopeKeys.ScopeGlobal, _contentRoot);
 
         var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
@@ -111,7 +114,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         await WriteFileAsync("notes.md");
         var scoped = Path.Combine(_contentRoot, "scoped");
         Directory.CreateDirectory(scoped);
-        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), scoped);
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), scoped);
 
         await Should.ThrowAsync<PathOutsideScopeException>(() =>
             _store.IngestDirectoryAsync("acme", _contentRoot, null, TestContext.Current.CancellationToken));
@@ -121,7 +124,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     public async Task IngestDirectory_InsideTheProjectScope_IsIndexed()
     {
         await WriteFileAsync("notes.md");
-        await SetScopeAsync(WatchConfigKeys.ScopeProject("acme"), _contentRoot);
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), _contentRoot);
 
         var indexed = await _store.IngestDirectoryAsync("acme", _contentRoot, null,
             TestContext.Current.CancellationToken);
@@ -139,6 +142,27 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Pre-1.2 banks hold watch.scope.* rows; opening one must carry them over, or every ingest silently starts refusing.</summary>
+    [Fact]
+    public async Task LegacyWatchScopeKey_IsMigratedOnOpen()
+    {
+        var file = await WriteFileAsync("notes.md");
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO settings (key, value) VALUES (@key, @value)",
+                new { key = "watch.scope.acme", value = IngestScopeKeys.Serialize([_contentRoot]) });
+        }
+
+        // The next open runs the schema pass, which is where the migration lives.
+        var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        indexed.ShouldBeGreaterThan(0);
+        (await _store.GetSettingAsync(IngestScopeKeys.ScopeProject("acme"),
+            TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        (await _store.GetSettingAsync("watch.scope.acme", TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
     private async Task<string> WriteFileAsync(string name)
     {
         var path = Path.Combine(_contentRoot, name);
@@ -147,7 +171,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     private Task SetScopeAsync(string key, string directory) =>
-        _store.SetSettingAsync(key, WatchConfigKeys.SerializeScope([directory]),
+        _store.SetSettingAsync(key, IngestScopeKeys.Serialize([directory]),
             TestContext.Current.CancellationToken);
 
     private sealed class StubChunker : IChunker

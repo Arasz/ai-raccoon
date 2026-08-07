@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
@@ -170,19 +171,19 @@ public sealed partial class WatchEventSource(
 
             if (fileTarget is not null)
             {
-                var normalizedFull = WatchPath.Normalize(fullPath);
+                var normalizedFull = IngestPath.Normalize(fullPath);
                 if (kind == WatchEventKind.Renamed && oldPath is not null)
                 {
-                    var normalizedOld = WatchPath.Normalize(oldPath);
-                    if (WatchPath.PathComparer.Equals(normalizedOld, fileTarget) &&
-                        !WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                    var normalizedOld = IngestPath.Normalize(oldPath);
+                    if (IngestPath.PathComparer.Equals(normalizedOld, fileTarget) &&
+                        !IngestPath.PathComparer.Equals(normalizedFull, fileTarget))
                     {
                         // Rename-away: the watched file left its registered name — the
                         // registration is now gone, so surface a Deleted for the target
                         // (a Renamed would make DigestAsync ingest the new name).
                         onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Deleted));
                     }
-                    else if (WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                    else if (IngestPath.PathComparer.Equals(normalizedFull, fileTarget))
                     {
                         onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Renamed, normalizedOld));
                     }
@@ -190,14 +191,14 @@ public sealed partial class WatchEventSource(
                     return;
                 }
 
-                if (!WatchPath.PathComparer.Equals(normalizedFull, fileTarget))
+                if (!IngestPath.PathComparer.Equals(normalizedFull, fileTarget))
                 {
                     return; // sibling event under the watched parent — not ours
                 }
             }
 
-            onEvent(new WatchEvent(projectId, WatchPath.Normalize(fullPath), kind,
-                oldPath is null ? null : WatchPath.Normalize(oldPath)));
+            onEvent(new WatchEvent(projectId, IngestPath.Normalize(fullPath), kind,
+                oldPath is null ? null : IngestPath.Normalize(oldPath)));
         }
         catch (Exception ex)
         {
@@ -223,7 +224,7 @@ public sealed partial class WatchEventSource(
     {
         try
         {
-            normalized = WatchPath.Normalize(path);
+            normalized = IngestPath.Normalize(path);
             return true;
         }
         catch (Exception)

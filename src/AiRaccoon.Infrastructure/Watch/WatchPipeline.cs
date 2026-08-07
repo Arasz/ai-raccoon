@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Threading.Channels;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -40,8 +41,8 @@ public sealed partial class WatchPipeline(
     {
         var normalized = evt with
         {
-            Path = WatchPath.Normalize(evt.Path),
-            OldPath = evt.OldPath is null ? null : WatchPath.Normalize(evt.OldPath)
+            Path = IngestPath.Normalize(evt.Path),
+            OldPath = evt.OldPath is null ? null : IngestPath.Normalize(evt.OldPath)
         };
         _events.Writer.TryWrite(normalized);
     }
@@ -49,7 +50,7 @@ public sealed partial class WatchPipeline(
     /// <summary>Registers a watch's runtime state (Scanning); idempotent — a re-add never resets state.</summary>
     public void RegisterWatch(string projectId, string path)
     {
-        var normalized = WatchPath.Normalize(path);
+        var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
             if (_runtime.TryAdd((projectId, normalized), new WatchRuntimeState(WatchState.Scanning, null, null)))
@@ -69,7 +70,7 @@ public sealed partial class WatchPipeline(
     /// and cancels its in-flight catch-up scan (D-1: this is the one choke point every removal inherits).</summary>
     public void UnregisterWatch(string projectId, string path)
     {
-        var normalized = WatchPath.Normalize(path);
+        var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
             _runtime.Remove((projectId, normalized));
@@ -79,7 +80,7 @@ public sealed partial class WatchPipeline(
             }
 
             foreach (var key in _pending.Keys
-                         .Where(k => k.ProjectId == projectId && WatchPath.IsWithinScope(k.Path, normalized))
+                         .Where(k => k.ProjectId == projectId && IngestPath.IsWithinScope(k.Path, normalized))
                          .ToArray())
             {
                 _pending.Remove(key);
@@ -94,7 +95,7 @@ public sealed partial class WatchPipeline(
     /// <summary>Marks a watch scanning (S5's initial scan) — clears the last error.</summary>
     public void MarkScanning(string projectId, string path)
     {
-        var normalized = WatchPath.Normalize(path);
+        var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
             if (_runtime.TryGetValue((projectId, normalized), out var current))
@@ -114,7 +115,7 @@ public sealed partial class WatchPipeline(
                     .Where(kv => kv.Key.ProjectId == projectId)
                     .Select(kv => new WatchStatus(projectId, kv.Key.Path, kv.Value.State, kv.Value.LastError,
                         kv.Value.LastSync))
-                    .OrderBy(s => s.Path, WatchPath.PathComparer)
+                    .OrderBy(s => s.Path, IngestPath.PathComparer)
             ];
         }
     }
@@ -230,7 +231,7 @@ public sealed partial class WatchPipeline(
         string? best = null;
         foreach (var watch in watches)
         {
-            if (WatchPath.IsWithinScope(filePath, watch) && (best is null || watch.Length > best.Length))
+            if (IngestPath.IsWithinScope(filePath, watch) && (best is null || watch.Length > best.Length))
             {
                 best = watch;
             }

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -245,7 +246,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
     /// <summary>Ingest is contained by the declared scope, so a test that ingests declares one.</summary>
     private Task ScopeDataRootAsync() =>
-        _store.SetSettingAsync(WatchConfigKeys.ScopeGlobal, WatchConfigKeys.SerializeScope([_dataRoot]),
+        _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]),
             TestContext.Current.CancellationToken);
 
     [Fact]
