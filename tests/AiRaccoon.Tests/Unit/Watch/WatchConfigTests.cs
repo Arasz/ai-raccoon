@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
 using AiRaccoon.Core.Watch;
 using Shouldly;
@@ -19,10 +20,10 @@ public sealed class WatchConfigTests
     public void Keys_ExactStrings_AreTheClIWrittenContract()
     {
         WatchConfigKeys.EnabledGlobal.ShouldBe("watch.enabled.global");
-        WatchConfigKeys.ScopeGlobal.ShouldBe("watch.scope.global");
+        IngestScopeKeys.ScopeGlobal.ShouldBe("ingest.scope.global");
         WatchConfigKeys.ConcurrencyGlobal.ShouldBe("watch.concurrency.global");
         WatchConfigKeys.EnabledProject("acme").ShouldBe("watch.enabled.acme");
-        WatchConfigKeys.ScopeProject("acme").ShouldBe("watch.scope.acme");
+        IngestScopeKeys.ScopeProject("acme").ShouldBe("ingest.scope.acme");
         WatchConfigKeys.ConcurrencyProject("acme").ShouldBe("watch.concurrency.acme");
     }
 
@@ -64,7 +65,7 @@ public sealed class WatchConfigTests
     public void Resolve_Scope_GlobalListApplies_WhenNoProjectList()
     {
         var global = ScopePath("global");
-        var config = Resolve(new Dictionary<string, string?> { [WatchConfigKeys.ScopeGlobal] = WatchConfigKeys.SerializeScope([global]) });
+        var config = Resolve(new Dictionary<string, string?> { [IngestScopeKeys.ScopeGlobal] = IngestScopeKeys.Serialize([global]) });
         config.Scope.ShouldBe([global]);
     }
 
@@ -73,8 +74,8 @@ public sealed class WatchConfigTests
     {
         var settings = new Dictionary<string, string?>
         {
-            [WatchConfigKeys.ScopeGlobal] = WatchConfigKeys.SerializeScope([ScopePath("global")]),
-            [WatchConfigKeys.ScopeProject("acme")] = WatchConfigKeys.SerializeScope([ScopePath("project")])
+            [IngestScopeKeys.ScopeGlobal] = IngestScopeKeys.Serialize([ScopePath("global")]),
+            [IngestScopeKeys.ScopeProject("acme")] = IngestScopeKeys.Serialize([ScopePath("project")])
         };
         Resolve(settings).Scope.ShouldBe([ScopePath("project")]);
     }
@@ -84,8 +85,8 @@ public sealed class WatchConfigTests
     {
         var settings = new Dictionary<string, string?>
         {
-            [WatchConfigKeys.ScopeGlobal] = WatchConfigKeys.SerializeScope([ScopePath("global")]),
-            [WatchConfigKeys.ScopeProject("acme")] = "[]"
+            [IngestScopeKeys.ScopeGlobal] = IngestScopeKeys.Serialize([ScopePath("global")]),
+            [IngestScopeKeys.ScopeProject("acme")] = "[]"
         };
         Resolve(settings).Scope.ShouldBeEmpty();
     }
@@ -94,29 +95,29 @@ public sealed class WatchConfigTests
     public void SerializeScope_RoundTripsThroughJsonArray()
     {
         var paths = new[] { ScopePath("a"), ScopePath("b") };
-        JsonSerializer.Deserialize<string[]>(WatchConfigKeys.SerializeScope(paths)).ShouldBe(paths);
+        JsonSerializer.Deserialize<string[]>(IngestScopeKeys.Serialize(paths)).ShouldBe(paths);
     }
 
     [Fact]
     public void SerializeScope_NormalizesEntries()
     {
         var path = ScopePath("a");
-        JsonSerializer.Deserialize<string[]>(WatchConfigKeys.SerializeScope([path + Path.DirectorySeparatorChar]))
+        JsonSerializer.Deserialize<string[]>(IngestScopeKeys.Serialize([path + Path.DirectorySeparatorChar]))
             .ShouldBe([path]);
     }
 
     [Fact]
     public void ParseScope_NullOrBlank_IsAbsent()
     {
-        WatchConfigKeys.ParseScope(null).ShouldBeNull();
-        WatchConfigKeys.ParseScope("   ").ShouldBeNull();
+        IngestScopeKeys.Parse(null).ShouldBeNull();
+        IngestScopeKeys.Parse("   ").ShouldBeNull();
     }
 
     [Fact]
-    public void ParseScope_EmptyArray_IsPresentAndEmpty() => WatchConfigKeys.ParseScope("[]").ShouldBeEmpty();
+    public void ParseScope_EmptyArray_IsPresentAndEmpty() => IngestScopeKeys.Parse("[]").ShouldBeEmpty();
 
     [Fact]
-    public void ParseScope_MalformedJson_IsAbsent() => WatchConfigKeys.ParseScope("[nope").ShouldBeNull();
+    public void ParseScope_MalformedJson_IsAbsent() => IngestScopeKeys.Parse("[nope").ShouldBeNull();
 
     [Fact]
     public void Resolve_Concurrency_GlobalApplies_WhenNoProjectEntry()

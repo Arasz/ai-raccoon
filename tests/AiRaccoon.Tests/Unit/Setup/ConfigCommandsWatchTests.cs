@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Setup.Cli;
@@ -11,7 +12,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// <summary>
 ///     Watch-config commands pin the exact settings-key contract the file-watcher branch
 ///     reads: watch.enabled.global|{projectId} ("true"/"false"),
-///     watch.scope.global|{projectId} (JSON array of absolute paths),
+///     ingest.scope.global|{projectId} (JSON array of absolute paths),
 ///     watch.concurrency.global|{projectId} (1..16, default 4). Project rows win over
 ///     global; paths normalize with Path.GetFullPath semantics (add = dedup + re-sort).
 /// </summary>
@@ -62,7 +63,7 @@ public class ConfigCommandsWatchTests
         var (exit, _, err) = await Run(["watch", "enable", "*", "true"], store);
 
         exit.ShouldBe(0);
-        err.ShouldContain("watch scope add '*'");
+        err.ShouldContain("ingest scope add '*'");
     }
 
     [Fact]
@@ -72,7 +73,7 @@ public class ConfigCommandsWatchTests
         {
             Settings =
             {
-                [WatchConfigKeys.ScopeGlobal] = "[\"/a\"]"
+                [IngestScopeKeys.ScopeGlobal] = "[\"/a\"]"
             }
         };
 
@@ -102,7 +103,7 @@ public class ConfigCommandsWatchTests
         var (exit, stdout, _) = await Run(["watch", "scope", "add", "acme", "rel/notes"], store);
 
         exit.ShouldBe(0);
-        store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe($"[{JsonSerializer.Serialize(expected)}]");
+        store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe($"[{JsonSerializer.Serialize(expected)}]");
         stdout.ShouldContain(expected);
     }
 
@@ -113,14 +114,14 @@ public class ConfigCommandsWatchTests
         {
             Settings =
             {
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/b\"]"
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/b\"]"
             }
         };
 
         await Run(["watch", "scope", "add", "acme", "/a"], store);
         await Run(["watch", "scope", "add", "acme", "/b"], store);
 
-        store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/b\"]");
+        store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/b\"]");
     }
 
     [Fact]
@@ -130,7 +131,7 @@ public class ConfigCommandsWatchTests
 
         await Run(["watch", "scope", "add", "*", "/a"], store);
 
-        store.Settings[WatchConfigKeys.ScopeGlobal].ShouldBe("[\"/a\"]");
+        store.Settings[IngestScopeKeys.ScopeGlobal].ShouldBe("[\"/a\"]");
     }
 
     [Fact]
@@ -140,13 +141,13 @@ public class ConfigCommandsWatchTests
         {
             Settings =
             {
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\",\"/b\",\"/c\"]"
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/a\",\"/b\",\"/c\"]"
             }
         };
 
         await Run(["watch", "scope", "remove", "acme", "/b"], store);
 
-        store.Settings[WatchConfigKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/c\"]");
+        store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/c\"]");
     }
 
     [Fact]
@@ -156,13 +157,13 @@ public class ConfigCommandsWatchTests
         {
             Settings =
             {
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]"
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/a\"]"
             }
         };
 
         await Run(["watch", "scope", "remove", "acme", "/a"], store);
 
-        store.Settings.ShouldNotContainKey(WatchConfigKeys.ScopeProject("acme"));
+        store.Settings.ShouldNotContainKey(IngestScopeKeys.ScopeProject("acme"));
     }
 
     [Fact]
@@ -172,7 +173,7 @@ public class ConfigCommandsWatchTests
         {
             Settings =
             {
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\",\"/b\"]"
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/a\",\"/b\"]"
             }
         };
 
@@ -240,7 +241,7 @@ public class ConfigCommandsWatchTests
             {
                 [WatchConfigKeys.EnabledGlobal] = "true",
                 [WatchConfigKeys.ConcurrencyProject("acme")] = "2",
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]"
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/a\"]"
             }
         };
 
@@ -311,7 +312,7 @@ public class ConfigCommandsWatchTests
             Settings =
             {
                 [WatchConfigKeys.EnabledProject("CLAUDE.md")] = "true",
-                [WatchConfigKeys.ScopeGlobal] = "[\"/x\"]"
+                [IngestScopeKeys.ScopeGlobal] = "[\"/x\"]"
             }
         };
 
@@ -381,7 +382,7 @@ public class ConfigCommandsWatchTests
             Settings =
             {
                 [WatchConfigKeys.EnabledGlobal] = "true",
-                [WatchConfigKeys.ScopeGlobal] = "[\"/x\"]",
+                [IngestScopeKeys.ScopeGlobal] = "[\"/x\"]",
                 [WatchConfigKeys.ConcurrencyGlobal] = "8"
             }
         };
@@ -402,7 +403,7 @@ public class ConfigCommandsWatchTests
             Settings =
             {
                 [WatchConfigKeys.EnabledProject("acme")] = "true",
-                [WatchConfigKeys.ScopeProject("acme")] = "[\"/a\"]",
+                [IngestScopeKeys.ScopeProject("acme")] = "[\"/a\"]",
                 [WatchConfigKeys.ConcurrencyProject("acme")] = "8",
                 [WatchConfigKeys.EnabledProject("zeta")] = "true"
             }
@@ -413,7 +414,7 @@ public class ConfigCommandsWatchTests
         exit.ShouldBe(0);
         stdout.ShouldContain("removed");
         store.Settings.Keys.ShouldNotContain(WatchConfigKeys.EnabledProject("acme"));
-        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ScopeProject("acme"));
+        store.Settings.Keys.ShouldNotContain(IngestScopeKeys.ScopeProject("acme"));
         store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ConcurrencyProject("acme"));
         store.Settings.Keys.ShouldContain(WatchConfigKeys.EnabledProject("zeta"));
     }
@@ -426,7 +427,7 @@ public class ConfigCommandsWatchTests
             Settings =
             {
                 [WatchConfigKeys.EnabledGlobal] = "true",
-                [WatchConfigKeys.ScopeGlobal] = "[\"/a\"]",
+                [IngestScopeKeys.ScopeGlobal] = "[\"/a\"]",
                 [WatchConfigKeys.ConcurrencyGlobal] = "8"
             }
         };
@@ -436,7 +437,7 @@ public class ConfigCommandsWatchTests
         exit.ShouldBe(0);
         stdout.ShouldContain("removed");
         store.Settings.Keys.ShouldNotContain(WatchConfigKeys.EnabledGlobal);
-        store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ScopeGlobal);
+        store.Settings.Keys.ShouldNotContain(IngestScopeKeys.ScopeGlobal);
         store.Settings.Keys.ShouldNotContain(WatchConfigKeys.ConcurrencyGlobal);
     }
 

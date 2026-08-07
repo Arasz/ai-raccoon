@@ -69,7 +69,9 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
   `memory_share_extract` in `mode=promote` drains the top queued candidates into
   `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
-  in `meta`.
+  in `meta`; while the queue holds rows, `meta.capacityByProject` also carries each
+  occupying project's `reserved`/`used`/`borrowing` share of the cap (ADR-0007's
+  fair-share promise, made observable).
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
@@ -106,7 +108,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   age exceeds 30 days. `shared` entries are never swept.
 - **File watching:** watching is enabled per project (or `*`) with
   `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
-  allowlist (`watch scope add|remove|list`) and a concurrency cap (`watch concurrency
+  allowlist (`ingest scope add|remove|list`) and a concurrency cap (`watch concurrency
   {project-id|*} {1..16}`, default 4) — all CLI-only. Quote the `*` wildcard in the
   shell (`'*'`); an unquoted `*` expands into the current directory's files and the CLI
   reports each as an unrecognized argument. The `watch` family CONFIGURES watching —
@@ -132,7 +134,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 
 | Prompt | Purpose |
 |---|---|
-| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon watch scope add` + `enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
+| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon ingest scope add` + `watch enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
 | `workspace-consolidation-guide` | Ritual: list the outbox, promote durable facts, drop noise. |
 
 ## Contexts
@@ -279,7 +281,7 @@ ai-raccoon sync show
 # watch: file-watcher configuration (registers happen via memory_watch_add)
 ai-raccoon watch enable {project-id|*} {true|false}
 ai-raccoon watch disable {project-id|*} {true|false}
-ai-raccoon watch scope add {project-id|*} {path}
+ai-raccoon ingest scope add {project-id|*} {path}
 ai-raccoon watch scope remove {project-id|*} {path}
 ai-raccoon watch scope list {project-id|*}
 ai-raccoon watch concurrency {project-id|*} {1..16}

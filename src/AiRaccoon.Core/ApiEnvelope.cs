@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Memory;
+
 namespace AiRaccoon.Core;
 
 /// <summary>
@@ -14,4 +16,5 @@ public sealed record ApiEnvelope<TData>(TData? Data, ResponseMeta Meta);
 public sealed record ResponseMeta(
     int WaitingPromotionsCount,
     double? PromotionsWaitTimeSeconds,
-    IReadOnlyDictionary<string, int>? WaitingByProject);
+    IReadOnlyDictionary<string, int>? WaitingByProject,
+    IReadOnlyDictionary<string, PromotionCapacityInfo>? CapacityByProject = null);

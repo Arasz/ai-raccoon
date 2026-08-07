@@ -81,4 +81,41 @@ public class PromotionQueueMetricsTests
 
         collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Tags.ShouldBeEmpty();
     }
+
+    /// <summary>
+    ///     Not a deterministic reproduction of the missing-barrier bug — a reordering/visibility
+    ///     failure on an unsynchronized field is not reliably forceable from a unit test on any
+    ///     one run. This exercises the real concurrent access pattern (writer thread calling
+    ///     RecordUtilization while the exporter thread collects the gauge) and demands that it
+    ///     completes without exception and that the gauge observes a value that was actually
+    ///     written, guarding the code path the Volatile fix touches.
+    /// </summary>
+    [Fact]
+    public async Task RecordUtilization_ConcurrentWithGaugeCollection_NeverThrows_AndObservesAWrittenValue()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_capacity_utilization");
+
+        var writer = Task.Run(() =>
+        {
+            for (var i = 1; i <= 500; i++)
+            {
+                metrics.RecordUtilization(i / 500.0);
+            }
+        }, TestContext.Current.CancellationToken);
+        var reader = Task.Run(() =>
+        {
+            for (var i = 0; i < 500; i++)
+            {
+                collector.RecordObservableInstruments();
+            }
+        }, TestContext.Current.CancellationToken);
+
+        await Task.WhenAll(writer, reader);
+        collector.RecordObservableInstruments();
+
+        var snapshot = collector.GetMeasurementSnapshot();
+        snapshot.ShouldNotBeEmpty();
+        snapshot[^1].Value.ShouldBeInRange(0.0, 1.0, "the gauge must observe a value RecordUtilization actually wrote, not garbage");
+    }
 }

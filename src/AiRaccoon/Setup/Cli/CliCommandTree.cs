@@ -13,7 +13,7 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>The root launch --port (shared with the bare launch root); serve reads it
     /// instance-based as its fallback when serve's own --port is absent (R7/R12).</summary>
@@ -54,6 +54,7 @@ internal static class CliCommandTree
         root.Add(RetrievalCommand());
         root.Add(SweepCommand());
         root.Add(SyncCommand());
+        root.Add(IngestCommand());
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
@@ -183,6 +184,25 @@ internal static class CliCommandTree
         return encryption;
     }
 
+    /// <summary>The scope allowlist subtree, mounted under both `ingest` (canonical) and `watch` (alias).</summary>
+    private static Command ScopeCommand(string description) =>
+        new("scope", description)
+        {
+            new Command("add", "Adds a scope path (normalized absolute, deduped, re-sorted)")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("remove", "Removes a scope path")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("list", "Lists a target's scope allowlist") { new Argument<string>("target") { HelpName = "project-id|*" } }
+        };
+
+    private static Command IngestCommand()
+    {
+        var ingest = new Command("ingest",
+            "Ingestion configuration (CLI-only channel). The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.");
+        ingest.Add(ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read"));
+        return ingest;
+    }
+
     private static Command WatchCommand()
     {
         var watch = new Command("watch",
@@ -192,14 +212,9 @@ internal static class CliCommandTree
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
             new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } }
         };
-        var scope = new Command("scope", "Scope allowlist (absolute paths, covers dir + subdirs) — the paths a registered watch must sit under")
-        {
-            new Command("add", "Adds a scope path (normalized absolute, deduped, re-sorted)")
-                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
-            new Command("remove", "Removes a scope path") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<string>("path") { HelpName = "path" } },
-            new Command("list", "Lists a target's scope allowlist") { new Argument<string>("target") { HelpName = "project-id|*" } }
-        };
-        watch.Add(scope);
+        // Kept as a deprecated alias: the scope moved to `ingest scope` when it stopped being
+        // watch-only, and breaking every existing setup script at the same time is gratuitous.
+        watch.Add(ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"));
         watch.Add(new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
             { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } });
         watch.Add(new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those"));

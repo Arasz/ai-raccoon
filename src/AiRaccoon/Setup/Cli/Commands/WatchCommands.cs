@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Memory;
@@ -10,7 +11,10 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency (IWatchStore).</summary>
 public sealed class WatchCommands(IWatchStore watchStore)
 {
+    // The ?? reads as redundant to the analyzer, but WatchCommandsTests proves the guard: the
+    // CLI composes this by hand, outside DI, where a null can genuinely arrive.
     private readonly IWatchStore _watchStore = watchStore ?? ThrowHelper.ThrowArgumentNullException<IWatchStore>(nameof(watchStore));
+
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
@@ -20,10 +24,10 @@ public sealed class WatchCommands(IWatchStore watchStore)
         await store.SetSettingAsync(key, enabled ? "true" : "false", cancellationToken);
 
         if (target == "*" && enabled &&
-            WatchScopeList.Parse(await store.GetSettingAsync(WatchConfigKeys.ScopeGlobal, cancellationToken)).Count == 0)
+            IngestScopeList.Parse(await store.GetSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken)).Count == 0)
         {
             await stderr.WriteLineAsync(
-                "ai-raccoon: warning — no watch scopes configured; add at least one scope with 'ai-raccoon watch scope add '*' <path>'");
+                "ai-raccoon: warning — no ingest scope configured; add at least one scope with 'ai-raccoon ingest scope add '*' <path>'. Nothing can be ingested or watched until you do.");
         }
 
         await stdout.WriteLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");
@@ -35,11 +39,11 @@ public sealed class WatchCommands(IWatchStore watchStore)
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
-        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
-        var current = WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
-        var updated = WatchScopeList.Add(current, path);
-        await store.SetSettingAsync(key, WatchScopeList.ToJson(updated), cancellationToken);
-        await stdout.WriteLineAsync($"added {Path.GetFullPath(path)} to watch scope for {target}");
+        var key = target == "*" ? IngestScopeKeys.ScopeGlobal : IngestScopeKeys.ScopeProject(target);
+        var current = IngestScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
+        var updated = IngestScopeList.Add(current, path);
+        await store.SetSettingAsync(key, IngestScopeList.ToJson(updated), cancellationToken);
+        await stdout.WriteLineAsync($"added {Path.GetFullPath(path)} to ingest scope for {target}");
         return 0;
     }
 
@@ -48,19 +52,19 @@ public sealed class WatchCommands(IWatchStore watchStore)
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
-        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
-        var current = WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
-        var updated = WatchScopeList.Remove(current, path);
+        var key = target == "*" ? IngestScopeKeys.ScopeGlobal : IngestScopeKeys.ScopeProject(target);
+        var current = IngestScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
+        var updated = IngestScopeList.Remove(current, path);
         if (updated.Count == 0)
         {
             await store.DeleteSettingAsync(key, cancellationToken);
         }
         else
         {
-            await store.SetSettingAsync(key, WatchScopeList.ToJson(updated), cancellationToken);
+            await store.SetSettingAsync(key, IngestScopeList.ToJson(updated), cancellationToken);
         }
 
-        await stdout.WriteLineAsync($"removed {Path.GetFullPath(path)} from watch scope for {target}");
+        await stdout.WriteLineAsync($"removed {Path.GetFullPath(path)} from ingest scope for {target}");
         return 0;
     }
 
@@ -68,8 +72,8 @@ public sealed class WatchCommands(IWatchStore watchStore)
         TextWriter stdout, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
-        var key = target == "*" ? WatchConfigKeys.ScopeGlobal : WatchConfigKeys.ScopeProject(target);
-        foreach (var path in WatchScopeList.Parse(await store.GetSettingAsync(key, cancellationToken)))
+        var key = target == "*" ? IngestScopeKeys.ScopeGlobal : IngestScopeKeys.ScopeProject(target);
+        foreach (var path in IngestScopeList.Parse(await store.GetSettingAsync(key, cancellationToken)))
         {
             await stdout.WriteLineAsync(path);
         }
@@ -97,14 +101,24 @@ public sealed class WatchCommands(IWatchStore watchStore)
     public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        var rows = await store.GetSettingsByPrefixAsync("watch.", cancellationToken);
+        // Two prefixes since the scope moved out of watch.*: enabled/concurrency stay watch-only,
+        // the scope allowlist bounds all ingestion.
+        var rows = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var prefix in (string[])["watch.", "ingest.scope."])
+        {
+            foreach (var row in await store.GetSettingsByPrefixAsync(prefix, cancellationToken))
+            {
+                rows[row.Key] = row.Value;
+            }
+        }
+
         var targets = new SortedSet<string>(StringComparer.Ordinal) { "global" };
         foreach (var key in rows.Keys)
         {
             targets.Add(key.StartsWith("watch.enabled.", StringComparison.Ordinal)
                 ? key["watch.enabled.".Length..]
-                : key.StartsWith("watch.scope.", StringComparison.Ordinal)
-                    ? key["watch.scope.".Length..]
+                : key.StartsWith("ingest.scope.", StringComparison.Ordinal)
+                    ? key["ingest.scope.".Length..]
                     : key["watch.concurrency.".Length..]);
         }
 
@@ -126,7 +140,7 @@ public sealed class WatchCommands(IWatchStore watchStore)
         var rows = watches
             .Where(w => filter is null || w.ProjectId == filter)
             .OrderBy(w => w.ProjectId, StringComparer.Ordinal)
-            .ThenBy(w => w.Path, WatchPath.PathComparer)
+            .ThenBy(w => w.Path, IngestPath.PathComparer)
             .ToArray();
         if (rows.Length == 0)
         {
@@ -149,8 +163,8 @@ public sealed class WatchCommands(IWatchStore watchStore)
     {
         var target = parseResult.GetValue<string>("target")!;
         string[] keys = target == "*"
-            ? [WatchConfigKeys.EnabledGlobal, WatchConfigKeys.ScopeGlobal, WatchConfigKeys.ConcurrencyGlobal]
-            : [WatchConfigKeys.EnabledProject(target), WatchConfigKeys.ScopeProject(target), WatchConfigKeys.ConcurrencyProject(target)];
+            ? [WatchConfigKeys.EnabledGlobal, IngestScopeKeys.ScopeGlobal, WatchConfigKeys.ConcurrencyGlobal]
+            : [WatchConfigKeys.EnabledProject(target), IngestScopeKeys.ScopeProject(target), WatchConfigKeys.ConcurrencyProject(target)];
         foreach (var key in keys)
         {
             await store.DeleteSettingAsync(key, cancellationToken);

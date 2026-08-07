@@ -156,7 +156,11 @@ sequenceDiagram
     end
 ```
 
-For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), the path
+For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), the path is first
+checked against the project's declared ingest scope (`ingest.scope.<project>`, falling back
+to `ingest.scope.global`) and refused with `PathOutsideScopeException` when it falls outside —
+the same rule and primitive `memory_watch_add` uses, enforced in the store so every client
+is bound. An unscoped project refuses every ingest. From there the path
 diverges: the file content is split into **token-aware chunks** before hashing
 and insertion. The chunker uses the o200k_base tokenizer with code-fence-aware
 splitting and an overlay window for context continuity between chunks.

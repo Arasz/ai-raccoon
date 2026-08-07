@@ -8,7 +8,7 @@ namespace AiRaccoon.Core.Memory;
 /// </summary>
 public interface IPromotionQueueStore
 {
-    /// <summary>Upsert by (project_id, hash): inserts keep the first created_at; re-propose refreshes score/value/reasons/updated_at. Returns the affected row count.</summary>
+    /// <summary>Upsert by (project_id, hash), in one transaction: inserts keep the first created_at; re-propose refreshes score/value/reasons/updated_at. Returns the count of genuinely new rows — a re-propose of an existing hash does not count.</summary>
     Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
         CancellationToken cancellationToken = default);
 

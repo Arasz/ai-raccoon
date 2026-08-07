@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Core.Memory;
@@ -22,12 +23,12 @@ public sealed partial class WatchDigestExecutor(
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
     {
-        var normalizedWatch = WatchPath.Normalize(watchPath);
-        var normalized = WatchPath.Normalize(filePath);
+        var normalizedWatch = IngestPath.Normalize(watchPath);
+        var normalized = IngestPath.Normalize(filePath);
 
         if (kind == WatchEventKind.Renamed && oldPath is not null)
         {
-            await DeletePathAsync(projectId, normalizedWatch, WatchPath.Normalize(oldPath), cancellationToken)
+            await DeletePathAsync(projectId, normalizedWatch, IngestPath.Normalize(oldPath), cancellationToken)
                 .ConfigureAwait(false);
         }
 

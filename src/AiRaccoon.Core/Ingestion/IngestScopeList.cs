@@ -1,13 +1,13 @@
 using System.Text.Json;
 
-namespace AiRaccoon.Core.Watch;
+namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
-///     Serialization and mutation of a watch scope allowlist (JSON array of absolute
+///     Serialization and mutation of an ingest scope allowlist (JSON array of absolute
 ///     paths): add normalizes with Path.GetFullPath semantics and dedups + re-sorts;
 ///     unparsable rows read as empty.
 /// </summary>
-public static class WatchScopeList
+public static class IngestScopeList
 {
     public static IReadOnlyList<string> Parse(string? json)
     {

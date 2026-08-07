@@ -1,32 +1,33 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Watch;
+namespace AiRaccoon.Tests.Unit.Ingestion;
 
 /// <summary>D3 path identity: absolute, separators and ".." resolved, trailing separator stripped, host-OS case.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class WatchPathTests
+public sealed class IngestPathTests
 {
     [Fact]
     public void Normalize_RelativePath_ResolvesToAbsolute()
     {
-        WatchPath.Normalize(Path.Combine("repo", "..", "file.md")).ShouldBe(Path.GetFullPath("file.md"));
+        IngestPath.Normalize(Path.Combine("repo", "..", "file.md")).ShouldBe(Path.GetFullPath("file.md"));
     }
 
     [Fact]
     public void Normalize_TrailingSeparator_IsStripped()
     {
         var dir = Path.Combine("repo", "sub");
-        WatchPath.Normalize(dir + Path.DirectorySeparatorChar).ShouldBe(Path.GetFullPath(dir));
+        IngestPath.Normalize(dir + Path.DirectorySeparatorChar).ShouldBe(Path.GetFullPath(dir));
     }
 
     [Fact]
     public void Normalize_RootPath_KeepsTrailingSeparator()
     {
         var root = Path.GetPathRoot(Path.GetFullPath("."))!;
-        WatchPath.Normalize(root).ShouldBe(root);
+        IngestPath.Normalize(root).ShouldBe(root);
     }
 
     [Theory]
@@ -35,13 +36,13 @@ public sealed class WatchPathTests
     [InlineData("   ")]
     public void Normalize_BlankPath_Throws(string? path)
     {
-        Should.Throw<ArgumentException>(() => WatchPath.Normalize(path!));
+        Should.Throw<ArgumentException>(() => IngestPath.Normalize(path!));
     }
 
     [Fact]
     public void PathComparer_FollowsHostOsCaseRules()
     {
-        WatchPath.PathComparer.Equals("/Repo/File.md", "/repo/file.md").ShouldBe(OperatingSystem.IsWindows());
+        IngestPath.PathComparer.Equals("/Repo/File.md", "/repo/file.md").ShouldBe(OperatingSystem.IsWindows());
     }
 
     [Fact]
@@ -50,9 +51,9 @@ public sealed class WatchPathTests
         var repo = Path.Combine(Path.GetTempPath(), "watch-scope-root", "repo");
         var file = Path.Combine(repo, "src", "Program.cs");
 
-        WatchPath.IsWithinScope(repo, repo).ShouldBeTrue();
-        WatchPath.IsWithinScope(Path.Combine(repo, "src"), repo).ShouldBeTrue();
-        WatchPath.IsWithinScope(file, repo).ShouldBeTrue();
+        IngestPath.IsWithinScope(repo, repo).ShouldBeTrue();
+        IngestPath.IsWithinScope(Path.Combine(repo, "src"), repo).ShouldBeTrue();
+        IngestPath.IsWithinScope(file, repo).ShouldBeTrue();
     }
 
     [Fact]
@@ -62,15 +63,15 @@ public sealed class WatchPathTests
         var repo = Path.Combine(root, "repo");
         var sibling = Path.Combine(root, "repo-other");
 
-        WatchPath.IsWithinScope(Path.Combine(sibling, "x.md"), repo).ShouldBeFalse();
-        WatchPath.IsWithinScope(repo, sibling).ShouldBeFalse();
+        IngestPath.IsWithinScope(Path.Combine(sibling, "x.md"), repo).ShouldBeFalse();
+        IngestPath.IsWithinScope(repo, sibling).ShouldBeFalse();
     }
 
     [Fact]
     public void IsWithinScope_TrailingSeparatorOnEntry_IsIgnored()
     {
         var repo = Path.Combine(Path.GetTempPath(), "watch-scope-root", "repo");
-        WatchPath.IsWithinScope(Path.Combine(repo, "a.md"), repo + Path.DirectorySeparatorChar).ShouldBeTrue();
+        IngestPath.IsWithinScope(Path.Combine(repo, "a.md"), repo + Path.DirectorySeparatorChar).ShouldBeTrue();
     }
 
     [Fact]
@@ -78,13 +79,13 @@ public sealed class WatchPathTests
     {
         var root = Path.Combine(Path.GetTempPath(), "watch-scope-root");
         var repo = Path.Combine(root, "repo");
-        WatchPath.IsWithinScope(Path.Combine(root, "REPO", "a.md"), repo).ShouldBe(OperatingSystem.IsWindows());
+        IngestPath.IsWithinScope(Path.Combine(root, "REPO", "a.md"), repo).ShouldBe(OperatingSystem.IsWindows());
     }
 
     [Fact]
     public void IsWithinScope_BlankArguments_Throw()
     {
-        Should.Throw<ArgumentException>(() => WatchPath.IsWithinScope(" ", "/repo"));
-        Should.Throw<ArgumentException>(() => WatchPath.IsWithinScope("/repo", " "));
+        Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope(" ", "/repo"));
+        Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope("/repo", " "));
     }
 }
