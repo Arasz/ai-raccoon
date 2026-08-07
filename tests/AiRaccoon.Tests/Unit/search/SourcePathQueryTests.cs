@@ -15,7 +15,7 @@ public sealed class SourcePathQueryTests
             .ShouldBeTrue();
 
         expression.ShouldBe(
-            "{source_file section} : (docs AND adr AND 0011 AND frontend AND chassis AND stack AND md AND decision)");
+            "{source_file section} : (docs AND adr AND 0011 AND frontend AND chassis AND stack AND md AND \"decision\")");
     }
 
     [Fact]
@@ -36,6 +36,15 @@ public sealed class SourcePathQueryTests
     {
         SourcePathQuery.TryBuild(query, out var expression).ShouldBeFalse();
         expression.ShouldBeEmpty();
+    }
+
+    /// <summary>An FTS5 bareword cannot contain a hyphen, and markdown anchors routinely do.</summary>
+    [Fact]
+    public void TryBuild_HyphenatedSection_IsQuoted()
+    {
+        SourcePathQuery.TryBuild("notes.md#getting-started", out var expression).ShouldBeTrue();
+
+        expression.ShouldBe("{source_file section} : (notes AND md AND \"getting-started\")");
     }
 
     [Fact]

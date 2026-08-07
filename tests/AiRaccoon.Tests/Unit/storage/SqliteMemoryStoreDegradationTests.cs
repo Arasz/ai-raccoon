@@ -45,26 +45,22 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     A hyphenated markdown anchor used to reach FTS5 as a bare term, which it read as a
+    ///     column filter ("no such column: started"), so the keyword modality died on every
+    ///     such query. The EventId-900 warning is what made it visible.
+    /// </summary>
     [Fact]
-    public async Task Search_WhenTheKeywordQueryFails_LogsTheDegradation()
+    public async Task Search_WithAHyphenatedSectionAnchor_DoesNotDegrade()
     {
-        await _store.WriteAsync(new MemoryWriteRequest("acme", "the quick brown fox"),
-            TestContext.Current.CancellationToken);
-        // A hyphenated section anchor reaches FTS5 as a bare term, and FTS5 barewords cannot
-        // contain a hyphen — the expression is a syntax error. Markdown anchors look like this.
+        await _store.AddContentAsync("acme", "notes.md", "the quick brown fox", null,
+            "notes.md", "getting-started", TestContext.Current.CancellationToken);
+
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "notes.md#getting-started"), TestContext.Current.CancellationToken);
 
-        // The degradation itself is deliberate — the search still answers.
-        results.ShouldNotBeNull();
-
-        // One per search context: each context's keyword list degraded independently.
-        var warnings = _logger.Collector.GetSnapshot()
-            .Where(r => r.Level == LogLevel.Warning)
-            .ToList();
-        warnings.ShouldNotBeEmpty("a failed keyword modality must not degrade silently");
-        warnings.ShouldAllBe(r => r.Message.Contains("Keyword search failed"));
-        warnings.ShouldAllBe(r => r.Id.Id == 900);
+        results.ShouldNotBeEmpty("the anchor's own chunk is the answer to a path query");
+        _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
     }
 
     [Fact]
