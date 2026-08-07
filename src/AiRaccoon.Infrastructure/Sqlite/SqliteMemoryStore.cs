@@ -9,6 +9,7 @@ using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -16,11 +17,12 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     IMemoryStore over the single-file memory.db (see docs/work/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
 ///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
-public sealed class SqliteMemoryStore(
+public sealed partial class SqliteMemoryStore(
     SqliteConnectionFactory factory,
     TimeProvider timeProvider,
     IChunker chunker,
-    EmbeddingService embeddings)
+    EmbeddingService embeddings,
+    ILogger<SqliteMemoryStore> logger)
     : IMemoryStore
 {
     // Chunk bounds (see docs/work/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
@@ -276,9 +278,10 @@ public sealed class SqliteMemoryStore(
         var rows = await connection.QueryAsync<SharedRow>(
                 Def(MemorySql.SelectSharedIndex, cancellationToken))
             .ConfigureAwait(false);
+        var indexed = rows.ToList();
         return new SharedIndex(
-            rows.Select(r => r.Value).ToList(),
-            rows.Select(r => r.Path).ToList());
+            indexed.Select(r => r.Value).ToList(),
+            indexed.Select(r => r.Path).ToList());
     }
 
     public async Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default)
@@ -707,8 +710,9 @@ public sealed class SqliteMemoryStore(
     {
         try
         {
-            // ftsExpression is normalized, but a pathological query can still trip the FTS5
-            // tokenizer limits; a failed keyword modality degrades to the vector list.
+            // FtsQueryNormalizer sanitizes its own expressions, but SourcePathQuery bypasses it,
+            // so a malformed expression can still reach FTS5; a failed keyword modality degrades
+            // to the vector list.
             return
             [
                 .. (await connection.QueryAsync<SearchRow>(
@@ -722,10 +726,20 @@ public sealed class SqliteMemoryStore(
                     row.SourceFile, row.ChunkIndex, row.TotalChunks))
             ];
         }
-        catch (SqliteException)
+        catch (SqliteException ex)
         {
+            // Deliberate degradation, but never a silent one: the caller just gets a shorter
+            // list, and a broken index looks exactly like "nothing matched" without this.
+            Log.KeywordModalityFailed(logger, ex);
             return [];
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 900, Level = LogLevel.Warning,
+            Message = "Keyword search failed; degrading to the vector modality for this query")]
+        public static partial void KeywordModalityFailed(ILogger logger, Exception exception);
     }
 
     /// <summary>

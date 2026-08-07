@@ -9,6 +9,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -28,7 +29,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService());
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

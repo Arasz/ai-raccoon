@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -33,7 +34,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new EmbeddingService());
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);

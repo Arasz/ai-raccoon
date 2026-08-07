@@ -12,6 +12,7 @@ using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -87,7 +88,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         Resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
-        ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService());
+        ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
     }
 
     /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>

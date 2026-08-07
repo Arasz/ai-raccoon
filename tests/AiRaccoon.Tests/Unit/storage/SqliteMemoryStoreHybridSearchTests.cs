@@ -8,6 +8,7 @@ using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -33,7 +34,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService());
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }
 

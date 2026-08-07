@@ -11,6 +11,7 @@ using AiRaccoon.Tests.Unit.Retrieval;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -70,7 +71,7 @@ public sealed class BaselineMetricsTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService());
+            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
