@@ -516,13 +516,23 @@ public sealed class WatchIntegrationTests
         var entriesAfterFirstScan =
             await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken);
         entriesAfterFirstScan.ShouldBeGreaterThan(0);
+        var scansStartedBeforeRemoval = stack.ScanGuard.StartedScans;
+        var firstScan = stack.CatchUp.LastScan;
 
         await stack.Service.RemoveAsync(Project, stack.WatchDir, TestContext.Current.CancellationToken);
         (await stack.CountFingerprintsUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBe(0, "removal must cascade the fingerprints away");
 
+        // Mutate a file on disk while the watch is removed: only a genuine second scan can pick
+        // this up, so a skipped catch-up (defect 1) leaves the new word permanently unsearchable.
+        stack.Write("a.md", "zephyrkappa alpha body edited-while-removed");
+
         await stack.AddWatchAsync(TestContext.Current.CancellationToken);
         await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(scansStartedBeforeRemoval + 1,
+            "the re-add must start exactly one new scan, not join/skip the first");
+        stack.CatchUp.LastScan.ShouldNotBeSameAs(firstScan, "the re-add's scan must be a new task instance");
         if (stack.CatchUp.LastScan is { } second)
         {
             await second;
@@ -532,6 +542,10 @@ public sealed class WatchIntegrationTests
                 async () => await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken) >=
                             entriesAfterFirstScan, TestContext.Current.CancellationToken))
             .ShouldBeTrue("re-add did not re-ingest the files");
+        (await stack.StepUntilAsync(
+                async () => (await stack.SearchAsync("edited-while-removed", TestContext.Current.CancellationToken))
+                    .Any(), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the re-add's scan never ingested the change made while the watch was removed");
         (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBe(entriesAfterFirstScan, "remove-then-re-add must replace the entries, not accumulate them");
         (await stack.CountEntriesAsync(stack.File("a.md"), "zephyrkappa", TestContext.Current.CancellationToken))
@@ -560,13 +574,13 @@ public sealed class WatchIntegrationTests
             Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService());
             WatchStore = new WatchStore(_factory);
             var host = new MemoryExtensionHost(Memory, []);
-            var scanGuard = new WatchScanGuard();
+            ScanGuard = new WatchScanGuard();
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(host, WatchStore, host, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Memory, Time,
-                scanGuard, NullLogger<WatchPipeline>.Instance);
+                ScanGuard, NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);
-            CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
+            CatchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
                 new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance);
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 NullLogger<WatchHostedService>.Instance);
@@ -582,6 +596,8 @@ public sealed class WatchIntegrationTests
         public SqliteMemoryStore Memory { get; }
 
         public WatchStore WatchStore { get; }
+
+        public WatchScanGuard ScanGuard { get; }
 
         public WatchPipeline Pipeline { get; }
 

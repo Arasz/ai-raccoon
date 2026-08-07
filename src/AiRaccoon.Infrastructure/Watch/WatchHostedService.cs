@@ -19,6 +19,7 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly WatchCatchUp _catchUp;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<WatchHostedService> _logger;
+    private readonly Lock _activeGate = new();
     private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
     private readonly HashSet<(string ProjectId, string Path)> _registered = new(WatchKeyComparer.Instance);
 
@@ -35,6 +36,19 @@ public sealed partial class WatchHostedService : BackgroundService
         _catchUp = catchUp;
         _timeProvider = timeProvider;
         _logger = logger;
+        // D-1: any removal — WatchService.RemoveAsync included — drops the key here at the exact
+        // instant it unregisters from the pipeline, so a remove-then-re-add that both land between
+        // two polls is never mistaken for a watch that has been continuously active.
+        _pipeline.Unregistered += OnWatchUnregistered;
+    }
+
+    private void OnWatchUnregistered(string projectId, string path)
+    {
+        lock (_activeGate)
+        {
+            _active.Remove((projectId, path));
+            _registered.Remove((projectId, path));
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -73,9 +87,16 @@ public sealed partial class WatchHostedService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        // Must run before the poll loop is considered stopped: without it, a scan enqueued by the
+        // last reconcile keeps walking the tree and enqueueing into a pipeline nothing drains.
+        _catchUp.CancelAllScans();
         _eventSource.StopAll();
-        _active.Clear();
-        _registered.Clear();
+        lock (_activeGate)
+        {
+            _active.Clear();
+            _registered.Clear();
+        }
+
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -92,11 +113,20 @@ public sealed partial class WatchHostedService : BackgroundService
             var key = (registration.ProjectId, registration.Path);
             seen.Add(key);
             _pipeline.RegisterWatch(registration.ProjectId, registration.Path);
-            _registered.Add(key);
+            lock (_activeGate)
+            {
+                _registered.Add(key);
+            }
 
             if (!await IsEnabledAsync(registration.ProjectId, cancellationToken).ConfigureAwait(false))
             {
-                if (_active.Remove(key))
+                bool wasActive;
+                lock (_activeGate)
+                {
+                    wasActive = _active.Remove(key);
+                }
+
+                if (wasActive)
                 {
                     _eventSource.Stop(registration.ProjectId, registration.Path);
                 }
@@ -104,7 +134,13 @@ public sealed partial class WatchHostedService : BackgroundService
                 continue;
             }
 
-            if (!_active.Add(key))
+            bool started;
+            lock (_activeGate)
+            {
+                started = _active.Add(key);
+            }
+
+            if (!started)
             {
                 continue;
             }
@@ -112,21 +148,28 @@ public sealed partial class WatchHostedService : BackgroundService
             _eventSource.Start(registration.ProjectId, registration.Path);
             if (registration.LastChangeTs == 0)
             {
-                _catchUp.EnqueueInitialScan(registration.ProjectId, registration.Path);
+                _catchUp.EnqueueInitialScan(registration.ProjectId, registration.Path, cancellationToken);
             }
             else
             {
-                _catchUp.EnqueueChangedSince(registration.ProjectId, registration.Path, registration.LastChangeTs);
+                _catchUp.EnqueueChangedSince(registration.ProjectId, registration.Path, registration.LastChangeTs,
+                    cancellationToken);
             }
         }
 
-        foreach (var stale in _registered.Where(k => !seen.Contains(k)).ToArray())
+        (string ProjectId, string Path)[] stale;
+        lock (_activeGate)
         {
-            _eventSource.Stop(stale.ProjectId, stale.Path);
-            _pipeline.UnregisterWatch(stale.ProjectId, stale.Path);
-            _active.Remove(stale);
-            _registered.Remove(stale);
-            Log.StaleRegistrationUnregistered(_logger, stale.ProjectId, stale.Path);
+            stale = _registered.Where(k => !seen.Contains(k)).ToArray();
+        }
+
+        foreach (var s in stale)
+        {
+            _eventSource.Stop(s.ProjectId, s.Path);
+            // Raises WatchPipeline.Unregistered, which drops s from _active/_registered too (D-1) —
+            // the same choke point OnWatchUnregistered handles for an out-of-loop WatchService.RemoveAsync.
+            _pipeline.UnregisterWatch(s.ProjectId, s.Path);
+            Log.StaleRegistrationUnregistered(_logger, s.ProjectId, s.Path);
         }
     }
 
