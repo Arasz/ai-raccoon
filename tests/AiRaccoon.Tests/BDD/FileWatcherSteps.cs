@@ -641,6 +641,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         catch (Exception ex)
         {
             _lastError = ex;
+            // Bridges to NativeMemorySteps.ThenAccessDenied, the shared "the tool errors with
+            // access-denied" binding for the ro-agent-add scenario below.
+            _scenarioContext["LastError"] = ex;
         }
     }
 
@@ -957,8 +960,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     }
 
     // "the tool errors with access-denied" is intentionally NOT bound here: NativeMemorySteps
-    // already binds that exact text as a no-op (tool-layer validation precedent), and the
-    // access-denied behavior is pinned by WatchToolsAccessModeTests (S6).
+    // binds that exact text for real (reads scenarioContext["LastError"], set above), so this
+    // scenario shares that assertion instead of duplicating it. Also pinned unit-side by
+    // WatchToolsAccessModeTests (S6).
 
     [Then("^the tool errors with missing-project$")]
     public void ThenToolErrorsMissingProject()
