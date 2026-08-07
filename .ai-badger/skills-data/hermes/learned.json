@@ -256,10 +256,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-testing",
-        "sourceHash": "d3e0ffeaa3ec8095f4eb44a68c71724d687efa9accf245583ca92bc80f52fcf8",
+        "sourceHash": "2c862aacdc09f61e49d11537b46b8c9d184be99a5f3135ec99e074a0d0551c6d",
       "sourcePath": "software-development/dotnet-hosted-service-testing",
       "status": "synced",
-        "syncedAt": "2026-08-07T05:47:22Z",
+        "syncedAt": "2026-08-07T07:52:40Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
     },
     {

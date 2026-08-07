@@ -970,6 +970,21 @@
           "resumeCommand": "claude --resume cd899fae-395f-45ff-bc58-6057b2d651d9",
           "resumeAttempts": [],
           "stateJsonUpdated": true
+      },
+      {
+          "taskId": "skill-discovery",
+          "title": "SEP-2640 skill discovery + memory skill",
+          "sessionId": "cd899fae-395f-45ff-bc58-6057b2d651d9",
+          "transcriptPath": "/Users/arasz/.claude/projects/-Users-arasz-RiderProjects-ai-raccoon/cd899fae-395f-45ff-bc58-6057b2d651d9.jsonl",
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "experimental/skill-discovery",
+          "risk": false,
+          "startedAt": "2026-08-07T07:08:13.358863+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
+          "trackingSource": "claude",
+          "resumeCommand": "claude --resume cd899fae-395f-45ff-bc58-6057b2d651d9",
+          "resumeAttempts": []
     }
   ]
 }
