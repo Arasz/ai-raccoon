@@ -322,4 +322,50 @@ public sealed class WatchCatchUpTests
 
         stack.Memory.Ingested.Count.ShouldBe(2);
     }
+
+    /// <summary>
+    ///     The incident's whole shape in one test: a scan is running, the watch is removed, and it
+    ///     is added straight back. The first scan must be cancelled, its already-queued events must
+    ///     not digest, and exactly one new scan must run — leaving one ingest per file, not two.
+    /// </summary>
+    [Fact]
+    public async Task RemoveThenReAdd_WhileTheFirstScanIsRunning_CancelsItAndRunsExactlyOneNewScan()
+    {
+        using var dir = TempDir.New("catchup-remove-readd");
+        WriteAllText(dir.File("a.md"), "zephyrone");
+        WriteAllText(dir.File("b.md"), "zephyrtwo");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+        var insideScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var holdScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Store.OnListFiles = async () =>
+        {
+            insideScan.TrySetResult();
+            await holdScan.Task;
+        };
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await insideScan.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        // Removal cancels the in-flight scan and unregisters the path, so anything the first scan
+        // already queued is dropped at the next tick rather than digested under a dead watch.
+        await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        holdScan.SetResult();
+        await catchUp.LastScan!;
+        stack.Store.ListFilesTokens[0].IsCancellationRequested.ShouldBeTrue("removal must cancel the running scan");
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldBeEmpty("events from the cancelled scan must not digest");
+
+        stack.Store.OnListFiles = null;
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(2, "one scan before removal, one after the re-add — never three");
+        stack.Memory.Ingested.Count.ShouldBe(2, "each file must be ingested exactly once");
+    }
 }

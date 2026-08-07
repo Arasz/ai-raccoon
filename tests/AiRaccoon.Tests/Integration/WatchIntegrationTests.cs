@@ -489,6 +489,56 @@ public sealed class WatchIntegrationTests
             .ShouldBeGreaterThanOrEqualTo(300);
     }
 
+    /// <summary>
+    ///     The incident's own shape: removing a watch cascades its fingerprints away (#94), so the
+    ///     re-add is a full re-ingest. Every file must come back exactly once — a second copy would
+    ///     mean entry-level dedup is broken independently of the watcher.
+    /// </summary>
+    [Fact]
+    public async Task RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries()
+    {
+        using var stack = new Stack();
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        stack.Write("a.md", "zephyrkappa alpha body");
+        stack.Write("b.md", "zephyrkappa beta body");
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        (await stack.StepUntilAsync(
+                async () => (await stack.SearchAsync("zephyrkappa", TestContext.Current.CancellationToken)).Any(),
+                TestContext.Current.CancellationToken))
+            .ShouldBeTrue("initial scan never made the files searchable");
+        var entriesAfterFirstScan =
+            await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken);
+        entriesAfterFirstScan.ShouldBeGreaterThan(0);
+
+        await stack.Service.RemoveAsync(Project, stack.WatchDir, TestContext.Current.CancellationToken);
+        (await stack.CountFingerprintsUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
+            .ShouldBe(0, "removal must cascade the fingerprints away");
+
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } second)
+        {
+            await second;
+        }
+
+        (await stack.StepUntilAsync(
+                async () => await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken) >=
+                            entriesAfterFirstScan, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("re-add did not re-ingest the files");
+        (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
+            .ShouldBe(entriesAfterFirstScan, "remove-then-re-add must replace the entries, not accumulate them");
+        (await stack.CountEntriesAsync(stack.File("a.md"), "zephyrkappa", TestContext.Current.CancellationToken))
+            .ShouldBe(await stack.CountEntriesAsync(stack.File("b.md"), "zephyrkappa",
+                TestContext.Current.CancellationToken));
+    }
+
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
     private sealed class Stack : IDisposable
     {
