@@ -2,7 +2,7 @@
 
 Date: 2026-08-06 · Branch: `task/switch-from-stdio-to-http` · Lane: research + design (subagent), input to owner-gate review
 
-Status: **verdicts ready — not merged into the design doc.** This report evaluates the two questions the owner elevated to first-class (f: 2026-08-06). It does **not** modify `docs/work/2026-08-06-http-serve-design.md` or any code; if the owner approves, the design doc gains the new sections/acceptance rows proposed here.
+Status: **verdicts ready — not merged into the design doc.** This report evaluates the two questions the owner elevated to first-class (f: 2026-08-06). It does **not** modify `docs/work/archive/2026-08-06-http-serve-design.md` or any code; if the owner approves, the design doc gains the new sections/acceptance rows proposed here.
 
 ## Verdicts (read this first)
 
