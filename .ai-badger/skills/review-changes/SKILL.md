@@ -62,6 +62,10 @@ that makes it risky, not "it's core"); test status — covered (name the test), 
 gap), or untested with the specific missing case; overall recommendation — safe to merge / merge
 with tracked test debt / block.
 
+## Gotchas
+
+No environment-specific gotchas known.
+
 ## Red flags — STOP
 
 - Ranking by diff size instead of blast radius

@@ -66,6 +66,10 @@ that needs no graph server.
 6. **Write down what you concluded and what you did not check.** An exploration that produces
    no artifact has to be repeated by the next person, including you next week.
 
+## Gotchas
+
+No environment-specific gotchas known.
+
 ## Red flags — STOP
 
 - Reading files in search-result order and calling it an understanding

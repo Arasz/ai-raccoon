@@ -57,6 +57,10 @@ that needs no graph server.
    Z because of change W" — or "the bug predates commit V because no recent change touched this
    path". A hypothesis with no traced path behind it is a guess, not a diagnosis.
 
+## Gotchas
+
+No environment-specific gotchas known.
+
 ## Red flags — STOP
 
 - Proposing a fix before step 2 has produced an actual caller/callee list

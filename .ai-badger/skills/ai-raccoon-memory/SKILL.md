@@ -15,6 +15,12 @@ metadata:
 
 # AiRaccoon Memory
 
+## When NOT to Use
+
+- A one-off lookup ("have we seen X before?") — run `memory_search` and be done, no watch ritual, no write-back
+- No docs directory to watch and no durable fact to write — the ritual adds ceremony, not value
+- The memory-grade hook when you only need one answer — it is opt-in by env var; don't enable it for a single search
+
 ## 1. Watch-on-docs ritual (do this first)
 
 On session start, run `memory_watch_status(project_id)` for this project. If the docs directory
@@ -53,7 +59,7 @@ low-rated entries; shared entries are exempt.
 
 `scope=all` (default: shared + project), `scope=project`, `scope=shared` (the promotion tier only).
 
-## 6. Pitfalls
+## 6. Gotchas
 
 - `memory_write` has **no `path` param** — the entry path is derived from its content.
 - **Never pass `context`** unless workspace isolation is intended: it silently sets

@@ -57,6 +57,13 @@ heuristics are the last resort for the servers it does not know.
 - **When the agent picks the wrong tool** — run `mcp-index tag <tool> <correct-tags...>` to fix tagging
 - **After removing MCP servers** — run `mcp-index update` to mark stale tools
 
+## When NOT to Use
+
+- A one-off tool lookup — read the index JSON (`.ai-badger/mcp-tools.json`) directly
+- Writing a brand-new MCP server — use `hermes-mcp-setup`
+- No MCP servers in the project — there is nothing to index
+- A wrong-tool call that is a one-off — tag it, don't re-architect
+
 ## Tag Taxonomy
 
 Tags come from a closed set in `features/common/mcp-tags.json`:
@@ -184,58 +191,11 @@ reads a saved `hermes mcp list --json` document.
 If no source answers, both commands **refuse** and print what each one said — a missing CLI, a
 non-zero exit with its error line, or an empty listing. They never write a half-index.
 
-## Server status — why a silent server is still in the index
+> Status meanings: read references/status.md if `update` reports a status other than `ok` (or when a silent server needs explaining).
 
-Each `sources[]` entry records what the host's last listing supported. A zero-tool server used to
-be dropped at write time, which made "switched off" and "running but exposing nothing" the same
-absence with opposite remedies (ADR-0014 decision 7).
+> Auto-tagging rules: read references/heuristics.md when a tool came back `[general]` and you are deciding whether to curate it or extend the catalog.
 
-| `status` | what the listing said | remedy |
-|---|---|---|
-| `ok` | the server reported tools | none |
-| `disabled` | the host says the server is switched off | enable it (`hermes mcp configure`) |
-| `empty` | enabled, asked, exposed nothing | check the server actually starts |
-| `unknown` | the listing carried no tool detail at all | see below |
-| `absent` | the host no longer lists the server; its tools are marked `removed` | re-add it, or accept the removal |
-| `unauthenticated` | `claude mcp list` said `! Needs authentication` | `claude mcp login <server>` |
-| `unreachable` | `claude mcp list` said `✘ Failed to connect` | fix the endpoint or the credentials it names |
-| `pending_approval` | `claude mcp list` said `⏸ Pending approval` — an unapproved `.mcp.json` server, not connected to | approve it in the host |
-
-`unknown` is the honest reading of a listing with no tool detail: the `hermes mcp list` text table
-(its Tools column reads `all`, never the tool names) and a `claude mcp list` server that is merely
-`✔ Connected`. An `update` over such a listing restates statuses and **does not** mark anything
-removed — "not asked" is not "exposes nothing".
-
-The status enum is additive, and a status is added only once a host CLI is *observed* reporting it:
-the four phrases above are what `claude mcp list` produced on a 2026-07 install and what its own
-`--help` documents. Its other documented phrases (`Connection error`, `Rejected`, `not configured`)
-are not mapped, and a phrase this release does not know reads as `unknown` rather than inventing a
-distinction the data cannot support.
-
-## Auto-tagging Heuristics
-
-These are the **last resort** — they run only where the catalog has nothing to say about a tool.
-
-A name substring may infer an *action*; it must never guess a *technology* (issue #171 found
-`build` implying `dotnet`, and `log` matching inside `dialog` to imply `opentelemetry`). Only a
-tight, unambiguous alias earns a technology tag.
-
-| Tool name pattern | Assigned tags |
-|---|---|
-| Contains `database`, `schema`, `db` | `[database]` |
-| Contains `sql` | `[database, sql]` |
-| Contains `build` | `[build]` |
-| Contains `search`, `find` | `[search]` |
-| Contains `symbol` | `[semantic, search]` |
-| Contains `problem`, `error`, `diagnostic` | `[diagnostic]` |
-| Contains `span`, `otel`, or the compound `service_map` | `[tracing, opentelemetry]` |
-| Contains `browser`, `navigate`, `screenshot` | `[browser]` |
-| Contains `run`, `execute` | `[run]` |
-| Contains `refactor`, `rename`, `reformat` | `[refactoring]` |
-| Server is `playwright` | adds `[browser]` |
-| No match | `[general]` |
-
-## Common Pitfalls
+## Gotchas
 
 1. **Auto-tagging covers only ~60% of tools.** Expect 10-20 tools tagged as `[general]` after `init`. Curate them with `mcp-index tag`, or — better, if the server is worth describing for every project — add its `tools.json` to the framework's mcp catalog.
 2. **The first `update` after upgrading rewrites heuristic tags.** Any tool the catalog describes gets the curated tags and intent, because an entry with no `origin` cannot be told apart from a guess. Tools curated with `mcp-index tag`/`intent` from now on are marked `manual` and left alone.

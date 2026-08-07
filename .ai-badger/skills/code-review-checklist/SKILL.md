@@ -188,38 +188,7 @@ metadata:
 - [ ] **Repository filter methods cover spec requirements** — if the API spec
   defines filters, the repository must have a method that supports them.
 
-### 3.3 Security
-
-- [ ] **No hardcoded secrets, credentials, or tokens** in any tracked file
-- [ ] **Managed credentials preferred over shared keys** — use identity-based
-  auth over connection strings, account keys, or shared access signatures
-  wherever the platform supports it.
-- [ ] **Token/credential storage is encrypted** — secrets at rest use the
-  platform's encryption mechanism, not plaintext.
-- [ ] **OAuth/SSO flows handle edge cases** — popup-blocked fallback documented,
-  token refresh implemented, CSRF tokens have TTL/cleanup.
-- [ ] **Nothing secret ships in a client artifact** — a build-time environment
-  variable inlined into a bundle, a mobile binary, or anything else the user
-  downloads is public. An API key that reaches the client is a leak even though
-  it appears in no tracked file.
-- [ ] **Authorization is enforced server-side** — a client-side check is UX, not
-  a control. Every state-changing request re-authorizes at the API, and hiding a
-  button is never the authorization.
-- [ ] **Untrusted input never reaches a markup or code-execution sink** — markup
-  templating, DOM injection, dynamic evaluation, shell or query construction. The
-  value goes through the framework's escaping/parameterised path, or through an
-  audited sanitizer at the point of insertion. Nothing is trusted because of
-  where it was stored.
-- [ ] **Redirect and navigation targets are allowlisted** — a target taken from a
-  query parameter, a stored value, or a header is an open redirect until proven
-  otherwise; rejecting `javascript:` and `data:` schemes is the floor, not the
-  control.
-
-> Browser-runtime security items (DOM XSS sinks, CSP, Web Storage, `postMessage`,
-> SRI, source maps) live in the `ts` extension, which activates for `ts` and
-> `react` projects. Both sets are distilled from the OpenAI `security-best-practices`
-> skill's frontend references ([openai/skills](https://github.com/openai/skills),
-> Apache-2.0).
+> Full checklist: read references/security.md if the diff touches security surfaces (auth, secrets, input handling, redirects).
 
 ### 3.4 Documentation & Hygiene
 
@@ -262,31 +231,7 @@ metadata:
 - [ ] **Problem type URIs / error codes are consistent** — the error identifier
   used by the backend must match what the client checks. Drift = silent failures.
 
-### 4.3 Observability
-
-- [ ] **A renamed or removed metric, label, or structured-log field is treated
-  as a breaking change** — operators' dashboards, alerts and saved queries bind
-  to those names, so they are a quasi-API. A rename in the diff gets the same
-  question as an API rename: who consumes it, and what changes with it?
-- [ ] **Trace context crosses every async boundary the change adds** — a queue
-  publish/consume, a thread-pool or executor hop, a background task, a
-  fire-and-forget call. Working HTTP tracing is not evidence that these work;
-  propagation breaks *silently* and surfaces months later as an orphaned span.
-- [ ] **Readiness does not depend on optional downstreams** — a probe that fails
-  when a non-essential dependency degrades pulls the instance out of rotation for
-  a fault it could have served through. Liveness, readiness and startup answer
-  three different questions.
-- [ ] **Every new metric has a named consumer** — the alert, dashboard, or
-  investigation it exists for. A metric that drives none of the three is cost and
-  noise, not observability.
-- [ ] **Histogram buckets reflect the latency objective** — library-default
-  buckets usually straddle the threshold that matters, which makes the percentile
-  at that threshold unreadable exactly when someone needs it.
-
-> Distilled from the Kotlin `observability-integrator` skill
-> ([Kotlin/kotlin-backend-agent-skills](https://github.com/Kotlin/kotlin-backend-agent-skills));
-> no licence file accompanied the captured copy, so its terms are unestablished —
-> these are restatements of the underlying operational rules, not copied text.
+> Full checklist: read references/observability.md if the diff touches metrics, logs, tracing, or readiness probes.
 
 ## dotnet: High-Performance Logging
 - [ ] **New log statements use `[LoggerMessage]` source generators** — not
@@ -379,6 +324,10 @@ metadata:
 - [ ] **`dotnet test` all pass** — no regressions from merge conflicts
 
 ---
+
+## Gotchas
+
+No environment-specific gotchas known.
 
 ## Usage Tips
 

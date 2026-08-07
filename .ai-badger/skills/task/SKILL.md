@@ -6,7 +6,14 @@ description: >-
   separated, token-tracked unit of work with model delegation: a high-reasoning model plans and
   reviews, implementation models do the hands-on work. Project specifics come from
   .ai-badger/config.json; source-control and PR behaviour from config-gated extensions.
+version: 1.0.0
+author: ai-badger
+license: MIT
 platforms: [linux, macos]
+metadata:
+  hermes:
+    tags: [task, orchestration, delegation, worktree]
+    related_skills: [create-task-spec, commit-reminder]
 ---
 
 # task orchestration skill
@@ -19,6 +26,12 @@ dead session can be resumed.
 **All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
 a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
 Scripts live in this skill's `scripts/`.
+
+## When NOT to Use
+
+- A single-file typo fix or one-off question — no tracking, worktree, or delegation needed
+- Work the user wants done inline in this session
+- Anything where the token-tracked pipeline's overhead exceeds the task — use the plain workflow
 
 ## Config contract (read first)
 
@@ -225,6 +238,15 @@ The name is literal: you are buying speed with coverage, and the coverage is sti
 After integration, delegate a doc-audit agent (worktree-isolated) to check CLAUDE.md and the
 project's docs against the merged code, fix small drift, and report gaps needing a decision.
 
+## Gotchas
+
+- **`start` with `--no-worktree` records a branch name nothing creates.** `status` then reports a branch that does not exist (2026-08-01: two commits landed on `main`).
+- **`finish` refuses and keeps the worktree when it holds work that exists nowhere else.** Read the
+  `worktree.keptBecause` field; a kept worktree is unmerged or uncommitted work, not failed cleanup.
+- **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.**
+  Subagent cache reads depend on a byte-stable prefix (~10× cost); rewrite only between tasks.
+- **Two levels of dispatch, no deeper.** A widening agent tree starves the machine.
+
 ## Recovery
 
 `task_tracker.py` records each task's session id and resume command. Pass `--cron` to `start` to
@@ -236,3 +258,11 @@ your crontab. If you wake in a resumed session mid-task, run
 > are defined in `extensions/<name>/` and are embedded by `welcome-ai-badger` only when
 > `config.json` supplies the required data. The base skill above stays platform-, stack- and
 > model-neutral.
+
+## Verification Checklist
+
+- [ ] `python3 .ai-badger/skills/task/scripts/task_tracker.py status` shows the task finished and `.ai-badger/state.json` reflects it
+- [ ] All work lives in the worktree `start` created — no stray commits on the main checkout's branch
+- [ ] Every plan point's acceptance gate ran
+- [ ] `finish` left no worktree with unmerged or uncommitted work — `keptBecause` empty or resolved
+- [ ] Token cost reported and compact/fresh-session advice given (or the auto-continue condition held)

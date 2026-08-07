@@ -4,6 +4,14 @@ description: >-
   Use when something learned in this repo belongs in the ai-badger framework itself — a new
   skill, persona, invariant, instruction or fix that is project-agnostic — and the user wants to
   contribute it back. Opens a draft PR against the framework; refuses anything project-specific.
+version: 1.0.0
+author: ai-badger
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [contribution, framework, pr, catalog]
+    related_skills: [welcome-ai-badger, den-refresh]
 ---
 
 # feed-badger
@@ -69,6 +77,13 @@ back to `ai-badger` as a **draft PR** for human review.
 - **Provenance drives detection.** `feed-badger` only works on repos scaffolded by ai-badger
   (those with `.ai-badger/manifest.json`).
 
+## Gotchas
+
+- **Draft PR, always.** A human reviews and merges; never auto-merge.
+- **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty file cannot ride along in the PR.
+- **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is not a certificate.
+- **The agnostic bar is high.** When unsure, keep it in the project, not the framework.
+
 ## Error Recovery
 
 When any script in the feed flow (`detect_additions.py`, `open_pr.py`) exits
@@ -93,7 +108,15 @@ non-zero or emits an error, attempt recovery before surfacing the failure.
    succeeds, report what was fixed.
 
 3. **Recovery failed — offer to create a GitHub issue.** Follow
-   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md`: ask
+   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix does not recover the failure**: ask
    permission first, gate on `gh` being installed and authenticated, sanitize the config
    before including it. **Never create the issue without explicit user approval** — that rule
    holds even if the reference file is not present.
+
+## Verification Checklist
+
+- [ ] `detect_additions.py` ran and every candidate was classified — dropped project-specific ones have stated reasons
+- [ ] Every keeper generalized — no repo names, domain nouns, or absolute paths
+- [ ] Placed files pass `index_build.py` + `validate.py --all` in the checkout
+- [ ] Draft PR opened with `--path` naming every placed path (and `index.json` if regenerated)
+- [ ] Credential scan clean

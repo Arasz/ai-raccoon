@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python
-> Scaffolded by ai-badger 0.84.0. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.87.1. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Non-negotiable invariants
 
@@ -78,6 +78,11 @@ Keep the domain/pure-logic layer free of framework, persistence, HTTP, and third
 ### High-performance logging
 
 Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed methods (taking `ILogger` as a parameter, with an explicit `EventId`) instead of calling `logger.LogInformation(...)`/`LogError(...)` etc. directly — it avoids boxing/allocation on the hot path and keeps event ids centrally discoverable.
+
+### Static classes: extensions, constants, and pure functions only
+
+Static classes are allowed for extensions, constants, and pure functions — no state, no I/O, no injectable dependencies. Anything with state, I/O, or dependencies is an injectable component (constructor injection, interface + implementation
+pair), not a static class. A static dispatcher with optional interface parameters is the one sanctioned exception: it exists to cap test churn, and it stays a dispatcher, never a logic holder.
 
 ### MCP stays thin
 

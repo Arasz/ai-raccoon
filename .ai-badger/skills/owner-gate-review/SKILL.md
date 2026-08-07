@@ -118,7 +118,11 @@ Each card carries exactly three things:
 Group cards under headings when the kinds differ (corrections / design / open items). Give every
 card a short stable id (`D1`, `C2`, `O4`) — it is the join key in the result file.
 
-## Common Pitfalls — STOP
+## Gotchas
+
+No environment-specific gotchas known.
+
+## Red flags — STOP
 
 - A result file that exists before the reviewer has opened the form
 - Reading only the verdict and skipping the note
@@ -139,6 +143,5 @@ card a short stable id (`D1`, `C2`, `O4`) — it is the join key in the result f
 
 ## Files
 
-- `references/form-template.html` — the generator template, parameterised by `DECISIONS`.
-- `references/result-template.md` — the exact markdown shape the form emits, so the parser knows
-  what to expect.
+- `references/form-template.html` — the generator template, parameterised by `DECISIONS`; read it **when writing the form**.
+- `references/result-template.md` — the exact markdown shape the form emits, so the parser knows what to expect; read it **when reconciling a saved result**.

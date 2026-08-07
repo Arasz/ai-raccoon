@@ -5,6 +5,14 @@ description: >-
   CLAUDE.md, copilot-instructions.md, AGENTS.md, hosted-review and path-scoped instruction files
   — or when validation/drift checks fail in CI. Reconciles them from the machine-readable model
   in .ai-badger/agent-instructions/.
+version: 1.0.0
+author: ai-badger
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [agent-instructions, drift, claude, copilot]
+    related_skills: [welcome-ai-badger, update-documentation]
 ---
 
 # Maintain agent instructions
@@ -15,13 +23,19 @@ hub-and-spoke model: one compact, always-loaded entrypoint per agent (`CLAUDE.md
 instruction files. The model is machine-readable so drift between agent files can be checked by
 script instead of by eye — if the project records this decision as an ADR, link it here.
 
+## When NOT to Use
+
+- A single-file typo fix in one instruction file — edit it directly
+- No drift exists and CI checks pass
+- Authoring brand-new policy from scratch — that is content work, not reconciliation
+
 ## Principles
 
 - Use scripts first; inspect only failing files/rules.
 - Keep each agent's always-loaded entrypoint compact. Put detailed guidance in scoped or
   on-demand files.
 - Update the agent-instructions model (`.ai-badger/agent-instructions/model.json` by default; see
-  `references/agent-instruction-model.md`) before changing shared policy.
+  `references/agent-instruction-model.md`) **when** changing shared policy.
 - Treat `.github/instructions/*.instructions.md` (or the project's equivalent) as the shared
   path-scoped implementation rule source.
 - Do not rewrite every agent file just to rephrase. Make the smallest consistency-preserving edit.
@@ -70,11 +84,23 @@ Scripts are small deterministic helpers. They should:
 - avoid LLM calls,
 - avoid network calls,
 - read the agent-instructions model (path resolved via `AGENT_INSTRUCTIONS_DIR`, default
-  `.ai-badger/agent-instructions`; see `references/agent-instruction-model.md`),
+  `.ai-badger/agent-instructions`; read `references/agent-instruction-model.md` **when writing a script that reads the model**),
 - report precise file/rule failures,
 - exit non-zero on errors,
 - keep warnings separate from errors,
 - avoid editing files unless a future explicit `--write` mode is added.
 
-Use `references/agent-instruction-model.md` for the model contract and
-`references/copilot-compatibility.md` for Copilot integration notes.
+Read `references/agent-instruction-model.md` **when the model contract is in question** and
+`references/copilot-compatibility.md` **when phrasing a Copilot-specific rule**.
+
+## Gotchas
+
+No environment-specific gotchas known.
+
+## Verification Checklist
+
+- [ ] Both scripts ran from the project root
+- [ ] Both exit 0 — or every reported failure was fixed and the re-runs pass
+- [ ] Only the reported files and rules were touched
+- [ ] The model was updated before any shared-policy change
+- [ ] ADR added or updated when architecture/process policy changed

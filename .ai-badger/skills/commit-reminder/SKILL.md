@@ -8,6 +8,14 @@ description: >-
   edit-shaped tool call and commands a commit once it crosses a threshold; after repeated
   unanswered commands it records the work as at risk, and `scripts/ensure_committed.py` reports
   that to a parent.
+version: 1.0.0
+author: ai-badger
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [git, commits, hooks, safety]
+    related_skills: [call-behaviorist, task]
 ---
 
 # Commit reminder
@@ -99,6 +107,14 @@ edit on one side cannot silently clear an escalation raised on the other.
 Entries are keyed by resolved project root, which separates parallel agents whenever they run in
 their own worktrees — the common case for this kind of fan-out.
 
+## Gotchas
+
+- **The escalation bar is three *new highs*, not three commands over a span of time.** An agent that edits the same five files repeatedly is never asked twice.
+- **Anything that lowers the count clears the unanswered counter.** `git stash` or a cleaned build directory clears it exactly like a commit; the hook cannot tell them apart.
+- **The hook only ever adds `additionalContext`** — no `decision`/`permissionDenied`/`continue`
+  on any code path (changelog 0.33.0: the third-party-interception incident).
+- **`ensure_committed.py` exits 0 even when work is at risk** — and on malformed state; a crash would be worse than the report a parent must read.
+
 ## Configuration
 
 - `AI_BADGER_COMMIT_REMINDER_THRESHOLD` — uncommitted-file count that triggers the command.
@@ -117,6 +133,12 @@ Every run logs to the `debug_log`/`call-behaviorist` audit trail under component
 `commit_reminder_hook` (a no-op unless that facility is switched on): `skip` when the hook exits
 early, `checked` after computing the uncommitted count, and `fire` when the command is emitted —
 carrying `unanswered` and `atRisk` so the escalation is visible in the audit trail too.
+
+## Verification Checklist
+
+- [ ] `scripts/ensure_committed.py` run and at-risk projects named
+- [ ] At-risk work committed or explicitly taken over
+- [ ] Hook verified firing: one edit → count checked; escalation visible in the audit trail when enabled
 
 ## Files
 

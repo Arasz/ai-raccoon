@@ -29,10 +29,11 @@ dies with the session; a resumed session that trusts one silently re-does or ski
 file lives in the docs tree's `meta/` area; a project may name it via `.ai-badger/config.json`'s
 `docs.stateFile`.
 
-References, each owned by the skill whose primary concern it is:
-`../update-documentation/references/placement.md`, `../update-documentation/references/trust.md`,
-`../update-documentation/references/amendments.md`, and
-`../scaffold-documentation/references/structure.md`. Read them where they live; do not copy them
+References, each owned by the skill whose primary concern it is: read
+`../update-documentation/references/placement.md` **when a target path is in doubt**,
+`../update-documentation/references/trust.md` **when freezing**,
+`../update-documentation/references/amendments.md` **when amending**, and
+`../scaffold-documentation/references/structure.md` **when the canonical tree is in question**. Read them where they live; do not copy them
 into a shared directory, which cannot ship.
 
 ## Step 1 — always, every session, before anything else
@@ -166,18 +167,9 @@ report the counts it holds.
 **A migration reported complete while the state file shows pending items is a failed run** — a
 worse outcome than stopping, because it retires the only signal that work remains.
 
-## Rationalizations — every one of these means STOP
+## Gotchas
 
-| Rationalization | Reality |
-|---|---|
-| "The content is clearly covered by the new page, I'll delete the source." | `residual == 0`, or it is not covered. "Clearly" is the word that precedes every vacuous migration. |
-| "I'll write `the state machine is described in explanation/flows.md` and mark it processed." | That sentence is exactly the failure mode this gate exists for. A `processedto` target must contain the span id and be a file this branch wrote. |
-| "I'll batch the remaining 40 files, it's faster." | One item at a time. Batching is how a compaction lands mid-batch and nobody can tell what transferred. |
-| "The todo list has the remaining work, that's enough." | The todo list does not survive a compaction. The state file is committed. |
-| "It's 90 % done, I'll report it complete and file the rest." | The state file will contradict you in the next session. Report the counts. |
-| "This file is obviously stale, I'll drop it rather than migrate it." | Dropping needs a recorded row with a reason. Silent drops are indistinguishable from bugs. |
-| "The freeze list is over-cautious for this one file." | It is derived from the build. A file the build parses at runtime corrupts from a static initializer in production, not at compile time. |
-| "I'll move and rewrite in one commit to save a round trip." | Then the rename is undetectable and `git log --follow` dies across the corpus. Move, then rewrite. |
+No environment-specific gotchas known.
 
 ## Red flags — STOP
 
@@ -193,3 +185,24 @@ worse outcome than stopping, because it retires the only signal that work remain
 - A `git mv` with no matching move record — the move is unrecorded and nothing can answer for it
 - Creating a redirect stub at a vacated path
 - Reporting completion while the state file shows pending items
+
+### Rationalizations — every one of these means STOP
+
+| Rationalization                                                                              | Reality                                                                                                                                          |
+|----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| "The content is clearly covered by the new page, I'll delete the source."                    | `residual == 0`, or it is not covered. "Clearly" is the word that precedes every vacuous migration.                                              |
+| "I'll write `the state machine is described in explanation/flows.md` and mark it processed." | That sentence is exactly the failure mode this gate exists for. A `processedto` target must contain the span id and be a file this branch wrote. |
+| "I'll batch the remaining 40 files, it's faster."                                            | One item at a time. Batching is how a compaction lands mid-batch and nobody can tell what transferred.                                           |
+| "The todo list has the remaining work, that's enough."                                       | The todo list does not survive a compaction. The state file is committed.                                                                        |
+| "It's 90 % done, I'll report it complete and file the rest."                                 | The state file will contradict you in the next session. Report the counts.                                                                       |
+| "This file is obviously stale, I'll drop it rather than migrate it."                         | Dropping needs a recorded row with a reason. Silent drops are indistinguishable from bugs.                                                       |
+| "The freeze list is over-cautious for this one file."                                        | It is derived from the build. A file the build parses at runtime corrupts from a static initializer in production, not at compile time.          |
+| "I'll move and rewrite in one commit to save a round trip."                                  | Then the rename is undetectable and `git log --follow` dies across the corpus. Move, then rewrite.                                               |
+
+## Verification Checklist
+
+- [ ] State file committed and shows zero pending
+- [ ] A drain report exists for every deleted legacy file
+- [ ] No delete shipped in the same PR as its replacement
+- [ ] Every move recorded — `git mv` plus a matching move record
+- [ ] Freeze list respected

@@ -5,6 +5,14 @@ description: >-
   project", "add agent instructions here", "onboard this repo" — whether it is new or already has
   agent files. Detects stacks, writes .ai-badger/, and generates each configured agent's
   discovery file.
+version: 1.0.0
+author: ai-badger
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [scaffolding, onboarding, setup, detection]
+    related_skills: [den-refresh, feed-badger]
 ---
 
 # welcome-ai-badger
@@ -54,7 +62,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
    (There is deliberately no "user-only" option.)
 
    If the user declines a skill, persona, invariant or instruction, name it in `exclude`
-   (`{"skills": ["mcp-index"]}`) — deleting the scaffolded file is undone by the next refresh.
+   (`{"skills": ["mcp-index"]}`) — deleting the scaffolded file is undone by the next refresh (Why — see Gotchas.).
    The declined item is not delivered and its discovery symlinks are removed; the copy already
    under `.ai-badger/skills/` stays on disk for the user to delete.
 
@@ -79,8 +87,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
 
 6. **Verify & report.** Confirm the scaffold matches the stacks (no leakage from unselected
    stacks). Summarize what was written, the plugin commands, and any notes the script emitted.
-   When the output ends with a list of trees that "claim to be ai-badger", relay it: a drift
-   notice fires once per tree, so competing copies explain contradictory notices. Scaffolding
+   When the output ends with a list of trees that "claim to be ai-badger", relay it: a drift notice fires once per tree (Why — see Gotchas.), so competing copies explain contradictory notices. Scaffolding
    deletes nothing in the home directory — `den-refresh --prune-cache` is the one command that
    removes `~/.ai-badger/framework`, and `~/.claude/plugins/cache/` is Claude Code's to manage.
 
@@ -102,11 +109,17 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
 - **Preserved regions (per-block):** content between `<!-- ai-badger:keep-start -->` and
   `<!-- ai-badger:keep-end -->` is carried verbatim into the regenerated file, in order, at the
   end. This applies to every managed agent file *and* its `.ai-badger/` source-of-truth copy, so
-  a project block added to `.ai-badger/CLAUDE.md` survives a re-scaffold. Unbalanced or nested
-  markers leave the file untouched and emit a note — a marker typo never loses content. Tell the
+  a project block added to `.ai-badger/CLAUDE.md` survives a re-scaffold. Unbalanced or nested markers leave the file untouched and emit a note — a marker typo never loses content (Why — see Gotchas.). Tell the
   user about this whenever they ask where to put project-authored content in a managed file.
 - **Extensions:** config-gated skill extensions (e.g. the GitHub PR/issue extension of `task`)
   are embedded automatically iff `config.json` supplies their required data.
+
+## Gotchas
+
+- **Deleting a scaffolded file does not decline the item.** The next refresh brings it back — decline a skill, persona, invariant or instruction by naming it in `exclude` in `config.json`, not by deleting the delivered copy.
+- **A keep-marker typo never loses content.** Unbalanced or nested
+  `<!-- ai-badger:keep-start -->`/`<!-- ai-badger:keep-end -->` markers leave the file untouched and emit a note rather than mangling it.
+- **A drift notice fires once per tree.** Competing ai-badger copies each claim the repo, so a relayed tree list explains contradictory notices — it is not a bug to fix.
 
 ## Updating an already-scaffolded project
 
@@ -146,7 +159,16 @@ exits non-zero or emits an error, attempt recovery before surfacing the failure.
    succeeds, report what was fixed.
 
 3. **Recovery failed — offer to create a GitHub issue.** Follow
-   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md`: ask
+   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix does not recover the failure**: ask
    permission first, gate on `gh` being installed and authenticated, sanitize the config
    before including it. **Never create the issue without explicit user approval** — that rule
    holds even if the reference file is not present.
+
+## Verification Checklist
+
+- [ ] `validate.py --kind config` passed on the authored config
+- [ ] Scaffold output covers exactly the selected stacks — no leakage from unselected stacks
+- [ ] `.ai-badger/` holds config.json, manifest.json, CLAUDE.md, agents/, instructions/, invariants/, skills/, agent-instructions/, state.json
+- [ ] Plugin-setup commands relayed per the chosen scope (default or local-only)
+- [ ] Preserved hand-authored discovery files reported, not overwritten
+- [ ] Any "competing copies" tree list relayed, and nothing outside the target deleted

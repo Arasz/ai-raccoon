@@ -20,8 +20,7 @@ metadata:
 # Scaffold the documentation tree
 
 Create the canonical documentation tree and its seed READMEs, so that every later document has a
-legal home before anyone has to invent one. Reference: `references/structure.md` — the tree, the
-filename grammar, and the freeze list. The docs root defaults to `docs/`; read it from
+legal home before anyone has to invent one. Reference: `references/structure.md` — the tree, the filename grammar, and the freeze list; read it **when the canonical tree is in question**. The docs root defaults to `docs/`; read it from
 `.ai-badger/config.json`'s `docs.root` if the project sets one.
 
 **What a finished scaffold IS** — four parts, in this order:
@@ -67,12 +66,16 @@ map — see `extensions/ledger/`.
 
 ## Where reference material lives
 
-**A skills directory registers exactly one nesting level, and a directory without a `SKILL.md` is
-silently ignored rather than erroring.** Verified across the agents ai-badger supports. So a
-skill's reference material belongs in a `references/` subdirectory *inside* that skill, which ships
+**A skills directory registers exactly one nesting level, and a directory without a `SKILL.md` is silently ignored rather than erroring.** Verified across the agents ai-badger supports. So **when placing a skill's reference material**, put
+it in a `references/` subdirectory *inside*
+that skill, which ships
 with it — never in a sibling directory beside it, which would never be indexed and would never be
 delivered. The same rule applies to the documentation tree you are creating: nothing is picked up
 because it is nearby.
+
+## Gotchas
+
+No environment-specific gotchas known.
 
 ## Red flags — STOP
 
@@ -80,6 +83,6 @@ because it is nearby.
 - Adding a directory the canonical tree does not have, "because this repo needs it"
 - A directory README that lists the interesting files instead of all of them
 - Putting a script inside this skill directory
-- Creating or touching content under a frozen build-input directory — see the freeze list in
-  `references/structure.md`
+- Creating or touching content under a frozen build-input directory — read the freeze list in
+  `references/structure.md` when a build-input path is in question
 - Reporting the scaffold done with seeded files the ledger does not know about

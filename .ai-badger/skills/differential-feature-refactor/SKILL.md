@@ -176,7 +176,11 @@ feature already has answers in the tree, and the UP blocks are that questioning 
 differential. If the refactor turns out to require a genuinely new sub-feature with no existing
 code, hand that sub-feature to the spec skill rather than growing this document.
 
-## Common Pitfalls — STOP and go back to the authority set
+## Gotchas
+
+No environment-specific gotchas known.
+
+## Red flags — STOP
 
 - About to write "dead code", "unused", "legacy", or "safe to delete" without naming the decision
   that authorised the thing

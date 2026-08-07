@@ -64,6 +64,10 @@ that needs no graph server.
    test command directly and read the result — a green exit code from a command you didn't
    actually invoke does not count.
 
+## Gotchas
+
+No environment-specific gotchas known.
+
 ## Red flags — STOP
 
 - Applying an edit before step 1 produced a complete list

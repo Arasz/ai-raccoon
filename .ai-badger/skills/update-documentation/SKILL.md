@@ -32,10 +32,10 @@ The hot path: one documentation change, correctly placed, evidence-backed, and r
 
 For a substantial **new** document, one more: a reader test (step 9). Not for edits.
 
-References: `references/placement.md`, `references/trust.md`, `references/amendments.md`. The tree
+References: read `references/placement.md` **when choosing a target path**,
+`references/trust.md` **when an evidence line is challenged**, `references/amendments.md` **when phrasing an amendment's reason**. The tree
 and filename grammar live with the skill that creates them —
-`../scaffold-documentation/references/structure.md` — because structure is that skill's primary
-concern; do not copy it into a shared directory, which cannot ship.
+`../scaffold-documentation/references/structure.md` — because structure is that skill's primary concern; read it **when the canonical tree is in question** — do not copy it into a shared directory, which cannot ship.
 
 ## Steps
 
@@ -100,8 +100,11 @@ check by hand.
 ## Placement, in one line
 
 Falsification test first: if the code changed tomorrow and this became untrue, would you **edit**
-it (→ a quadrant) or would editing it be **falsifying a record** (→ `work/`, dated filename)?
-Everything else is in `references/placement.md`.
+it (→ a quadrant) or would editing it be **falsifying a record** (→ `work/`, dated filename)? Everything else is in `references/placement.md` — read it **when the one-line test does not settle the target**.
+
+## Gotchas
+
+No environment-specific gotchas known.
 
 ## Red flags — STOP
 
@@ -123,3 +126,11 @@ Everything else is in `references/placement.md`.
 > ([anthropics/skills](https://github.com/anthropics/skills)). No licence file accompanied the
 > captured copy, so its terms are unestablished here — the step is a restatement of the practice,
 > not copied text.
+
+## Verification Checklist
+
+- [ ] Every `evidence=` line resolves to a real `path:line` — opened, not inferred
+- [ ] The ledger accepted the entry
+- [ ] No frozen build-input file touched
+- [ ] Verification-span budget respected (≤2)
+- [ ] Report matches what was recorded

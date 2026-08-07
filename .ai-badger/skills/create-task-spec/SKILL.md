@@ -7,7 +7,14 @@ description: >-
   approve, using Gherkin's own grammar to decide which questions must be asked and when the
   document is complete. Emits a .feature behavioural contract plus a spec.json manifest that the
   task skill consumes.
+version: 1.0.0
+author: ai-badger
+license: MIT
 platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [specification, gherkin, requirements, contracts]
+    related_skills: [task, behavioral-contracts]
 ---
 
 # create-task-spec
@@ -132,6 +139,10 @@ python3 .ai-badger/skills/create-task-spec/scripts/render_spec.py <spec>.feature
 planning phase gets an agreed contract plus explicit constraints. Acceptance becomes exact —
 every non-deferred scenario satisfied.
 
+## Gotchas
+
+No environment-specific gotchas known.
+
 ## What this skill is not
 
 It is not brainstorming. Brainstorming explores *what to build* and converges on an idea; this
@@ -139,4 +150,5 @@ starts once that is settled and converges on *exact meaning*. If the idea itself
 that belongs upstream — `superpowers:brainstorming` covers it where that plugin is installed;
 otherwise settle the idea in conversation first, then come back.
 
-> Why this shape, and the research behind it: `references/why-elicitation.md`.
+> Why this shape, and the research behind it: read `references/why-elicitation.md` **when the
+> contract shape is questioned**.
