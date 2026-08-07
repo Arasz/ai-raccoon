@@ -29,6 +29,7 @@ public sealed class OtlpExportTests : IDisposable
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string IntervalVar = "OTEL_METRIC_EXPORT_INTERVAL";
     private const string TimeoutVar = "OTEL_METRIC_EXPORT_TIMEOUT";
+    private const string ServiceNameVar = "OTEL_SERVICE_NAME";
 
     // SDK defaults (PeriodicExportingMetricReaderHelper), measured against opentelemetry-dotnet
     // core-1.17.0 source — the ceiling these tests prove we no longer silently fall back to.
@@ -262,6 +263,87 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
     }
 
+    // Without an explicit resource the SDK falls back to "unknown_service:<process>", which is what
+    // a collector actually displayed. OTEL_SERVICE_NAME cannot rescue it: the environment detector
+    // behind ResourceBuilder.CreateDefault() resolves through the same DI IConfiguration that
+    // McpServerSetup clears — the identical mechanism that swallowed the export interval.
+    [Fact]
+    public async Task HttpHost_ServiceName_ComesFromOtelServiceName_WhenSet()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        Environment.SetEnvironmentVariable(ServiceNameVar, "probe-service");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        ServiceName(host.Services.GetRequiredService<TracerProvider>()).ShouldBe("probe-service");
+    }
+
+    [Fact]
+    public async Task HttpHost_ServiceName_DefaultsToTheProductName_NotUnknownService()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        var name = ServiceName(host.Services.GetRequiredService<TracerProvider>());
+        name.ShouldBe("ai-raccoon");
+        name.ShouldNotStartWith("unknown_service");
+    }
+
+    [Fact]
+    public async Task HttpHost_ServiceName_IsTheSameOnMetricsAndTraces()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        Environment.SetEnvironmentVariable(ServiceNameVar, "shared-name");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        ServiceName(host.Services.GetRequiredService<MeterProvider>())
+            .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
+    }
+
+    // The bare-ServiceCollection listener test elsewhere in this file cannot show this: it never
+    // starts a host, so it never exercises the path a running serve takes. If no listener is
+    // attached after the host starts, ActivitySource.StartActivity returns null and every tool
+    // call produces no span at all — traces would silently never leave the process.
+    [Fact]
+    public async Task StartedHttpHost_AttachesATraceListener_SoToolCallsProduceSpans()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
+            metrics.ActivitySource.HasListeners().ShouldBeTrue();
+
+            using var activity = metrics.ActivitySource.StartActivity("probe");
+            activity.ShouldNotBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>Reads service.name off a provider's Resource; both provider SDKs expose it
+    /// internally only, so reflection is the only way to assert what was actually applied.</summary>
+    private static string ServiceName(object provider)
+    {
+        var resource = provider.GetType()
+            .GetProperty("Resource", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)!
+            .GetValue(provider)!;
+        var attributes = (IEnumerable<KeyValuePair<string, object>>)resource.GetType()
+            .GetProperty("Attributes")!
+            .GetValue(resource)!;
+        return (string)attributes.Single(a => a.Key == "service.name").Value;
+    }
+
     private static int PeriodicReaderField(MeterProvider meterProvider, string fieldName)
     {
         var reader = meterProvider.GetType()
@@ -291,18 +373,20 @@ public sealed class OtlpExportTests : IDisposable
         var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
         var originalInterval = Environment.GetEnvironmentVariable(IntervalVar);
         var originalTimeout = Environment.GetEnvironmentVariable(TimeoutVar);
+        var originalServiceName = Environment.GetEnvironmentVariable(ServiceNameVar);
         var originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         Environment.SetEnvironmentVariable(EndpointVar, null);
         Environment.SetEnvironmentVariable(ProtocolVar, null);
         Environment.SetEnvironmentVariable(IntervalVar, null);
         Environment.SetEnvironmentVariable(TimeoutVar, null);
+        Environment.SetEnvironmentVariable(ServiceNameVar, null);
         Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout, originalPassphrase);
+        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout, originalServiceName, originalPassphrase);
     }
 
     private sealed class EnvRestore(
         string? originalEndpoint, string? originalProtocol, string? originalInterval, string? originalTimeout,
-        string? originalPassphrase)
+        string? originalServiceName, string? originalPassphrase)
         : IDisposable
     {
         public void Dispose()
@@ -311,6 +395,7 @@ public sealed class OtlpExportTests : IDisposable
             Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
             Environment.SetEnvironmentVariable(IntervalVar, originalInterval);
             Environment.SetEnvironmentVariable(TimeoutVar, originalTimeout);
+            Environment.SetEnvironmentVariable(ServiceNameVar, originalServiceName);
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, originalPassphrase);
             TestData.EnvVarGate.Release();
         }
