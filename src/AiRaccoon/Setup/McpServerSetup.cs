@@ -1,5 +1,6 @@
 using System.Net;
 using AiRaccoon.Prompts;
+using AiRaccoon.Resources;
 using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tools;
 using DotNext.Collections.Generic;
@@ -61,7 +62,8 @@ internal static partial class McpServerSetup
             .WithTools<SyncTools>()
             .WithTools<PromotionTools>()
             .WithTools<WatchTools>()
-            .WithPrompts<MemoryPrompts>();
+            .WithPrompts<MemoryPrompts>()
+            .WithResources<SkillResources>();
         return builder.Build();
     }
 
@@ -134,7 +136,8 @@ internal static partial class McpServerSetup
                 .WithTools<SyncTools>()
                 .WithTools<PromotionTools>()
                 .WithTools<WatchTools>()
-                .WithPrompts<MemoryPrompts>();
+                .WithPrompts<MemoryPrompts>()
+                .WithResources<SkillResources>();
     }
 
     private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder, bool quietInfo = false)

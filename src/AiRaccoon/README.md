@@ -43,6 +43,10 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
 `memory_watch_status`, `memory_watch_remove` — and the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
+Two MCP resources complete the surface: `skill://index.json` and `skill://ai-raccoon-memory/SKILL.md`
+(SEP-2640 skill discovery). Agent Framework clients can discover and load the ai-raccoon-memory
+skill via `AgentSkillsProviderBuilder.UseMcpSkills`; other clients simply see two extra resources.
+
 Configuration is deliberately NOT an MCP tool: the CLI is the single config channel (see below), so `memory_configure`
 and `memory_set_structure_alpha` were removed. Watching pairs the `watch` CLI verbs (enable/scope/concurrency —
 CLI-only) with the three watch tools above (registration and status).
