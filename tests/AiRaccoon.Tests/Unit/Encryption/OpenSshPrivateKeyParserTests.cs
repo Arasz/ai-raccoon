@@ -85,7 +85,7 @@ public sealed class OpenSshPrivateKeyParserTests
         var seed = OpenSshPrivateKeyParser.ParseSeed(RealKeyPem);
 
         seed.ShouldBe(Convert.FromHexString("4c8ebb4e5ccc17dd079e58dc4e160079d22a0fc7aeb4fb889c26d612bedb42ea"));
-        SshKeyDerivation.DeriveRawKey(seed).ShouldBe("x'4ea6b27fdc450764e6727d50599f6c9efd62a367ea044700e5377fa230330427'");
+        SshKeyDerivation.DeriveRawKey(seed).ShouldBe("x'c7374dda8c04f79a6f71197552af1d2ed09e941e9156af13866d366a2466a674'");
     }
 
 

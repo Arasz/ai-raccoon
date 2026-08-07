@@ -108,14 +108,17 @@ public sealed partial class EncryptionCommands
         var bankPath = _bank.BankPath;
         if (File.Exists(bankPath))
         {
-            SqliteException? openError = null;
+            Exception? openError = null;
             try
             {
                 using (await _bank.OpenBankAsync(cancellationToken))
                 {
                 }
             }
-            catch (SqliteException ex)
+            // Post-ADR-0012 a bank that does not open under the resolved key surfaces as
+            // BankKeyMismatchException rather than a bare SqliteException. Both mean the same
+            // thing here — it did not open — and the fallbacks below decide what to do about it.
+            catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
             {
                 openError = ex;
             }
@@ -151,6 +154,42 @@ public sealed partial class EncryptionCommands
         await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
 
         await stdout.WriteLineAsync("encryption source set to bitwarden");
+        return 0;
+    }
+
+    /// <summary>
+    ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation. Explicit rather than
+    ///     automatic on open: a rekey needs exclusive access to the bank (plan Decision 3).
+    /// </summary>
+    public async Task<int> MigrateAsync(TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_bank.BankPath))
+        {
+            await stdout.WriteLineAsync("no bank to migrate");
+            return 0;
+        }
+
+        bool rekeyed;
+        try
+        {
+            Log.MigratingBank(_logger, _bank.BankPath);
+            rekeyed = await _bank.MigrateLegacyKeyAsync(cancellationToken);
+        }
+        catch (BankKeyMismatchException ex)
+        {
+            Log.MigrationRefused(_logger, _bank.BankPath, ex);
+            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            return 1;
+        }
+
+        if (rekeyed)
+        {
+            Log.BankMigrated(_logger, _bank.BankPath);
+            await stdout.WriteLineAsync("bank rekeyed to the current key derivation");
+            return 0;
+        }
+
+        await stdout.WriteLineAsync("bank is already on the current key derivation; nothing to do");
         return 0;
     }
 
@@ -259,5 +298,16 @@ public sealed partial class EncryptionCommands
 
         [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
+
+        // The migration records nothing in the bank or the sidecar (plan Decision 4) — these
+        // events are the whole audit trail.
+        [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Checking the bank at {BankPath} for the pre-ADR-0012 key derivation")]
+        public static partial void MigratingBank(ILogger logger, string bankPath);
+
+        [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
+        public static partial void BankMigrated(ILogger logger, string bankPath);
+
+        [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
+        public static partial void MigrationRefused(ILogger logger, string bankPath, Exception exception);
     }
 }

@@ -32,7 +32,8 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
         var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());
         return new Passphrase(Source)
         {
-            Value = SshKeyDerivation.DeriveRawKey(seed)
+            Value = SshKeyDerivation.DeriveRawKey(seed),
+            LegacyValue = SshKeyDerivation.DeriveLegacyRawKey(seed)
         };
     }
 }

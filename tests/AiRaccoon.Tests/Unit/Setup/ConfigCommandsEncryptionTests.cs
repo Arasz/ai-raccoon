@@ -25,8 +25,12 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigCommandsEncryptionTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'277b…' (TestOpenSshKeyBuilder builds that seed).
-    private const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…' (TestOpenSshKeyBuilder builds that seed).
+    private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
+
+    // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what the migrate
+    // verb has to find on disk and rekey away from.
+    private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";
 
@@ -564,6 +568,81 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new EncryptionSourceSidecar(BankPath()),
                 null!));
         ex.ParamName.ShouldBe("logger");
+    }
+
+    // ── encryption migrate: the ADR-0012 rekey verb ──
+
+    /// <summary>The verb's gate: a legacy-keyed bank is rekeyed and its rows survive.</summary>
+    [Fact]
+    public async Task Migrate_LegacyKeyedBank_RekeysToTheCurrentDerivationAndKeepsData()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+
+        // An installed user's bank: keyed with SHA-256(Label ‖ seed), holding a row.
+        var legacyBank = new SqliteConnectionFactory(Options(),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(LegacyDerivedRawKey)]));
+        await using (var connection = await legacyBank.OpenBankWithKeyAsync(LegacyDerivedRawKey, TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO t VALUES (1, 'survives')";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+
+        var (exit, output, _, bank) = await Run(["encryption", "migrate"], store, runner);
+
+        exit.ShouldBe(0);
+        output.ShouldContain("rekeyed");
+
+        await using var migrated = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken);
+        await using var read = migrated.CreateCommand();
+        read.CommandText = "SELECT value FROM t WHERE id = 1";
+        (await read.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe("survives");
+    }
+
+    [Fact]
+    public async Task Migrate_BankAlreadyOnCurrentDerivation_ReportsNoChange()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+
+        var currentBank = new SqliteConnectionFactory(Options(),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(DerivedRawKey)]));
+        await using (await currentBank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        {
+        }
+
+        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+
+        var (exit, output, _, _) = await Run(["encryption", "migrate"], store, runner);
+
+        exit.ShouldBe(0);
+        output.ShouldContain("already");
+    }
+
+    /// <summary>A bank that opens under neither derivation is refused, and left byte-identical.</summary>
+    [Fact]
+    public async Task Migrate_CorruptBank_FailsLoudlyAndLeavesTheFileByteIdentical()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+
+        var bankDirectory = Path.GetDirectoryName(BankPath());
+        bankDirectory.ShouldNotBeNull();
+        Directory.CreateDirectory(bankDirectory);
+        await File.WriteAllBytesAsync(BankPath(), [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))],
+            TestContext.Current.CancellationToken);
+        var before = await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken);
+
+        WriteSidecar("bitwarden", DefaultProjectId, DefaultSecretId);
+
+        var (exit, _, err, _) = await Run(["encryption", "migrate"], store, runner);
+
+        exit.ShouldBe(1);
+        err.ShouldContain("opens under neither");
+        (await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken)).ShouldBe(before);
     }
 
     private sealed record RunResult(int Exit, string Out, string Err, SqliteConnectionFactory Bank);

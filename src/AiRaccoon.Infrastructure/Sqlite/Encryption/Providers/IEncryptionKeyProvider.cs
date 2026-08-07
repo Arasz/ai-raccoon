@@ -18,4 +18,10 @@ public interface IEncryptionKeyProvider
 public sealed record Passphrase(string Source)
 {
     public string? Value { get; init; }
+
+    /// <summary>
+    ///     The same key under the pre-ADR-0012 derivation, for sources that can produce one — the
+    ///     only thing that authorises a rekey. Null when the source has no legacy form (env, none).
+    /// </summary>
+    public string? LegacyValue { get; init; }
 }

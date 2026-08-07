@@ -75,6 +75,7 @@ internal sealed class ConfigCommands(
                 ["extract", "exclude", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<ExtractCommands>(nameof(extract))).ExcludeListAsync(store, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
+                ["encryption", "migrate"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).MigrateAsync(stdout, stderr, cancellationToken),
                 ["maintenance", "interval"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<MaintenanceCommands>(nameof(maintenance))).SetCheckpointIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["maintenance", "vacuum-interval"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<MaintenanceCommands>(nameof(maintenance))).SetVacuumIntervalAsync(parseResult, store, stdout, stderr, cancellationToken),
                 ["maintenance", "list"] => await (maintenance ?? ThrowHelper.ThrowArgumentNullException<MaintenanceCommands>(nameof(maintenance))).ListAsync(store, stdout, cancellationToken),

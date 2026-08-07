@@ -6,6 +6,7 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(BwsAccessTokenCollection.Name)]
 public sealed class BitwardenCliSecretManagerTests : IDisposable
 {
     private const string NotFoundText =

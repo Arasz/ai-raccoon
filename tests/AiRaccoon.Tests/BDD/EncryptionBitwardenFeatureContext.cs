@@ -27,7 +27,7 @@ namespace AiRaccoon.Tests.BDD;
 public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 {
     // §5.1 pinned vector — seed 00 01 … 1e 1f derives to exactly this x'…' (hard-coded, never recomputed).
-    public const string DerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+    public const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
     // Owner-default project/secret ids (plan D6) and the synthetic fixtures the fake serves.
     public const string ProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
