@@ -166,15 +166,17 @@ public sealed class MaintenanceCommands(SqliteConnectionFactory factory) : IMain
         var percent = previousTotalBytes == 0
             ? 0
             : Math.Abs(deltaBytes) * 100.0 / previousTotalBytes;
-        return $"{FormatBytes(Math.Abs(deltaBytes))} {direction} ({percent:0.0}%)";
+        return $"{FormatBytes(Math.Abs(deltaBytes))} {direction} " +
+            $"({percent.ToString("0.0", CultureInfo.InvariantCulture)}%)";
     }
 
     private static string FormatBytes(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.0} KB",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.0} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):0.0} GB"
+        < 1024 * 1024 => $"{(bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture)} KB",
+        < 1024L * 1024 * 1024 =>
+            $"{(bytes / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MB",
+        _ => $"{(bytes / (1024.0 * 1024 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} GB"
     };
 
     private sealed record BankStats(
