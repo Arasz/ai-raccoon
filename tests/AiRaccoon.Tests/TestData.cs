@@ -69,6 +69,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
     public Exception? PromoteError { get; set; }
     public Exception? GetMetaError { get; set; }
     public TimeSpan GetMetaDelay { get; set; }
+    public PromotionMeta Meta { get; set; } = new(0, null, null);
 
     public Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
@@ -111,7 +112,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
             throw GetMetaError;
         }
 
-        return new PromotionMeta(0, null, null);
+        return Meta;
     }
 }
 

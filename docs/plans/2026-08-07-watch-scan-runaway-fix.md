@@ -112,9 +112,15 @@ B, C and D share no file. `WatchService.cs` is edited by nobody — that is D-1 
 | R3 | Lease-denied skip + once-per-process gate ⇒ a skipper never retries if the holder dies | accepted; watermark advances per digested file, so the next process resumes cheaply | `Reconcile_AfterALeaseDeniedScan_ANewProcessScansFromTheWatermark` |
 | R4 | "Fixing" R3 by scanning every poll ⇒ an empty directory never advances its watermark and full-scans once per second, forever — this incident in new clothes | keep `_active` as the once-per-process gate | `Reconcile_CalledTwice_EnqueuesOnlyOneScan` |
 | R5 | Progress-driven renewal ⇒ a >60s pause between files loses the lease | damage capped at one scanner; the loser stops before enqueueing more | `ScanCore_WhenTheLeaseIsLostMidScan_StopsEnqueuing` |
-| R6 | `BEGIN IMMEDIATE` on remove contends with live fingerprint writes ⇒ `SQLITE_BUSY` | `busy_timeout=5000` already set; verify, do not assume | `RemoveWatchAsync_WhileFingerprintsAreBeingWritten_Succeeds` |
+| R6 | `BEGIN IMMEDIATE` on remove contends with live fingerprint writes ⇒ `SQLITE_BUSY` | the connection string's `Default Timeout` (30s), not the PRAGMA — see the note below | `RemoveWatchAsync_WhileFingerprintsAreBeingWritten_Succeeds` |
 | R7 | Cancellation logged as `ScanError` ⇒ noise masking real failures | caught before the general handler, logged at Information | `EnqueueInitialScan_CancelledByRemoval_DoesNotLogAScanError` |
 | R8 | `WatchScanGuard` registered transient ⇒ single-flight silently does nothing, all tests still pass | DI smoke test asserts identity, not just resolution | `RegisterMemoryServices_ResolvesTheScanGuardAndTheScanLease` |
+
+> **R6, verified 2026-08-08.** The test holds a write transaction open while the remove runs.
+> It still passes with `PRAGMA busy_timeout=0`, and fails with the connection string's
+> `Default Timeout` at 1s — so what absorbs the contention is Microsoft.Data.Sqlite's
+> command-level busy retry, bounded by the default 30s command timeout. `busy_timeout=5000`
+> is belt-and-braces, not the mechanism.
 
 ## One assumption left for the implementer to verify
 

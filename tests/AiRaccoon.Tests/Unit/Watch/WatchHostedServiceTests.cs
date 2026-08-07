@@ -311,4 +311,26 @@ public sealed class WatchHostedServiceTests
             await hosted.StopAsync(CancellationToken.None);
         }
     }
+
+    /// <summary>R4 in the fix plan: without the once-per-process `_active` gate, a directory whose
+    /// watermark never advances re-scans on every 1s poll — the runaway incident in new clothes.</summary>
+    [Fact]
+    public async Task Reconcile_CalledTwice_EnqueuesOnlyOneScan()
+    {
+        using var dir = TempDir.New("hosted-once");
+        var (stack, _, catchUp, hosted) = NewStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await File.WriteAllTextAsync(dir.File("a.md"), "zephyrone", TestContext.Current.CancellationToken);
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        // Let the first scan finish: the scan guard only single-flights an in-flight scan, so a
+        // second scan here could only have been stopped by the _active gate.
+        await catchUp.LastScan!;
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(1);
+        stack.ScanGuard.SkippedScans.ShouldBe(0);
+    }
 }
