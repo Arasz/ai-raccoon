@@ -20,6 +20,15 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     private readonly ILogger<BankMaintenanceHostedService> _logger;
     private DateTimeOffset? _lastVacuumUtc;
 
+    /// <summary>Completed after each maintenance pass (startup + ticks); test seam.</summary>
+    internal TickSignal Ticks { get; } = new();
+
+    /// <summary>Completed once the periodic timer is armed; test seam (startup passes run before it).</summary>
+    internal TickSignal TimerArmed { get; } = new();
+
+    /// <summary>Completed after each post-tick interval re-read; test seam.</summary>
+    internal TickSignal IntervalReReads { get; } = new();
+
     public BankMaintenanceHostedService(SqliteConnectionFactory factory, TimeProvider timeProvider,
         ILogger<BankMaintenanceHostedService> logger)
     {
@@ -44,9 +53,14 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         {
             Log.RunFailed(_logger, ex);
         }
+        finally
+        {
+            Ticks.Increment();
+        }
 
         using var timer = new PeriodicTimer(await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
             _timeProvider);
+        TimerArmed.Increment();
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
@@ -61,9 +75,14 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
             {
                 Log.RunFailed(_logger, ex);
             }
+            finally
+            {
+                Ticks.Increment();
+            }
 
             // Re-read the interval so config changes apply without a restart.
             timer.Period = await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+            IntervalReReads.Increment();
         }
     }
 
