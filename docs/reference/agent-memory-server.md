@@ -195,8 +195,8 @@ for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
 http://127.0.0.1:7721/mcp`) or Claude Code (`.mcp.json` `type: http` entry).
 Keep stderr out of the entry file: `ai-raccoon serve --mcp-entry > entry.json
 2> serve.log &`. One long-lived HTTP server avoids the ~5-minute stdio
-recycle of per-connection processes and lets the background extraction hosted
-service actually fire.
+recycle of per-connection processes and lets the background extraction and
+bank-maintenance hosted services actually fire.
 
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):
@@ -253,6 +253,14 @@ ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
 ai-raccoon extract list
+
+# maintenance: bank housekeeping (every process checkpoints the WAL at startup
+# and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
+# default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
+# config changes apply live, no server restart needed)
+ai-raccoon maintenance interval {minutes}
+ai-raccoon maintenance vacuum-interval {days}
+ai-raccoon maintenance list
 ```
 
 **Encryption key sources.** Default: `AIRACCOON_DB_PASSPHRASE` (env). Alternative:
