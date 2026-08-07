@@ -164,7 +164,7 @@ public sealed partial class S3CloudStore : ICloudStore
         [LoggerMessage(EventId = 201, Level = LogLevel.Error, Message = "S3 push failed: {reason}")]
         public static partial void PushFailed(ILogger logger, string reason);
 
-        [LoggerMessage(EventId = 205, Level = LogLevel.Error, Message = "S3 auth failed: {reason}")]
+        [LoggerMessage(EventId = 202, Level = LogLevel.Error, Message = "S3 auth failed: {reason}")]
         public static partial void AuthFailed(ILogger logger, string reason);
     }
 }

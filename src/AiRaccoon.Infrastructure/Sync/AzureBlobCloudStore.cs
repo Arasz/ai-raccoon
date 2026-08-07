@@ -167,13 +167,13 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 202, Level = LogLevel.Error, Message = "Azure pull failed: {reason}")]
+        [LoggerMessage(EventId = 203, Level = LogLevel.Error, Message = "Azure pull failed: {reason}")]
         public static partial void PullFailed(ILogger logger, string reason);
 
-        [LoggerMessage(EventId = 203, Level = LogLevel.Error, Message = "Azure push failed: {reason}")]
+        [LoggerMessage(EventId = 204, Level = LogLevel.Error, Message = "Azure push failed: {reason}")]
         public static partial void PushFailed(ILogger logger, string reason);
 
-        [LoggerMessage(EventId = 204, Level = LogLevel.Error, Message = "Azure auth failed: {reason}")]
+        [LoggerMessage(EventId = 205, Level = LogLevel.Error, Message = "Azure auth failed: {reason}")]
         public static partial void AuthFailed(ILogger logger, string reason);
     }
 }

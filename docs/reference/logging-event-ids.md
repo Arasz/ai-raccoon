@@ -32,8 +32,8 @@ One block per source file that owns a `Log` class or equivalent:
 | 30 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
 | 40-41 | `src/AiRaccoon/Setup/EmbeddingAvailability.cs` |
 | 100 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` |
-| 200, 201, 205 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
-| 202-204 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
+| 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
+| 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
 | 300, 301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` |
 | 302 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` |
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
