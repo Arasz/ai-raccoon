@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Workspace;
 using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;

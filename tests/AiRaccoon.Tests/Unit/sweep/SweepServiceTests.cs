@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using Microsoft.Extensions.Time.Testing;
