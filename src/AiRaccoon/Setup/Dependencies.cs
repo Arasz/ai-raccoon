@@ -132,7 +132,9 @@ public static partial class Dependencies
             services.AddSingleton<WatchScheduler>();
             // Singleton is load-bearing: a transient guard silently defeats single-flight (R8).
             services.AddSingleton<WatchScanGuard>();
-            services.AddSingleton<IWatchScanLease, WatchScanLease>();
+            // Singleton is load-bearing here too: the owner id is per-instance, and a transient
+            // lease would hand every call a new owner, so renew and release could never match.
+            services.AddSingleton<IWatchScanLease, SqliteWatchScanLease>();
             services.AddSingleton<WatchPipeline>();
             services.AddSingleton<IWatchService, WatchService>();
         }
