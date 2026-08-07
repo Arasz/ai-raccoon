@@ -59,23 +59,7 @@ public partial class SyncService(
                 await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            // Strip workspace rows — they never leave the bank. The snapshot of an encrypted
-            // bank is itself encrypted, so the strip opens through openSnapshot with the bank
-            // key, read-write (DELETE + VACUUM) and vec0 loaded (the entry triggers need it).
-            await using (var snap = await openSnapshot(localSnapshot, cancellationToken).ConfigureAwait(false))
-            {
-                await using var del = snap.CreateCommand();
-                del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
-                await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                // Settings never leave the bank: the table holds the cloud credentials this very
-                // push authenticates with, plus the embedding API key.
-                await using var delSettings = snap.CreateCommand();
-                delSettings.CommandText = "DELETE FROM settings";
-                await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                await using var vac = snap.CreateCommand();
-                vac.CommandText = "VACUUM";
-                await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await StripNonSyncableAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
 
             // 2. Integrity check on the snapshot.
             await using (var ro = await openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
@@ -115,6 +99,7 @@ public partial class SyncService(
                         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                     }
 
+                    await StripNonSyncableAsync(mergedPath, cancellationToken).ConfigureAwait(false);
                     snapshotBytes = await File.ReadAllBytesAsync(mergedPath, cancellationToken).ConfigureAwait(false);
                 }
                 finally
@@ -169,6 +154,7 @@ public partial class SyncService(
                                 await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                             }
 
+                            await StripNonSyncableAsync(retryPath, cancellationToken).ConfigureAwait(false);
                             snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken).ConfigureAwait(false);
                         }
                         finally
@@ -369,6 +355,24 @@ public partial class SyncService(
                 File.Delete(remotePath);
             }
         }
+    }
+
+    /// <summary>Deletes workspace-scoped entries and all settings rows from a snapshot file, then VACUUMs it. Every path that pushes a snapshot must call this — settings hold the cloud credentials the push itself authenticates with.</summary>
+    private async Task StripNonSyncableAsync(string snapshotPath, CancellationToken cancellationToken)
+    {
+        // The snapshot of an encrypted bank is itself encrypted, so the strip opens through
+        // openSnapshot with the bank key, read-write (DELETE + VACUUM) and vec0 loaded (the
+        // entry triggers need it).
+        await using var snap = await openSnapshot(snapshotPath, cancellationToken).ConfigureAwait(false);
+        await using var del = snap.CreateCommand();
+        del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
+        await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var delSettings = snap.CreateCommand();
+        delSettings.CommandText = "DELETE FROM settings";
+        await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var vac = snap.CreateCommand();
+        vac.CommandText = "VACUUM";
+        await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task WaitForWalCheckpointAsync(CancellationToken cancellationToken)

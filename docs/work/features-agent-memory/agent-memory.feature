@@ -1,4 +1,5 @@
 # language: en
+@bdd
 Feature: Agent memory management (ai-raccoon MCP server)
     As an AI agent working across projects
     I want a persistent memory bank shared across my projects
