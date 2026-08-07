@@ -35,6 +35,17 @@ Sequence per tick: read installed version → below target: run the update comma
 5. Python compatibility: scripts may run under the macOS system python3 (3.9.x) — add `from __future__ import annotations` FIRST (before imports) or avoid `X | None` annotations entirely; `tuple[int,int,int] | None` raises TypeError at
    definition time on 3.9.
 
+## Pitfall: verify CLI verb paths BEFORE the rollout branch can execute them
+
+Draft scripts often assume a `config` parent verb (`ai-raccoon config extract enable true`). Verb families are frequently ROOT-level (`ai-raccoon extract enable true`) — there is no `config` command at all, and the mistake only surfaces
+when the rollout branch actually runs ("Unrecognized command or argument 'config'"). Caught this way 2026-08-07: the settings-arming verbs were wrong from the first commit and the error stayed invisible through smoke tests that never
+reached the rollout branch. Fix: during the foreground verification pass, run EVERY command the script will execute (or its `--help`) against the real binary — a wrong verb path fails silently in a log-only watchdog.
+
+## Pitfall: the scheduler may never tick — run the script manually when the trigger condition is met
+
+A job can sit with `next_run_at` in the past and `last_run_at: null` after creation/update (observed 2026-08-07 on an 'every 30m' job; the update also left `repeat: once`). Treat the cron as a self-healing layer, NOT the execution
+guarantee: when the user reports the trigger condition (e.g. "we updated to 1.1.0"), run the script in the foreground instead of waiting for the tick.
+
 ## Verification before scheduling
 
 Run the script once in the foreground first. Expect the "nothing to report" path to be silent + logged; the action path can be exercised with a lowered TARGET only if the real side effects are safe (port kill is NOT safe to dry-run against

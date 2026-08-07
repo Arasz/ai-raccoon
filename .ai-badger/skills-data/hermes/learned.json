@@ -20,6 +20,15 @@
       "target": ".ai-badger/skills/learned/ai-raccoon/sqlite-schema-review"
     },
     {
+        "category": "ai-raccoon-ops",
+        "name": "ai-raccoon-deployment-ops",
+        "sourceHash": "45bb22bc8d6e99437a1d7364c4d138420d219747ebdd2dc7434d20d743d50a39",
+        "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
+        "status": "synced",
+        "syncedAt": "2026-08-07T06:17:00Z",
+        "target": ".ai-badger/skills/learned/ai-raccoon-ops/ai-raccoon-deployment-ops"
+    },
+      {
       "category": "data-analysis",
       "name": "memory-bank-audit",
       "sourceHash": "1ff33ae80f24c74dce34f4cc4e2a7dc082ca48085d1dbaca31be3709e89732f1",
@@ -175,10 +184,10 @@
     {
         "category": "uncategorized",
         "name": "cron-watchdog-authoring",
-        "sourceHash": "7635838dd607766f90ad92abcb5d3b17e524ce1ef44fb6341898af0eeb356f4a",
+        "sourceHash": "a3ab59306902b119941b948280bfce1c143f5f945b62c30204bf272b7c0ac00f",
         "sourcePath": "cron-watchdog-authoring",
         "status": "synced",
-        "syncedAt": "2026-08-06T22:57:25Z",
+        "syncedAt": "2026-08-07T05:47:00Z",
         "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
     },
       {
@@ -229,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-flaky-test-diagnosis",
-      "sourceHash": "17976128ba0795b9e48f5b4ba72cf38a484cb5e9761f9ac4404fa65aa141468e",
+        "sourceHash": "1e2580460aac73bc2043741c07c55a994b1049eefc02097eb02b93efe00c87ae",
       "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:52:38Z",
+        "syncedAt": "2026-08-07T05:47:50Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
     },
     {
@@ -247,10 +256,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-testing",
-      "sourceHash": "46d400ce94a9671b3a0433f3e3748a80ed9b1ad99d3df69b943aa4688efec58e",
+        "sourceHash": "d3e0ffeaa3ec8095f4eb44a68c71724d687efa9accf245583ca92bc80f52fcf8",
       "sourcePath": "software-development/dotnet-hosted-service-testing",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:34:32Z",
+        "syncedAt": "2026-08-07T05:47:22Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
     },
     {

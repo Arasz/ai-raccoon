@@ -79,6 +79,12 @@ Child-process tests, ambient env vars (a real bws/aws CLI on PATH leaking in), p
 collisions. Fix = hermetic child PATH / env isolation, or record-and-tolerate with the
 owner's approval.
 
+**Cold-worktree asset provisioning (ai-raccoon signature, seen 3x 2026-08-07).** A freshly created worktree's FIRST full-suite run can fail ~48 tests — ALL in the retrieval/reference-assets area, with `System.IO.FileSystem.CopyFile` inside
+`ReferenceAssets.EnsureAssetAsync` (pinned native modules are gitignored and copied into
+`bin` on first run; a transient copy failure on the cold tree fails the whole cluster). The SECOND run on the same tree passes (assets persist). Discriminator vs a real regression: failure count clusters in asset-using tests, the exception
+is a file copy not an assertion, and any re-run is green. Do NOT rebuild a baseline worktree for this — the re-run IS the evidence; record "cold first run failed, warm run green" and move on. (Also matches the repo history note: "44 initial
+failures were the gitignored ONNX model missing from the fresh worktree at build time — environmental.")
+
 ## Gate discipline
 
 - Per-PR gates: a full-suite run showing ONLY the recorded known flakes counts GREEN
