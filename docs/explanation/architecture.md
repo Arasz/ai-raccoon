@@ -301,7 +301,6 @@ sequenceDiagram
         S->>L: PRAGMA quick_check on remote
         S->>L: ATTACH DATABASE remote
         S->>L: INSERT OR IGNORE entries (merge)
-        S->>L: INSERT ... ON CONFLICT settings (merge)
         S->>L: INSERT OR IGNORE sync_tombstones (merge)
         S->>L: DELETE FROM entries WHERE hash IN tombstones
         S->>L: GC old tombstones
@@ -323,6 +322,10 @@ sequenceDiagram
     Note right of S: release gate
     S-->>T: SyncResult(sent, received, reindexed)
 ```
+
+**Settings never sync:** the `settings` table (cloud credentials, embedding endpoint/key)
+is stripped from every snapshot before it's pushed and is never read from a pulled
+remote — settings stay per-machine in both directions (ADR 0014).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.

@@ -359,7 +359,8 @@ Auth failures map to `sync-auth-failed:` with a "run `az login`" / "run `aws con
 never accepted on the command line; the prompt-based methods read from stdin (an empty
 answer aborts with exit 1 and persists nothing). Only one provider is active at a time
 (`sync add` clears the other provider's rows), and switching modes clears the other
-mode's rows — a stale secret row must never survive to spread via the settings merge.
+mode's rows — settings never leave the local machine (ADR 0014), but a stale secret row
+left behind on this one is still a needless liability once its mode is no longer in use.
 
 | Method | Configure with | Stored in the settings table | Auth at sync time | On failure |
 |---|---|---|---|---|
