@@ -65,8 +65,9 @@ public sealed class SyncTools(
             {
                 var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
                 var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
+                var envelope = await WrapAsync(syncResult, cancellationToken);
                 activity.RecordInvocation();
-                return await WrapAsync(syncResult, cancellationToken);
+                return envelope;
             }
             catch (SyncNotConfiguredException ex)
             {

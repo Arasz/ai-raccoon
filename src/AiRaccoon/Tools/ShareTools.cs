@@ -53,8 +53,9 @@ public sealed class ShareTools(
 
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
+            var envelope = await WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(result, cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -122,8 +123,9 @@ public sealed class ShareTools(
             {
                 var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false);
+                var promoteEnvelope = await WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
                 activity.RecordInvocation();
-                return await WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
+                return promoteEnvelope;
             }
 
             var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
@@ -144,9 +146,10 @@ public sealed class ShareTools(
                         .ConfigureAwait(false);
                 }
             }
+            var envelope = await WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
 
             activity.RecordInvocation();
-            return await WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {

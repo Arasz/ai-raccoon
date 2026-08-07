@@ -68,9 +68,10 @@ public sealed class WatchTools(
                 activity.RecordError(ex);
                 throw new McpException($"path-not-found: {ex.Message}");
             }
+            var envelope = await WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
 
             activity.RecordInvocation();
-            return await WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -93,8 +94,9 @@ public sealed class WatchTools(
             await RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
             var states = await watch.StatusAsync(projectId, cancellationToken);
+            var envelope = await WrapAsync(new WatchStatusResult(states), cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(new WatchStatusResult(states), cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
@@ -118,8 +120,9 @@ public sealed class WatchTools(
             await RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
             await watch.RemoveAsync(projectId, path, cancellationToken);
+            var envelope = await WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
             activity.RecordInvocation();
-            return await WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
+            return envelope;
         }
         catch (Exception ex)
         {
