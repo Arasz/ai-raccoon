@@ -39,6 +39,14 @@ common response envelope that surfaces what is waiting.
   greatest item count; ordinal-smallest id breaks ties) and the store evicts its lowest
   score, oldest first. A crash between upsert and eviction may leave the queue one over
   cap; the next propose loop self-heals.
+  Reservations are enforced *by construction*, not by a separate check in the eviction
+  path: whenever eviction fires the queue is over cap, so some project necessarily
+  exceeds cap ÷ n, and the uniform greatest-count rule always picks that project (or a
+  tied one) — a project within its reservation is unreachable as a victim (see #117
+  item 5 / `PromotionCapacityPolicyTests.EvictionTarget_NeverPicksAProjectAtOrBelowItsReservation`).
+  `PromotionCapacityPolicy.CapacityInfo` is the reporting surface for this — per-project
+  `Reserved`/`Used`/`Borrowing`, surfaced in `GetMetaAsync`'s `ResponseMeta.CapacityByProject`
+  — not an enforcement gate.
 - **Review surface.** `memory_promotion_list` shows the queue; `memory_promotion_discard`
   drops rows or a whole project's queue. The background extraction loop (propose mode)
   fills the queue on its schedule.

@@ -42,7 +42,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
             description: "Rows discarded from the queue by the agent");
         Meter.CreateObservableGauge(
             "ai_raccoon_queue_capacity_utilization",
-            () => _utilization,
+            () => Volatile.Read(ref _utilization),
             description: "Queue occupancy against the cap (1.0 = full)");
     }
 
@@ -70,7 +70,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         _waitSeconds.Record(waitSeconds);
     }
 
-    public void RecordUtilization(double ratio) => _utilization = ratio;
+    public void RecordUtilization(double ratio) => Volatile.Write(ref _utilization, ratio);
 
     public void Dispose() => Meter.Dispose();
 }

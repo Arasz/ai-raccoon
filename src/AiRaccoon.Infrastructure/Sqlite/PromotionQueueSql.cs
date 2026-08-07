@@ -15,6 +15,12 @@ internal static class PromotionQueueSql
                                      updated_at = excluded.updated_at
                                  """;
 
+    /// <summary>Hashes already queued for this project, restricted to the candidate batch — the pre-upsert snapshot UpsertAsync diffs against to report a genuine insert count.</summary>
+    public const string ExistingHashes = """
+                                         SELECT hash FROM promotion_queue
+                                         WHERE project_id = @ProjectId AND hash IN @Hashes
+                                         """;
+
     public const string List = """
                                SELECT project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
                                       source_file AS SourceFile, score AS Score, reasons AS Reasons,

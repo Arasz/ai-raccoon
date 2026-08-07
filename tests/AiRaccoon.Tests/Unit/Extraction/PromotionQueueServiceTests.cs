@@ -76,6 +76,20 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Propose_ReProposingTheSameHash_RecordsZeroDelta_NotAnUpsertCount()
+    {
+        await _service.ProposeAsync("acme", [Candidate("h1", "fact one", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        var outcome = await _service.ProposeAsync("acme",
+            [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
+
+        outcome.Upserted.ShouldBe(0, "h1 already occupied a queue slot; the queue did not grow");
+        _metrics.QueuedDeltas.ShouldBe([("acme", 1), ("acme", 0)],
+            "RecordQueued must report the real queue-size delta, not the SQLite conflict-update count");
+    }
+
+    [Fact]
     public async Task Propose_AtCap_EvictsLowestScoreFromGreatestCountProject()
     {
         await SetCapAsync(4, TestContext.Current.CancellationToken);
@@ -227,6 +241,30 @@ public sealed class PromotionQueueServiceTests : IDisposable
         meta.WaitingPromotionsCount.ShouldBe(1);
         meta.PromotionsWaitTimeSeconds.ShouldBe(30);
         meta.WaitingByProject.ShouldBe(new Dictionary<string, int> { ["acme"] = 1 });
+    }
+
+    [Fact]
+    public async Task GetMeta_SurfacesPerProjectCapacityInfo()
+    {
+        await SetCapAsync(100, TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("acme",
+            [Candidate("a1", "a1", 1.0), Candidate("a2", "a2", 2.0), Candidate("a3", "a3", 3.0)],
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("other",
+            [Candidate("o1", "o1", 1.0)], TestContext.Current.CancellationToken);
+
+        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
+
+        meta.CapacityByProject.ShouldNotBeNull();
+        meta.CapacityByProject!["acme"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 3, Borrowing: false));
+        meta.CapacityByProject["other"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 1, Borrowing: false));
+    }
+
+    [Fact]
+    public async Task GetMeta_EmptyQueue_HasNoCapacityInfo()
+    {
+        (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
+            .CapacityByProject.ShouldBeNull();
     }
 
     [Fact]
