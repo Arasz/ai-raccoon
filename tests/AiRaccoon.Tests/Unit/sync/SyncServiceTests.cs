@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 
@@ -80,7 +81,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
     }
@@ -101,7 +102,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         result.Sent.ShouldBeGreaterThanOrEqualTo(0);
@@ -149,7 +150,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Now simulate a remote change — push different content to the cloud.
@@ -177,7 +178,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var count = conn.CreateCommand();
             count.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NULL";
-            var total = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var totalScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            totalScalar.ShouldNotBeNull();
+            var total = (long)totalScalar;
             total.ShouldBeGreaterThanOrEqualTo(1);
         }
     }
@@ -221,7 +224,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Delete locally and record a tombstone.
@@ -249,7 +252,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var check = conn.CreateCommand();
             check.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'will-delete'";
-            var count = (long)(await check.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var countScalar = await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            countScalar.ShouldNotBeNull();
+            var count = (long)countScalar;
             count.ShouldBe(0, "Deleted entry must not be resurrected by sync.");
         }
     }
@@ -288,7 +293,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Verify the cloud object does NOT contain the workspace row.
@@ -303,7 +308,9 @@ public class SyncServiceTests : IDisposable
                 await remoteConn.OpenAsync(TestContext.Current.CancellationToken);
                 await using var count = remoteConn.CreateCommand();
                 count.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL";
-                var wsCount = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+                var wsCountScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+                wsCountScalar.ShouldNotBeNull();
+                var wsCount = (long)wsCountScalar;
                 wsCount.ShouldBe(0, "Workspace rows must not appear in synced snapshots.");
             }
             finally
@@ -350,7 +357,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Check that the merged row was reindexed (embed_state reset to 'pending').
@@ -359,7 +366,7 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var check = conn.CreateCommand();
             check.CommandText = "SELECT embed_state FROM entries WHERE hash = 'row-a'";
-            var state = (string?)(await check.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var state = (string?)await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
             state.ShouldBe("pending",
                 "Merged rows must be reindexed (embed_state 'pending' so embed queue picks them up).");
         }
@@ -396,7 +403,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // The cloud snapshot must not contain the workspace row.
@@ -411,7 +418,9 @@ public class SyncServiceTests : IDisposable
                 await remoteConn.OpenAsync(TestContext.Current.CancellationToken);
                 await using var count = remoteConn.CreateCommand();
                 count.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NOT NULL";
-                var wsRows = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+                var wsRowsScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+                wsRowsScalar.ShouldNotBeNull();
+                var wsRows = (long)wsRowsScalar;
                 wsRows.ShouldBe(0, "Workspace rows must not leak into sync snapshots.");
             }
             finally
@@ -466,7 +475,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Both rows should exist after merge.
@@ -475,7 +484,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var count = conn.CreateCommand();
             count.CommandText = "SELECT COUNT(*) FROM entries WHERE workspace_id IS NULL";
-            var total = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var totalScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            totalScalar.ShouldNotBeNull();
+            var total = (long)totalScalar;
             total.ShouldBe(2, "Both local and remote rows should exist after merge.");
         }
     }
@@ -494,7 +505,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // Corrupt the remote with invalid bytes.
@@ -522,7 +533,9 @@ public class SyncServiceTests : IDisposable
             await conn.OpenAsync(TestContext.Current.CancellationToken);
             await using var check = conn.CreateCommand();
             check.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'real-hash'";
-            var count = (long)(await check.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var countScalar = await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            countScalar.ShouldNotBeNull();
+            var count = (long)countScalar;
             count.ShouldBe(1, "Local data must survive corrupt remote snapshot.");
         }
     }
@@ -554,7 +567,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         // The cloud object must not contain the settings row (credential exfiltration).
@@ -568,7 +581,9 @@ public class SyncServiceTests : IDisposable
             await remoteConn.OpenAsync(TestContext.Current.CancellationToken);
             await using var count = remoteConn.CreateCommand();
             count.CommandText = "SELECT COUNT(*) FROM settings";
-            var settingsCount = (long)(await count.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+            var settingsCountScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            settingsCountScalar.ShouldNotBeNull();
+            var settingsCount = (long)settingsCountScalar;
             settingsCount.ShouldBe(0, "Settings rows (cloud credentials, embedding API key) must never leave the bank.");
         }
         finally
@@ -625,7 +640,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
 
         // Must not throw merging a remote with an empty settings table.
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
@@ -659,7 +674,7 @@ public class SyncServiceTests : IDisposable
                 var c = new SqliteConnection($"Data Source={path}");
                 await c.OpenAsync(ct);
                 return c;
-            }, TimeProvider.System, null!);
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 

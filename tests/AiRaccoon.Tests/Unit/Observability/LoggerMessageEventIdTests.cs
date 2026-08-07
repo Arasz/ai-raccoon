@@ -31,9 +31,8 @@ public class LoggerMessageEventIdTests
             .SelectMany(a => a.GetTypes())
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
                                            BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-            .Select(m => (Method: m, Attribute: m.GetCustomAttribute<LoggerMessageAttribute>()))
-            .Where(x => x.Attribute is not null)
-            .Select(x => (x.Attribute!.EventId, Location: $"{x.Method.DeclaringType!.FullName}.{x.Method.Name}"))
+            .SelectMany(m => m.GetCustomAttributes<LoggerMessageAttribute>()
+                .Select(a => (a.EventId, Location: $"{m.DeclaringType?.FullName ?? "<unknown>"}.{m.Name}")))
             .ToList();
 
         entries.ShouldNotBeEmpty();
