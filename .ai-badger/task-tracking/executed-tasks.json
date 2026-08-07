@@ -949,11 +949,12 @@
           "branch": "task/fix-missing-data-in-promotion",
           "risk": false,
           "startedAt": "2026-08-06T20:23:39.079643+00:00",
-          "finishedAt": null,
-          "state": "STARTED",
+          "finishedAt": "2026-08-07T11:10:51.081672+00:00",
+          "state": "FINISHED",
           "trackingSource": "hermes",
           "resumeCommand": "hermes --resume 20260806_221408_da0975",
-          "resumeAttempts": []
+          "resumeAttempts": [],
+          "stateJsonUpdated": true
       },
       {
           "taskId": "sqli-impro",
@@ -984,6 +985,21 @@
           "state": "STARTED",
           "trackingSource": "claude",
           "resumeCommand": "claude --resume cd899fae-395f-45ff-bc58-6057b2d651d9",
+          "resumeAttempts": []
+      },
+      {
+          "taskId": "airaccoon-mem-check",
+          "title": "Watch removal must cancel the in-flight scan; re-chunking must not duplicate entries",
+          "sessionId": "4470297c-c39c-46b6-846e-deac78696f42",
+          "transcriptPath": null,
+          "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
+          "branch": "task/airaccoon-mem-check-watch-loop",
+          "risk": false,
+          "startedAt": "2026-08-07T11:10:58.940842+00:00",
+          "finishedAt": null,
+          "state": "STARTED",
+          "trackingSource": "claude",
+          "resumeCommand": "claude --resume 4470297c-c39c-46b6-846e-deac78696f42",
           "resumeAttempts": []
     }
   ]

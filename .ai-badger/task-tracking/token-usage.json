@@ -4762,7 +4762,19 @@
                   }
               },
               "latest": {
-                  "timestamp": "2026-08-06T20:23:39.079210+00:00",
+                  "timestamp": "2026-08-07T11:10:51.081653+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "finish": {
+                  "timestamp": "2026-08-07T11:10:51.081653+00:00",
                   "contextTokens": 0,
                   "assistantMessages": 0,
                   "byModel": {},
@@ -4921,6 +4933,65 @@
                       "cacheCreationTokens": 0
                   }
               }
+          }
+      },
+      {
+          "taskId": "airaccoon-mem-check",
+          "subagents": [
+              {
+                  "description": "general-purpose(sonnet): traced removal path; confirmed A/B, refuted C, found no cross-process single-flight",
+                  "at": "2026-08-07T11:16:51.824763+00:00",
+                  "totalTokens": 109968
+              },
+              {
+                  "description": "test-engineer(sonnet): watch test-coverage gap audit + project test idioms",
+                  "at": "2026-08-07T11:16:51.877949+00:00",
+                  "totalTokens": 145660
+              }
+          ],
+          "grade": null,
+          "sessionId": "4470297c-c39c-46b6-846e-deac78696f42",
+          "trackingSource": "claude",
+          "checkpoints": {
+              "start": {
+                  "timestamp": "2026-08-07T11:10:58.940191+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              },
+              "latest": {
+                  "timestamp": "2026-08-07T11:10:58.940191+00:00",
+                  "contextTokens": 0,
+                  "assistantMessages": 0,
+                  "byModel": {},
+                  "cumulative": {
+                      "inputTokens": 0,
+                      "outputTokens": 0,
+                      "cacheReadTokens": 0,
+                      "cacheCreationTokens": 0
+                  }
+              }
+          },
+          "usage": {
+              "outputByModel": {},
+              "modelMix": {},
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "cacheReadTokens": 0,
+              "cacheCreationTokens": 0,
+              "cacheEfficiency": null,
+              "subagentTokens": 255628,
+              "contextTokensAtStart": 0,
+              "contextTokensAtFinish": 0,
+              "contextGrowth": 0,
+              "mainSessionTotal": 0,
+              "grandTotal": 0
           }
     }
   ]

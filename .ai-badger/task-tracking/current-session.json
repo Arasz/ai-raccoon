@@ -1,10 +1,10 @@
 {
     "sessions": {
-        "56d7a4ab-b35c-4389-b891-54b5959ce0e1": {
-            "transcriptPath": "/Users/arasz/.claude/projects/-Users-arasz-RiderProjects-ai-raccoon/56d7a4ab-b35c-4389-b891-54b5959ce0e1.jsonl",
+        "1d166863-019d-4b48-a339-8d69973fb6a8": {
+            "transcriptPath": "/Users/arasz/.claude/projects/-Users-arasz-RiderProjects-ai-raccoon/1d166863-019d-4b48-a339-8d69973fb6a8.jsonl",
             "cwd": "/Users/arasz/RiderProjects/ai-raccoon",
-            "pid": 12862,
-            "recordedAt": "2026-08-07T10:58:00.308970+00:00"
+            "pid": 33547,
+            "recordedAt": "2026-08-07T11:13:22.238147+00:00"
         }
     }
 }
