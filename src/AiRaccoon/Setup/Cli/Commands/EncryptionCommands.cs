@@ -15,7 +15,7 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     collection with owner defaults, per-run-only -t token, reachability validation, and the
 ///     rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
 /// </summary>
-public sealed partial class EncryptionCommands : IEncryptionCommands
+public sealed partial class EncryptionCommands
 {
     private const string DefaultProjectId = "613165e6-7947-49e0-889b-b49d007c5b85";
     private const string DefaultSecretId = "f1d3c8e5-5391-4aef-8611-b49d007c8702";

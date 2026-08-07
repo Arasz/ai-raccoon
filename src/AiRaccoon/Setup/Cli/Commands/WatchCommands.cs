@@ -8,7 +8,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency (IWatchStore).</summary>
-public sealed class WatchCommands(IWatchStore watchStore) : IWatchCommands
+public sealed class WatchCommands(IWatchStore watchStore)
 {
     private readonly IWatchStore _watchStore = watchStore ?? ThrowHelper.ThrowArgumentNullException<IWatchStore>(nameof(watchStore));
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store,

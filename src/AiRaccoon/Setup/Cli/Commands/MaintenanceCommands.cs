@@ -12,7 +12,7 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     channel for the maintenance service. list additionally reports live bank disk stats
 ///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar).
 /// </summary>
-public sealed class MaintenanceCommands(SqliteConnectionFactory factory) : IMaintenanceCommands
+public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
 {
     private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(factory.BankPath)!, "maintenance-stats.json");
 

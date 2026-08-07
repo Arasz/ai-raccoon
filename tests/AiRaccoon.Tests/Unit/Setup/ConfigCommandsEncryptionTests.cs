@@ -66,9 +66,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
         var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            stdin ?? TextReader.Null, encryptionCommands: encryptionCommands,
-            cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 

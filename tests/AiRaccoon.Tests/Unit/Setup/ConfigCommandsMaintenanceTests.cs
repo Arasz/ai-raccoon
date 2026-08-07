@@ -38,9 +38,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await ConfigCommands.RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr,
-            TextReader.Null, maintenance: new MaintenanceCommands(_factory),
-            cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands(maintenance: new MaintenanceCommands(_factory)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
