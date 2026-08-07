@@ -239,4 +239,87 @@ public sealed class WatchCatchUpTests
         records.ShouldContain(r => r.Id.Id == 311);
         records.ShouldNotContain(r => r.Id.Id == 310);
     }
+
+    [Fact]
+    public async Task EnqueueInitialScan_WhenTheLeaseIsHeldElsewhere_EnqueuesNothing()
+    {
+        using var dir = TempDir.New("catchup-lease-denied");
+        WriteAllText(dir.File("a.md"), "zephyrone");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        stack.ScanLease.AcquireResult = false;
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        stack.Store.ListFilesCalls.ShouldBe(0);
+    }
+
+    /// <summary>A denied acquire must not release: the lease belongs to the process that holds it.</summary>
+    [Fact]
+    public async Task EnqueueInitialScan_WhenTheLeaseIsHeldElsewhere_DoesNotReleaseTheHoldersLease()
+    {
+        using var dir = TempDir.New("catchup-lease-no-release");
+        WriteAllText(dir.File("a.md"), "zephyrone");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        stack.ScanLease.AcquireResult = false;
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+
+        stack.ScanLease.ReleaseCalls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_WhenTheLeaseIsLostMidScan_StopsEnqueuing()
+    {
+        using var dir = TempDir.New("catchup-lease-lost");
+        WriteAllText(dir.File("a.md"), "zephyrone");
+        WriteAllText(dir.File("b.md"), "zephyrtwo");
+        WriteAllText(dir.File("c.md"), "zephyrthree");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        // Every clock read jumps a full TTL, so the first per-file renewal check fires.
+        stack.Time.AutoAdvanceAmount = SqliteWatchScanLease.LeaseTtl;
+        stack.ScanLease.RenewResults.Enqueue(false);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        stack.ScanLease.ReleaseCalls.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_WhileTheLeaseKeepsRenewing_IngestsEveryFile()
+    {
+        using var dir = TempDir.New("catchup-lease-renewed");
+        WriteAllText(dir.File("a.md"), "zephyrone");
+        WriteAllText(dir.File("b.md"), "zephyrtwo");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        stack.Time.AutoAdvanceAmount = SqliteWatchScanLease.LeaseTtl;
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.Count.ShouldBe(2);
+    }
 }
