@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -871,6 +872,275 @@ public class SyncServiceTests : IDisposable
             }
 
             return inner.PushAsync(objectKey, data, etag, cancellationToken);
+        }
+    }
+
+    //
+    // Issue #121: pull unconditionally clobbers local settings from the remote snapshot.
+    // Settings hold the sync credentials and the embedding API key/base URL — a remote
+    // snapshot must never be allowed to overwrite them, whether the source is a hostile
+    // writer to the shared object store or a stale pre-#88 replica.
+    //
+    [Fact]
+    public async Task MemorySync_PullWithHostileRemoteSettings_DoesNotOverwriteLocalSettings()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Remote snapshot carries a hostile embedding.baseUrl pointing at an attacker host.
+        var remoteSeedPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = $"""
+                                     INSERT INTO settings (key, value) VALUES ('{EmbeddingSettingsKeys.BaseUrl}', 'http://attacker.example.invalid')
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            cloud.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        // Local bank trusts its own embedding endpoint.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = $"""
+                                  INSERT INTO settings (key, value) VALUES ('{EmbeddingSettingsKeys.BaseUrl}', 'https://api.trusted-embeddings.example')
+                                  """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
+        {
+            await conn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var check = conn.CreateCommand();
+            check.CommandText = $"SELECT value FROM settings WHERE key = '{EmbeddingSettingsKeys.BaseUrl}'";
+            var value = (string?)await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            value.ShouldBe("https://api.trusted-embeddings.example",
+                "A remote settings row must never overwrite the local machine's settings.");
+        }
+    }
+
+    /// <summary>Builds a valid SQLite file with page 10 overwritten by garbage: the file still opens, but PRAGMA quick_check reports damage instead of throwing.</summary>
+    private static async Task<string> CreateCorruptSnapshotAsync(CancellationToken ct)
+    {
+        var path = Path.GetTempFileName();
+        // Pooling=False: without it, Microsoft.Data.Sqlite keeps this connection's native
+        // handle (and its in-memory page cache) alive in the pool after Dispose, so a later
+        // connection on the same path can read stale cached pages instead of the corrupted
+        // bytes the FileStream write below puts on disk.
+        await using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            await conn.OpenAsync(ct);
+            await using (var pragma = conn.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA page_size = 4096";
+                await pragma.ExecuteNonQueryAsync(ct);
+            }
+
+            await using (var create = conn.CreateCommand())
+            {
+                create.CommandText = "CREATE TABLE filler (id INTEGER PRIMARY KEY, value TEXT)";
+                await create.ExecuteNonQueryAsync(ct);
+            }
+
+            for (var i = 0; i < 800; i++)
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = "INSERT INTO filler (value) VALUES (@v)";
+                insert.Parameters.AddWithValue("@v", new string('x', 200) + i);
+                await insert.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        await using (var fs = new FileStream(path, FileMode.Open, FileAccess.Write))
+        {
+            fs.Seek(9 * 4096, SeekOrigin.Begin);
+            var garbage = new byte[4096];
+            Array.Fill(garbage, (byte)0xFF);
+            await fs.WriteAsync(garbage, ct);
+        }
+
+        return path;
+    }
+
+    //
+    // Issue #115: quick_check never runs on the bytes actually pushed by the merge branch.
+    // A genuinely corrupt VACUUM INTO source fails VACUUM itself, so this substitutes a
+    // pre-corrupted file at the exact call ordinal the merge-branch integrity check uses —
+    // the same openReadOnly seam SyncService already calls quick_check through.
+    //
+    [Fact]
+    public async Task MemorySync_MergeBranchWithExistingRemote_CorruptMergedSnapshot_RejectedBeforeUpload()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remoteSeedPath = Path.GetTempFileName();
+        byte[] remoteSeedBytes;
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            remoteSeedBytes = await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken);
+            cloud.Set("test-object", remoteSeedBytes);
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            // openReadOnly call ordinals: 1 = local snapshot check, 2 = remote snapshot
+            // check, 3 = merged-snapshot check. That third call is substituted here.
+            var callCount = 0;
+
+            async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
+            {
+                callCount++;
+                var actualPath = callCount == 3 ? corruptPath : path;
+                var c = new SqliteConnection($"Data Source={actualPath}");
+                await c.OpenAsync(ct);
+                return c;
+            }
+
+            var service = new SyncService(cloud,
+                ct => CreateAndOpenAsync(BankPath, ct),
+                OpenSnapshotAsync,
+                OpenReadOnly,
+                TimeProvider.System, NullLogger<SyncService>.Instance);
+
+            await Should.ThrowAsync<SyncCorruptFileException>(() =>
+                service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
+
+            var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+            cloudObj.ShouldNotBeNull();
+            cloudObj.Data.ShouldBe(remoteSeedBytes,
+                "A merged snapshot that fails its integrity check must never be pushed.");
+        }
+        finally
+        {
+            File.Delete(corruptPath);
+        }
+    }
+
+    //
+    // Same regression as above, but for the conflict-retry path: the corrupt file is
+    // substituted only at the retry branch's own integrity-check call, so the first
+    // (valid) merge attempt still runs far enough to hit the forced conflict.
+    //
+    [Fact]
+    public async Task MemorySync_ConflictRetryBranch_CorruptRetrySnapshot_RejectedBeforeUpload()
+    {
+        var inner = new FakeCloudStore();
+        var cloud = new ConflictOnceCloudStore(inner);
+
+        var remoteSeedPath = Path.GetTempFileName();
+        byte[] remoteSeedBytes;
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            remoteSeedBytes = await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken);
+            inner.Set("test-object", remoteSeedBytes);
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            // openReadOnly call ordinals: 1 = local check, 2 = remote check (initial pull),
+            // 3 = merged-snapshot check (first attempt — left valid so the conflict/retry
+            // path is actually reached), 4 = remote check (post-conflict re-pull), 5 =
+            // merged-snapshot check on the retry path. That fifth call is substituted here.
+            var callCount = 0;
+
+            async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
+            {
+                callCount++;
+                var actualPath = callCount == 5 ? corruptPath : path;
+                var c = new SqliteConnection($"Data Source={actualPath}");
+                await c.OpenAsync(ct);
+                return c;
+            }
+
+            var service = new SyncService(cloud,
+                ct => CreateAndOpenAsync(BankPath, ct),
+                OpenSnapshotAsync,
+                OpenReadOnly,
+                TimeProvider.System, NullLogger<SyncService>.Instance);
+
+            await Should.ThrowAsync<SyncCorruptFileException>(() =>
+                service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
+
+            cloud.ConflictWasRaised.ShouldBeTrue("The test must actually exercise the conflict-retry branch.");
+
+            var cloudObj = await inner.PullAsync("test-object", TestContext.Current.CancellationToken);
+            cloudObj.ShouldNotBeNull();
+            cloudObj.Data.ShouldBe(remoteSeedBytes,
+                "A corrupt retry-branch snapshot must never be pushed.");
+        }
+        finally
+        {
+            File.Delete(corruptPath);
         }
     }
 

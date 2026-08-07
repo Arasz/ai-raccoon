@@ -62,16 +62,7 @@ public partial class SyncService(
             await StripNonSyncableAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
 
             // 2. Integrity check on the snapshot.
-            await using (var ro = await openReadOnly(localSnapshot, cancellationToken).ConfigureAwait(false))
-            {
-                await using var integrity = ro.CreateCommand();
-                integrity.CommandText = "PRAGMA quick_check";
-                var result = (string)(await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-                if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new SyncCorruptFileException($"Local snapshot integrity check failed: {result}");
-                }
-            }
+            await EnsureSnapshotIntegrityAsync(localSnapshot, "Local", cancellationToken).ConfigureAwait(false);
 
             var snapshotBytes = await File.ReadAllBytesAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
 
@@ -100,6 +91,7 @@ public partial class SyncService(
                     }
 
                     await StripNonSyncableAsync(mergedPath, cancellationToken).ConfigureAwait(false);
+                    await EnsureSnapshotIntegrityAsync(mergedPath, "Merged", cancellationToken).ConfigureAwait(false);
                     snapshotBytes = await File.ReadAllBytesAsync(mergedPath, cancellationToken).ConfigureAwait(false);
                 }
                 finally
@@ -155,6 +147,7 @@ public partial class SyncService(
                             }
 
                             await StripNonSyncableAsync(retryPath, cancellationToken).ConfigureAwait(false);
+                            await EnsureSnapshotIntegrityAsync(retryPath, "Merged", cancellationToken).ConfigureAwait(false);
                             snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken).ConfigureAwait(false);
                         }
                         finally
@@ -264,18 +257,9 @@ public partial class SyncService(
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                // Push strips settings, so a current remote carries none. A pre-strip remote still
-                // clobbers local unconditionally — there is no updated_at to arbitrate on.
-                await using (var mergeSettings = conn.CreateCommand())
-                {
-                    mergeSettings.CommandText = """
-                                                INSERT INTO settings (key, value)
-                                                SELECT key, value FROM remote.settings
-                                                WHERE true
-                                                ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                                                """;
-                    await mergeSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
+                // Settings are per-machine (cloud credentials, embedding endpoint/key) and never
+                // cross the sync boundary in either direction — push already strips them, and
+                // pull must not read remote.settings at all.
 
                 // Merge sync_tombstones: union.
                 await using (var mergeTombstones = conn.CreateCommand())
@@ -373,6 +357,19 @@ public partial class SyncService(
         await using var vac = snap.CreateCommand();
         vac.CommandText = "VACUUM";
         await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs PRAGMA quick_check against a snapshot file and throws SyncCorruptFileException when the result is not "ok". Every path that pushes a snapshot must call this.</summary>
+    private async Task EnsureSnapshotIntegrityAsync(string snapshotPath, string label, CancellationToken cancellationToken)
+    {
+        await using var ro = await openReadOnly(snapshotPath, cancellationToken).ConfigureAwait(false);
+        await using var integrity = ro.CreateCommand();
+        integrity.CommandText = "PRAGMA quick_check";
+        var result = (string)(await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SyncCorruptFileException($"{label} snapshot integrity check failed: {result}");
+        }
     }
 
     private async Task WaitForWalCheckpointAsync(CancellationToken cancellationToken)
