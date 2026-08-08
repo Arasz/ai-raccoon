@@ -298,7 +298,7 @@ public sealed class MemoryToolsAccessModeTests
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),
         (_, _) => Task.FromResult<SqliteConnection>(null!), (_, _) => Task.FromResult<SqliteConnection>(null!), TimeProvider.System, null!)
     {
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new SyncResult(0, 0, 0));
     }

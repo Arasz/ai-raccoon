@@ -286,11 +286,15 @@ public class MemoryToolsTests
         _store.Shared.ShouldBe(("acme", "h1"));
     }
 
-    // The CallToolFilter maps this to "sync-not-configured:" (see ToolRefusalsTests) — a direct
-    // call sees the domain exception itself.
+    // SyncTools no longer decides IsConfigured itself (SyncService does, via NullCloudStore —
+    // see SyncServiceTests.MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured); this
+    // proves the tool doesn't swallow or wrap whatever the service throws. The CallToolFilter
+    // maps the propagated exception to "sync-not-configured:" on the wire (see ToolRefusalsTests).
     [Fact]
-    public async Task Sync_WithoutCredentials_ThrowsSyncNotConfigured()
+    public async Task Sync_WhenServiceThrowsSyncNotConfigured_PropagatesItUnchanged()
     {
+        _sync.Exception = new SyncNotConfiguredException();
+
         var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             _syncTools.Sync("acme", TestContext.Current.CancellationToken));
 
@@ -308,7 +312,9 @@ public class MemoryToolsTests
         result.Data!.Sent.ShouldBe(3);
         result.Data!.Received.ShouldBe(2);
         result.Data!.Reindexed.ShouldBe(5);
-        _sync.LastObjectKey.ShouldBe("memory-acme.db");
+        // No objectKey override configured — the tool passes null through; SyncService owns the
+        // memory-{projectId}.db default now (see SyncServiceTests.MemorySync_WithNoObjectKey_DefaultsToMemoryDashProjectId).
+        _sync.LastObjectKey.ShouldBeNull();
     }
 
     [Fact]
@@ -569,7 +575,7 @@ public class MemoryToolsTests
 
         public string? LastObjectKey { get; private set; }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
             CancellationToken cancellationToken = default)
         {
             LastObjectKey = objectKey;

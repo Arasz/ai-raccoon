@@ -24,16 +24,17 @@ public partial class SyncService(
     private const int MaxPushRetries = 3;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
+    /// <summary>Defaults <paramref name="objectKey" /> to "memory-{projectId}.db" when the caller has none configured — the naming convention is the service's concern, not the caller's.</summary>
+    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
+        var key = string.IsNullOrWhiteSpace(objectKey) ? $"memory-{projectId}.db" : objectKey;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await SyncCycleAsync(projectId, objectKey, cancellationToken).ConfigureAwait(false);
+            return await SyncCycleAsync(projectId, key, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -47,6 +48,14 @@ public partial class SyncService(
         // F13: the cloud store is resolved per call from the current settings rows —
         // `sync add/remove` take effect without a restart.
         var cloud = await resolveCloud(cancellationToken).ConfigureAwait(false);
+
+        // Fail fast, before any local VACUUM/read work: an unconfigured sync is guaranteed to
+        // fail on push anyway (NullCloudStore.PushAsync throws), so there is no reason to touch
+        // the local bank first.
+        if (cloud is NullCloudStore)
+        {
+            throw new SyncNotConfiguredException();
+        }
 
         // 1. VACUUM INTO a temp snapshot of the current local bank.
         var localSnapshot = Path.GetTempFileName();
