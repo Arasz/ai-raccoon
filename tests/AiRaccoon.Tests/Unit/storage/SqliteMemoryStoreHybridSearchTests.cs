@@ -93,6 +93,37 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Search_VectorOnly_ReturnsExactlyLimitResults_WithCorrectSnippets_OutOfALargerCandidateSet()
+    {
+        // Laziness proof (perf: snippet computation deferred to ranking survivors): N=8 vector-only
+        // candidates compete for a Limit=3 query. Every returned result must still carry the exact
+        // snippet SnippetFallback.From would have produced eagerly — deferral must not change output.
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+
+        var entries = new List<MemoryEntry>();
+        for (var i = 0; i < 8; i++)
+        {
+            var longValue = string.Join(" ", Enumerable.Range(1, 40).Select(n =>
+                $"sentence number {n} candidate {i} with enough prose to exceed the two hundred character window"));
+            entries.Add(await _store.WriteAsync(
+                new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken));
+        }
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "fast canine", SearchScope.Project, Limit: 3, MinScore: 0.0,
+                RrfK: 60, FtsWeight: 0, VectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        results.Count.ShouldBe(3, "3 survivors out of 8 candidates");
+        foreach (var hit in results)
+        {
+            var source = entries.Single(e => e.Hash == hit.Hash);
+            hit.Snippet.ShouldBe(SnippetFallback.From(source.Value, hit.Hash));
+        }
+    }
+
+    [Fact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
         // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
