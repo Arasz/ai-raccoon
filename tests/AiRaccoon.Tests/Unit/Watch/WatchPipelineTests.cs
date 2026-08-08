@@ -276,15 +276,18 @@ public sealed class WatchPipelineTests
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
         // Backing off: a tick before the backoff elapses must not attempt a digest.
+        // DeletedPaths counts attempts: the executor deletes-then-reingests on every real
+        // attempt, regardless of the injected ingest failure, so it stands in for "an
+        // attempt ran" without needing a dedicated counter.
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
         stack.Time.Advance(TimeSpan.FromMilliseconds(500));
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.Count.ShouldBe(0);
-        stack.Extension.SourceChanges.Count.ShouldBe(1);
+        stack.Memory.DeletedPaths.Count.ShouldBe(1);
 
         stack.Time.Advance(TimeSpan.FromMilliseconds(500));
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
-        stack.Extension.SourceChanges.Count.ShouldBe(2);
+        stack.Memory.DeletedPaths.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -300,32 +303,6 @@ public sealed class WatchPipelineTests
         stack.Pipeline.GetStatuses(Project).Single().State.ShouldBe(WatchState.Healthy);
 
         stack.Pipeline.RegisterWatch(Project, dir.Path);
-        stack.Pipeline.GetStatuses(Project).Single().State.ShouldBe(WatchState.Healthy);
-    }
-
-    [Fact]
-    public async Task Loop_ExecutorFailureIsContained_HookThrowIsContained()
-    {
-        using var dir = TempDir.New("pipeline-contained");
-        var file = dir.File("a.md");
-        await File.WriteAllTextAsync(file, "v1", TestContext.Current.CancellationToken);
-        var stack = new WatchTestStack();
-        stack.Pipeline.RegisterWatch(Project, dir.Path);
-        stack.Extension.ThrowOnSourceChanged = true;
-        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
-
-        // The extension hook throws inside the digest — the tick must not propagate it.
-        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
-
-        var failed = stack.Pipeline.GetStatuses(Project).Single();
-        failed.State.ShouldBe(WatchState.Retrying);
-        failed.LastError.ShouldNotBeNull().ShouldContain("hook boom");
-
-        stack.Extension.ThrowOnSourceChanged = false;
-        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
-        stack.Time.Advance(WatchRetryPolicy.BackoffFor(1));
-        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
-
         stack.Pipeline.GetStatuses(Project).Single().State.ShouldBe(WatchState.Healthy);
     }
 

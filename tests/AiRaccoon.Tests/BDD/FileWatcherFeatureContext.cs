@@ -3,7 +3,6 @@ using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Observability;
@@ -16,9 +15,9 @@ namespace AiRaccoon.Tests.BDD;
 /// <summary>
 ///     Shared state for the file-watcher feature scenarios — one instance per scenario.
 ///     Real temp dirs under DataRoot, real SqliteMemoryStore, FakeTimeProvider-driven ticks and
-///     bounded polling for OS event delivery (R7). The watch stack is composed
-///     exactly like DI (Dependencies.RegisterMemoryServices): MemoryExtensionHost-decorated
-///     IMemoryStore, WatchPipeline/EventSource/CatchUp/HostedService, WatchTools over the guard.
+///     bounded polling for OS event delivery (R7). The watch stack is composed exactly like DI
+///     (Dependencies.RegisterMemoryServices): WatchPipeline/EventSource/CatchUp/HostedService,
+///     WatchTools over the guard, all backed directly by the base context's IMemoryStore.
 /// </summary>
 public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 {
@@ -33,8 +32,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public string RepoDir { get; }
 
     public WatchStore WatchStore { get; private set; } = null!;
-
-    public MemoryExtensionHost Host { get; private set; } = null!;
 
     public WatchPipeline Pipeline { get; private set; } = null!;
 
@@ -149,7 +146,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string projectId, string query,
         CancellationToken cancellationToken = default) =>
-        Host.SearchAsync(new SearchQuery(projectId, query), cancellationToken);
+        Store.SearchAsync(new SearchQuery(projectId, query), cancellationToken);
 
     /// <summary>Writes a file (dirs created) and stamps its mtime at the current fake time.</summary>
     public void WriteFile(string path, string content)
@@ -208,20 +205,19 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     private void ComposeStack()
     {
         WatchStore = new WatchStore(Factory);
-        Host = new MemoryExtensionHost(Store, []);
         var scanGuard = new WatchScanGuard();
         Pipeline = new WatchPipeline(new WatchScheduler(),
-            new WatchDigestExecutor(Host, WatchStore, Host, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Host,
+            new WatchDigestExecutor(Store, WatchStore, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Store,
             TimeProvider, scanGuard, NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
         CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance);
-        Hosted = new WatchHostedService(Host, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
+        Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             NullLogger<WatchHostedService>.Instance);
-        Service = new WatchService(WatchStore, Host, Pipeline, TimeProvider);
+        Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider);
         Metrics?.Dispose();
         var metrics = new ToolCallMetrics();
         Metrics = metrics;
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Host), new FakePromotionQueue()), metrics);
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue()), metrics);
     }
 }

@@ -2,7 +2,6 @@ using AiRaccoon.Core.Ingestion;
 using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
@@ -10,13 +9,12 @@ namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
 ///     Replace-by-path digest: hash-skip (SHA-256 of normalized path + content), delete-by-source-path,
-///     OnSourceChanged firing (post-hash-skip, pre-ingest), re-digest through the existing ingest path,
-///     rename = remove old path + digest new path with overwrite (D2). File gone → chunks removed.
+///     re-digest through the existing ingest path, rename = remove old path + digest new path with
+///     overwrite (D2). File gone → chunks removed.
 /// </summary>
 public sealed partial class WatchDigestExecutor(
     IMemoryStore store,
     IWatchStore watchStore,
-    MemoryExtensionHost extensionHost,
     TimeProvider timeProvider,
     ILogger<WatchDigestExecutor> logger)
 {
@@ -34,9 +32,6 @@ public sealed partial class WatchDigestExecutor(
 
         if (!File.Exists(normalized))
         {
-            await extensionHost.OnSourceChangedAsync(
-                    new SourceChangedContext(projectId, normalized, SourceChangeKind.Deleted), cancellationToken)
-                .ConfigureAwait(false);
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -52,9 +47,6 @@ public sealed partial class WatchDigestExecutor(
             return;
         }
 
-        await extensionHost.OnSourceChangedAsync(new SourceChangedContext(projectId, normalized, ToKind(kind)),
-                cancellationToken)
-            .ConfigureAwait(false);
         await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
         await store.IngestFileAsync(projectId, normalized, null, cancellationToken).ConfigureAwait(false);
         await TryEmbedPendingAsync(projectId, cancellationToken).ConfigureAwait(false);
@@ -81,16 +73,6 @@ public sealed partial class WatchDigestExecutor(
 
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (R5 contract).</summary>
     public static string ComputeHash(string normalizedPath, string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));
-
-    private static SourceChangeKind ToKind(WatchEventKind kind) =>
-        kind switch
-        {
-            WatchEventKind.Created => SourceChangeKind.Created,
-            WatchEventKind.Changed => SourceChangeKind.Changed,
-            WatchEventKind.Deleted => SourceChangeKind.Deleted,
-            WatchEventKind.Renamed => SourceChangeKind.Renamed,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-        };
 
     private async Task DeletePathAsync(string projectId, string watchPath, string path,
         CancellationToken cancellationToken)

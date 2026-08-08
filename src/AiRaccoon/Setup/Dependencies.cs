@@ -2,7 +2,6 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
@@ -12,7 +11,6 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Rating;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
@@ -52,11 +50,7 @@ public static partial class Dependencies
             services.AddSingleton<IPromotionQueueMetrics, PromotionQueueMetrics>();
             services.AddSingleton<IPromotionQueue, PromotionQueueService>();
             services.AddSingleton<IChunker, TokenizerChunker>();
-            services.AddSingleton<MemoryExtensionHost>(sp => new MemoryExtensionHost(
-                sp.GetRequiredService<SqliteMemoryStore>(),
-                [sp.GetRequiredService<RetrievalRatingExtension>()]));
-            services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<MemoryExtensionHost>());
-            services.AddSingleton<RetrievalRatingExtension>();
+            services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddSingleton(sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),

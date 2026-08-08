@@ -1,11 +1,10 @@
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Replace-by-path digest: hash-skip (R5), delete-by-source-path, rename semantics (D2), OnSourceChanged firing.</summary>
+/// <summary>Replace-by-path digest: hash-skip (R5), delete-by-source-path, rename semantics (D2).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchDigestExecutorTests
@@ -15,7 +14,7 @@ public sealed class WatchDigestExecutorTests
     private static WatchDigestExecutor Executor(WatchTestStack stack) => stack.Executor;
 
     [Fact]
-    public async Task Digest_NewFile_IngestsFingerprintsAdvancesWatermarkAndFiresHook()
+    public async Task Digest_NewFile_IngestsFingerprintsAdvancesWatermark()
     {
         using var dir = TempDir.New("digest-new");
         var file = dir.File("a.md");
@@ -35,12 +34,10 @@ public sealed class WatchDigestExecutorTests
             WatchDigestExecutor.ComputeHash(file, "hello"));
         stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(
             WatchTestStack.FixedNow.ToUnixTimeSeconds());
-        stack.Extension.SourceChanges.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges[0].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Created));
     }
 
     [Fact]
-    public async Task Digest_UnchangedContent_HashSkips_NoIngestNoHookNoFingerprintChange()
+    public async Task Digest_UnchangedContent_HashSkips_NoIngestNoFingerprintChange()
     {
         using var dir = TempDir.New("digest-skip");
         var file = dir.File("a.md");
@@ -55,7 +52,6 @@ public sealed class WatchDigestExecutorTests
             TestContext.Current.CancellationToken);
 
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges.ShouldHaveSingleItem();
         // The embed fired on the first (ingesting) digest; the hash-skip must not embed again.
         stack.Memory.EmbedCalls.ShouldHaveSingleItem();
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
@@ -100,14 +96,12 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.Ingested.Count.ShouldBe(2);
         stack.Memory.Ingested[1].Content.ShouldBe("v2");
-        stack.Extension.SourceChanges.Count.ShouldBe(2);
-        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Changed));
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "v2"));
     }
 
     [Fact]
-    public async Task Digest_FileGone_DeletesChunksAndFingerprint_AndFiresDeletedHook()
+    public async Task Digest_FileGone_DeletesChunksAndFingerprint()
     {
         using var dir = TempDir.New("digest-delete");
         var file = dir.File("a.md");
@@ -125,34 +119,12 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges.Count.ShouldBe(2);
-        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
         // The embed fired on the create-digest only; the delete-digest must not embed.
         stack.Memory.EmbedCalls.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task Digest_Delete_FiresOnSourceChangedWithDeletedKind()
-    {
-        using var dir = TempDir.New("digest-delete-hook");
-        var file = dir.File("a.md");
-        await File.WriteAllTextAsync(file, "bye", TestContext.Current.CancellationToken);
-        var stack = new WatchTestStack();
-        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
-        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
-        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
-            TestContext.Current.CancellationToken);
-
-        File.Delete(file);
-        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Deleted, null,
-            TestContext.Current.CancellationToken);
-
-        stack.Extension.SourceChanges.Count.ShouldBe(2);
-        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
-    }
-
-    [Fact]
-    public async Task Digest_DeleteOfNeverIngestedFile_IsSilentForMemory_ButFiresTheDeletedHook()
+    public async Task Digest_DeleteOfNeverIngestedFile_IsSilentForMemory()
     {
         using var dir = TempDir.New("digest-delete-never");
         var file = dir.File("never.md");
@@ -164,8 +136,6 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         stack.Memory.Ingested.ShouldBeEmpty();
-        stack.Extension.SourceChanges.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges[0].ShouldBe(new SourceChangedContext(Project, file, SourceChangeKind.Deleted));
     }
 
     [Fact]
@@ -192,8 +162,6 @@ public sealed class WatchDigestExecutorTests
         (await stack.Store.GetFileHashAsync(Project, oldFile, TestContext.Current.CancellationToken)).ShouldBeNull();
         (await stack.Store.GetFileHashAsync(Project, newFile, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(newFile, "moved"));
-        stack.Extension.SourceChanges.Count.ShouldBe(2);
-        stack.Extension.SourceChanges[1].ShouldBe(new SourceChangedContext(Project, newFile, SourceChangeKind.Renamed));
     }
 
     [Fact]
@@ -209,7 +177,6 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
         await Executor(stack).DigestAsync(Project, dir.Path, bFile, WatchEventKind.Created, null,
             TestContext.Current.CancellationToken);
-        stack.Extension.SourceChanges.Clear();
 
         File.Move(aFile, bFile, overwrite: true);
         await Executor(stack).DigestAsync(Project, dir.Path, bFile, WatchEventKind.Renamed, aFile,
@@ -221,8 +188,6 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested[^1].Content.ShouldBe("from-a");
         (await stack.Store.GetFileHashAsync(Project, bFile, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(bFile, "from-a"));
-        stack.Extension.SourceChanges.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges[0].ShouldBe(new SourceChangedContext(Project, bFile, SourceChangeKind.Renamed));
     }
 
     [Fact]
@@ -238,7 +203,6 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
         await Executor(stack).DigestAsync(Project, dir.Path, bFile, WatchEventKind.Created, null,
             TestContext.Current.CancellationToken);
-        stack.Extension.SourceChanges.Clear();
 
         File.Move(aFile, bFile, overwrite: true);
         await Executor(stack).DigestAsync(Project, dir.Path, bFile, WatchEventKind.Renamed, aFile,
@@ -246,7 +210,6 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.DeletedPaths.ShouldContain((Project, aFile));
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Extension.SourceChanges.ShouldBeEmpty();
     }
 
     [Fact]

@@ -93,12 +93,8 @@ Feature: Agent memory management (ai-raccoon MCP server)
     # engine, deferred writes, embed_pending) — the three FR-MEM-1.11/1.12 scenarios above
     # were duplicates of that rule's live scenarios, so the rule is dropped here.
 
-    @FR-MEM-1.13 @FR-MEM-1.14 @AC-6
-    Rule: Extensions observe memory operations through a hook pipeline
-        Scenario: Registered extensions run their hooks in order
-            Given two extensions are registered
-            When I write an entry
-            Then the first extension's OnWrite ran before the second's
+    @FR-MEM-1.14 @AC-6
+    Rule: Retrieval raises an entry's access count and rating
         Scenario: Search hits raise a memory's access count and rating
             Given an entry that has been searched twice
             Then its access count in the meta store is two
