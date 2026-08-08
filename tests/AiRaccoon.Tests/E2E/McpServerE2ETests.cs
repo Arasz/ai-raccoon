@@ -104,9 +104,12 @@ public class McpServerE2ETests : IAsyncLifetime
 
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":1");
+
+        // Consolidating removes the workspace, so status must say so rather than report an empty
+        // outbox — an agent polling for completion has to tell "finished" from "never existed".
         var statusAfter = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
-        Text(statusAfter).ShouldContain("\"count\":0");
+        RefusalText(statusAfter).ShouldStartWith("unknown-workspace:");
     }
 
     [Fact]
@@ -124,9 +127,10 @@ public class McpServerE2ETests : IAsyncLifetime
             ("projectId", "acme"), ("workspaceId", workspaceId));
         Text(discard).ShouldContain("\"discarded\":1");
 
+        // Discarding removes the workspace, so status refuses rather than reporting an empty outbox.
         var status = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
-        Text(status).ShouldContain("\"count\":0");
+        RefusalText(status).ShouldStartWith("unknown-workspace:");
 
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":0");
@@ -264,5 +268,12 @@ public class McpServerE2ETests : IAsyncLifetime
         result.IsError.ShouldNotBe(true);
         var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
         return text;
+    }
+
+    /// <summary>The refusal message of a failed call, so a test can assert the typed prefix rather than merely that something went wrong.</summary>
+    private static string RefusalText(CallToolResult result)
+    {
+        result.IsError.ShouldBe(true);
+        return string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
     }
 }
