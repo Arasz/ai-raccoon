@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-08T08:20:00Z",
+  "lastUpdated": "2026-08-08T11:55:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "erdb",
+      "title": "Verify the hermes-provider/ -> integrations/hermes/ rename and fix the docs it broke",
+      "finished": "2026-08-08T11:55:00Z",
+      "pr": "none (owner authorized direct-to-main; code fix swept into 5950a4b, docs in e699356)",
+      "summary": "The rename broke scripts/hermes-provider-setup.py's default_source() (still pointed at hermes-provider/, so a plain run died with 'plugin source not found') and test_setup_script.py's REPO anchor (parent.parent.parent was one level short after the file moved a directory deeper). Proven by running the suite at pre-rename 74bb2e1 (6 passed) vs after (6 failed). Coverage gap found and closed: all 6 setup tests passed --source explicitly, so default_source() was untested and nothing would have caught the rename - added test_default_source_resolves_to_shipped_plugin (red on the broken default, green after). Gates: 51 passed/6 skipped with the hermes venv python, 137 passed in scripts/tests, setup script --check resolves the real plugin dir. Docs updated: plugin README (install path, explicit pytest path, two design-record links that had moved to docs/work/archive/), two learned-skill reference files, and a dated path note on the MoE-G review record (left at review-date wording on purpose). Nothing on the .NET side moved - no csproj/slnx/props reference the directory. PRE-EXISTING BUG FOUND, NOT FIXED: the 5 slow integration tests fail identically at 74bb2e1 and today - the ApiEnvelope refactor wrapped tool results in {data, meta} and the provider was never updated, so __init__.py:262 reads payload.get('results') off the envelope and Hermes prefetch silently returns zero memories against the current server."
+    },
     {
       "id": "continue-resolving",
       "title": "Resolve the open post-integration-review issues (#115 #117 #118 #119 #120 #121)",
