@@ -13,10 +13,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Store-level FR-NM-3 (see docs/work/features-native-memory/native-memory.feature) scenarios (pluggable embeddings; bundled in-process ONNX default):
-///     synchronous embed on write when configured, deferred writes without configuration,
-///     embed_pending processing, and full re-embed on engine change — against the real local
-///     engine and a fake OpenAI-compatible endpoint.
+///     Store-level embedding scenarios (docs/work/features-native-memory/native-memory.feature):
+///     pluggable engines, sync/deferred embed on write, embed_pending processing, and re-embed
+///     on engine change — against the real local engine and a fake OpenAI-compatible endpoint.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -195,7 +194,6 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
 
-        // Re-configuring the identical engine must not invalidate or touch existing rows.
         var row = await ReadRowAsync((await _store.ListContextAsync("acme", "project:acme",
             TestContext.Current.CancellationToken)).Single().Hash);
         row.EmbedState.ShouldBe("embedded");

@@ -61,7 +61,7 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_watch_remove");
     }
 
-    /// <summary>MS4: Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>
+    /// <summary>Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>
     [Fact]
     public void McpToolNames_MatchConstStrings()
     {
