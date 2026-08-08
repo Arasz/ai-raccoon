@@ -60,6 +60,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # #150: one SIGBUS (exit 135) test-host crash was observed here with no
+      # diagnostic evidence; capture a crash dump so a recurrence is debuggable.
+      DOTNET_DbgEnableMiniDump: 1
+      DOTNET_DbgMiniDumpType: 2
+      DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -67,7 +72,16 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build
         run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Prepare dump directory
+        run: mkdir -p dumps
       - name: Slow tests (integration + E2E)
         # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
         # host-specific ONNX artifact, not a portable expectation.
         run: dotnet test --filter "Speed=Slow" --no-build --nologo -v m
+      - name: Upload crash dumps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-slow-dumps
+          path: dumps/
+          if-no-files-found: ignore
