@@ -13,8 +13,10 @@ public sealed class SharedExtractionService
 
     private const int PreviewLength = 300;
 
-    /// <summary>Recalibrated for the v2 scale (docs/adr/0018-promotion-scoring-v2.md): the winning
-    /// scorer put doc-index chunks at or below 0.4 on the reference-labeled data.</summary>
+    /// <summary>Re-examined for v3 (docs/adr/0018-promotion-scoring-v2.md v3 section) and kept: every
+    /// hard-noise channel prior sits below 0.4 with no content rescue, and the weakest real channel
+    /// (plan, 0.70) can still fall below it under heavy ephemera — the same gap the floor was
+    /// originally derived from in v2.</summary>
     private const double CandidateFloor = 0.4;
 
     /// <summary>Scoring and (in promote mode) selection of rows to share. Never mutates anything.</summary>

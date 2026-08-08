@@ -21,21 +21,24 @@ public sealed class SharedExtractionServiceTests
             ttlDays);
 
     [Fact]
-    public void Propose_OrganicWrite_RanksFirst_WithOrganicNoteArchetype()
+    public void Propose_OrganicWrite_OutranksAPlainDocChunkOfEqualShape()
     {
         var rows = new[]
         {
-            Row("a", sourceFile: "docs/x.md"),
-            Row("b", sourceFile: null, value: "agent-written fact", accessCount: 0)
+            Row("a", sourceFile: "docs/x.md",
+                value: "Notes on the eviction policy behaviour under load, kept here for whoever revisits " +
+                       "this file next time the cache size needs tuning for the current traffic pattern."),
+            Row("b", sourceFile: null,
+                value: "Notes on the eviction policy behaviour under load, kept here for whoever revisits " +
+                       "this file next time the cache size needs tuning for the current traffic pattern.")
         };
 
         var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,
             [], [], false, 20, Now);
 
-        result.Candidates.ShouldHaveSingleItem();
-        result.Candidates[0].Hash.ShouldBe("b");
-        result.Candidates[0].Reasons.ShouldContain("organic-note");
-        result.PromotedHashes.ShouldBeEmpty();
+        var byHash = result.Candidates.ToDictionary(c => c.Hash);
+        byHash["b"].Reasons.ShouldContain("organic-note");
+        byHash["b"].Score.ShouldBeGreaterThan(byHash["a"].Score);
     }
 
     /// <summary>v2 narrows the incumbent's bare-substring `+2 cross-project` (which fired on 61/61
@@ -71,30 +74,20 @@ public sealed class SharedExtractionServiceTests
         result.Candidates[0].Reasons.ShouldNotContain("foreign-subject");
     }
 
+    /// <summary>A bare, low-prior doc chunk (below the ~8-word floor's min(prior, 0.5) rescue, and with
+    /// no rule/measured/foreign evidence) sits below the candidate floor. v3 drops the recency/access-count
+    /// bonus entirely — agentC's doc_adjust never referenced it (docs/adr/0018-promotion-scoring-v2.md
+    /// v3 section) — so this no longer has anything to do with usage.</summary>
     [Fact]
-    public void Propose_UsageSignal_AddsAccessedReason()
+    public void Propose_BarePlanChunk_IsBelowTheFloor()
     {
         var rows = new[]
         {
-            Row("a", sourceFile: "docs/x.md", accessCount: 5, rating: 0.6,
-                value: "Notes on the eviction policy behaviour under load, kept here for whoever revisits " +
-                       "this file next time the cache size needs tuning for the current traffic pattern.")
+            Row("a", sourceFile: "docs/plans/notes-plan.md",
+                value: "notes about the plan that continue for a little while without stating anything " +
+                       "durable or citing anything that would justify sharing this beyond the local " +
+                       "scratch file it already lives in for the rest of the current sprint cycle.")
         };
-
-        var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,
-            [], [], false, 20, Now);
-
-        result.Candidates.ShouldHaveSingleItem();
-        result.Candidates[0].Reasons.ShouldContain("accessed");
-    }
-
-    /// <summary>A bare work-note chunk with no archetype boost and no content evidence sits below
-    /// the v2 floor (docs/adr/0018-promotion-scoring-v2.md) — unlike v1, this has nothing to do with
-    /// recency, which no longer feeds the score at all.</summary>
-    [Fact]
-    public void Propose_BareWorkNoteChunk_IsBelowTheFloor()
-    {
-        var rows = new[] { Row("a", sourceFile: "docs/x.md") };
 
         var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,
             [], [], false, 20, Now);

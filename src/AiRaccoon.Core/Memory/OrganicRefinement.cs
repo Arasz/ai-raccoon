@@ -1,126 +1,153 @@
-using System.Text.RegularExpressions;
-
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>Refined score plus the plain-name reason tags the organic refinement layer fired.</summary>
 internal readonly record struct OrganicRefinementResult(double Score, IReadOnlyList<string> Reasons);
 
-/// <summary>Refines the archetype+evidence score for organic (source_file-null) entries: without it, the
-/// model saturates on the organic prior and cannot tell a status/turn-mirror dump ("Done. Everything
-/// shipped... 3272 passed, 3m18s") from a durable fact — held-out Spearman on the organic-only slice was
-/// +0.145 (see docs/adr/0018-promotion-scoring-v2.md). Ported from refine.py.</summary>
-internal static partial class OrganicRefinement
+/// <summary>Refines the channel prior for organic-note candidates: without it the model cannot tell a
+/// status/turn-mirror dump from a durable fact. Ported from agentC/scorer.py's organic_adjust() and the
+/// organic_note branch of score_candidate() (see docs/adr/0018-promotion-scoring-v2.md v3 section).
+/// Only called for the organic-note channel; routing itself lives in ProvenanceArchetypeClassifier.</summary>
+internal static class OrganicRefinement
 {
-    private const double DeltaLo = -2.8;
-    private const double DeltaHi = 1.5;
-    private const double ShortDefinitionalFloor = 2.2;
-    private const int ShortDefinitionalMaxWords = 40;
-    private const int OpenerWindowChars = 80;
-    private const int DatedFactWindowChars = 120;
+    private const double DeltaLo = -2.2;
+    private const double DeltaHi = 1.6;
+    private const double ShortDefinitionalFloor = 2.4;
+    private const int ShortDefinitionalMaxWords = 45;
+    private const int VeryShortMaxWords = 15;
 
-    internal static OrganicRefinementResult Apply(double baseScore, string? sourceFile, string value)
+    internal static OrganicRefinementResult Apply(
+        double baseScore, string value, string projectId, IReadOnlyList<string> allProjectIds) =>
+        Apply(CandidateFeatureExtractor.Extract(value ?? string.Empty, projectId, allProjectIds), baseScore);
+
+    internal static OrganicRefinementResult Apply(CandidateFeatures f, double baseScore)
     {
-        if (sourceFile is not null)
-        {
-            return new OrganicRefinementResult(baseScore, []);
-        }
-
-        var v = value ?? string.Empty;
         var reasons = new List<string>();
         var delta = 0.0;
 
-        var opener = v.Length > OpenerWindowChars ? v[..OpenerWindowChars] : v;
-        if (StatusOpener().IsMatch(opener))
+        if (f.StatusOpener)
         {
-            delta -= 1.2;
+            delta -= 1.20;
             reasons.Add("status-opener");
         }
 
-        var statusHits = StatusVocabulary().Matches(v).Count;
-        if (statusHits > 0)
+        if (f.StatusVocab > 0)
         {
-            delta -= Math.Min(1.5, 0.15 * statusHits);
+            delta -= Math.Min(1.5, 0.15 * f.StatusVocab);
             reasons.Add("status-vocabulary");
         }
 
-        if (SecondPerson().IsMatch(v))
+        if (f.SecondPerson)
         {
-            delta -= 0.5;
+            delta -= 0.50;
             reasons.Add("second-person");
         }
 
-        if (CommitHash().Matches(v).Count >= 2)
+        if (f.CommitHashes >= 2)
         {
-            delta -= 0.3;
+            delta -= 0.30;
             reasons.Add("commit-hashes");
         }
 
-        // Test-result counts ("174 passed", "exit 0") are status, not measurements — strip them
-        // before counting real measured evidence.
-        var withoutTestCounts = TestCounts().Replace(v, " ");
-        var realMeasures = Measure().Matches(withoutTestCounts).Count;
-        if (realMeasures >= 2)
+        if (f.RealMeasures >= 2)
         {
-            delta += 0.5;
+            delta += 0.50;
             reasons.Add("real-measurements");
         }
 
-        var durableHits = Durable().Matches(v).Count;
-        if (durableHits > 0)
+        if (f.DurableLoose > 0)
         {
-            delta += Math.Min(1.0, 0.35 * durableHits);
+            delta += Math.Min(1.0, 0.35 * f.DurableLoose);
             reasons.Add("durable-fact-language");
         }
 
-        var datedWindow = v.Length > DatedFactWindowChars ? v[..DatedFactWindowChars] : v;
-        if (DatedFact().IsMatch(datedWindow))
+        if (f.DatedFact)
         {
-            delta += 0.5;
+            delta += 0.50;
             reasons.Add("dated-fact");
         }
 
-        delta = Math.Clamp(delta, DeltaLo, DeltaHi);
+        if (f.ForeignSubject)
+        {
+            delta += 0.20;
+            reasons.Add("foreign-subject");
+        }
 
-        var wordCount = v.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
-        if (wordCount < ShortDefinitionalMaxWords && durableHits >= 1 && statusHits <= 1)
+        // Pointer-shaped organic writes are still pointers, even in the organic-note channel.
+        if (f.LinkDensity >= 1.5 || f.DocnameDensity >= 2.5)
+        {
+            delta -= 0.40;
+            reasons.Add("pointer-density");
+        }
+
+        if (f.TableFrac >= 0.55)
+        {
+            delta -= 0.50;
+            reasons.Add("table-shaped");
+        }
+
+        if (f.ContentsIndex)
+        {
+            delta -= 1.20;
+            reasons.Add("contents-index");
+        }
+
+        if (f.Urls >= 3 && f.DurableLoose <= 2)
+        {
+            delta -= 0.50;
+            reasons.Add("link-heavy");
+        }
+
+        if (f.DocnameDensity >= 4.0 && f.DurableLoose == 0 && f.RuleDensity < 0.5)
+        {
+            delta -= 0.30;
+            reasons.Add("docname-heavy");
+        }
+
+        if (f.MetaHeader >= 1)
+        {
+            delta -= 0.35;
+            reasons.Add("metadata-header");
+        }
+
+        if (f.Imperatives >= 3)
+        {
+            delta -= 0.40;
+            reasons.Add("imperative-checklist");
+        }
+
+        if (f.DirReadme)
+        {
+            delta -= 0.80;
+            reasons.Add("directory-readme");
+        }
+
+        if (f.FindingRows >= 3)
+        {
+            delta -= 0.70;
+            reasons.Add("finding-rows");
+        }
+
+        if (f.Superseded)
+        {
+            delta -= 0.40;
+            reasons.Add("superseded");
+        }
+
+        // One-breath durable rule: a short definitional fact keeps a floor so it survives.
+        if (f.NWords < ShortDefinitionalMaxWords && f.DurableLoose >= 1 && f.StatusVocab <= 1 && !f.StatusOpener)
         {
             baseScore = Math.Max(baseScore, ShortDefinitionalFloor);
             reasons.Add("short-definitional-floor");
         }
 
+        if (f.NWords < VeryShortMaxWords)
+        {
+            delta -= 0.30;
+            reasons.Add("very-short-penalty");
+        }
+
+        delta = Math.Clamp(delta, DeltaLo, DeltaHi);
         var score = Math.Clamp(baseScore + delta, 0.0, 4.0);
         return new OrganicRefinementResult(score, reasons);
     }
-
-    [GeneratedRegex(
-        """^\s*(Done\b|Fixed\b|Verified\b|Merged\b|Pinned\b|Recorded\b|Rendered\b|All confirmed|Status\b|Prep done|Shell ready|Task closed|Cleanup complete|Amended\b|Locked in|Draft PR|Fresh verification|No code has changed|f: |Implementation in flight|Extension complete|Rollout complete|Both\b|Ad-hoc verification|Render(?:\s|ing)|Plan written|Software MoE|From\b|Here.s the current|PR[- #]|\*\*1\.)""",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex StatusOpener();
-
-    [GeneratedRegex(
-        """\b(merged|pushed|re-pushed|in flight|worktree|pre-push|gate chain|full suite|suite green|passed\b|skipped\b|exit 0|handed over|dispatched|still working|waiting on|re-run|rebased|cherry-pick|draft PR|ready for review|cron job|status board|deliverable|committed as|origin/main|HEAD|CI checks)\b""",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex StatusVocabulary();
-
-    [GeneratedRegex(@"\b(your|you'll|you can|as instructed|per your)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex SecondPerson();
-
-    [GeneratedRegex(@"\b[0-9a-f]{7,10}\b", RegexOptions.IgnoreCase)]
-    private static partial Regex CommitHash();
-
-    [GeneratedRegex(
-        @"\b\d+\s*(passed|failed|skipped|errors|warnings|green|assertions?)\b|\bexit 0\b|\b\d+/\d+\b",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex TestCounts();
-
-    [GeneratedRegex(@"\d+(?:\.\d+)?\s*(?:s|ms|x|%|lines?|KB|MB|GB|tokens?)\b")]
-    private static partial Regex Measure();
-
-    [GeneratedRegex(
-        """\[facts\]|\bREGRESSION\b|\bgotcha\b|\broot cause\b|\brequires?\b|\bmust\b|\bnever\b|\balways\b|\bconvention\b|\bone \w+ per \w+|\bholds\b|\bby design\b|\bcontract\b|\bprecedence\b|\bsemantics\b""",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex Durable();
-
-    [GeneratedRegex(@"\(\d{4}-\d{2}-\d{2}\)[:,]")]
-    private static partial Regex DatedFact();
 }

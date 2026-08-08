@@ -4,7 +4,9 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentB/scorer.py's archetype() ordering (see docs/adr/0018-promotion-scoring-v2.md).</summary>
+/// <summary>Ports agentC/scorer.py's channel() ordering (see docs/adr/0018-promotion-scoring-v2.md v3
+/// section). v3 grew from 14 archetypes to 19 channels: `.remember/` journals, the Claude auto-memory
+/// tree (index/session/note), and an other-doc/work-note split; a dated charter now routes to review.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProvenanceArchetypeClassifierTests
@@ -25,6 +27,48 @@ public sealed class ProvenanceArchetypeClassifierTests
         var archetype = ProvenanceArchetypeClassifier.Classify(hex, sourceFile: "somewhere.md", value: "a fact");
 
         archetype.ShouldBe(ProvenanceArchetype.OrganicNote);
+    }
+
+    [Fact]
+    public void RememberDirectoryPath_IsRememberLog_EvenBeforeTheOrganicCheck()
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            ".remember/2026-08-01-status.md", sourceFile: ".remember/2026-08-01-status.md", value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.RememberLog);
+    }
+
+    [Fact]
+    public void ClaudeAutoMemory_MemoryMdBasename_IsAutoMemoryIndex()
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "/Users/dev/.claude/projects/x/memory/MEMORY.md",
+            sourceFile: "/Users/dev/.claude/projects/x/memory/MEMORY.md", value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.AutoMemoryIndex);
+    }
+
+    [Theory]
+    [InlineData("session-2026-08-01.md")]
+    [InlineData("status-handoff.md")]
+    [InlineData("handoff-notes.md")]
+    public void ClaudeAutoMemory_SessionStatusOrHandoffBasename_IsAutoMemorySession(string basename)
+    {
+        var path = $"/Users/dev/.claude/projects/x/memory/{basename}";
+
+        var archetype = ProvenanceArchetypeClassifier.Classify(path, sourceFile: path, value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.AutoMemorySession);
+    }
+
+    [Fact]
+    public void ClaudeAutoMemory_NamedBasename_IsAutoMemoryNote()
+    {
+        var path = "/Users/dev/.claude/projects/x/memory/nuget-lock-starvation-not-node-reuse.md";
+
+        var archetype = ProvenanceArchetypeClassifier.Classify(path, sourceFile: path, value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.AutoMemoryNote);
     }
 
     [Fact]
@@ -68,12 +112,24 @@ public sealed class ProvenanceArchetypeClassifierTests
     }
 
     [Fact]
-    public void CharterInFilename_IsCharter()
+    public void UndatedCharterInFilename_IsCharter()
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(
-            "docs/work/2026-05-01-review-charter.md", sourceFile: "docs/work/2026-05-01-review-charter.md", value: "x");
+            "docs/charter.md", sourceFile: "docs/charter.md", value: "x");
 
         archetype.ShouldBe(ProvenanceArchetype.Charter);
+    }
+
+    /// <summary>v3 change: a dated `YYYY-MM-DD-*-charter.md` under docs/work is in-flight review
+    /// coordination, not a durable project charter (docs/adr/0018-promotion-scoring-v2.md v3 section).</summary>
+    [Fact]
+    public void DatedCharterInFilename_IsReview_NotCharter()
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "docs/work/2026-05-01-review-charter.md", sourceFile: "docs/work/2026-05-01-review-charter.md",
+            value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.Review);
     }
 
     [Fact]
@@ -152,17 +208,31 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.ChangelogEntry);
     }
 
+    /// <summary>v3 change: `/docs/work/` stays work-note, but a bare `/docs/` path that isn't any more
+    /// specific channel now routes to the new other-doc channel instead of sharing work-note's prior.
+    /// Ported bug-for-bug from the prototype: the check is a literal `/docs/` substring, so it only
+    /// fires when something precedes "docs" in the path (matching real ingest source_file paths, which
+    /// are absolute) — a bare repo-relative "docs/..." path falls through to the work-note fallback.</summary>
     [Fact]
-    public void UnrecognisedPath_FallsBackToWorkNote()
+    public void UnrecognisedDocsPath_NotUnderWork_IsOtherDoc()
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(
-            "docs/misc/random-topic.md", sourceFile: "docs/misc/random-topic.md", value: "x");
+            "notes/docs/misc/random-topic.md", sourceFile: "notes/docs/misc/random-topic.md", value: "x");
+
+        archetype.ShouldBe(ProvenanceArchetype.OtherDoc);
+    }
+
+    [Fact]
+    public void UnrecognisedPath_OutsideDocs_FallsBackToWorkNote()
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "misc/random-topic.md", sourceFile: "misc/random-topic.md", value: "x");
 
         archetype.ShouldBe(ProvenanceArchetype.WorkNote);
     }
 
     [Fact]
-    public void TwoOrMoreInvokeMarkupHits_IsTurnMirror_EvenWithNullSourceFile()
+    public void TwoOrMoreInvokeMarkupHits_NearTheStart_IsTurnMirror_EvenWithNullSourceFile()
     {
         var value = "<invoke name=\"Bash\">...</invoke><invoke name=\"Read\">...</invoke>";
 
@@ -171,25 +241,46 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.TurnMirror);
     }
 
+    /// <summary>Prose-prefix rescue: a transcript starting 300+ chars in is not a turn-mirror — the
+    /// candidate is classified (and later scored) on its path/prose, not the appended transcript.</summary>
+    [Fact]
+    public void InvokeMarkup_StartingLate_IsNotTurnMirror()
+    {
+        var prose = string.Concat(Enumerable.Repeat("This paragraph exists only to push the transcript well " +
+                                                      "past the rescue threshold before anything tool-shaped " +
+                                                      "appears in the text at all. ", 4));
+        var value = prose + "<invoke name=\"Bash\">...</invoke><invoke name=\"Read\">...</invoke>";
+
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "docs/work/notes.md", sourceFile: "docs/work/notes.md", value: value);
+
+        archetype.ShouldNotBe(ProvenanceArchetype.TurnMirror);
+    }
+
     [Fact]
     public void Prior_MatchesTheEvalReport()
     {
         var expected = new Dictionary<ProvenanceArchetype, double>
         {
-            [ProvenanceArchetype.OrganicNote] = 3.45,
-            [ProvenanceArchetype.Adr] = 3.00,
-            [ProvenanceArchetype.Charter] = 2.45,
-            [ProvenanceArchetype.Explanation] = 2.30,
+            [ProvenanceArchetype.TurnMirror] = 0.35,
+            [ProvenanceArchetype.RememberLog] = 0.30,
+            [ProvenanceArchetype.AutoMemorySession] = 0.30,
+            [ProvenanceArchetype.AutoMemoryIndex] = 0.55,
+            [ProvenanceArchetype.AutoMemoryNote] = 2.70,
+            [ProvenanceArchetype.OrganicNote] = 2.30,
+            [ProvenanceArchetype.DocIndex] = 0.35,
+            [ProvenanceArchetype.Adr] = 2.55,
+            [ProvenanceArchetype.Charter] = 2.30,
+            [ProvenanceArchetype.Explanation] = 2.15,
             [ProvenanceArchetype.Measurement] = 2.10,
-            [ProvenanceArchetype.ResearchSynthesis] = 1.90,
+            [ProvenanceArchetype.ResearchSynthesis] = 1.75,
             [ProvenanceArchetype.Reference] = 1.45,
-            [ProvenanceArchetype.WorkNote] = 1.15,
-            [ProvenanceArchetype.CatalogPage] = 1.10,
             [ProvenanceArchetype.ChangelogEntry] = 1.05,
-            [ProvenanceArchetype.Plan] = 0.85,
-            [ProvenanceArchetype.Review] = 0.80,
-            [ProvenanceArchetype.DocIndex] = 0.25,
-            [ProvenanceArchetype.TurnMirror] = 0.45
+            [ProvenanceArchetype.WorkNote] = 1.30,
+            [ProvenanceArchetype.Plan] = 0.70,
+            [ProvenanceArchetype.Review] = 0.95,
+            [ProvenanceArchetype.CatalogPage] = 1.05,
+            [ProvenanceArchetype.OtherDoc] = 1.10
         };
 
         foreach (var (archetype, prior) in expected)

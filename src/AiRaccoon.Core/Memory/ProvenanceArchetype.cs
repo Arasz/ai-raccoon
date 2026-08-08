@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>What kind of document a shared-extraction candidate came out of (docs/adr/0018-promotion-scoring-v2.md).</summary>
+/// <summary>What provenance channel a shared-extraction candidate came from (docs/adr/0018-promotion-scoring-v2.md).</summary>
 internal enum ProvenanceArchetype
 {
     OrganicNote,
@@ -13,40 +13,51 @@ internal enum ProvenanceArchetype
     ResearchSynthesis,
     Reference,
     WorkNote,
+    OtherDoc,
     CatalogPage,
     ChangelogEntry,
     Plan,
     Review,
     DocIndex,
-    TurnMirror
+    TurnMirror,
+    RememberLog,
+    AutoMemorySession,
+    AutoMemoryIndex,
+    AutoMemoryNote
 }
 
-/// <summary>Classifies a candidate's provenance archetype from its path/source-file shape (ported from
-/// agentB/scorer.py's archetype(), see docs/adr/0018-promotion-scoring-v2.md). First-match-wins ordering.</summary>
+/// <summary>Classifies a candidate's provenance channel from its path/source-file shape (ported from
+/// agentC/scorer.py's channel(), see docs/adr/0018-promotion-scoring-v2.md v3 section). First-match-wins
+/// ordering.</summary>
 internal static partial class ProvenanceArchetypeClassifier
 {
     private static readonly IReadOnlyDictionary<ProvenanceArchetype, double> Priors =
         new Dictionary<ProvenanceArchetype, double>
         {
-            [ProvenanceArchetype.OrganicNote] = 3.45,
-            [ProvenanceArchetype.Adr] = 3.00,
-            [ProvenanceArchetype.Charter] = 2.45,
-            [ProvenanceArchetype.Explanation] = 2.30,
+            [ProvenanceArchetype.TurnMirror] = 0.35,
+            [ProvenanceArchetype.RememberLog] = 0.30,
+            [ProvenanceArchetype.AutoMemorySession] = 0.30,
+            [ProvenanceArchetype.AutoMemoryIndex] = 0.55,
+            [ProvenanceArchetype.AutoMemoryNote] = 2.70,
+            [ProvenanceArchetype.OrganicNote] = 2.30,
+            [ProvenanceArchetype.DocIndex] = 0.35,
+            [ProvenanceArchetype.Adr] = 2.55,
+            [ProvenanceArchetype.Charter] = 2.30,
+            [ProvenanceArchetype.Explanation] = 2.15,
             [ProvenanceArchetype.Measurement] = 2.10,
-            [ProvenanceArchetype.ResearchSynthesis] = 1.90,
+            [ProvenanceArchetype.ResearchSynthesis] = 1.75,
             [ProvenanceArchetype.Reference] = 1.45,
-            [ProvenanceArchetype.WorkNote] = 1.15,
-            [ProvenanceArchetype.CatalogPage] = 1.10,
             [ProvenanceArchetype.ChangelogEntry] = 1.05,
-            [ProvenanceArchetype.Plan] = 0.85,
-            [ProvenanceArchetype.Review] = 0.80,
-            [ProvenanceArchetype.DocIndex] = 0.25,
-            [ProvenanceArchetype.TurnMirror] = 0.45
+            [ProvenanceArchetype.WorkNote] = 1.30,
+            [ProvenanceArchetype.Plan] = 0.70,
+            [ProvenanceArchetype.Review] = 0.95,
+            [ProvenanceArchetype.CatalogPage] = 1.05,
+            [ProvenanceArchetype.OtherDoc] = 1.10
         };
 
     internal static double Prior(ProvenanceArchetype archetype) => Priors[archetype];
 
-    /// <summary>Kebab-case reason tag for the archetype, e.g. "organic-note".</summary>
+    /// <summary>Kebab-case reason tag for the archetype, e.g. "auto-memory-note".</summary>
     internal static string Tag(ProvenanceArchetype archetype) => archetype switch
     {
         ProvenanceArchetype.OrganicNote => "organic-note",
@@ -57,39 +68,64 @@ internal static partial class ProvenanceArchetypeClassifier
         ProvenanceArchetype.ResearchSynthesis => "research-synthesis",
         ProvenanceArchetype.Reference => "reference",
         ProvenanceArchetype.WorkNote => "work-note",
+        ProvenanceArchetype.OtherDoc => "other-doc",
         ProvenanceArchetype.CatalogPage => "catalog-page",
         ProvenanceArchetype.ChangelogEntry => "changelog-entry",
         ProvenanceArchetype.Plan => "plan",
         ProvenanceArchetype.Review => "review",
         ProvenanceArchetype.DocIndex => "doc-index",
         ProvenanceArchetype.TurnMirror => "turn-mirror",
+        ProvenanceArchetype.RememberLog => "remember-log",
+        ProvenanceArchetype.AutoMemorySession => "auto-memory-session",
+        ProvenanceArchetype.AutoMemoryIndex => "auto-memory-index",
+        ProvenanceArchetype.AutoMemoryNote => "auto-memory-note",
         _ => throw new ArgumentOutOfRangeException(nameof(archetype))
     };
 
     internal static ProvenanceArchetype Classify(string path, string? sourceFile, string value)
     {
-        var p = (path ?? string.Empty).ToLowerInvariant();
-        var basename = Basename(p);
-
-        // A mirror of an agent's own tool-call turn: the payload is a transcript, not an entry.
-        if (TurnMirrorMarkup().Matches(value).Count >= 2)
+        var (_, isMirror) = TurnMirrorPrefix.Split(value ?? string.Empty);
+        if (isMirror)
         {
             return ProvenanceArchetype.TurnMirror;
         }
 
-        // Agent-authored memory write: no ingest source, or a content-addressed filename.
-        if (string.IsNullOrEmpty(sourceFile) || HexName().IsMatch(basename))
+        var rawPath = path ?? string.Empty;
+        var p = EffectivePath(rawPath, sourceFile).ToLowerInvariant();
+        var basename = Basename(p);
+
+        if (p.Contains("/.remember/", StringComparison.Ordinal) || p.StartsWith(".remember/", StringComparison.Ordinal))
+        {
+            return ProvenanceArchetype.RememberLog;
+        }
+
+        if (p.Contains("/.claude/", StringComparison.Ordinal) && p.Contains("/memory/", StringComparison.Ordinal))
+        {
+            if (basename == "memory.md")
+            {
+                return ProvenanceArchetype.AutoMemoryIndex;
+            }
+
+            if (basename.StartsWith("session", StringComparison.Ordinal) ||
+                basename.Contains("status", StringComparison.Ordinal) ||
+                basename.Contains("handoff", StringComparison.Ordinal))
+            {
+                return ProvenanceArchetype.AutoMemorySession;
+            }
+
+            return ProvenanceArchetype.AutoMemoryNote;
+        }
+
+        if (string.IsNullOrEmpty(sourceFile) || HexName().IsMatch(Basename(rawPath.ToLowerInvariant())))
         {
             return ProvenanceArchetype.OrganicNote;
         }
 
-        // Directory indexes and rolling ledgers: rows of pointers to other docs.
         if (basename is "readme.md" or "changelog.md" or "index.md")
         {
             return ProvenanceArchetype.DocIndex;
         }
 
-        // A numbered decision record: docs/adr/, or "NNNN-slug.md" that is not a dated work note.
         if (p.Contains("/adr/", StringComparison.Ordinal) || p.Contains("/decisions/", StringComparison.Ordinal) ||
             (NumberedPrefix().IsMatch(basename) && !DatedPrefix().IsMatch(basename)))
         {
@@ -98,7 +134,8 @@ internal static partial class ProvenanceArchetypeClassifier
 
         if (basename.Contains("charter", StringComparison.Ordinal))
         {
-            return ProvenanceArchetype.Charter;
+            // A dated charter under docs/work is in-flight review coordination, not a durable charter.
+            return DatedPrefix().IsMatch(basename) ? ProvenanceArchetype.Review : ProvenanceArchetype.Charter;
         }
 
         if (p.Contains("/explanation/", StringComparison.Ordinal) ||
@@ -111,14 +148,18 @@ internal static partial class ProvenanceArchetypeClassifier
         if (p.Contains("/plans/", StringComparison.Ordinal) ||
             basename.StartsWith("plan", StringComparison.Ordinal) ||
             basename.Contains("-plan", StringComparison.Ordinal) ||
-            basename.EndsWith("plan.md", StringComparison.Ordinal))
+            basename.EndsWith("plan.md", StringComparison.Ordinal) ||
+            basename.Contains("backlog", StringComparison.Ordinal) ||
+            basename.Contains("checkpoint", StringComparison.Ordinal) ||
+            basename.Contains("dev-review", StringComparison.Ordinal))
         {
             return ProvenanceArchetype.Plan;
         }
 
         if (p.Contains("/reviews/", StringComparison.Ordinal) || basename.Contains("review", StringComparison.Ordinal) ||
             basename.Contains("moe-", StringComparison.Ordinal) || LensFilePrefix().IsMatch(basename) ||
-            basename.Contains("findings", StringComparison.Ordinal) || basename.Contains("incident", StringComparison.Ordinal))
+            basename.Contains("findings", StringComparison.Ordinal) || basename.Contains("incident", StringComparison.Ordinal) ||
+            basename.Contains("diagnosis", StringComparison.Ordinal))
         {
             return ProvenanceArchetype.Review;
         }
@@ -141,18 +182,40 @@ internal static partial class ProvenanceArchetypeClassifier
             return ProvenanceArchetype.Reference;
         }
 
+        if (p.Contains("/changelog/", StringComparison.Ordinal) || p.Contains("/releases/", StringComparison.Ordinal))
+        {
+            return ProvenanceArchetype.ChangelogEntry;
+        }
+
         if (p.Contains("/guide", StringComparison.Ordinal) ||
             basename is "skills.md" or "getting-started.md" or "glossary.md")
         {
             return ProvenanceArchetype.CatalogPage;
         }
 
-        if (p.Contains("/changelog/", StringComparison.Ordinal) || p.Contains("/releases/", StringComparison.Ordinal))
+        if (p.Contains("/docs/work/", StringComparison.Ordinal))
         {
-            return ProvenanceArchetype.ChangelogEntry;
+            return ProvenanceArchetype.WorkNote;
+        }
+
+        if (p.Contains("/docs/", StringComparison.Ordinal))
+        {
+            return ProvenanceArchetype.OtherDoc;
         }
 
         return ProvenanceArchetype.WorkNote;
+    }
+
+    /// <summary>The most informative provenance path: the ingest source, else the stored path with any
+    /// shared/ promotion prefix stripped.</summary>
+    private static string EffectivePath(string path, string? sourceFile)
+    {
+        if (!string.IsNullOrEmpty(sourceFile))
+        {
+            return sourceFile;
+        }
+
+        return path.StartsWith("shared/", StringComparison.Ordinal) ? path["shared/".Length..] : path;
     }
 
     private static string Basename(string path)
@@ -163,11 +226,6 @@ internal static partial class ProvenanceArchetypeClassifier
 
     [GeneratedRegex(@"^[0-9a-f]{32,}\.md$", RegexOptions.IgnoreCase)]
     private static partial Regex HexName();
-
-    [GeneratedRegex(
-        """</?(invoke|parameter|content|sourceFile|antml:invoke|function_calls)\b|<invoke\s+name=|<parameter\s+name=""",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex TurnMirrorMarkup();
 
     [GeneratedRegex(@"^\d{4}-")]
     private static partial Regex NumberedPrefix();

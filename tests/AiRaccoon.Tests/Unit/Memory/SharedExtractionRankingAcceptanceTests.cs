@@ -70,15 +70,15 @@ public sealed class SharedExtractionRankingAcceptanceTests
             "queue's shutdown path, and removes the deprecated v1 cache warm-up script that nobody has " +
             "called in over a year according to the access logs the team checked before removing it."),
 
-        // The defect fixture: a plan chunk that merely mentions a sibling project (svc-billing),
-        // with prior access recorded — under the old scorer this out-scores the organic measurement.
+        // The defect fixture: a plan chunk that merely mentions a sibling project (svc-billing) near its
+        // opening — under the old scorer this out-scores the organic measurement.
         Row("plan-mentions-foreign-project", "docs/plans/2026-05-01-cache-plan.md",
             "docs/plans/2026-05-01-cache-plan.md",
-            "AC: cache hit rate above 90% sustained for one hour. Gate: perf review required before " +
-            "merge, sign-off from svc-billing's on-call since they share the eviction library. Effort: " +
-            "3 days. Work happens on a worktree during Wave 2 of the rollout, dispatched to the perf " +
-            "lane for review before Friday's freeze, closes: #4821 once the gate chain goes green. The " +
-            "rollout otherwise follows the standard checklist without any special casing needed here.",
+            "Perf review needed before merge, with sign-off from svc-billing's on-call since the two " +
+            "services share the eviction library and any regression there would affect both of them at " +
+            "once. Work happens on a worktree ahead of Friday's freeze, and the rollout otherwise " +
+            "follows the standard checklist without any special casing needed for this particular " +
+            "release, so no further coordination beyond the usual sign-off should be necessary at all.",
             accessCount: 3),
 
         Row("turn-mirror", "session.md", null,

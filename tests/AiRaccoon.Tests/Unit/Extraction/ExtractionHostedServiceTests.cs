@@ -272,7 +272,7 @@ public sealed class ExtractionHostedServiceTests
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Candidates["acme"] =
         [
-            // organic-note + rule-language + foreign-subject: clearly outscores h2.
+            // organic-note + durable-fact-language + foreign-subject: clearly outscores h2.
             Row("h1", null,
                 "The retry queue must never drop a message silently; this is a hard invariant recorded " +
                 "here so nobody has to relearn it after beta hit the same failure mode independently " +
@@ -282,7 +282,11 @@ public sealed class ExtractionHostedServiceTests
                 "The retry queue clears completed messages once every consumer has acknowledged them, " +
                 "keeping memory bounded during long backlogs without any operator intervention at all " +
                 "during normal day to day operation across every environment this service runs in."),
-            Row("h3", "docs/x.md", "plain fact") // below floor → excluded
+            // bare low-prior plan chunk, no rule/measured/foreign evidence: below floor → excluded
+            Row("h3", "docs/plans/notes-plan.md",
+                "notes about the plan that continue for a little while without stating anything durable " +
+                "or citing anything that would justify sharing this beyond the local scratch file it " +
+                "already lives in for the rest of the current sprint cycle around here.")
         ];
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
@@ -299,7 +303,7 @@ public sealed class ExtractionHostedServiceTests
         records[0].Message.ShouldContain("h1.md");
         records[0].Message.ShouldContain("organic-note");
         records[0].Message.ShouldContain("foreign-subject");
-        records[0].Message.ShouldContain("rule-language");
+        records[0].Message.ShouldContain("durable-fact-language");
         // The content preview is dropped from the message (a data-leak into logs otherwise).
         records[0].Message.ShouldNotContain("must never drop a message silently");
         // Rank ordering: #1 before #2 in emission order (the list is pre-sorted by score).
