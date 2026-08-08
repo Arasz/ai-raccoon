@@ -161,10 +161,22 @@ scope and the other two absent, confirmed by search.
 Discovered by accident, then reproduced deliberately. It is the same normalization as above, in its
 damaging form.
 
-`scope=all` fuses a per-context result list. RRF scores each list independently and the fused score
-is divided by the maximum, so **the top entry of a one-item list scores `weight / (k + 1)` — the
-best score any list can produce.** A tier with one entry therefore always contributes a rank-1
-result, and after normalization it lands at or beside 1.0 regardless of what was asked.
+`scope=all` collects a result list per context and fuses them. The fusion scores **by rank position
+only**, so a context's rank-1 entry scores `weight / (k + 1)` no matter how many candidates that
+context ranked. At `k=60`:
+
+| list | rank-1 score | displayed |
+|---|---|---|
+| shared tier, **1** entry | 1/61 = 0.016393 | **1.0000** |
+| project tier, **2,400** entries | 1/61 = 0.016393 | **1.0000** |
+| project tier, rank 2 | 1/62 = 0.016129 | 0.9839 |
+
+The one-entry tier and the 2,400-entry tier **tie**, and the tie is broken by
+`ThenBy(Path, Ordinal)` — effectively a coin flip on the filename.
+
+Max-normalization is not the cause, though it is what makes the symptom so visible: dividing every
+score by a positive constant preserves order, so the two rank-1 entries tie with or without it.
+Normalization only inflates the displayed number to a confident `1.0000`.
 
 The sweep's `memory_share` test put exactly one entry into a previously empty shared tier. Every
 subsequent `scope=all` query returned it at `ranking: 1.0`:
@@ -190,8 +202,29 @@ ten-entry shared tier against a 2,400-entry project tier still puts its best mat
 for any query at all.
 
 The sweep's entry has been deleted and the shared tier is empty again; the bank is back to 2,401
-entries across the five real projects. The defect is latent rather than fixed — it returns the
-moment anyone uses `memory_share`, which is a documented core feature.
+entries across the five real projects.
+
+**Fixed.** Contexts partition storage, not relevance — the per-context loop exists because the vec0
+index is partitioned by context key. Both modalities already produce absolutely comparable
+cross-context scores: `bm25` from one shared `entries_fts` index with global corpus statistics, and
+cosine from one embedding space. So the fix collects per-context candidates, orders each modality
+globally by absolute score, and fuses **once**. Length-weighting was rejected because it penalizes
+exactly the curated tier the product wants trusted; raw scores and fixed-reference normalization
+were rejected because fused scores are ~0.016, and the shipped `minScore` default of 0.7 would then
+have started filtering everything ADR-0006 measured as unfiltered.
+
+Single-context parity is exact rather than approximate: nDCG@5 0.674, MRR 0.881, recall@5 0.564 and
+exact-chunk@3 4/11 are unchanged, and regenerating the 96-point RRF grid and the 33-point affinity
+grid leaves `git status docs/work/` empty — byte-identical. That holds by construction, since every
+baseline query searches a single context where the new path is a no-op.
+
+**What this fix does not claim.** No retrieval measurement anywhere in the repo exercises
+`scope=all` with two populated tiers — every graded query and harness fixture is single-context. So
+cross-context *ranking quality* has no ground truth here. The claim is: defect removed,
+single-context parity preserved, semantics now well-defined ("rank the union as if it were one
+bank"). It is not a measured cross-context improvement, and that absence is why nothing was retuned.
+Adding a cross-context stratum to `scripts/baseline-queries.json` with a shared-tier fixture is the
+open corpus-scope question.
 
 ## Promotion queue — quality assessment
 
