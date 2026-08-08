@@ -586,6 +586,20 @@ WP0 ──▶ WP1 ──┬──▶ WP2 ──▶ WP3 ──▶ WP4 ──┐
 - **Trigger**: run it only if WP4 lands materially above the ~10 ms target and the schedule allows.
   Otherwise file it, with the §1.1 table as its evidence.
 
+#### Why the resolution filters by rowid, not hash
+
+Recorded here 2026-08-09, moved out of a code comment in `MemorySql.FtsSnippetsForSurvivors` that
+was the only place it existed. Measured against a live-bank copy at K=20 survivors:
+
+| survivor filter | SQLite plan | per-query |
+|---|---|---|
+| `e.hash IN (…)` | `SCAN entries_fts VIRTUAL TABLE INDEX 0:M3` | **7.9–17.7 ms** |
+| `entries_fts.rowid IN (…)` alongside `MATCH` | `INDEX 0:=M3` | **2.9–3.2 ms** |
+
+`hash` is not a column FTS5 can index, so filtering on it forces a full `MATCH` scan of the term
+across the whole corpus; `entries_fts.rowid` (= `entries.id`) uses FTS5's rowid lookup. Roughly
+5–6× on this corpus, and the reason the resolution statement carries row ids rather than hashes.
+
 ---
 
 ## 6. Risks

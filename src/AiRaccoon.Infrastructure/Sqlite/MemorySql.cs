@@ -194,13 +194,10 @@ internal static class MemorySql
                                          LIMIT @limit
                                          """;
 
-    // Deferred FTS snippet resolution (§WP7, issue #198): re-runs the SAME @query text SearchByFilter
-    // used, restricted to the ranking survivors' rowids, so the highlighting matches what the eager
-    // statement would have produced. Filters by entries_fts.rowid (= entries.id), not e.hash — measured
-    // (session scratchpad, live-bank copy, K=20 survivors): filtering by e.hash forces FTS5 to fall
-    // back to a full MATCH scan of the term across the WHOLE corpus (`SCAN entries_fts VIRTUAL TABLE
-    // INDEX 0:M3`, 7.9-17.7 ms here) because hash isn't a column FTS5 can index; entries_fts.rowid IN
-    // (...) alongside MATCH uses FTS5's rowid lookup (`INDEX 0:=M3`) and drops to 2.9-3.2 ms.
+    // Re-runs the SAME @query text SearchByFilter used, restricted to the ranking survivors' rowids,
+    // so the highlighting matches what the eager statement would have produced. Filters by
+    // entries_fts.rowid rather than e.hash, which is not FTS5-indexable and degrades MATCH to a
+    // full-corpus scan (docs/plans/2026-08-08-search-knn-perf.md §WP7).
     public const string FtsSnippetsForSurvivors = """
                                                   SELECT e.hash AS Hash, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet
                                                   FROM entries_fts

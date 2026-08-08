@@ -160,12 +160,11 @@ public sealed partial class SqliteMemoryStore(
         var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
-        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7, issue #198): records,
-        // per hash an FTS candidate produced, the exact @query text that matched it and its row id
-        // (the FtsSnippetsForSurvivors resolution filters by entries_fts.rowid, not hash — measured
-        // 5-6x faster, see MemorySql.FtsSnippetsForSurvivors). The fallback re-query overwrites
-        // entries for hashes it also returns, which is correct: only the expression that produced
-        // the FINAL ftsResults list for a context should resolve its snippet.
+        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7): records, per hash an
+        // FTS candidate produced, the exact @query text that matched it and its row id — resolution
+        // filters by rowid, not hash. The fallback re-query overwrites entries for hashes it also
+        // returns, which is correct: only the expression that produced the FINAL ftsResults list for
+        // a context should resolve its snippet.
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
 
