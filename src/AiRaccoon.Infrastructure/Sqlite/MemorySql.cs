@@ -408,7 +408,8 @@ internal static class MemorySql
                                             """;
 
     public const string SelectRatingForBump =
-        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries WHERE hash = @hash LIMIT 1";
+        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +
+        "WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared') LIMIT 1";
 
     public const string BumpAccess =
         """
@@ -416,7 +417,7 @@ internal static class MemorySql
         SET access_count = access_count + 1,
             last_accessed_at = @now,
             rating = @rating
-        WHERE hash = @hash
+        WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
         """;
 
     public const string UpsertSetting = """"

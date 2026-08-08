@@ -228,6 +228,31 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         metadata.Rating.ShouldBe(row.Rating);
     }
 
+    /// <summary>SelectRatingForBump/BumpAccess must not touch another project's row that happens
+    /// to share the same content hash — searching one project must never age or rate-bump another's.</summary>
+    [Fact]
+    public async Task Search_BumpsAccessOnlyForTheSearchedProjectsRow_NotAnotherProjectsIdenticalHash()
+    {
+        var acme = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "identical fact shared by two projects"),
+            TestContext.Current.CancellationToken);
+        var other = await _store.WriteAsync(
+            new MemoryWriteRequest("other", "identical fact shared by two projects"),
+            TestContext.Current.CancellationToken);
+        other.Hash.ShouldBe(acme.Hash, "the collision this test needs: identical content, two projects");
+
+        await _store.SearchAsync(new SearchQuery("acme", "identical"), TestContext.Current.CancellationToken);
+
+        var acmeRow = await ReadRowByProjectAsync("acme", acme.Hash);
+        acmeRow.ShouldNotBeNull();
+        acmeRow.AccessCount.ShouldBe(1);
+
+        var otherRow = await ReadRowByProjectAsync("other", other.Hash);
+        otherRow.ShouldNotBeNull();
+        otherRow.AccessCount.ShouldBe(0, "searching acme must not bump other's identically-hashed row");
+        otherRow.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
+    }
+
     [Fact]
     public async Task Share_CopiesRowIntoSharedScope_PreservingPath()
     {
@@ -605,7 +630,66 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "the context label filter augments the project scope, it does not replace it");
     }
 
-    // The RRF fusion fuses per-context batches by rank position, not best ranking.
+    /// <summary>
+    ///     Regression for the double-RRF defect (see docs/adr/0006-rrf-parameter-optimization.md):
+    ///     the outer merge used to fuse per-context batches by rank POSITION, so a shared tier
+    ///     holding a single unrelated entry always tied the project tier's genuine top match at
+    ///     "rank 1 of my own context" — a tie broken only by Path.
+    /// </summary>
+    [Fact]
+    public async Task Search_ScopeAll_SmallSharedTier_DoesNotCaptureAnUnrelatedQuery()
+    {
+        const string query = "docker container deployment rollback pipeline";
+
+        // Path deliberately sorts after "shared/..." (Ordinal) so the old code's Path tie-break
+        // cannot accidentally save this assertion — only a genuine score wins it.
+        var bestMatch = await _store.AddContentAsync("acme", "zz-deploy-pipeline-decision.md",
+            "The docker container deployment pipeline automatically triggers a rollback when health checks fail three times.",
+            ContextNaming.ProjectContext("acme"), cancellationToken: TestContext.Current.CancellationToken);
+
+        string[] noise =
+        [
+            "CI pipeline runs unit tests before merging any pull request.",
+            "The build system caches docker layers to speed up image creation.",
+            "Kubernetes restarts a container when its readiness probe fails.",
+            "Deployment history is stored so operators can audit each release.",
+            "The staging environment mirrors production for pre-release checks.",
+            "A canary release shifts five percent of traffic to the new version.",
+            "Docker images are scanned for known vulnerabilities before publishing.",
+            "The release manager tags each build with a semantic version number.",
+            "Blue-green deployment swaps traffic between two identical environments.",
+            "Container orchestration schedules workloads across the available nodes.",
+            "The deployment dashboard shows the health of every running service.",
+            "Automated smoke tests run immediately after each deployment.",
+            "The pipeline notifies the on-call engineer when a stage fails.",
+            "Rollback plans are rehearsed quarterly during the reliability drill.",
+            "The container registry retains the last ten images per service.",
+            "Infrastructure changes go through the same review process as code."
+        ];
+        foreach (var content in noise)
+        {
+            await _store.WriteAsync(new MemoryWriteRequest("acme", content), TestContext.Current.CancellationToken);
+        }
+
+        var offTopic = await _store.WriteAsync(
+            new MemoryWriteRequest("acme",
+                "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", offTopic.Hash, TestContext.Current.CancellationToken);
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", query, SearchScope.All, Limit: 25, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results[0].Path.ShouldBe(bestMatch.Path,
+            "the genuinely relevant project entry must rank first, not an unrelated single-entry shared tier");
+        var sharedResult = results.Single(r => r.Hash == shared.Hash);
+        sharedResult.Ranking.ShouldBeLessThan(results[0].Ranking,
+            "a single promoted entry in the shared tier must not tie the project tier's real top match");
+    }
+
+    // Merge's own multi-list RRF behaviour (fuses batches by rank position); production now
+    // passes it a single already-globally-fused batch (see docs/adr/0006-rrf-parameter-optimization.md).
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
@@ -680,6 +764,21 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             LIMIT 1
             """,
             new { hash });
+    }
+
+    private async Task<EntryRow?> ReadRowByProjectAsync(string projectId, string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<EntryRow>(
+            """
+            SELECT hash AS Hash, path AS Path, scope AS Scope, project_id AS ProjectId,
+                   context_label AS ContextLabel, workspace_id AS WorkspaceId, agent_id AS AgentId,
+                   created_at AS CreatedAt, access_count AS AccessCount, last_accessed_at AS LastAccessedAt,
+                   rating AS Rating, ttl_days AS TtlDays, embed_state AS EmbedState
+            FROM entries
+            WHERE hash = @hash AND project_id = @projectId
+            """,
+            new { hash, projectId });
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");

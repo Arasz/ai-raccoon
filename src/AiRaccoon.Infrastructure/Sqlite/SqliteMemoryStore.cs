@@ -253,7 +253,7 @@ public sealed partial class SqliteMemoryStore(
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             cancellationToken).ConfigureAwait(false);
-        await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
+        await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         return merged;
     }
 
@@ -906,15 +906,17 @@ public sealed partial class SqliteMemoryStore(
             : StructureFusion.DefaultAlpha;
     }
 
-    /// <summary>Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).</summary>
+    /// <summary>Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).
+    /// Scoped to the searching project's own row or the shared tier — a hash collision in another,
+    /// unrelated project must never be aged or rate-bumped by this search.</summary>
     private async Task BumpAccessAsync(SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
-        CancellationToken cancellationToken)
+        string projectId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         foreach (var hash in results.Select(r => r.Hash).Distinct(StringComparer.Ordinal))
         {
             var row = await connection.QueryFirstOrDefaultAsync<RatingRow>(
-                    Def(MemorySql.SelectRatingForBump, new { hash }, cancellationToken))
+                    Def(MemorySql.SelectRatingForBump, new { hash, projectId }, cancellationToken))
                 .ConfigureAwait(false);
             if (row is null)
             {
@@ -925,7 +927,7 @@ public sealed partial class SqliteMemoryStore(
             var rating = RatingPolicy.Rating(
                 RatingPolicy.DefaultBaseScore, row.AccessCount + 1, ageDays, RatingPolicy.DefaultHalfLifeDays);
             await connection.ExecuteAsync(
-                    Def(MemorySql.BumpAccess, new { hash, now, rating }, cancellationToken))
+                    Def(MemorySql.BumpAccess, new { hash, now, rating, projectId }, cancellationToken))
                 .ConfigureAwait(false);
         }
     }
