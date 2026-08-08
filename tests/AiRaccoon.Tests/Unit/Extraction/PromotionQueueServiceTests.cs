@@ -243,6 +243,25 @@ public sealed class PromotionQueueServiceTests : IDisposable
         meta.WaitingByProject.ShouldBe(new Dictionary<string, int> { ["acme"] = 1 });
     }
 
+    /// <summary>B1: nothing drains a propose-only queue, so a stale row needs to be visible even
+    /// when the average wait looks fine — the response meta is the surface every tool already carries.</summary>
+    [Fact]
+    public async Task GetMeta_SurfacesTheOldestWaitSeparatelyFromTheAverage()
+    {
+        await _service.ProposeAsync("acme", [Candidate("stale", "old fact", 1.0)],
+            TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(30));
+        await _service.ProposeAsync("acme", [Candidate("fresh", "new fact", 2.0)],
+            TestContext.Current.CancellationToken);
+
+        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
+
+        meta.OldestWaitSeconds.ShouldNotBeNull();
+        meta.OldestWaitSeconds!.Value.ShouldBe(TimeSpan.FromDays(30).TotalSeconds, 0.1);
+        meta.PromotionsWaitTimeSeconds.ShouldNotBe(meta.OldestWaitSeconds,
+            "the average across both rows must not equal the single stalest row's age");
+    }
+
     [Fact]
     public async Task GetMeta_SurfacesPerProjectCapacityInfo()
     {

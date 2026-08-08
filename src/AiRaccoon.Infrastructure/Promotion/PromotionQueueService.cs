@@ -148,7 +148,8 @@ public sealed partial class PromotionQueueService(
         return new PromotionMeta(stats.TotalCount, stats.AvgWaitSeconds,
             stats.PerProject.Count > 0 ? stats.PerProject : null)
         {
-            CapacityByProject = capacityByProject
+            CapacityByProject = capacityByProject,
+            OldestWaitSeconds = stats.OldestWaitSeconds
         };
     }
 

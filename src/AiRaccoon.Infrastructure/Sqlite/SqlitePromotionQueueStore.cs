@@ -100,6 +100,14 @@ public sealed class SqlitePromotionQueueStore(
                     new { Now = now },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        // The single stalest row's age: an average hides one very old row once enough fresh
+        // rows join the same queue, and nothing else drains a propose-only queue (B1).
+        var oldestWait = await connection.ExecuteScalarAsync<double?>(
+                new CommandDefinition(
+                    "SELECT CAST(max(@Now - created_at) AS REAL) FROM promotion_queue",
+                    new { Now = now },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
         // Dynamic query: an empty GROUP BY yields no rows, and Dapper still builds a typed
         // deserializer from the NULL-typed count(*) column — the dynamic path materializes
         // per row and skips that entirely.
@@ -111,7 +119,7 @@ public sealed class SqlitePromotionQueueStore(
             perProject[(string)row.ProjectId] = (int)(long)row.Count;
         }
 
-        return new PromotionQueueStats(total, avgWait, perProject);
+        return new PromotionQueueStats(total, avgWait, perProject, oldestWait);
     }
 
     public async Task<PromotionQueueRow?> EvictVictimAsync(string projectId,

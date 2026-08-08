@@ -235,6 +235,22 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         stats.TotalCount.ShouldBe(0);
         stats.PerProject.ShouldBeEmpty();
         stats.AvgWaitSeconds.ShouldBeNull();
+        stats.OldestWaitSeconds.ShouldBeNull();
+    }
+
+    /// <summary>B1: a queue with nothing draining it needs a staleness signal an average can hide —
+    /// one very old row does not move the average much once enough fresh rows join it.</summary>
+    [Fact]
+    public async Task GetStats_OldestWaitSeconds_ReflectsTheSingleStalestRow()
+    {
+        await _store.UpsertAsync("acme", [Candidate("stale", "old", 1.0)], TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(30));
+        await _store.UpsertAsync("acme", [Candidate("fresh", "new", 2.0)], TestContext.Current.CancellationToken);
+
+        var stats = await _store.GetStatsAsync(TestContext.Current.CancellationToken);
+
+        stats.OldestWaitSeconds.ShouldNotBeNull();
+        stats.OldestWaitSeconds!.Value.ShouldBe(TimeSpan.FromDays(30).TotalSeconds, 0.1);
     }
 
     // ------------------------------------------------------------------ eviction victim
