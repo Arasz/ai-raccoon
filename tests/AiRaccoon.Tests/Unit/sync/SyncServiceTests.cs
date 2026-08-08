@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sync;
@@ -1286,6 +1287,70 @@ public class SyncServiceTests : IDisposable
         finally
         {
             File.Delete(corruptPath);
+        }
+    }
+
+    [Fact]
+    public async Task MemorySync_RemoteSnapshotNewerSchemaVersion_RefusedBeforeMerging()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remoteSeedPath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                     VALUES ('remote-hash', 'remote.md', 'remote content', 'project', 'acme', 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+                await using var stamp = conn.CreateCommand();
+                stamp.CommandText = "PRAGMA user_version = 99";
+                await stamp.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            cloud.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remoteSeedPath);
+        }
+
+        // Local also has a row of its own, to prove the merge never runs at all.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await Should.ThrowAsync<UnsupportedSchemaVersionException>(() =>
+            service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
+
+        await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
+        {
+            await conn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var check = conn.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'remote-hash'";
+            var countScalar = await check.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            countScalar.ShouldNotBeNull();
+            ((long)countScalar).ShouldBe(0, "a forward-version remote snapshot must never be merged.");
         }
     }
 

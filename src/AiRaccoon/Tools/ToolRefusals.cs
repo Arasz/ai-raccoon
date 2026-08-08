@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Sync;
@@ -31,7 +32,11 @@ internal static partial class ToolRefusals
         [typeof(SyncNetworkException)] = "sync-network",
         [typeof(SyncCorruptFileException)] = "sync-corrupt-file",
         [typeof(AccessDeniedException)] = "access-denied",
-        [typeof(ValidationException)] = "invalid-params"
+        [typeof(ValidationException)] = "invalid-params",
+        // The SDK's own argument marshaller (Microsoft.Extensions.AI.AIFunctionFactory) throws a
+        // raw JsonException when a call's JSON shape doesn't match a parameter's declared type —
+        // before our tool method ever runs, so it otherwise escapes as an unhandled crash.
+        [typeof(JsonException)] = "invalid-argument"
     };
 
     /// <summary>

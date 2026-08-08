@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Encryption;
@@ -66,6 +67,15 @@ public sealed class ToolRefusalsTests : IDisposable
             "memory_write",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
             "unknown-workspace",
+            null
+        },
+        {
+            // D1: 'keep' is documented as accepting the scalar "all", but the schema declares
+            // string[] — the SDK's argument marshaller throws a raw JsonException instead of a
+            // typed refusal (see docs/reference/agent-memory-server.md Error shapes).
+            "memory_workspace_consolidate",
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
+            "invalid-argument",
             null
         }
     };
@@ -169,7 +179,8 @@ public sealed class ToolRefusalsTests : IDisposable
         { new SyncNetworkException("timed out"), "sync-network" },
         { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
         { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
-        { new ValidationException("projectId is required"), "invalid-params" }
+        { new ValidationException("projectId is required"), "invalid-params" },
+        { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" }
     };
 
     [Theory]

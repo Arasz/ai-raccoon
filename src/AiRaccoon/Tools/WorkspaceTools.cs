@@ -80,7 +80,7 @@ public sealed class WorkspaceTools(
 
     [McpServerTool(Name = TnMemoryWorkspaceConsolidate)]
     [Description(
-        "Finishes a workspace: promotes the kept hashes (or 'all') from the workspace outbox into the project's committed memory, then removes the workspace context.")]
+        "Finishes a workspace: promotes the kept hashes (or ['all']) from the workspace outbox into the project's committed memory, then removes the workspace context.")]
     public async Task<ApiEnvelope<ConsolidationToolResult>> WorkspaceConsolidate(
         [Description("The project id.")] string projectId,
         [Description("The workspace id.")] string workspaceId,

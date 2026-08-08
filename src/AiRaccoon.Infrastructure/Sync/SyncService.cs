@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -241,6 +242,20 @@ public partial class SyncService(
 
             try
             {
+                // The read-write open path refuses a bank stamped newer than CurrentVersion
+                // (MemorySchema.EnsureAsync); ATTACH bypasses that guard entirely, so the
+                // attached snapshot's own version is checked here before anything is merged.
+                await using (var versionCheck = conn.CreateCommand())
+                {
+                    versionCheck.CommandText = "PRAGMA remote.user_version";
+                    var remoteVersion = (long)(await versionCheck.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                    if (remoteVersion > MemorySchema.CurrentVersion)
+                    {
+                        throw new UnsupportedSchemaVersionException(
+                            $"remote snapshot schema v{remoteVersion} is newer than this binary supports (v{MemorySchema.CurrentVersion}); update ai-raccoon");
+                    }
+                }
+
                 var received = 0;
 
                 // Merge entries: content-addressed near-union (skip duplicates).

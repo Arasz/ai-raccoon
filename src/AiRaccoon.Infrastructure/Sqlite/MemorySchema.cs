@@ -229,11 +229,9 @@ internal static class MemorySchema
     {
         var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
 
-        // Issue #200: a bank stamped by a newer binary must refuse an older binary's write, not
-        // silently no-op through write paths that skip that schema's maintenance — that gap is
-        // how the drift in #200 happened. EnsureAsync only ever runs on the read-write open path
-        // (SqliteConnectionFactory.InitializeAsync); the codebase has no separate read-only open
-        // that reaches it, so this is the one surface that gates every writer.
+        // EnsureAsync runs on the read-write open path (SqliteConnectionFactory.InitializeAsync) and
+        // refuses a bank stamped newer than CurrentVersion rather than silently no-oping. Note the sync
+        // merge path opens snapshots read-only and does not pass through here.
         if (storedVersion > CurrentVersion)
         {
             throw new UnsupportedSchemaVersionException(
