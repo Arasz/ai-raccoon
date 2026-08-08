@@ -12,4 +12,7 @@ public interface IWorkspaceStore
 
     Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Throws <see cref="UnknownWorkspaceException" /> unless the workspace is Active for the project.</summary>
+    Task RequireActiveAsync(string projectId, string workspaceId, CancellationToken cancellationToken = default);
 }

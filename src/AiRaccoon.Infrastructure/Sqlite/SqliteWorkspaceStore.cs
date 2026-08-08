@@ -48,4 +48,19 @@ public sealed class SqliteWorkspaceStore(SqliteConnectionFactory factory) : IWor
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
+
+    public async Task RequireActiveAsync(string projectId, string workspaceId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        var status = await connection.QueryFirstOrDefaultAsync<string?>(
+                new CommandDefinition(MemorySql.SelectWorkspaceStatus, new { workspaceId, projectId },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (status != WorkspaceStatus.Active.ToString())
+        {
+            throw new UnknownWorkspaceException(workspaceId, projectId);
+        }
+    }
 }

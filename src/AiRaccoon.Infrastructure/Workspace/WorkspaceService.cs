@@ -27,6 +27,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         return await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
@@ -38,6 +39,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
         var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
@@ -73,6 +75,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         var discarded = await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);

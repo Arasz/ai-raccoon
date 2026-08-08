@@ -321,6 +321,10 @@ public sealed class MemoryToolsAccessModeTests
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task RequireActiveAsync(string projectId, string workspaceId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     // Scenario: the propose tier follows the same read/write gate as every other surface.

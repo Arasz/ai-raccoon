@@ -173,6 +173,39 @@ public class WorkspaceServiceTests
         closed.Status.ShouldBe(WorkspaceStatus.Closed);
     }
 
+    [Fact]
+    public async Task GetStatusAsync_WithUnknownWorkspace_ThrowsUnknownWorkspaceException()
+    {
+        var store = new FakeStore();
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.MissingWorkspace = new UnknownWorkspaceException("ghost", "acme");
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            service.GetStatusAsync("acme", "ghost", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ConsolidateAsync_WithUnknownWorkspace_ThrowsUnknownWorkspaceException()
+    {
+        var store = new FakeStore();
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.MissingWorkspace = new UnknownWorkspaceException("ghost", "acme");
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            service.ConsolidateAsync("acme", "ghost", ["all"], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DiscardAsync_WithUnknownWorkspace_ThrowsUnknownWorkspaceException()
+    {
+        var store = new FakeStore();
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.MissingWorkspace = new UnknownWorkspaceException("ghost", "acme");
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            service.DiscardAsync("acme", "ghost", TestContext.Current.CancellationToken));
+    }
+
     /// <summary>Rescued from the deleted extension-host test suite (WI-9/ADR-0016): ConsolidateAsync
     /// deletes the workspace context through IMemoryStore, not around it.</summary>
     [Fact]
@@ -292,6 +325,9 @@ public class WorkspaceServiceTests
 
         public List<(string ProjectId, string WorkspaceId, WorkspaceStatus Status, DateTimeOffset ClosedAt)> Closed { get; } = [];
 
+        /// <summary>When set, RequireActiveAsync throws this instead of succeeding.</summary>
+        public UnknownWorkspaceException? MissingWorkspace { get; set; }
+
         public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
             CancellationToken cancellationToken = default)
         {
@@ -305,6 +341,10 @@ public class WorkspaceServiceTests
             Closed.Add((projectId, workspaceId, status, closedAt));
             return Task.CompletedTask;
         }
+
+        public Task RequireActiveAsync(string projectId, string workspaceId,
+            CancellationToken cancellationToken = default) =>
+            MissingWorkspace is not null ? throw MissingWorkspace : Task.CompletedTask;
     }
 
     /// <summary>Minimal recording IMemoryStore backing one workspace entry, moved from the deleted
