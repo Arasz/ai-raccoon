@@ -489,29 +489,32 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
-  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery
+  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
   Chunking/                 IChunker port, MarkdownChunker (pure splitter)
-  Access/                   AccessMode enum, AccessModePolicy, AccessRequirement
-  Rating/                   RatingPolicy, IMemoryExtension pipeline
+  Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
+  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFound
+  Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
   Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
+  Validation/               ValidatorConfiguration (FluentValidation wiring)
   Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
-  Common/                   ContextNaming
 
 src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
-                            SearchContexts, SearchResultMerger
+                            SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
-  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
+  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
   Sync/                     SyncService, S3CloudStore, FakeCloudStore
   Chunking/                 TokenizerChunker (o200k_base)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
+  Extraction/               ExtractionHostedService (background shared-extraction loop, #55)
+  Maintenance/              BankMaintenanceHostedService (WAL checkpoint + VACUUM/ANALYZE, #79)
   Encryption/               BitwardenCliSecretManager (Bitwarden key source)
   Degradation/              SweepService
-  Rating/                   RetrievalRatingExtension (no-op, kept for extension host)
   Options/                  SyncOptions, InfrastructureOptions
 ```
 

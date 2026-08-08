@@ -84,14 +84,9 @@ with If-Match for conflict detection. A user-scope install and a project-scope i
 the same machine are independent local banks; they correlate **only through the shared
 cloud object**.
 
-## How extensions keep the server open
-
-The `IMemoryExtension` pipeline (`MemoryExtensionHost`) lets first-party and future
-third-party logic observe every store operation. The first-party `RetrievalRatingExtension`
-is currently a no-op — the rating pipeline has been rewired directly into
-`SqliteMemoryStore.SearchAsync` via the on-row `rating`/`access_count` columns (P1
-rewire). The extension host architecture stays registered so later waves can add hooks
-without restructuring the core.
+The rating pipeline is wired directly into `SqliteMemoryStore.SearchAsync` via the on-row
+`rating`/`access_count` columns; the extension-host seam that used to sit in front of it was
+removed as unused (docs/adr/0016-remove-the-extension-host.md).
 
 ## What it costs
 
