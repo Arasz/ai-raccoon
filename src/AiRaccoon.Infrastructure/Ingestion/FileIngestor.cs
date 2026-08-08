@@ -11,7 +11,7 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <summary>
 ///     The bank's file-ingestion mechanics: scope containment, chunking, and chunk insertion.
 ///     Takes an already-open connection rather than opening its own — every caller has already
-///     opened the bank once for the whole walk, so the compiler enforces one-bank-open-per-ingest (WI-8).
+///     opened the bank once for the whole walk, so the compiler enforces one-bank-open-per-ingest.
 /// </summary>
 internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, TimeProvider timeProvider)
 {
@@ -46,11 +46,9 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
         RequireInScope(scope, path);
 
         // Directory.EnumerateFiles descends into directory symlinks, so a link inside the scoped
-        // root can point anywhere on disk; a per-file recheck against the same scope list is the
-        // only thing that actually enforces containment for what gets read. A file whose symlink
-        // (directly, or via a symlinked ancestor directory) resolves outside scope is skipped, not
-        // treated as a reason to refuse the whole directory — one stray link must not DoS an
-        // otherwise legitimate ingest.
+        // root can point anywhere on disk; a per-file recheck against the scope list is what
+        // actually enforces containment. A file resolving outside scope is skipped, not a reason
+        // to refuse the whole directory — one stray link must not DoS an otherwise legitimate ingest.
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(file) && IsIndexableFile(file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
@@ -124,7 +122,7 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
                         cancellationToken))
                 .ConfigureAwait(false);
             // Re-select by bucket key: a concurrent same-file ingest may have won this chunk's
-            // insert (ON CONFLICT DO NOTHING), and last_insert_rowid is stale on a lost race (F3).
+            // insert (ON CONFLICT DO NOTHING), and last_insert_rowid is stale on a lost race.
             var chunkId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
@@ -147,11 +145,10 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
             inserted++;
         }
 
-        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputed
-        // once after the loop rather than per row (~800x cheaper — measured), and unconditionally
-        // — a re-ingest that hits the exists-skip for every chunk still needs numbering intact.
-        // The loop above has no chunk ordinal to compute this in C# (existing chunks are skipped,
-        // so loop position isn't row position), which is exactly why this is a SQL recompute.
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputed once
+        // after the loop, unconditionally, since a re-ingest that hits the exists-skip for every
+        // chunk still needs numbering intact. The loop has no chunk ordinal to compute this in C#
+        // (existing chunks are skipped, so loop position isn't row position) — hence the SQL recompute.
         var ctx = MemorySql.ContextKeyFor(resolvedContext, projectId);
         await connection.ExecuteAsync(
                 Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile = path }, cancellationToken))
@@ -185,9 +182,8 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
 
     /// <summary>
     ///     Ingest reads whatever path it is handed, so the project's declared scope contains it —
-    ///     the same rule and the same primitive memory_watch_add uses, and deny-by-default for the
-    ///     same reason: an unscoped project would otherwise let any caller read any file the
-    ///     server can. Enforced here rather than in the tool so every client is bound.
+    ///     the same rule memory_watch_add uses, deny-by-default so no caller can read any file the
+    ///     server can reach. Enforced here, not in the tool, so every client is bound.
     /// </summary>
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)

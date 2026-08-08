@@ -14,9 +14,8 @@ namespace AiRaccoon.Tools;
 
 /// <summary>
 ///     Turns an expected refusal into a normal error <see cref="CallToolResult" /> instead of an
-///     escaping exception (#151): the SDK's <c>McpServerImpl</c> logs Error on every exception a
-///     tool call throws, <see cref="McpException" /> included, so a correct refusal used to log as
-///     a crash. Registered once as a CallToolFilter in McpServerSetup.ConfigureMcpTransport.
+///     escaping exception: the SDK's <c>McpServerImpl</c> logs Error on every exception a tool call
+///     throws, <see cref="McpException" /> included. Registered once as a CallToolFilter in McpServerSetup.ConfigureMcpTransport.
 /// </summary>
 internal static partial class ToolRefusals
 {
@@ -44,10 +43,8 @@ internal static partial class ToolRefusals
 
     /// <summary>
     ///     Wire prefixes thrown directly as a bare <see cref="McpException" /> message rather than
-    ///     mapped from an exception type here — throw sites: ToolGate.cs ("invalid-params"),
-    ///     MemoryTools.cs ("invalid-params"), ShareTools.cs ("invalid-params", "confirm-required"),
-    ///     PromotionTools.cs ("invalid-params"). Kept next to <see cref="RefusalPrefixes" /> so the
-    ///     doc-drift test's expected set stays code-derived rather than hand-duplicated.
+    ///     mapped from an exception type here (ToolGate.cs, MemoryTools.cs, ShareTools.cs,
+    ///     PromotionTools.cs). Kept next to <see cref="RefusalPrefixes" /> so the doc-drift test's expected set stays code-derived.
     /// </summary>
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params", "confirm-required"];
 
@@ -61,10 +58,9 @@ internal static partial class ToolRefusals
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
 
     /// <summary>
-    ///     The CallToolFilter: a protocol exception or a cancellation always rethrows; a mapped
-    ///     refusal or a bare <see cref="McpException" /> (whose message is already
-    ///     the intended client-facing text) becomes an error result instead; anything else rethrows
-    ///     and stays fail-level.
+    ///     The CallToolFilter: a protocol exception or cancellation always rethrows; a mapped refusal
+    ///     or a bare <see cref="McpException" /> (already client-facing text) becomes an error result
+    ///     instead; anything else rethrows and stays fail-level.
     /// </summary>
     internal static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(
         McpRequestHandler<CallToolRequestParams, CallToolResult> next) =>

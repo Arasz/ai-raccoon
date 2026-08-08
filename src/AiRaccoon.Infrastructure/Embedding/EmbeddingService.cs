@@ -8,10 +8,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
 ///     Resolves the bank's embedding engine from settings (FR-NM-3; see
-///     docs/work/features-native-memory/native-memory.feature): provider local → the
-///     bundled int8 ONNX model in-process; provider openai → any OpenAI-compatible endpoint
-///     (baseUrl override). The engine fingerprint is what `model set` persists so a
-///     provider/model change triggers a full re-embed.
+///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
+///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
 public sealed class EmbeddingService
 {
