@@ -80,6 +80,34 @@ public sealed class OtlpExportTests : IDisposable
         toolMetrics.ActivitySource.HasListeners().ShouldBeTrue();
     }
 
+    // Regression guard for the ActivitySource/sampler/processor wiring outside a real HTTP
+    // request context (issue #181's actual root cause — an ambient unrecorded parent Activity
+    // from ASP.NET Core's request pipeline — only reproduces inside one; see
+    // OtlpTraceExportE2ETests). AddInMemoryExporter is chained onto the SAME TracerProviderBuilder
+    // AddOtlpExport already configured — AddOpenTelemetry() is idempotent per IServiceCollection.
+    [Fact]
+    public async Task ToolCallSpan_IsForceFlushedToTheConfiguredExporter()
+    {
+        var services = new ServiceCollection();
+        var exportedItems = new List<Activity>();
+
+        services.AddOtlpExport(Enabled);
+        services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems));
+        await using var provider = services.BuildServiceProvider();
+        var tracerProvider = provider.GetRequiredService<TracerProvider>();
+
+        using var metrics = new ToolCallMetrics();
+        using (var toolActivity = new ToolExecutionActivity(metrics, "probe_tool", "probe-project"))
+        {
+            toolActivity.RecordInvocation();
+        }
+
+        tracerProvider.ForceFlush();
+
+        exportedItems.ShouldNotBeEmpty();
+        exportedItems.ShouldContain(a => a.OperationName == "probe_tool");
+    }
+
     [Fact]
     public async Task EndpointSet_DoesNotRegisterAspNetCoreInstrumentation()
     {

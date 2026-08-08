@@ -17,6 +17,7 @@
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk"/>
         <PackageReference Include="ModelContextProtocol.Core"/>
+        <PackageReference Include="OpenTelemetry.Exporter.InMemory"/>
         <PackageReference Include="Reqnroll.xunit.v3"/>
         <PackageReference Include="Reqnroll.Tools.MsBuild.Generation" PrivateAssets="all"/>
         <PackageReference Include="Shouldly"/>

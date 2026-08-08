@@ -11,6 +11,7 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="ModelContextProtocol.Core" Version="2.1.0" />
     <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.InMemory" Version="1.17.0" />
     <PackageVersion Include="Reqnroll.xunit.v3" Version="3.3.4" />
     <PackageVersion Include="Reqnroll.Tools.MsBuild.Generation" Version="3.3.4" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
