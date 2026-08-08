@@ -448,7 +448,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Resets one entry to the pre-WP5 shape (content embedded, no structure) to test the healing pass.</summary>
+    /// <summary>Resets one entry to the pre-structure-writer shape (content embedded, no structure; see
+    ///     docs/plans/2026-08-08-search-knn-perf.md §3.6) to test the healing pass.</summary>
     private async Task SimulatePreWp5ShapeAsync(string hash)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -464,7 +465,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Resets every row in a project to the pre-WP5 shape, for a multi-row healing test.</summary>
+    /// <summary>Resets every row in a project to the pre-structure-writer shape
+    ///     (docs/plans/2026-08-08-search-knn-perf.md §3.6), for a multi-row healing test.</summary>
     private async Task SimulatePreWp5ShapeForProjectAsync(string projectId)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

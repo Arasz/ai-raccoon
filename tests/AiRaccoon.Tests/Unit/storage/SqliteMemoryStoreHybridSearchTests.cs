@@ -202,7 +202,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
     {
-        // Per-modality candidate window K = max(limit*3, 100): a doc ranked #2 in both modalities
+        // Per-modality candidate window K = max(limit*3, 100): a doc ranked second in both modalities
         // survives fusion for a limit-1 query even though neither per-modality top-1 is that doc.
         var a = await _store.AddContentAsync("acme", "a.md",
             "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
