@@ -147,6 +147,16 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
             inserted++;
         }
 
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputed
+        // once after the loop rather than per row (~800x cheaper — measured), and unconditionally
+        // — a re-ingest that hits the exists-skip for every chunk still needs numbering intact.
+        // The loop above has no chunk ordinal to compute this in C# (existing chunks are skipped,
+        // so loop position isn't row position), which is exactly why this is a SQL recompute.
+        var ctx = MemorySql.ContextKeyFor(resolvedContext, projectId);
+        await connection.ExecuteAsync(
+                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile = path }, cancellationToken))
+            .ConfigureAwait(false);
+
         return inserted > 0 ? 1 : 0;
     }
 

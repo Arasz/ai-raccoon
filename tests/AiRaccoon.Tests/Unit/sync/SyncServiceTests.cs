@@ -42,6 +42,7 @@ public class SyncServiceTests : IDisposable
                               hash TEXT,
                               path TEXT,
                               value TEXT,
+                              source_file TEXT NULL,
                               scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
                               project_id TEXT NULL,
                               context_label TEXT NULL,
@@ -54,7 +55,9 @@ public class SyncServiceTests : IDisposable
                               rating REAL NOT NULL DEFAULT 0.5,
                               ttl_days INTEGER NULL,
                               embed_state TEXT NOT NULL DEFAULT 'pending',
-                              embedding BLOB NULL
+                              embedding BLOB NULL,
+                              chunk_index INTEGER NOT NULL DEFAULT 0,
+                              total_chunks INTEGER NOT NULL DEFAULT 0
                           );
                           CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
@@ -305,6 +308,69 @@ public class SyncServiceTests : IDisposable
             var count = (long)countScalar;
             count.ShouldBe(0, "Deleted entry must not be resurrected by sync.");
         }
+    }
+
+    /// <summary>docs/plans/2026-08-08-search-knn-perf.md §3.3: the merge's tombstone-apply step can remove a group member; the bank-wide recompute after the merge must leave survivors contiguous.</summary>
+    [Fact]
+    public async Task MemorySync_TombstoneFromRemote_DeletesAGroupMember_AndRecomputesSurvivorsContiguously()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Seed local with three chunks of one source file, deliberately wrong chunk columns —
+        // passing this test proves the post-merge recompute actually ran, not that the seed
+        // happened to already be correct.
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, chunk_index, total_chunks)
+                                 VALUES ('h1', 'doc.md', 'chunk one', 'doc.md', 'project', 'acme', 1, 1, 9, 9),
+                                        ('h2', 'doc.md', 'chunk two', 'doc.md', 'project', 'acme', 2, 2, 9, 9),
+                                        ('h3', 'doc.md', 'chunk three', 'doc.md', 'project', 'acme', 3, 3, 9, 9)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        // A remote snapshot carrying a tombstone for the middle chunk but no entries of its own
+        // — the merge's tombstone-apply path is what must remove h2 locally.
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var tomb = remote.CreateCommand();
+            tomb.CommandText = "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES ('h2', 'project', 1)";
+            await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+        await using var select = check.CreateCommand();
+        select.CommandText =
+            "SELECT hash, chunk_index, total_chunks FROM entries WHERE source_file = 'doc.md' ORDER BY id";
+        var survivors = new List<(string Hash, long ChunkIndex, long TotalChunks)>();
+        await using (var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken))
+        {
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                survivors.Add((reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2)));
+            }
+        }
+
+        survivors.Select(s => s.Hash).ShouldBe(["h1", "h3"]);
+        survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
     }
 
     //
