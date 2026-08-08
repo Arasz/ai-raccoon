@@ -44,7 +44,8 @@ public sealed class SharedExtractionRunnerTests
     public async Task ProposeAsync_QueuesTheFullValueAndSourceFile()
     {
         var (store, queue, _, runner) = NewStack();
-        var value = new string('x', 400) + " beta";
+        var value = string.Join(" ", Enumerable.Repeat("Documented migration step details for the record.", 30)) +
+                    " beta";
         store.Candidates["acme"] = [Row("h1", value, sourceFile: "docs/beta.md")];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
@@ -70,22 +71,23 @@ public sealed class SharedExtractionRunnerTests
         queue.LastProject.ShouldBeNull();
     }
 
-    /// <summary>Recency scoring reads the injected clock, not the wall clock.</summary>
+    /// <summary>v2: recency is a sort tie-break only, never part of the score (docs/adr/0018-promotion-scoring-v2.md)
+    /// — a re-propose after time passes must not change an unchanged row's score.</summary>
     [Fact]
-    public async Task ProposeAsync_ScoresRecencyAgainstTheInjectedClock()
+    public async Task ProposeAsync_ScoreIsStableAcrossTime()
     {
         var (store, _, time, runner) = NewStack();
         store.Candidates["acme"] = [Row("h1", ageDays: 20)];
 
         var fresh = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
-        fresh[0].Reasons.ShouldContain("recent");
 
         time.Advance(TimeSpan.FromDays(30));
 
         var stale = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
-        stale[0].Reasons.ShouldNotContain("recent");
+
+        stale[0].Score.ShouldBe(fresh[0].Score);
     }
 
     [Fact]

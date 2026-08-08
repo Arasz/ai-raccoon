@@ -14,6 +14,10 @@ internal static partial class PromotionContentEvidence
     private const double PositiveHiCapped = 0.15;
     private const int ForeignSubjectHeadChars = 250;
 
+    /// <summary>Alpha-token word count used both for density-normalised features and the
+    /// short-chunk score cap (agentB's `words()`).</summary>
+    internal static int WordCount(string value) => Words().Matches(value ?? string.Empty).Count;
+
     internal static ContentEvidence Evaluate(
         string value, ProvenanceArchetype archetype, string projectId, IReadOnlyList<string> allProjectIds,
         int accessCount)
