@@ -307,7 +307,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         await SimulatePreWp5ShapeForProjectAsync("acme");
 
-        // Bounded: two calls cover 33 candidates at a batch size of 32.
+        // The heal pass loops internally, so one call already covers both the headingless batch
+        // and the headed row past it; the second call re-proves idempotence over the same bank.
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
@@ -333,6 +334,34 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
         _openAi.Requests.Count.ShouldBe(requestsAfterFirstHeal, "a healed row must not be re-embedded by a later pass");
+    }
+
+    [Fact]
+    public async Task Embedding_HealingPass_OneCallHealsMoreThanOneBatchOfCandidates()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
+            TestContext.Current.CancellationToken);
+
+        // More than 2x the heal batch size (32), so a single EmbedPendingAsync call must loop
+        // the heal pass across several internal batches to heal every row.
+        const int rowCount = 70;
+        for (var i = 0; i < rowCount; i++)
+        {
+            await _store.WriteAsync(
+                new MemoryWriteRequest("acme", $"# Doc {i}\n\n## Section\n\nBody paragraph number {i}."),
+                TestContext.Current.CancellationToken);
+        }
+        await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
+        await SimulatePreWp5ShapeForProjectAsync("acme");
+        (await CountVecStructureRowsAsync()).ShouldBe(0, "the pre-WP5 simulation must have actually erased every structure row");
+
+        await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
+
+        (await CountVecStructureRowsAsync()).ShouldBe(rowCount,
+            "one call must heal every candidate, not just the first heal batch");
+        (await CountHealOpenRowsAsync("acme")).ShouldBe(0,
+            "no row may be left with heading_path still NULL after one healing call");
     }
 
     [Fact]
@@ -382,6 +411,17 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @projectId AND structure_embedding IS NOT NULL",
+                new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Rows still open for the structure heal pass, mirroring SelectStructureHealCandidates.</summary>
+    private async Task<int> CountHealOpenRowsAsync(string projectId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE embed_state = 'embedded' AND heading_path IS NULL " +
+                "AND structure_embedding IS NULL AND project_id = @projectId",
                 new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
