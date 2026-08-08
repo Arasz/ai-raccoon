@@ -10,9 +10,9 @@ public sealed class GoldenFileTests
     public const string RegenerateEnvVar = "AIRACCOON_HARNESS_REGENERATE_GOLDEN";
 
     /// <summary>
-    ///     Gate: a fresh reference run must reproduce the committed golden top-k exactly (same
-    ///     hashes in the same order, rankings within 1e-6). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
-    ///     (or run scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
+    ///     Gate: a fresh reference run must reproduce the committed golden top-k within the
+    ///     portable band (ADR-0015). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1 (or run
+    ///     scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
     /// </summary>
     [Fact]
     public async Task GoldenFile_MatchesFreshReferenceRun()

@@ -23,8 +23,9 @@ jobs:
         # exist on the fresh runner or restore fails with NU1301.
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Fast tests
-        # Fast-only gate: full suite runs nightly (nightly.yml) — the Speed trait
-        # split is defined in tests/AiRaccoon.Tests/TestCategories.cs.
+        # Speed=Fast only; Speed=Slow is gated by build-slow below and BDD by
+        # build-bdd. The three filters together cover the suite — see
+        # tests/AiRaccoon.Tests/TestCategories.cs for the trait split.
         run: dotnet test --filter "Speed=Fast" --no-build --nologo -v m
 
   build-bdd:
@@ -46,3 +47,27 @@ jobs:
         # nothing until this job existed. BddGateCoverageTests fails if a feature
         # file is ever added without the tag.
         run: dotnet test --filter "Category=bdd" --no-build --nologo -v m
+
+  build-slow:
+    # The integration/E2E gate. Until 2026-08-08 nothing in the PR gate ran these:
+    # build-fast filters Speed=Fast and build-bdd filters Category=bdd, so every
+    # Speed=Slow test was merged unverified. #126 landed four red ingest tests
+    # through a fully green PR that way. nightly.yml was the nominal backstop and
+    # had failed on every run it ever had, so it could not signal anything.
+    #
+    # Runs beside the other two jobs, so the coverage costs concurrency, not wall
+    # clock (measured: the full suite is ~3m30s of test time).
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Slow tests (integration + E2E)
+        # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
+        # host-specific ONNX artifact, not a portable expectation.
+        run: dotnet test --filter "Speed=Slow" --no-build --nologo -v m

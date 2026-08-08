@@ -1,5 +1,10 @@
-# Full test suite — the slow integration, E2E and retrieval gates that the
-# fast-only build workflow skips. Runs nightly and on demand.
+# Full test suite, unfiltered — the one run with no --filter at all, so it also
+# covers anything a trait typo would hide from the three per-PR jobs.
+#
+# Since 2026-08-08 the PR gate runs Speed=Slow too (build.yml build-slow), so this
+# is a backstop rather than the only integration coverage. It had failed on every
+# run it ever had before then, which is exactly why a red main went unnoticed:
+# a permanently-failing backstop signals nothing.
 #
 # ⚠️ SCHEDULED RUNS ARE BEST-EFFORT. GitHub documents `schedule` as subject to
 # delay during periods of high load, and runs can be dropped entirely — there is

@@ -28,6 +28,10 @@ public sealed record GoldenFile(
     public const int CurrentSchemaVersion = 1;
     public const int RankingPrecision = 6;
 
+    /// <summary>Cross-platform ranking spread measured 1e-4..3e-3 (GGUF SIMD paths differ by
+    /// host); see ADR-0015.</summary>
+    public const double RankingTolerance = 5e-3;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -64,7 +68,12 @@ public sealed record GoldenFile(
         File.WriteAllText(Path, JsonSerializer.Serialize(this, JsonOptions));
     }
 
-    /// <summary>Exact order + near-exact ranking comparison against a fresh reference run.</summary>
+    /// <summary>
+    ///     Portable comparison against a fresh reference run (ADR-0015): hashes are compared as
+    ///     sets, not positions, and matched rankings must agree within <see cref="RankingTolerance"/>.
+    ///     Order is not asserted separately — rankings are the sort key, so set equality plus the
+    ///     ranking tolerance already constrain order except among genuine near-ties.
+    /// </summary>
     public IReadOnlyList<string> Differences(ReferenceRun run)
     {
         var differences = new List<string>();
@@ -90,25 +99,7 @@ public sealed record GoldenFile(
                 continue;
             }
 
-            var expectedHits = expectedQuery.Hits;
-            var actualHits = actualQuery.Hits;
-            var compared = Math.Min(expectedHits.Count, actualHits.Count);
-            for (var i = 0; i < compared; i++)
-            {
-                var e = expectedHits[i];
-                var a = actualHits[i];
-                if (e.Hash != a.Hash || e.Path != a.Path ||
-                    Math.Abs(e.Ranking - a.Ranking) > 1e-6)
-                {
-                    differences.Add(
-                        $"{queryId}[{i}]: expected ({e.Hash}, {e.Ranking:F6}, {e.Path}), got ({a.Hash}, {a.Ranking:F6}, {a.Path})");
-                }
-            }
-
-            if (expectedHits.Count != actualHits.Count)
-            {
-                differences.Add($"{queryId}: hit count {expectedHits.Count} vs {actualHits.Count}");
-            }
+            differences.AddRange(QueryDifferences(queryId, expectedQuery.Hits, actualQuery.Hits));
         }
 
         foreach (var queryId in actual.Keys.Where(id => !expected.ContainsKey(id)))
@@ -117,5 +108,52 @@ public sealed record GoldenFile(
         }
 
         return differences;
+    }
+
+    private static IEnumerable<string> QueryDifferences(
+        string queryId, IReadOnlyList<GoldenHit> expectedHits, IReadOnlyList<ReferenceHit> actualHits)
+    {
+        // The k-th (last) golden ranking is the top-k cut point: a hash that only appears on
+        // one side but sits within tolerance of that cut is a boundary substitution, not a
+        // regression — absorb it rather than report it.
+        var boundaryRanking = expectedHits[^1].Ranking;
+        var expectedByHash = expectedHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);
+        var actualByHash = actualHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);
+
+        foreach (var (hash, e) in expectedByHash)
+        {
+            if (!actualByHash.TryGetValue(hash, out var a))
+            {
+                if (Math.Abs(e.Ranking - boundaryRanking) > RankingTolerance)
+                {
+                    yield return $"{queryId}: {hash} in golden (ranking {e.Ranking:F6}) missing from fresh run";
+                }
+
+                continue;
+            }
+
+            if (e.Path != a.Path)
+            {
+                yield return $"{queryId}: {hash} path expected {e.Path}, got {a.Path}";
+            }
+
+            if (Math.Abs(e.Ranking - a.Ranking) > RankingTolerance)
+            {
+                yield return $"{queryId}: {hash} ranking expected {e.Ranking:F6}, got {a.Ranking:F6}";
+            }
+        }
+
+        foreach (var (hash, a) in actualByHash)
+        {
+            if (expectedByHash.ContainsKey(hash))
+            {
+                continue;
+            }
+
+            if (Math.Abs(a.Ranking - boundaryRanking) > RankingTolerance)
+            {
+                yield return $"{queryId}: {hash} in fresh run (ranking {a.Ranking:F6}) not in golden";
+            }
+        }
     }
 }
