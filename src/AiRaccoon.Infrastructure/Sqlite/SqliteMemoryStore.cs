@@ -158,6 +158,7 @@ public sealed partial class SqliteMemoryStore(
         foreach (var context in contexts)
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
+            var ctx = MemorySql.ContextKeyFor(context, query.ProjectId);
             var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
             // FTS modality: primary expression first; a per-context under-match — at most as
@@ -185,8 +186,8 @@ public sealed partial class SqliteMemoryStore(
             // when the semantic weight is zero (a weight-0 list contributes nothing to RRF).
             var vectorResults = queryVector is null || query.VectorWeight == 0
                 ? []
-                : await QueryDualVectorBatchAsync(connection, filter,
-                    SearchParameters(""), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
+                : await QueryDualVectorBatchAsync(connection,
+                    VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
@@ -209,6 +210,21 @@ public sealed partial class SqliteMemoryStore(
                 foreach (var (key, value) in values)
                 {
                     parameters.Add(key, value);
+                }
+
+                return parameters;
+            }
+
+            // The vector queries bind ctx as the vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md
+            // §3.4) instead of the {filter}/values pair SearchParameters builds for the FTS statement.
+            DynamicParameters VectorParameters()
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("ctx", ctx);
+                parameters.Add("limit", limit);
+                if (queryVector is not null)
+                {
+                    parameters.Add("queryVector", queryVector);
                 }
 
                 return parameters;
@@ -698,21 +714,21 @@ public sealed partial class SqliteMemoryStore(
     ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
     ///     degrade to content-only order. Snippet computation is deferred (perf: most candidates
     ///     never reach the final top-K) — <paramref name="valueByHash" /> carries each survivor's
-    ///     raw value out so the caller can resolve it after ranking.
+    ///     raw value out so the caller can resolve it after ranking. <paramref name="parameters"/>
+    ///     already carries the vec0 partition key (ctx), the candidate window (limit) and the
+    ///     query vector — both statements query their own vec0 table with the same partition.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
+        SqliteConnection connection, DynamicParameters parameters, double alpha,
         IDictionary<string, string> valueByHash, CancellationToken cancellationToken)
     {
         var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                    new CommandDefinition(MemorySql.VectorSearchByFilter, parameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
         var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.StructureVectorSearchByFilter.Replace("{filter}", filter), parameters,
+                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, parameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
