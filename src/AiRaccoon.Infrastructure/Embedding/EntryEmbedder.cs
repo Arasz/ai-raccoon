@@ -106,11 +106,13 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
         }
 
-        // Structure backfill (§3.6.3): runs to completion regardless of the caller's `limit`,
-        // which bounds pending-row embedding (a generator call per row) — the heal pass makes no
-        // generator call for a headingless row and pays only for each batch's distinct headings,
-        // so it stays cheap even over a large backlog and there's no reason to leave it half-done.
-        await HealStructureAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        // Structure heal shares the pending-embed loop's `limit` budget above, so a small
+        // `limit` bounds both instead of leaving structure backfill to run unbounded.
+        var healBudget = (limit ?? int.MaxValue) - processed;
+        if (healBudget > 0)
+        {
+            await HealStructureAsync(connection, projectId, healBudget, cancellationToken).ConfigureAwait(false);
+        }
 
         return processed;
     }
@@ -159,18 +161,19 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
     }
 
     /// <summary>
-    ///     Backfills structure vectors for rows embedded before the structure writer existed
-    ///     (§3.6.3), looping batches to completion: every candidate a batch touches gets a real
+    ///     Backfills structure vectors for rows embedded before the structure writer existed, up
+    ///     to <paramref name="budget"/> candidates: every candidate a batch touches gets a real
     ///     heading path or the '' sentinel, which removes it from SelectStructureHealCandidates'
     ///     WHERE clause, so each iteration shrinks the candidate set and the loop terminates.
     /// </summary>
-    private async Task HealStructureAsync(SqliteConnection connection, string projectId,
+    private async Task HealStructureAsync(SqliteConnection connection, string projectId, int budget,
         CancellationToken cancellationToken)
     {
-        while (true)
+        var remaining = budget;
+        while (remaining > 0)
         {
             var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
-                    new { projectId, limit = BatchSize }, cancellationToken))
+                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))
                 .ConfigureAwait(false)).ToList();
             if (candidates.Count == 0)
             {
@@ -191,6 +194,8 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
                         new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
                     .ConfigureAwait(false);
             }
+
+            remaining -= candidates.Count;
         }
     }
 

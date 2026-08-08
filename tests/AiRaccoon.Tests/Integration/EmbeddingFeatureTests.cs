@@ -365,6 +365,31 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Embedding_EmbedPending_SmallLimitBoundsTheHealPassToTheRemainingBudget()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
+            TestContext.Current.CancellationToken);
+
+        const int rowCount = 70;
+        for (var i = 0; i < rowCount; i++)
+        {
+            await _store.WriteAsync(
+                new MemoryWriteRequest("acme", $"# Doc {i}\n\n## Section\n\nBody paragraph number {i}."),
+                TestContext.Current.CancellationToken);
+        }
+        await SimulatePreWp5ShapeForProjectAsync("acme");
+        _openAi.Requests.Clear();
+
+        await _store.EmbedPendingAsync("acme", 1, TestContext.Current.CancellationToken);
+
+        _openAi.Requests.Count.ShouldBe(1,
+            "a limit:1 call must bound the heal pass to the remaining budget, not walk the whole backlog");
+        (await CountHealOpenRowsAsync("acme")).ShouldBe(rowCount - 1,
+            "only the budgeted number of heal candidates may be healed by a limit-bounded call");
+    }
+
+    [Fact]
     public async Task Embedding_Delete_RemovesTheVectorRowToo()
     {
         await _store.ConfigureEmbeddingAsync("local", null, null,
