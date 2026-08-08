@@ -10,6 +10,8 @@ namespace AiRaccoon.Tests.Unit.Search;
 ///     adjacent-chunk boost, source consolidation and document-first tie-breaking over the
 ///     fused candidate list.
 /// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SourceAffinityRankerTests
 {
     [Fact]

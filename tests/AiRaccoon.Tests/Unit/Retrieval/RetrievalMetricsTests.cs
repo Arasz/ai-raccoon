@@ -3,6 +3,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class NdcgTests
 {
     private static readonly IReadOnlySet<string> Relevant = new HashSet<string>(["A", "C"], StringComparer.Ordinal);
@@ -30,6 +32,8 @@ public sealed class NdcgTests
     public void NdcgAtK_ZeroOrNegativeK_IsZero() => RetrievalMetrics.NdcgAtK(["A", "B"], Relevant, 0).ShouldBe(0.0);
 }
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class MrrTests
 {
     [Fact]
@@ -42,6 +46,8 @@ public sealed class MrrTests
     public void Mrr_NoRelevantHit_IsZero() => RetrievalMetrics.Mrr(["X", "Y"], new HashSet<string>(["A"])).ShouldBe(0.0);
 }
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class RecallAtKTests
 {
     private static readonly IReadOnlySet<string> Relevant = new HashSet<string>(["A", "C", "E"], StringComparer.Ordinal);
@@ -61,6 +67,8 @@ public sealed class RecallAtKTests
     public void RecallAtK_EmptyRelevance_IsZero() => RetrievalMetrics.RecallAtK(["A", "B"], new HashSet<string>(), 5).ShouldBe(0.0);
 }
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class KendallTauTests
 {
     [Fact]

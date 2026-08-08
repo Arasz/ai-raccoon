@@ -5,6 +5,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SweepMatrixTests
 {
     [Fact]
@@ -34,6 +36,8 @@ public sealed class SweepMatrixTests
     }
 }
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SweepRunnerTests
 {
     [Fact]
