@@ -444,7 +444,7 @@ public sealed partial class SqliteMemoryStore(
         var pendingCount = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.PendingCount, new { projectId }, cancellationToken)).ConfigureAwait(false);
         var contextList = (await connection.QueryAsync<string>(
-                Def(MemorySql.CommittedContexts, cancellationToken: cancellationToken))
+                Def(MemorySql.CommittedContexts, new { projectId }, cancellationToken))
             .ConfigureAwait(false)).ToList();
 
         return new MemoryStats(entries, pendingCount, contextList);

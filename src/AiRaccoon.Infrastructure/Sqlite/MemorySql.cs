@@ -394,7 +394,7 @@ internal static class MemorySql
     public const string CommittedContexts = """
                                             SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
                                             FROM entries
-                                            WHERE scope IN ('shared', 'project')
+                                            WHERE scope = 'shared' OR (scope = 'project' AND project_id = @projectId)
                                             ORDER BY CASE WHEN scope = 'shared' THEN 0 ELSE 1 END, context
                                             """;
 

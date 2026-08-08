@@ -44,7 +44,6 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task GetProjectIdsAsync_ReturnsDistinctOrderedProjectScopeIdsOnly()
     {
-        // Committed project-scope rows for three projects.
         await _store.WriteAsync(
             new MemoryWriteRequest("beta", "beta committed fact"),
             TestContext.Current.CancellationToken);
@@ -54,18 +53,15 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         await _store.WriteAsync(
             new MemoryWriteRequest("gamma", "gamma committed fact"),
             TestContext.Current.CancellationToken);
-        // A second row in an existing project (distinct must collapse it).
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "another acme fact"),
             TestContext.Current.CancellationToken);
 
-        // A shared-scope row (promoted) must NOT surface as a project id.
         var sharedEntry = await _store.ShareAsync("beta", (await _store.WriteAsync(
             new MemoryWriteRequest("beta", "promoted to shared"),
             TestContext.Current.CancellationToken)).Hash, TestContext.Current.CancellationToken);
         sharedEntry.Context.ShouldBe(ContextNaming.SharedContext);
 
-        // A workspace-scope row must NOT surface either.
         await EnsureWorkspaceAsync("ws-1");
 
         var projects = await _store.GetProjectIdsAsync(TestContext.Current.CancellationToken);
@@ -126,9 +122,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task Write_WithDiscardedWorkspaceId_ThrowsUnknownWorkspaceException()
     {
-        // The realistic agent mistake: workspaceId is a stale id from before a discard/consolidate,
-        // not a random typo. The workspaces row survives close (see IWorkspaceStore) so this must
-        // be caught by an active-status check, not merely a row-existence check.
+        // A stale workspaceId (post-close) must fail an active-status check, not merely a
+        // row-existence check — the workspaces row survives close (see IWorkspaceStore).
         await EnsureWorkspaceAsync("ws-1");
         var workspaceStore = new SqliteWorkspaceStore(_factory);
         await workspaceStore.CloseAsync("acme", "ws-1", WorkspaceStatus.Closed, FixedNow,
@@ -178,8 +173,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task Search_WithoutEmbeddingEngine_KeywordOnlyQuery_ReturnsKeywordResultsAboveMinScore()
     {
-        // FR-NM-4 s2 (see docs/work/features-native-memory/native-memory.feature): no engine configured -> the vec modality is absent. The keyword query
-        // must still return results above the minimum score without crashing.
+        // No embedding engine means the vec modality is absent (docs/work/features-native-memory/native-memory.feature);
+        // the keyword query must still return results above the minimum score without crashing.
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "the only exact keyword phrase present is ziggurat"),
             TestContext.Current.CancellationToken);
@@ -333,6 +328,19 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Stats_ScopesContextsToTheCallingProject_PlusShared()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "acme fact"), TestContext.Current.CancellationToken);
+        var betaEntry = await _store.WriteAsync(new MemoryWriteRequest("beta", "beta fact"),
+            TestContext.Current.CancellationToken);
+        await _store.ShareAsync("beta", betaEntry.Hash, TestContext.Current.CancellationToken);
+
+        var stats = await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken);
+
+        stats.Contexts.ShouldBe(["shared", "project:acme"]);
+    }
+
+    [Fact]
     public async Task AddContent_IsIdempotent_ByPathInBucket()
     {
         var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
@@ -414,7 +422,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
-        result.Processed.ShouldBe(0); // no engine configured → nothing can be embedded (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature)
+        result.Processed.ShouldBe(0); // no engine configured → nothing can be embedded (docs/work/features-native-memory/native-memory.feature)
         result.Pending.ShouldBe(1);
     }
 
@@ -735,8 +743,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task ShareAsync_ConcurrentSameHash_DifferentProjects_SingleSharedRow()
     {
-        // The global shared index closes the cross-project promote race: project B's loser
-        // must converge on project A's row (project-agnostic re-read), not throw (F3).
+        // The global shared index closes the cross-project promote race: project B's loser must
+        // converge on project A's row (project-agnostic re-read), not throw.
         var entryA = await _store.WriteAsync(new MemoryWriteRequest("acme", "cross-project fact"),
             TestContext.Current.CancellationToken);
         var entryB = await _store.WriteAsync(new MemoryWriteRequest("beta", "cross-project fact"),
@@ -801,9 +809,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         })).ToArray();
         var results = await Task.WhenAll(tasks);
 
-        // Convergence, not both-return-1: one of the two racers may hit the exists-skip
-        // fast path (0) while the other inserts the full chunk set — the invariant is the
-        // single chunk set on disk, not the return codes.
+        // Convergence, not both-return-1: one racer may hit the exists-skip fast path (0) while
+        // the other inserts the full set; the invariant is the single chunk set on disk, not the codes.
         results.ShouldContain(1);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var count = await connection.ExecuteScalarAsync<long>(
@@ -847,7 +854,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
-    /// <summary>Ingest is deny-by-default since #126; these tests exercise chunking, not containment.</summary>
+    /// <summary>Ingest is deny-by-default; these tests exercise chunking, not containment.</summary>
     private Task AllowIngestScopeAsync(string path) =>
         _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
             TestContext.Current.CancellationToken);
