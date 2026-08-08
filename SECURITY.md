@@ -73,15 +73,17 @@ Metrics differ by meter, and the difference matters:
 
 | Meter | Carries `project_id`? |
 |---|---|
-| `AiRaccoon.MemoryTools` (tool calls) | No — only `tool`, `result`, `error_type` (`ToolCallMetrics.RecordInvocation`) |
+| `AiRaccoon.MemoryTools` (tool calls) | **Partially** — the `ai_raccoon_tool_invocations` counter carries it; the `ai_raccoon_tool_duration_ms` histogram does not (`ToolCallMetrics.RecordInvocation`) |
 | `AiRaccoon.PromotionQueue` | **Yes**, on four of its seven instruments — the queued/evicted/promoted/discarded counters (`PromotionQueueMetrics.RecordQueued`/`RecordEviction`/`RecordPromoted`/`RecordDiscarded`). The wait-seconds histogram and the capacity gauge carry no project tag |
 | `System.Runtime` (built-in) | No — process-level GC/CPU/memory only |
 
-So project names reach a collector through two channels, not one: trace spans and
-the promotion-queue metrics. There is a second, non-privacy cost to the metric
-channel — `project_id` is unbounded, so each distinct project becomes its own time
-series. That is free over EventPipe locally, but a hosted collector generally bills
-per series.
+So project names reach a collector through more than just trace spans: the
+tool-invocation counter and four of the promotion-queue instruments carry
+`project_id` too. In both cases the tag is dropped on the paired histogram —
+counters and histograms get the same treatment on this dimension. There is a
+second, non-privacy cost to the metric channel — `project_id` is unbounded, so
+each distinct project becomes its own time series, on both meters. That is
+free over EventPipe locally, but a hosted collector generally bills per series.
 
 **Memory content never leaves.** No entry text, no search queries, no file contents,
 no embeddings — only the scope name (`project_id`) and call-shape telemetry (which

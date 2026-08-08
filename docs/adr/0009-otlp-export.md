@@ -228,9 +228,13 @@ and no hashing processor is added to the tracing pipeline.
 The tag surface, confirmed in code: `ToolExecutionActivity`
 (`src/AiRaccoon/Observability/ToolExecutionActivity.cs`) tags spans with
 `tool`/`project_id`/`result`/`error_type`; `ToolCallMetrics.RecordInvocation`
-(`src/AiRaccoon/Observability/ToolCallMetrics.cs`) tags the counter and
-histogram with `tool`/`result`/`error_type` only — metrics carry no
-`project_id` at any point, hashed or not.
+(`src/AiRaccoon/Observability/ToolCallMetrics.cs`) tags the
+`ai_raccoon_tool_invocations` counter with `tool`/`result`/`error_type`/
+`project_id` and the `ai_raccoon_tool_duration_ms` histogram with
+`tool`/`result`/`error_type` only — the histogram is the one instrument with
+no `project_id`, kept off it for cardinality reasons (ADR 0002), not for
+disclosure reasons. Everywhere `project_id` does appear — the span and the
+invocation counter — it is plaintext, hashed or not.
 
 Reasoning, in order of weight:
 

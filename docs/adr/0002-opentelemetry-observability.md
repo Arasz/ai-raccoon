@@ -37,8 +37,15 @@ A single `Meter` named `"AiRaccoon.MemoryTools"` exposes two instruments:
 
 | Instrument | Type | Name | Unit | Tags |
 |---|---|---|---|---|
-| Call counter | `Counter<long>` | `ai_raccoon_tool_invocations` | `{call}` | `tool`, `result`, `error_type` |
+| Call counter | `Counter<long>` | `ai_raccoon_tool_invocations` | `{call}` | `tool`, `result`, `error_type`, `project_id` |
 | Call duration | `Histogram<double>` | `ai_raccoon_tool_duration_ms` | `ms` | `tool`, `result`, `error_type` |
+
+> **2026-08-08 update.** The counter row gained `project_id`; the histogram
+> row deliberately did not. Histograms carry a far smaller safe cardinality
+> budget than counters (Microsoft guidance: roughly 1,000 tag combinations
+> for counters, 10–100× lower for histograms), and per-project latency was
+> not requested. This matches `PromotionQueueMetrics`, which tags
+> `project_id` on its counters but not its histograms — see ADR 0009.
 
 Custom histogram buckets (milliseconds):
 `1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000`.
@@ -96,8 +103,9 @@ contract lives, so the 22 tools cannot drift apart.
 ### ToolCallMetrics class
 
 A dedicated `ToolCallMetrics` class owns the `Meter`, both instruments, the
-`ActivitySource`, and a `Record` method that writes both metrics atomically
-with a single `TagList`. The class implements `IDisposable` (disposes the
+`ActivitySource`, and a `Record` method that writes both metrics, each with
+its own `TagList` sized to its instrument's cardinality budget (see the
+Meter table above). The class implements `IDisposable` (disposes the
 `Meter`) and exposes the `Meter` instance for test collectors.
 
 ### DI registration
