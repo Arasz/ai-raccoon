@@ -26,12 +26,13 @@ public sealed partial class SqliteMemoryStore(
     ILogger<SqliteMemoryStore> logger)
     : IMemoryStore
 {
+    private readonly EntryEmbedder _embedder = new(embeddings);
+
     // Chunk bounds (see docs/work/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
     // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
     // chunk size is clamped to the configured engine's window where the engine knows it.
     private const int DefaultMaxTokens = 256;
     private const int DefaultOverlayTokens = 48;
-    private const int EmbedBatchSize = 32;
 
     private static readonly HashSet<string> IndexableExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
@@ -108,7 +109,7 @@ public sealed partial class SqliteMemoryStore(
             throw new InvalidOperationException($"Insert stored no row for context '{context}'.");
         }
 
-        await EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
+        await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
         return ToEntry(row);
     }
 
@@ -122,15 +123,8 @@ public sealed partial class SqliteMemoryStore(
         // Hybrid modalities (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): a keyword list from FTS5 and a semantic list from vec0.
         // No engine configured -> the query cannot be embedded, so the vec modality is absent
         // and search degrades to FTS5-only results (never a crash).
-        var settings = await ReadEmbeddingSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
-        byte[]? queryVector = null;
-        if (!string.IsNullOrWhiteSpace(settings.Provider))
-        {
-            var generator = embeddings.CreateGenerator(settings);
-            var embedding = await generator.GenerateAsync([query.Query],
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            queryVector = EmbeddingBlob.ToBytes(embedding[0].Vector);
-        }
+        var queryVector = await _embedder.EmbedQueryAsync(connection, query.Query, cancellationToken)
+            .ConfigureAwait(false);
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
         // Source-path queries (plan C §3 2c; see docs/plans/retrieval-improvement-c.md): match
@@ -464,38 +458,8 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-
-        var previous = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Engine }, cancellationToken))
+        return await _embedder.ConfigureAsync(connection, provider, model, baseUrl, cancellationToken)
             .ConfigureAwait(false);
-
-        // The CLI contract is a consistent engine state: a null model/baseUrl clears the
-        // row (switching provider must not leave stale rows behind).
-        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
-            .ConfigureAwait(false);
-        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
-            .ConfigureAwait(false);
-        await UpsertOrDeleteSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
-            .ConfigureAwait(false);
-
-        var engine = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
-        await connection.ExecuteAsync(
-                Def(MemorySql.UpsertSetting, new { key = EmbeddingSettingsKeys.Engine, value = engine },
-                    cancellationToken))
-            .ConfigureAwait(false);
-
-        // Engine change → re-embed the whole bank with the new engine (FR-NM-3 s6; see docs/work/features-native-memory/native-memory.feature): settings
-        // are bank-global, so every embedded row re-embeds; the pending queue is untouched —
-        // memory_embed_pending owns it (s5).
-        if (!string.Equals(previous, engine, StringComparison.Ordinal))
-        {
-            var reEmbedRows = (await connection.QueryAsync<EmbedRow>(
-                    Def(MemorySql.SelectAllEmbedded, cancellationToken))
-                .ConfigureAwait(false)).ToList();
-            await EmbedBatchAsync(connection, reEmbedRows, cancellationToken).ConfigureAwait(false);
-        }
-
-        return new EmbeddingConfig(provider, model ?? "bundled", engine);
     }
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
@@ -506,17 +470,16 @@ public sealed partial class SqliteMemoryStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         // No engine configured: nothing can be embedded; pending is reported from embed_state.
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
+        var settings = await _embedder.ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(settings.Provider))
         {
             var pendingCount = await connection.ExecuteScalarAsync<int>(
                 Def(MemorySql.PendingCount, new { projectId }, cancellationToken)).ConfigureAwait(false);
             return new EmbedPendingResult(0, pendingCount);
         }
 
-        var processed = await EmbedRowsAsync(connection, projectId, limit, cancellationToken).ConfigureAwait(false);
+        var processed = await _embedder.EmbedPendingAsync(connection, projectId, limit, cancellationToken)
+            .ConfigureAwait(false);
         var remaining = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.PendingCount, new { projectId }, cancellationToken)).ConfigureAwait(false);
         return new EmbedPendingResult(processed, remaining);
@@ -580,7 +543,7 @@ public sealed partial class SqliteMemoryStore(
                 $"memory_add_content stored no row for '{path}' in '{resolvedContext}'.");
         }
 
-        await EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
+        await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
         return ToEntry(inserted);
     }
 
@@ -830,116 +793,6 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
-    private async Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
-        CancellationToken cancellationToken)
-    {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            return;
-        }
-
-        var settings = await ReadEmbeddingSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
-        var generator = embeddings.CreateGenerator(settings);
-        var result = await generator.GenerateAsync([value], cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        var blob = EmbeddingBlob.ToBytes(result[0].Vector);
-        await connection.ExecuteAsync(
-                Def(MemorySql.MarkEmbedded, new { id, embedding = blob }, cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>Embeds a project's pending rows in batches with the configured engine.</summary>
-    private async Task<int> EmbedRowsAsync(SqliteConnection connection, string projectId, int? limit,
-        CancellationToken cancellationToken)
-    {
-        var processed = 0;
-        while (true)
-        {
-            var remaining = (limit ?? int.MaxValue) - processed;
-            if (remaining <= 0)
-            {
-                break;
-            }
-
-            var batch = (await connection.QueryAsync<EmbedRow>(
-                    Def(MemorySql.SelectPendingForEmbed,
-                        new { projectId, limit = Math.Min(EmbedBatchSize, remaining) }, cancellationToken))
-                .ConfigureAwait(false)).ToList();
-            if (batch.Count == 0)
-            {
-                break;
-            }
-
-            processed += await EmbedBatchAsync(connection, batch, cancellationToken).ConfigureAwait(false);
-        }
-
-        return processed;
-    }
-
-    /// <summary>Embeds a set of rows with the configured engine; missing rows are skipped.</summary>
-    private async Task<int> EmbedBatchAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
-        CancellationToken cancellationToken)
-    {
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
-
-        var settings = await ReadEmbeddingSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
-        var generator = embeddings.CreateGenerator(settings);
-        for (var offset = 0; offset < rows.Count; offset += EmbedBatchSize)
-        {
-            var batch = rows.Skip(offset).Take(EmbedBatchSize).ToList();
-            var result = await generator.GenerateAsync(batch.Select(r => r.Value),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            for (var i = 0; i < batch.Count; i++)
-            {
-                var blob = EmbeddingBlob.ToBytes(result[i].Vector);
-                await connection.ExecuteAsync(
-                        Def(MemorySql.MarkEmbedded, new { id = batch[i].Id, embedding = blob }, cancellationToken))
-                    .ConfigureAwait(false);
-            }
-        }
-
-        return rows.Count;
-    }
-
-    private async Task<EmbeddingSettings> ReadEmbeddingSettingsAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
-        var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
-            .ConfigureAwait(false);
-        var baseUrl = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.BaseUrl }, cancellationToken))
-            .ConfigureAwait(false);
-        var apiKey = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.ApiKey }, cancellationToken))
-            .ConfigureAwait(false);
-        return new EmbeddingSettings(provider ?? "", model, baseUrl, apiKey);
-    }
-
-    private static async Task UpsertOrDeleteSettingAsync(SqliteConnection connection, string key, string? value,
-        CancellationToken cancellationToken)
-    {
-        if (value is null)
-        {
-            await connection.ExecuteAsync(Def(MemorySql.DeleteSetting, new { key }, cancellationToken))
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken))
-                .ConfigureAwait(false);
-        }
-    }
-
     private async Task<int> InsertChunksAsync(string projectId, string path, string content, string? context,
         CancellationToken cancellationToken)
     {
@@ -1016,7 +869,7 @@ public sealed partial class SqliteMemoryStore(
                 continue;
             }
 
-            await EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken).ConfigureAwait(false);
+            await _embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken).ConfigureAwait(false);
             inserted++;
         }
 
@@ -1250,13 +1103,6 @@ public sealed partial class SqliteMemoryStore(
     }
 
     private sealed record SettingRow(string Key, string Value);
-
-    private sealed class EmbedRow
-    {
-        public long Id { get; set; }
-
-        public string Value { get; set; } = "";
-    }
 
     private sealed class RatingRow
     {
