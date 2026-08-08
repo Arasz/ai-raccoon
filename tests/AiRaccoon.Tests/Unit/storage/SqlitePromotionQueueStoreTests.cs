@@ -11,10 +11,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     The propose-tier queue table (promotion_queue): persistence contract for the waiting
-///     promotions — upsert-by-(project, hash), review ordering, discard, stats, and the
-///     per-project eviction victim query. The table is separate from entries: queue rows are
-///     never searchable and never counted by memory_stats.
+///     Persistence contract for promotion_queue: upsert-by-(project, hash), review ordering,
+///     discard, stats, and per-project eviction victim query. Rows are separate from entries —
+///     never searchable, never counted by memory_stats.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -164,6 +163,21 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         all.Select(r => r.Hash).ShouldBe(["h4", "h2", "h3", "h1"]);
     }
 
+    /// <summary>228 of 288 live rows share both score and created_at (a propose pass inserts ~20 rows
+    /// within the same second) — SQL specifies no order for those without a further tiebreak.</summary>
+    [Fact]
+    public async Task List_TiedScoreAndCreatedAt_BreaksTieByInsertionOrder()
+    {
+        await _store.UpsertAsync("acme",
+            [Candidate("z1", "z one", 2.0), Candidate("a1", "a one", 2.0), Candidate("m1", "m one", 2.0)],
+            TestContext.Current.CancellationToken);
+
+        var rows = await _store.ListAsync("acme", TestContext.Current.CancellationToken);
+
+        rows.Select(r => r.Hash).ShouldBe(["z1", "a1", "m1"],
+            "a tie on score and created_at must still break deterministically, by insertion order");
+    }
+
     [Fact]
     public async Task List_RoundTripsReasonsAndSourceFile()
     {
@@ -243,6 +257,19 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         victim!.Hash.ShouldBe("h1", "lowest score first; the older of the two 1.0 rows");
         (await _store.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldNotContain("h1");
+    }
+
+    [Fact]
+    public async Task EvictVictim_TiedScoreAndCreatedAt_BreaksTieByInsertionOrder()
+    {
+        await _store.UpsertAsync("acme",
+            Enumerable.Range(0, 20).Select(i => Candidate($"h{i:00}", $"fact {i}", 2.0)).ToList(),
+            TestContext.Current.CancellationToken);
+
+        var victim = await _store.EvictVictimAsync("acme", TestContext.Current.CancellationToken);
+
+        victim.ShouldNotBeNull();
+        victim!.Hash.ShouldBe("h00", "a tie on score and created_at must still break deterministically, by insertion order");
     }
 
     [Fact]
