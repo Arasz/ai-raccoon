@@ -40,7 +40,6 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.8, "a.md", 2)
         };
 
-        // h1 has two adjacent siblings (h0, h2) -> +0.2; h0 and h2 have one each -> +0.1.
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);
@@ -73,12 +72,10 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.85, "a.md", 1)
         };
 
-        // Threshold 0.2 -> only siblings scoring >= 0.8 count; both count here.
         var wide = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.2, DocScoreFormula.Max);
         wide[0].Ranking.ShouldBe(1.0); // (1.0 + 0.1) / 1.1
         wide[1].Ranking.ShouldBe(0.95 / 1.1, 1e-9);
 
-        // Threshold 0.1 -> visibility floor 0.9 excludes the 0.85 sibling.
         var narrow = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
         narrow[0].Ranking.ShouldBe(1.0); // no boost
         narrow[1].Ranking.ShouldBe(0.95); // 0.85 + 0.1 (h0 still visible to h1)
@@ -94,7 +91,6 @@ public sealed class SourceAffinityRankerTests
             Hit("b0", 0.5, "b.md", 0)
         };
 
-        // a0 = 1.1, a1 = 0.5, b0 = 0.5; a1 and b0 tie and a.md's document score (1.1) wins.
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["a0", "a1", "b0"]);
@@ -110,8 +106,6 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.9, "a.md", 2)
         };
 
-        // Visibility floor 0.9: h1 (0.7) is not counted as a boost source; h1 = 0.9 ties h2,
-        // and best h0 (1.0) merges adjacent h1 (gap 0.1 >= threshold 0.1).
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h2"]);
@@ -128,7 +122,6 @@ public sealed class SourceAffinityRankerTests
 
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
-        // Boosted gap 0.05 < 0.1 -> h1 stays a separate result.
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h1"]);
         ranked[0].Ranking.ShouldBe(1.0); // 1.1 / 1.1
         ranked[1].Ranking.ShouldBe(1.05 / 1.1, 1e-9);
@@ -185,7 +178,6 @@ public sealed class SourceAffinityRankerTests
         var merged = SearchResultMerger.Merge([batch], 10, sourceLambda: 0.1,
             consolidationThreshold: double.PositiveInfinity, formula: DocScoreFormula.Max);
 
-        // h0 (1.1) and h1 (1.0839) both get the sibling boost; order is preserved.
         merged.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);
     }
 

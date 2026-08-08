@@ -19,7 +19,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>Wave 0 corpus-exclusion markers (plan C step 5; see docs/plans/retrieval-improvement-c.md §0): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
+    /// <summary>Wave 0 corpus-exclusion markers (docs/plans/retrieval-improvement-c.md §0): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
     /// <remarks>Provenance now lives in the source_file column, so the markers are matched
     /// against source_file — a bare value scan would false-positive on legitimate prose mentions.</remarks>
     private static readonly string[] ExcludedContentMarkers =
@@ -38,9 +38,8 @@ public sealed class RetrievalBaselineTests : IDisposable
     {
         _output = output;
 
-        // The regenerated DB carries embedding.provider='local', so SearchAsync embeds the query at
-        // query time and CreateGenerator throws if the bundled ONNX model is missing (ManagedHarness
-        // contract). Provision it before any search.
+        // The regenerated DB carries provider='local', so SearchAsync embeds queries locally and needs
+        // the bundled ONNX model provisioned before any search runs.
         var ensured = TestData.CreateBundledModel().EnsureAsync().GetAwaiter().GetResult();
         if (!ensured.AllPresent)
         {
@@ -50,7 +49,6 @@ public sealed class RetrievalBaselineTests : IDisposable
 
         _dataRoot = CreateTempRoot();
 
-        // Copy the pre-built JSAA memory database into the temp data root
         var bundledDb = ResolveBundledDbPath();
         var dbPath = Path.Combine(_dataRoot, "memory.db");
         File.Copy(bundledDb, dbPath);
@@ -124,7 +122,6 @@ public sealed class RetrievalBaselineTests : IDisposable
 
         _output.WriteLine($"Results: {totalWithResults}/{queries.Length} queries returned results");
 
-        // At least some queries should return results from the pre-built database
         totalWithResults.ShouldBeGreaterThanOrEqualTo(1,
             "at least one query should return results from the pre-built database");
 
@@ -145,13 +142,12 @@ public sealed class RetrievalBaselineTests : IDisposable
             TestContext.Current.CancellationToken);
         _output.WriteLine($"Baseline written to {binPath}");
 
-        // The report must carry the computed counts, not hardcoded placeholders (plan C step 2; see docs/plans/retrieval-improvement-c.md §0).
+        // The report must carry the computed counts, not hardcoded placeholders (docs/plans/retrieval-improvement-c.md §0).
         baseline.ExpectedSourceMatchesAtTop3.ShouldBe(exactMatchesAtTop3);
         baseline.ExpectedSourceFileMatchesAtTop3.ShouldBe(fileMatchesAtTop3);
 
-        // The hash-map mechanism must demonstrably work end-to-end on the committed corpus: at least
-        // one query finds its exact expected chunk and at least one finds a chunk of the expected
-        // file in the top 3. The >=80% success target is a later gate, not a Wave 0 gate (see docs/plans/retrieval-improvement-c.md §0).
+        // At least one query must find its exact expected chunk, and one a chunk of the expected file,
+        // in the top 3; the >=80% target is a later gate, not Wave 0 (docs/plans/retrieval-improvement-c.md §0).
         exactMatchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
             "at least one query should match its expected chunk (exact hash match) at rank <= 3");
         fileMatchesAtTop3.ShouldBeGreaterThanOrEqualTo(1,
@@ -194,9 +190,8 @@ public sealed class RetrievalBaselineTests : IDisposable
                 $"{query.Id}: expectedSource '{query.ExpectedSource}' is missing from scripts/chunk-hash-map.json");
         }
 
-        // The regenerated corpus stores provenance in the source_file column (plan C §3 2d;
-        // see docs/plans/retrieval-improvement-c.md), so each expected source's file must appear
-        // as a source_file in at least one entry (included files present).
+        // The regenerated corpus stores provenance in the source_file column (docs/plans/retrieval-improvement-c.md §3),
+        // so each expected source's file must appear as a source_file in at least one entry.
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         foreach (var query in expected)
         {

@@ -71,10 +71,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    /// <summary>
-    ///     Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6), S4: "Consequences of ADR-0011?" finds the Consequences chunk at rank ≤ 3
-    ///     in the production hybrid search. Measured rank 1 with the committed corpus.
-    /// </summary>
+    /// <summary>Wave 6 gate S4 (docs/plans/retrieval-improvement-c.md §3 Wave 6): "Consequences of ADR-0011?" finds the Consequences chunk at rank ≤ 3.</summary>
     [Fact]
     public async Task S4_ConsequencesOfAdr0011_ConsequencesChunkAtRankAtMost3()
     {
@@ -87,10 +84,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             "S4: the ADR-0011 Consequences chunk must rank <= 3 (dual-vector structure signal).");
     }
 
-    /// <summary>
-    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S1 (ADR-0011 Context section target) finds the Context chunk at rank ≤ 3.
-    ///     Measured rank 2 with the committed corpus (structure signal + document-first ranking).
-    /// </summary>
+    /// <summary>Wave 5b gate S1 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): ADR-0011's Context section target finds the Context chunk at rank ≤ 3.</summary>
     [Fact]
     public async Task S1_ContextOfAdr0011_ContextChunkAtRankAtMost3()
     {
@@ -103,10 +97,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             "S1: the ADR-0011 Context chunk must rank <= 3 (section-targeted structure signal).");
     }
 
-    /// <summary>
-    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S3 (ADR-0011 Alternatives-considered section target) finds the
-    ///     Alternatives-considered chunk at rank ≤ 3. Measured rank 1 with the committed corpus.
-    /// </summary>
+    /// <summary>Wave 5b gate S3 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): ADR-0011's Alternatives-considered section target finds that chunk at rank ≤ 3.</summary>
     [Fact]
     public async Task S3_AlternativesOfAdr0011_AlternativesChunkAtRankAtMost3()
     {
@@ -120,9 +111,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S5 (cross-document structural query) — the frontend stack decision is
-    ///     recorded in ADR-0011 (formal record) and docs/frontend-architecture.md §2-3 (deep-dive);
-    ///     the formal record's Decision chunk must rank ≤ 3. Measured rank 2 with the committed corpus.
+    ///     Wave 5b gate S5 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): a cross-document structural
+    ///     query — ADR-0011 is the formal record, docs/frontend-architecture.md §2-3 the deep-dive — must
+    ///     rank the formal record's Decision chunk at ≤ 3.
     /// </summary>
     [Fact]
     public async Task S5_FrontendStackDecisionDocument_FindsFormalRecordAtRankAtMost3()
@@ -136,10 +127,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             "S5: the formal decision record's chunk must rank <= 3 (cross-document structural query).");
     }
 
-    /// <summary>
-    ///     Wave 5b gate (see docs/plans/retrieval-improvement-c.md §3 Wave 5b): S6 (section target on a second ADR) — ADR-0060's What-is-lost section
-    ///     chunk must rank ≤ 3. Measured rank 1 with the committed corpus.
-    /// </summary>
+    /// <summary>Wave 5b gate S6 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): a section target on a second ADR — ADR-0060's What-is-lost chunk must rank ≤ 3.</summary>
     [Fact]
     public async Task S6_WhatIsLostByMcpDeletion_WhatIsLostChunkAtRankAtMost3()
     {
@@ -153,10 +141,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>
-    ///     Wave 6 gate (b) + Wave 3 amendment (see docs/plans/retrieval-improvement-c.md §3):
-    ///     "What does ADR-0011 decide?" is answered at the file level within the top 3, and the
-    ///     Decision-section chunk ranks ≤ 3 — the source-affinity ranking resolves the
-    ///     within-file sibling competition that left it at 5.
+    ///     Wave 6 gate (b) + Wave 3 amendment (docs/plans/retrieval-improvement-c.md §3): "What does
+    ///     ADR-0011 decide?" must answer at the file level within the top 3. (Section-exact retrieval of
+    ///     the Decision chunk is a known gap, not asserted here — see the in-body note.)
     /// </summary>
     [Fact]
     public async Task S2_WhatDoesAdr0011Decide_AnswersAtFileLevel()
@@ -177,20 +164,17 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         fileRank.ShouldBeGreaterThan(0, "S2: an ADR-0011 chunk must appear in the results.");
         fileRank.ShouldBeLessThanOrEqualTo(3,
             "S2: the ADR-0011 file must answer the query within the top 3.");
-        // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef): the file answers at rank 1,
-        // but the exact Decision chunk is outside the top 10 — the content-only corpus lacks the
-        // Wave 6 structure signal (structure_embedding is unpopulated; tracked follow-up). The
-        // file-level answer is the honest contract; section-exact retrieval is the recorded gap.
+        // File-level answers at rank 1; the exact Decision chunk sits outside the top 10 because
+        // structure_embedding is unpopulated (tracked follow-up) — file-level is the asserted contract.
         _output.WriteLine(
             "S2 section-exact gap: decision chunk outside top-10 on the re-pinned corpus " +
             "(structure-signal follow-up; see docs/work/2026-08-06-baseline-repin-new-corpus.md)");
     }
 
     /// <summary>
-    ///     Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6): section-level
-    ///     hit@5 over the six A-queries with section ground truth
-    ///     (A1–A5, A7 — A6's section ground truth is missing per
-    ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6. Measured 6/6.
+    ///     Wave 6 gate (docs/plans/retrieval-improvement-c.md §3 Wave 6): section-level hit@5 over the
+    ///     six A-queries with section ground truth (A1–A5, A7; A6 lacks ground truth per
+    ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6.
     /// </summary>
     [Fact]
     public async Task SectionHitAt5_OverAdrQueries_AtLeast4Of6()
@@ -224,7 +208,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             $"section-level hit@5 over A1-A7 must be >= 4/6; got {hits.Count}/6");
     }
 
-    /// <summary>Wave 6 gate (b; see docs/plans/retrieval-improvement-c.md §3 Wave 6): no content-only file-level rank regression beyond the bounded tolerance (see docs/adr/0004-dual-vector-structure-signal.md).</summary>
+    /// <summary>Wave 6 gate (docs/plans/retrieval-improvement-c.md §3 Wave 6): no content-only file-level rank regression beyond the bounded tolerance (docs/adr/0004-dual-vector-structure-signal.md).</summary>
     [Fact]
     public async Task FileLevelRanks_FusedArm_NoRegressionBeyondTolerance()
     {
@@ -280,9 +264,8 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var tolerantRank = 1 + results.Count(r => r.Ranking > expected.Ranking + GoldenFile.RankingTolerance);
         var rawRank = results.FindIndex(r => r.Hash == expected.Hash) + 1;
 
-        // Bound total near-tie absorption to one position: the tolerant rank may forgive at
-        // most one real slide, never an unlimited run of adjacent near-ties (see PR body for
-        // the worked example).
+        // Bounds total near-tie absorption to one position: the tolerant rank forgives at most one
+        // real slide, never an unlimited run of adjacent near-ties.
         return Math.Max(tolerantRank, rawRank - 1);
     }
 

@@ -5,8 +5,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Watch;
 
 /// <summary>
-///     WP3 single-flight: concurrent Run calls for the same (projectId, path) join the in-flight
-///     scan; different watches scan independently; Cancel stops only the watch it names.
+///     Single-flight: concurrent Run calls for the same (projectId, path) join the in-flight scan;
+///     different watches scan independently; Cancel stops only the watch it names.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

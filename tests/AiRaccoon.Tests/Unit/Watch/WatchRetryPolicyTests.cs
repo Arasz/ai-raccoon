@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Per-watch consecutive-failure counter, exponential backoff, 5th failure → stopped (feature rule 14).</summary>
+/// <summary>Per-watch consecutive-failure counter, exponential backoff, 5th failure → stopped (docs/plans/file-watcher-implementation.md, feature rule 14).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchRetryPolicyTests
@@ -77,7 +77,6 @@ public sealed class WatchRetryPolicyTests
         policy.RecordFailure("acme", "/repo", next);
         policy.RecordSuccess("acme", "/repo");
 
-        // Counter reset: two more failures must still be retrying, not stopped.
         next += WatchRetryPolicy.BackoffFor(2);
         policy.RecordFailure("acme", "/repo", next).ShouldBe(WatchState.Retrying);
         next += WatchRetryPolicy.BackoffFor(1);

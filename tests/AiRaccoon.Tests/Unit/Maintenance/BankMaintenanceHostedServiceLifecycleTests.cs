@@ -8,11 +8,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Maintenance;
 
 /// <summary>
-///     Hosted-service lifecycle contract: a startup pass runs one checkpoint before
-///     traffic, the periodic timer re-reads its interval after every tick, settings
-///     failures fall back to defaults without killing the loop, and StopAsync runs a
-///     final best-effort checkpoint. All synchronization is signal-driven (TickSignal
-///     seams on the service) — no polling sleeps; the fake clock drives the timer.
+///     Lifecycle contract: a startup pass checkpoints once before traffic, the periodic timer
+///     re-reads its interval every tick, settings failures fall back to defaults without killing
+///     the loop, and StopAsync runs a final best-effort checkpoint — all signal-driven (TickSignal), no polling sleeps.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -83,8 +81,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        // The startup pass's completion is the sync point: only then write churn the
-        // ticks must reap (no fixed delays to race the bank create + schema ensure).
+        // Startup-pass completion is the sync point, so no fixed delay races the bank create + schema ensure.
         (await WaitForTicksAsync(1)).ShouldBeTrue();
         await InsertSettingAsync("probe.x", "1", TestContext.Current.CancellationToken);
         var walAfterStartup = new FileInfo(WalPath).Length;
@@ -110,9 +107,8 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         (await WaitForTicksAsync(1)).ShouldBeTrue(); // startup pass
         var baseline = _service.Ticks.Count;
 
-        // Tick #1 fires at the configured 1-minute period; wait for its re-read to
-        // complete (the seam) so the period is known to be 1 min, then widen the
-        // setting: the NEXT tick must re-read it and defer.
+        // Waits for the re-read signal before widening the setting, so the NEXT tick is the
+        // one that re-reads and defers.
         await AdvanceUntilTicksAsync(baseline + 1, TimeSpan.FromMinutes(1));
         (await _service.IntervalReReads.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken))
             .ShouldBeTrue();
@@ -137,9 +133,8 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
     [Fact]
     public async Task ExecuteAsync_SettingsTableMissing_LoopSurvivesWithDefaults()
     {
-        // A plain DROP is undone by EnsureAsync's CREATE TABLE IF NOT EXISTS on every
-        // bank open, so the broken channel is simulated with a view of that name over
-        // a missing table: the service's SELECT then fails on every open.
+        // A plain DROP is undone by EnsureAsync's CREATE TABLE IF NOT EXISTS on every open, so this
+        // simulates failure with a view over a missing table instead — the service's SELECT then fails.
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await using var command = connection.CreateCommand();
