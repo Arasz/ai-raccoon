@@ -3,10 +3,9 @@ using System.CommandLine;
 namespace AiRaccoon.Setup.Cli;
 
 /// <summary>
-///     Turns a parse result into CLI text: the Render loop (help/version/errors through the
-///     caller-supplied writer) plus the shell-glob-expansion hint. The hint parses
-///     System.CommandLine error-message templates pinned to 2.0.10 — on an SCL upgrade, run
-///     the CliGlobExpansionHint tests and update TryUnrecognizedToken/TryTypedArgumentToken.
+///     Turns a parse result into CLI text: the Render loop (help/version/errors) plus the
+///     shell-glob-expansion hint, which parses System.CommandLine error-message templates
+///     pinned to 2.0.10 — on an SCL upgrade, update TryUnrecognizedToken/TryTypedArgumentToken.
 /// </summary>
 internal static class CliRendering
 {

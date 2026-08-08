@@ -18,10 +18,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     One-shot config commands (the single runtime config channel): each verb opens the
-///     bank through the given store, applies settings-table writes, prints a result, and
-///     returns the process exit code. User-run commands get no access-tier checks; errors
-///     go to stderr, results to stdout.
+///     One-shot config commands (the single runtime config channel): each verb opens the bank
+///     through the given store, applies settings-table writes, and returns the exit code.
+///     User-run commands get no access-tier checks; errors go to stderr, results to stdout.
 /// </summary>
 internal sealed class ConfigCommands(
     SettingsCommands? settings = null,

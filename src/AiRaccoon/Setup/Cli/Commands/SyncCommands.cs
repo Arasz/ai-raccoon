@@ -42,8 +42,8 @@ public sealed class SyncCommands
             }
         }
 
-        // R1: one active provider — drop the other backend's rows and the stale mode row
-        // first so a crash between delete and write can't leave stale secrets behind.
+        // One active provider (docs/plans/azure-blob-sync-plan.md R1): drop the other backend's
+        // rows first so a crash between delete and write can't leave stale secrets behind.
         foreach (var key in new[]
                  {
                      SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container, SyncSettingsKeys.AzureAccount
@@ -121,8 +121,8 @@ public sealed class SyncCommands
             }
         }
 
-        // R1: one active provider — drop the other backend's rows and the stale mode row
-        // first so a crash between delete and write can't leave stale secrets behind.
+        // One active provider (docs/plans/azure-blob-sync-plan.md R1): drop the other backend's
+        // rows first so a crash between delete and write can't leave stale secrets behind.
         foreach (var key in new[]
                  {
                      SyncSettingsKeys.Endpoint, SyncSettingsKeys.Bucket, SyncSettingsKeys.Region,
@@ -165,8 +165,8 @@ public sealed class SyncCommands
     public async Task<int> RemoveAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't
-        // drift when rows are added later (single-active-provider ruling R1).
+        // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't drift
+        // when rows are added later (docs/plans/azure-blob-sync-plan.md R1).
         var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
         foreach (var key in rows.Keys)
         {
@@ -187,7 +187,7 @@ public sealed class SyncCommands
             return 0;
         }
 
-        // R2 — unknown values route as s3; the raw row is printed so a typo is diagnosable.
+        // Unknown values route as s3 (docs/plans/azure-blob-sync-plan.md R2); the raw row is printed so a typo is diagnosable.
         var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
         await stdout.WriteLineAsync($"provider: {rawProvider}");
         if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
