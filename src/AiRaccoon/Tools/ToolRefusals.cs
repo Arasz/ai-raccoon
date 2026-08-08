@@ -1,8 +1,8 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
-using AiRaccoon.Infrastructure.Sync;
 using FluentValidation;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;

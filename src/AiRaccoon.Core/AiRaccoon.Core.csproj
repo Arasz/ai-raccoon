@@ -10,6 +10,8 @@
     <ItemGroup>
         <PackageReference Include="FluentValidation"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
+        <!-- ADR 0017: TensorPrimitives for EmbeddingMath.MeanPoolAndNormalize. -->
+        <PackageReference Include="System.Numerics.Tensors"/>
     </ItemGroup>
 
     <ItemGroup>

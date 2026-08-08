@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AiRaccoon.Core.Sync;
 
 namespace AiRaccoon.Infrastructure.Sync;
 

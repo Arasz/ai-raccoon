@@ -1,4 +1,4 @@
-namespace AiRaccoon.Infrastructure.Sync;
+namespace AiRaccoon.Core.Sync;
 
 /// <summary>Thrown when memory sync is not configured or its connection string is invalid.</summary>
 public sealed class SyncNotConfiguredException : InvalidOperationException

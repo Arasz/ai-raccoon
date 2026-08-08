@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Sync;
+
 namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>No-op cloud store that rejects all operations — used when sync is not configured.</summary>

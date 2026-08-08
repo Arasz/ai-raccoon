@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Options;
 using Amazon;
 using Amazon.Runtime;
