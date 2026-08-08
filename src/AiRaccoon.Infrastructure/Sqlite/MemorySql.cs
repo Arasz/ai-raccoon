@@ -190,18 +190,34 @@ internal static class MemorySql
     // (ADR-0070) and section tokens (decision) rank the owning chunk above cross-referencing
     // prose. ChunkIndex/TotalChunks are persisted columns (docs/plans/2026-08-08-search-knn-perf.md
     // §3.2/§3.3) rather than a per-query window function — the old MATERIALIZED CTE existed only
-    // to keep FTS5's bm25() from sharing a SELECT with a window function.
+    // to keep FTS5's bm25() from sharing a SELECT with a window function. snippet() is deferred
+    // (§WP7, issue #198) — computing it over the ~300-row candidate window cost ~6.3 ms/query for
+    // rows ranking discards; FtsSnippetsForSurvivors resolves it for ranking survivors only.
     public const string SearchByFilter = """
                                          SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
-                                                e.path AS Path, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet,
-                                                e.value AS Value, e.source_file AS SourceFile,
-                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
+                                                e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
+                                                e.id AS Id
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query AND {filter}
                                          ORDER BY bm25(entries_fts, 1.0, 8.0, 16.0)
                                          LIMIT @limit
                                          """;
+
+    // Deferred FTS snippet resolution (§WP7, issue #198): re-runs the SAME @query text SearchByFilter
+    // used, restricted to the ranking survivors' rowids, so the highlighting matches what the eager
+    // statement would have produced. Filters by entries_fts.rowid (= entries.id), not e.hash — measured
+    // (session scratchpad, live-bank copy, K=20 survivors): filtering by e.hash forces FTS5 to fall
+    // back to a full MATCH scan of the term across the WHOLE corpus (`SCAN entries_fts VIRTUAL TABLE
+    // INDEX 0:M3`, 7.9-17.7 ms here) because hash isn't a column FTS5 can index; entries_fts.rowid IN
+    // (...) alongside MATCH uses FTS5's rowid lookup (`INDEX 0:=M3`) and drops to 2.9-3.2 ms.
+    public const string FtsSnippetsForSurvivors = """
+                                                  SELECT e.hash AS Hash, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet
+                                                  FROM entries_fts
+                                                  JOIN entries e ON e.id = entries_fts.rowid
+                                                  WHERE entries_fts MATCH @query AND entries_fts.rowid IN @ids
+                                                  """;
 
     // vec0 modality: native KNN over the ctx partition (docs/plans/2026-08-08-search-knn-perf.md
     // §3.4) — replaces `WHERE {filter}` entirely, since the partition already selects exactly the

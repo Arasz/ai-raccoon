@@ -162,6 +162,14 @@ public sealed partial class SqliteMemoryStore(
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7, issue #198): records,
+        // per hash an FTS candidate produced, the exact @query text that matched it and its row id
+        // (the FtsSnippetsForSurvivors resolution filters by entries_fts.rowid, not hash — measured
+        // 5-6x faster, see MemorySql.FtsSnippetsForSurvivors). The fallback re-query overwrites
+        // entries for hashes it also returns, which is correct: only the expression that produced
+        // the FINAL ftsResults list for a context should resolve its snippet.
+        var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
+        var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
 
         foreach (var context in contexts)
         {
@@ -180,12 +188,14 @@ public sealed partial class SqliteMemoryStore(
             IReadOnlyList<MemorySearchResult> ftsResults = [];
             if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
-                ftsResults = await QueryFtsBatchAsync(connection, filter,
-                    SearchParameters(plan.Expression), cancellationToken).ConfigureAwait(false);
+                ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Expression,
+                    SearchParameters(plan.Expression), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
+                    .ConfigureAwait(false);
                 if (plan.Fallback is not null && ftsResults.Count <= Math.Max(plan.TokenCount, query.Limit))
                 {
-                    ftsResults = await QueryFtsBatchAsync(connection, filter,
-                        SearchParameters(plan.Fallback), cancellationToken).ConfigureAwait(false);
+                    ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Fallback,
+                        SearchParameters(plan.Fallback), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
 
@@ -241,7 +251,8 @@ public sealed partial class SqliteMemoryStore(
 
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
-        merged = ResolveDeferredSnippets(merged, valueByHash);
+        merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
+            cancellationToken).ConfigureAwait(false);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
     }
@@ -687,26 +698,36 @@ public sealed partial class SqliteMemoryStore(
             ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
+    /// <summary>
+    ///     Keyword modality: FTS5 candidates without snippet() (perf: deferred, §WP7 issue #198 — see
+    ///     <see cref="BuildFtsResults" />). <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" />
+    ///     and <paramref name="idByHash" /> carry each candidate's raw value, matching @query text and
+    ///     row id out so the caller can resolve its snippet after ranking.
+    /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, CancellationToken cancellationToken)
+        SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
+        IDictionary<string, string> valueByHash, IDictionary<string, string> ftsQueryByHash,
+        IDictionary<string, long> idByHash, CancellationToken cancellationToken)
     {
         try
         {
             // FtsQueryNormalizer sanitizes its own expressions, but SourcePathQuery bypasses it,
             // so a malformed expression can still reach FTS5; a failed keyword modality degrades
             // to the vector list.
-            return
-            [
-                .. (await connection.QueryAsync<SearchRow>(
-                        new CommandDefinition(
-                            MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false))
-                .Select(row => new MemorySearchResult(
-                    row.Hash, row.Seq, row.Ranking, row.Path,
-                    string.IsNullOrEmpty(row.Snippet) ? SnippetFallback.From(row.Value, row.Hash) : row.Snippet,
-                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
-            ];
+            var rows = (await connection.QueryAsync<SearchRow>(
+                    new CommandDefinition(
+                        MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
+            foreach (var row in rows)
+            {
+                valueByHash[row.Hash] = row.Value;
+                ftsQueryByHash[row.Hash] = ftsExpression;
+                idByHash[row.Hash] = row.Id;
+            }
+
+            return BuildFtsResults(rows);
         }
         catch (SqliteException ex)
         {
@@ -716,6 +737,14 @@ public sealed partial class SqliteMemoryStore(
             return [];
         }
     }
+
+    /// <summary>Maps FTS candidate rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
+    internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
+        [
+            .. rows.Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
+                row.SourceFile, row.ChunkIndex, row.TotalChunks))
+        ];
 
     /// <summary>
     ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
@@ -791,15 +820,80 @@ public sealed partial class SqliteMemoryStore(
                 row.SourceFile, row.ChunkIndex, row.TotalChunks))
         ];
 
-    /// <summary>Computes the deferred snippet for each result that still carries the unresolved placeholder.</summary>
-    private static IReadOnlyList<MemorySearchResult> ResolveDeferredSnippets(
-        IReadOnlyList<MemorySearchResult> results, IReadOnlyDictionary<string, string> valueByHash) =>
+    /// <summary>
+    ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder
+    ///     (§WP7, issue #198): an FTS-originated survivor gets the real FTS5 snippet() text (matching
+    ///     the same @query it was matched by); everything else — vector-only survivors, and an
+    ///     FTS-originated one whose snippet() came back empty — falls back to
+    ///     <see cref="SnippetFallback" />, exactly as before deferral.
+    /// </summary>
+    private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
+        SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
+        IReadOnlyDictionary<string, string> valueByHash, IReadOnlyDictionary<string, string> ftsQueryByHash,
+        IReadOnlyDictionary<string, long> idByHash, CancellationToken cancellationToken)
+    {
+        var deferred = results.Where(result => result.Snippet.Length == 0).ToList();
+        if (deferred.Count == 0)
+        {
+            return results;
+        }
+
+        var ftsSnippetByHash = await ResolveFtsSnippetsAsync(connection, deferred, ftsQueryByHash, idByHash,
+            cancellationToken).ConfigureAwait(false);
+
+        return
         [
             .. results.Select(result =>
-                result.Snippet.Length == 0 && valueByHash.TryGetValue(result.Hash, out var value)
+            {
+                if (result.Snippet.Length != 0)
+                {
+                    return result;
+                }
+
+                if (ftsSnippetByHash.TryGetValue(result.Hash, out var ftsSnippet) && ftsSnippet.Length > 0)
+                {
+                    return result with { Snippet = ftsSnippet };
+                }
+
+                return valueByHash.TryGetValue(result.Hash, out var value)
                     ? result with { Snippet = SnippetFallback.From(value, result.Hash) }
-                    : result)
+                    : result;
+            })
         ];
+    }
+
+    /// <summary>
+    ///     Batches the deferred FTS-native snippet lookup by matching @query text — most searches
+    ///     use one context, so this is one small query restricted to <paramref name="deferred" />'s
+    ///     row ids, not the full candidate window. Filters by id (entries_fts.rowid), not hash:
+    ///     measured (session scratchpad, live-bank copy) — a hash-filtered MATCH forces FTS5 into a
+    ///     full corpus-wide scan for the term (hash isn't an FTS5-indexed column), 5-6x slower than
+    ///     the rowid-restricted lookup.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, string>> ResolveFtsSnippetsAsync(
+        SqliteConnection connection, IReadOnlyList<MemorySearchResult> deferred,
+        IReadOnlyDictionary<string, string> ftsQueryByHash, IReadOnlyDictionary<string, long> idByHash,
+        CancellationToken cancellationToken)
+    {
+        var snippetByHash = new Dictionary<string, string>(StringComparer.Ordinal);
+        var byQuery = deferred
+            .Where(result => ftsQueryByHash.ContainsKey(result.Hash))
+            .GroupBy(result => ftsQueryByHash[result.Hash], StringComparer.Ordinal);
+
+        foreach (var group in byQuery)
+        {
+            var ids = group.Select(result => idByHash[result.Hash]).ToList();
+            var rows = await connection.QueryAsync<SnippetRow>(
+                    Def(MemorySql.FtsSnippetsForSurvivors, new { query = group.Key, ids }, cancellationToken))
+                .ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                snippetByHash[row.Hash] = row.Snippet;
+            }
+        }
+
+        return snippetByHash;
+    }
 
     private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -968,7 +1062,7 @@ public sealed partial class SqliteMemoryStore(
         public long CreatedAt { get; set; }
     }
 
-    private sealed class SearchRow
+    internal sealed class SearchRow
     {
         public string Hash { get; set; } = "";
 
@@ -978,8 +1072,6 @@ public sealed partial class SqliteMemoryStore(
 
         public string Path { get; set; } = "";
 
-        public string Snippet { get; set; } = "";
-
         public string Value { get; set; } = "";
 
         public string? SourceFile { get; set; }
@@ -987,6 +1079,17 @@ public sealed partial class SqliteMemoryStore(
         public int ChunkIndex { get; set; }
 
         public int TotalChunks { get; set; }
+
+        /// <summary>entries.id — the FTS5 rowid, used to resolve the deferred snippet by row identity rather than hash.</summary>
+        public long Id { get; set; }
+    }
+
+    /// <summary>Row shape for <see cref="MemorySql.FtsSnippetsForSurvivors" />.</summary>
+    private sealed class SnippetRow
+    {
+        public string Hash { get; set; } = "";
+
+        public string Snippet { get; set; } = "";
     }
 
     internal sealed class VectorRow
