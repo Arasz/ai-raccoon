@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Sync;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;

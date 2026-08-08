@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
