@@ -276,6 +276,11 @@ public sealed class SourceAffinitySweepTests : IDisposable
         IReadOnlyList<(double Lambda, double Threshold, DocScoreFormula Formula)> points,
         IReadOnlyList<SweepRow> rows, SweepRow chosen, SweepRow baseline)
     {
+        if (Environment.GetEnvironmentVariable(ParityGateTests.WriteReportEnvVar) != "1")
+        {
+            return;
+        }
+
         var invariant = CultureInfo.InvariantCulture;
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 3 Source-Affinity Scoring — Parameter Sweep");

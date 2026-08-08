@@ -433,6 +433,11 @@ public sealed class RrfParameterSweepTests : IDisposable
         IReadOnlyList<SweepRow> rows, SweepRow chosen, SweepRow current,
         IReadOnlyList<BaselineQuery> queries, IReadOnlyList<FusionRow> fusion)
     {
+        if (Environment.GetEnvironmentVariable(ParityGateTests.WriteReportEnvVar) != "1")
+        {
+            return;
+        }
+
         var invariant = CultureInfo.InvariantCulture;
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 4 RRF Parameter Optimization — Parameter Sweep");
