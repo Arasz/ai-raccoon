@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
-///     D1 catch-up: a never-synced watch (watermark 0) gets a full initial scan; otherwise only
-///     files with mtime strictly after the watermark are re-queued. Also reconciles deletions
+///     D1 catch-up: a never-synced watch (watermark 0) gets a full initial scan; otherwise files
+///     with mtime strictly after the watermark are re-queued, plus any file the fingerprint index
+///     has never seen — the watermark advances per digested file, so a scan interrupted mid-walk
+///     must not strand the files it never reached. Also reconciles deletions
 ///     that happened while the server was down (see docs/features/file-watcher/file-watcher.feature).
 ///     Scans are single-flighted per (projectId, path) via <see cref="WatchScanGuard"/> and
 ///     cancellable — removal (<see cref="WatchPipeline.UnregisterWatch"/>) and host shutdown both
@@ -34,16 +36,16 @@ public sealed partial class WatchCatchUp(
     /// <summary>Cancels every in-flight scan (host shutdown).</summary>
     public void CancelAllScans() => scanGuard.CancelAll();
 
-    /// <summary>Deterministic core: files under path, optionally filtered by mtime &gt; watermark.
-    /// A watched FILE target enumerates itself; a missing target enumerates nothing (catch-up
-    /// reconciliation removes its stale chunks).</summary>
-    internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark)
+    /// <summary>Deterministic core: files under path. A file is due when there is no watermark,
+    /// its mtime is after the watermark, or it was never fingerprinted (missed by an interrupted
+    /// scan). A watched FILE target enumerates itself; a missing target enumerates nothing
+    /// (catch-up reconciliation removes its stale chunks).</summary>
+    internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark,
+        IReadOnlySet<string> fingerprinted)
     {
         if (!Directory.Exists(path))
         {
-            if (File.Exists(path) &&
-                (sinceWatermark is null ||
-                 new DateTimeOffset(File.GetLastWriteTimeUtc(path)).ToUnixTimeSeconds() > sinceWatermark.Value))
+            if (File.Exists(path) && IsDue(path, sinceWatermark, fingerprinted))
             {
                 yield return path;
             }
@@ -53,13 +55,17 @@ public sealed partial class WatchCatchUp(
 
         foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
         {
-            if (sinceWatermark is null ||
-                new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeSeconds() > sinceWatermark.Value)
+            if (IsDue(file, sinceWatermark, fingerprinted))
             {
                 yield return file;
             }
         }
     }
+
+    private static bool IsDue(string file, long? sinceWatermark, IReadOnlySet<string> fingerprinted) =>
+        sinceWatermark is null ||
+        new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeSeconds() > sinceWatermark.Value ||
+        !fingerprinted.Contains(IngestPath.Normalize(file));
 
     private async Task ScanCoreAsync(string projectId, string path, long? sinceWatermark,
         CancellationToken cancellationToken)
@@ -72,8 +78,12 @@ public sealed partial class WatchCatchUp(
         var startedAt = timeProvider.GetUtcNow();
         try
         {
+            var fingerprinted = sinceWatermark is null
+                ? (IReadOnlySet<string>)new HashSet<string>()
+                : (await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
+                .ToHashSet(IngestPath.PathComparer);
             var nextRenew = startedAt + SqliteWatchScanLease.HeartbeatInterval;
-            foreach (var file in EnumerateFiles(path, sinceWatermark))
+            foreach (var file in EnumerateFiles(path, sinceWatermark, fingerprinted))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
