@@ -112,6 +112,14 @@ public sealed partial class SqliteMemoryStore(
             throw new InvalidOperationException($"Insert stored no row for context '{context}'.");
         }
 
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): a write
+        // carrying a source_file can join or grow an existing (ctx, source_file) group.
+        if (request.SourceFile is not null)
+        {
+            await RecomputeChunkColumnsAsync(connection, context, request.ProjectId, request.SourceFile,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
         return ToEntry(row);
     }
@@ -158,6 +166,7 @@ public sealed partial class SqliteMemoryStore(
         foreach (var context in contexts)
         {
             var (filter, values) = FilterFor(context, query.ProjectId, "e.");
+            var ctx = MemorySql.ContextKeyFor(context, query.ProjectId);
             var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
             // FTS modality: primary expression first; a per-context under-match — at most as
@@ -185,8 +194,8 @@ public sealed partial class SqliteMemoryStore(
             // when the semantic weight is zero (a weight-0 list contributes nothing to RRF).
             var vectorResults = queryVector is null || query.VectorWeight == 0
                 ? []
-                : await QueryDualVectorBatchAsync(connection, filter,
-                    SearchParameters(""), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
+                : await QueryDualVectorBatchAsync(connection,
+                    VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
@@ -209,6 +218,21 @@ public sealed partial class SqliteMemoryStore(
                 foreach (var (key, value) in values)
                 {
                     parameters.Add(key, value);
+                }
+
+                return parameters;
+            }
+
+            // The vector queries bind ctx as the vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md
+            // §3.4) instead of the {filter}/values pair SearchParameters builds for the FTS statement.
+            DynamicParameters VectorParameters()
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("ctx", ctx);
+                parameters.Add("limit", limit);
+                if (queryVector is not null)
+                {
+                    parameters.Add("queryVector", queryVector);
                 }
 
                 return parameters;
@@ -305,6 +329,12 @@ public sealed partial class SqliteMemoryStore(
         var scope = await connection.QueryFirstOrDefaultAsync<string?>(
                 Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId }, cancellationToken))
             .ConfigureAwait(false);
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read
+        // alongside the scope lookup above, before the delete, so a removed chunk's siblings can
+        // be renumbered afterward.
+        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
 
         var deleted = await connection.ExecuteAsync(
                 Def(MemorySql.DeleteByHashAndProject, new { hash, projectId }, cancellationToken))
@@ -317,6 +347,14 @@ public sealed partial class SqliteMemoryStore(
                         new { hash, scope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
                         cancellationToken))
                 .ConfigureAwait(false);
+        }
+
+        if (deleted > 0 && recomputeContext?.SourceFile is not null)
+        {
+            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                recomputeContext.WorkspaceId, projectId);
+            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return deleted > 0;
@@ -531,6 +569,15 @@ public sealed partial class SqliteMemoryStore(
                 $"memory_add_content stored no row for '{path}' in '{resolvedContext}'.");
         }
 
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): scoped to the
+        // TARGET context — ShareAsync/promotion write into a different context than the source
+        // row, and only the target's group changed.
+        if (sourceFile is not null)
+        {
+            await RecomputeChunkColumnsAsync(connection, resolvedContext, projectId, sourceFile, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
         return ToEntry(inserted);
     }
@@ -698,21 +745,21 @@ public sealed partial class SqliteMemoryStore(
     ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
     ///     degrade to content-only order. Snippet computation is deferred (perf: most candidates
     ///     never reach the final top-K) — <paramref name="valueByHash" /> carries each survivor's
-    ///     raw value out so the caller can resolve it after ranking.
+    ///     raw value out so the caller can resolve it after ranking. <paramref name="parameters"/>
+    ///     already carries the vec0 partition key (ctx), the candidate window (limit) and the
+    ///     query vector — both statements query their own vec0 table with the same partition.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
-        SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
+        SqliteConnection connection, DynamicParameters parameters, double alpha,
         IDictionary<string, string> valueByHash, CancellationToken cancellationToken)
     {
         var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.VectorSearchByFilter.Replace("{filter}", filter), parameters,
+                    new CommandDefinition(MemorySql.VectorSearchByFilter, parameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
         var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(
-                        MemorySql.StructureVectorSearchByFilter.Replace("{filter}", filter), parameters,
+                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, parameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
@@ -836,20 +883,37 @@ public sealed partial class SqliteMemoryStore(
 
     private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
 
-    private static string ContextStringOf(EntryRow row)
+    private static string ContextStringOf(EntryRow row) =>
+        ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
+
+    /// <summary>Inverse of <see cref="EntryBucket.For"/>: the bucket columns a row was stored under, back to the context string that would retrieve it.</summary>
+    private static string ContextStringOf(string? scope, string? contextLabel, string? workspaceId, string projectId)
     {
-        if (row.WorkspaceId is not null)
+        if (workspaceId is not null)
         {
-            return ContextNaming.WorkspaceContext(row.WorkspaceId);
+            return ContextNaming.WorkspaceContext(workspaceId);
         }
 
-        return row.Scope switch
+        return scope switch
         {
             "shared" => ContextNaming.SharedContext,
-            "project" => ContextNaming.ProjectContext(row.ProjectId),
-            "custom" => row.ContextLabel ?? "",
+            "project" => ContextNaming.ProjectContext(projectId),
+            "custom" => contextLabel ?? "",
             _ => ""
         };
+    }
+
+    /// <summary>
+    ///     Recomputes chunk_index/total_chunks for one (ctx, sourceFile) group after a write that
+    ///     can change its membership (docs/plans/2026-08-08-search-knn-perf.md §3.3).
+    /// </summary>
+    private static async Task RecomputeChunkColumnsAsync(SqliteConnection connection, string context,
+        string projectId, string sourceFile, CancellationToken cancellationToken)
+    {
+        var ctx = MemorySql.ContextKeyFor(context, projectId);
+        await connection.ExecuteAsync(
+                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile }, cancellationToken))
+            .ConfigureAwait(false);
     }
 
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
@@ -945,6 +1009,8 @@ public sealed partial class SqliteMemoryStore(
     }
 
     private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section);
+
+    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
 
     private sealed record SharedRow(string Path, string Value);
 
