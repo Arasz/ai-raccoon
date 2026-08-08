@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using ModelContextProtocol;
 
 namespace AiRaccoon.Access;
 
@@ -40,7 +39,7 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
         }
 
         var required = AccessModePolicy.RequiredFor(requirement);
-        throw new McpException(
-            $"access-denied: {toolName} requires mode {AccessModePolicy.Serialize(required)} (current {AccessModePolicy.Serialize(mode)})");
+        throw new AccessDeniedException(
+            $"{toolName} requires mode {AccessModePolicy.Serialize(required)} (current {AccessModePolicy.Serialize(mode)})");
     }
 }

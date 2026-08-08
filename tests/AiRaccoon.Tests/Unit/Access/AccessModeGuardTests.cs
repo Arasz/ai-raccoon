@@ -1,7 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -50,11 +49,12 @@ public sealed class AccessModeGuardTests
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "rw";
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _guard.EnsureAsync("acme", AccessRequirement.Destructive, "memory_delete",
                 TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldBe("access-denied: memory_delete requires mode full (current rw)");
+        // The "access-denied:" wire prefix is added by the CallToolFilter (ToolRefusalsTests), not the guard itself.
+        ex.Message.ShouldBe("memory_delete requires mode full (current rw)");
     }
 
     // Scenario 5: forgetting knobs denied in rw, policy unchanged.
@@ -63,7 +63,7 @@ public sealed class AccessModeGuardTests
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme-web")] = "rw";
 
-        await Should.ThrowAsync<McpException>(() =>
+        await Should.ThrowAsync<AccessDeniedException>(() =>
             _knobs.SetSweepThresholdAsync("acme-web", 0.1, TestContext.Current.CancellationToken));
 
         (await _knobs.GetSweepThresholdAsync("acme-web", TestContext.Current.CancellationToken)).ShouldBe(0.3);
@@ -74,7 +74,7 @@ public sealed class AccessModeGuardTests
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme-web")] = "rw";
 
-        await Should.ThrowAsync<McpException>(() =>
+        await Should.ThrowAsync<AccessDeniedException>(() =>
             _knobs.SetEntryTtlAsync("acme-web", "h1", 7, TestContext.Current.CancellationToken));
 
         (await _store.GetMetadataAsync("acme-web", "h1", TestContext.Current.CancellationToken)).ShouldBeNull();

@@ -171,6 +171,10 @@ internal static partial class McpServerSetup
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
             ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
+            // #151: one registration reaches every transport chain below (app-host and web-host both
+            // call this extension) — no per-tool catch/rethrow needed to keep a refusal off the error log.
+            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
+
             if (selectedTransports.Count == 0)
             {
                 return mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo);

@@ -973,9 +973,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         _lastWrite.ShouldNotBeNull();
         var projectId = (string)scenarioContext["ProjectId"];
-        var ex = await Should.ThrowAsync<McpException>(async () =>
+        await Should.ThrowAsync<AccessDeniedException>(async () =>
             await Gate.RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete", CancellationToken.None));
-        ex.Message.ShouldContain("access-denied");
     }
 
     [Then(@"memory_search for project ""(.*)"" still returns results")]
@@ -1103,7 +1102,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
                 new MemoryWriteRequest(projectId, "generic content"),
                 CancellationToken.None);
         }
-        catch (McpException ex)
+        catch (Exception ex) when (ex is McpException or AccessDeniedException)
         {
             RecordError(ex);
         }
@@ -1311,9 +1310,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [Then("the forgetting policy is unchanged")]
     public async Task ThenForgettingPolicyUnchanged()
     {
-        var ex = (scenarioContext.TryGetValue("LastError", out var stored) ? stored : _lastError) as McpException;
+        var ex = (scenarioContext.TryGetValue("LastError", out var stored) ? stored : _lastError) as AccessDeniedException;
         ex.ShouldNotBeNull();
-        ex.Message.ShouldContain("access-denied");
 
         var projectId = (string)scenarioContext["ProjectId"];
         var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
@@ -1376,9 +1374,11 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void ThenAccessDenied()
     {
         scenarioContext.TryGetValue("LastError", out var stored);
-        var ex = (stored ?? _lastError) as McpException;
-        ex.ShouldNotBeNull("expected the previous step to record an access-denied tool error");
-        ex.Message.ShouldContain("access-denied");
+        var error = (stored ?? _lastError) as Exception;
+        error.ShouldNotBeNull("expected the previous step to record an access-denied tool error");
+        // A direct call sees the raw AccessDeniedException; the CallToolFilter adds the wire
+        // prefix (see ToolRefusalsTests) — read that same mapping table here.
+        ToolRefusals.PrefixFor(error).ShouldBe("access-denied");
     }
 
     [Then("the workspace entry was never part of a sync payload")]
@@ -1408,7 +1408,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         {
             await policy.SetSweepThresholdAsync(projectId, 0.5, CancellationToken.None);
         }
-        catch (McpException ex)
+        catch (Exception ex) when (ex is McpException or AccessDeniedException)
         {
             RecordError(ex);
         }

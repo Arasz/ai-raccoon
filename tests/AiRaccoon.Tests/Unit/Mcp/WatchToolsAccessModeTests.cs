@@ -4,7 +4,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
-using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -45,10 +44,10 @@ public sealed class WatchToolsAccessModeTests
     {
         SetMode(perProject: "ro");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Add("acme-web", "/repo", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("access-denied: memory_watch_add requires mode rw (current ro)");
+        ex.Message.ShouldContain("memory_watch_add requires mode rw (current ro)");
     }
 
     [Fact]
@@ -56,10 +55,10 @@ public sealed class WatchToolsAccessModeTests
     {
         SetMode(perProject: "ro");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Remove("acme-web", "/repo", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("access-denied: memory_watch_remove requires mode rw (current ro)");
+        ex.Message.ShouldContain("memory_watch_remove requires mode rw (current ro)");
     }
 
     [Fact]

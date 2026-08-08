@@ -10,7 +10,6 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10"/>
     <PackageVersion Include="ModelContextProtocol" Version="2.1.0"/>
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.1.0"/>
-    <PackageVersion Include="ModelContextProtocol.Core" Version="2.0.0"/>
     <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0"/>
     <!-- encryption-at-rest: SQLitePCLRaw's own encryption bundles (e_sqlite3mc) are deprecated since 3.0;
          SQLite3MC.PCLRaw.bundle (utelle) is the maintained train and needs core >= 3.0.2. The provider is
