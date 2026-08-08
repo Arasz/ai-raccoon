@@ -1,7 +1,9 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.AI;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -61,8 +63,21 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
         var generator = embeddings.CreateGenerator(settings);
         var result = await generator.GenerateAsync([value], cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+
+        var headingPath = HeadingPathParser.Parse(value);
+        var structure = await EmbedDistinctHeadingsAsync(generator, [headingPath], cancellationToken)
+            .ConfigureAwait(false);
+        structure.TryGetValue(headingPath, out var structureEmbedding);
+
         await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-            new { id, embedding = EmbeddingBlob.ToBytes(result[0].Vector) }, cancellationToken)).ConfigureAwait(false);
+                new
+                {
+                    id,
+                    embedding = EmbeddingBlob.ToBytes(result[0].Vector),
+                    headingPath = headingPath.Length > 0 ? headingPath : null,
+                    structureEmbedding
+                }, cancellationToken))
+            .ConfigureAwait(false);
     }
 
     /// <summary>Embeds a project's pending rows in batches with the configured engine.</summary>
@@ -89,6 +104,11 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
         }
 
+        // One-shot structure backfill (docs/plans/2026-08-08-search-knn-perf.md §3.6.3): heals
+        // rows embedded before the structure writer existed. Not part of the pending loop above —
+        // a row with no heading never leaves the candidate set, so looping over it would never end.
+        await HealStructureAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+
         return processed;
     }
 
@@ -108,16 +128,96 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             var batch = rows.Skip(offset).Take(BatchSize).ToList();
             var result = await generator.GenerateAsync(batch.Select(r => r.Value),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            // Heading paths repeat heavily within a document; embedding only the distinct
+            // non-empty ones once per batch is what keeps this affordable (§3.6.2).
+            var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
+            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
+                .ConfigureAwait(false);
+
             for (var i = 0; i < batch.Count; i++)
             {
+                var headingPath = headingPaths[i];
+                structure.TryGetValue(headingPath, out var structureEmbedding);
                 await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-                        new { id = batch[i].Id, embedding = EmbeddingBlob.ToBytes(result[i].Vector) },
+                        new
+                        {
+                            id = batch[i].Id,
+                            embedding = EmbeddingBlob.ToBytes(result[i].Vector),
+                            headingPath = headingPath.Length > 0 ? headingPath : null,
+                            structureEmbedding
+                        },
                         cancellationToken))
                     .ConfigureAwait(false);
             }
         }
 
         return rows.Count;
+    }
+
+    /// <summary>
+    ///     Backfills heading-path structure vectors for rows already embedded without one — a bank
+    ///     embedded before the structure writer existed, or a chunk whose heading only appears
+    ///     after a later re-chunk. Bounded to one batch and run once per call (§3.6.3): a chunk
+    ///     with no heading writes nothing and so never leaves <see cref="MemorySql.SelectStructureHealCandidates" />'s
+    ///     result set, so looping here would never terminate. The unhealed remainder is simply
+    ///     picked up again next call — cheap (a parse, no embed) since no heading means no generator call.
+    /// </summary>
+    private async Task HealStructureAsync(SqliteConnection connection, string projectId,
+        CancellationToken cancellationToken)
+    {
+        var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
+                new { projectId, limit = BatchSize }, cancellationToken))
+            .ConfigureAwait(false)).ToList();
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var generator = embeddings.CreateGenerator(settings);
+        var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
+        var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
+            .ConfigureAwait(false);
+        if (structure.Count == 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var headingPath = headingPaths[i];
+            if (headingPath.Length == 0 || !structure.TryGetValue(headingPath, out var structureEmbedding))
+            {
+                continue;
+            }
+
+            await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
+                    new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Embeds each distinct non-empty heading path once; empty paths are omitted from the result.</summary>
+    private static async Task<Dictionary<string, byte[]>> EmbedDistinctHeadingsAsync(
+        IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<string> headingPaths,
+        CancellationToken cancellationToken)
+    {
+        var distinct = headingPaths.Where(path => path.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (distinct.Count == 0)
+        {
+            return [];
+        }
+
+        var result = await generator.GenerateAsync(distinct, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var vectors = new Dictionary<string, byte[]>(distinct.Count, StringComparer.Ordinal);
+        for (var i = 0; i < distinct.Count; i++)
+        {
+            vectors[distinct[i]] = EmbeddingBlob.ToBytes(result[i].Vector);
+        }
+
+        return vectors;
     }
 
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>

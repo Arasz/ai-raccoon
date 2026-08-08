@@ -344,8 +344,25 @@ internal static class MemorySql
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' AND project_id = @projectId " +
         "ORDER BY id LIMIT @limit";
 
+    // Sets all four embed-transition columns together (docs/plans/2026-08-08-search-knn-perf.md
+    // §3.6): a chunk with no heading passes heading_path/structure_embedding as NULL, which is
+    // exactly the vec_structure_au WHEN guard's "leave it alone" case.
     public const string MarkEmbedded =
-        "UPDATE entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id";
+        "UPDATE entries SET embed_state = 'embedded', embedding = @embedding, " +
+        "heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
+
+    // Structure-only counterpart to MarkEmbedded, for the healing pass (§3.6.3): the row is
+    // already embed_state='embedded' with content embedding set, so only the structure columns move.
+    public const string MarkStructure =
+        "UPDATE entries SET heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
+
+    // Healing candidates for a bank embedded before WP5 (or a chunk whose heading never parsed):
+    // embedded content with no structure yet. Bounded per call by @limit and run once per
+    // EmbedPendingAsync invocation (not looped) — a row with no heading never leaves this set
+    // (heading_path stays NULL), so a perpetual loop over it would never terminate.
+    public const string SelectStructureHealCandidates =
+        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' AND heading_path IS NULL " +
+        "AND structure_embedding IS NULL AND project_id = @projectId ORDER BY id LIMIT @limit";
 
     public const string SelectEmbeddedForProject =
         "SELECT id AS Id, value AS Value FROM entries WHERE project_id = @projectId AND embed_state = 'embedded' " +
