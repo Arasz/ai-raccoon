@@ -17,7 +17,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
-///     OTel SDK wiring (ADR 0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT, web-host only —
+///     OTel SDK wiring (ADR-0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT, web-host only —
 ///     never stdio (short-lived, per-connection processes) and never the one-shot CLI verbs.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -32,8 +32,8 @@ public sealed class OtlpExportTests : IDisposable
     private const string ServiceNameVar = "OTEL_SERVICE_NAME";
     private const string ResourceAttributesVar = "OTEL_RESOURCE_ATTRIBUTES";
 
-    // SDK defaults (PeriodicExportingMetricReaderHelper), measured against opentelemetry-dotnet
-    // core-1.17.0 source — the ceiling these tests prove we no longer silently fall back to.
+    // SDK defaults for the periodic metric reader (opentelemetry-dotnet, pinned per ADR-0009) —
+    // the ceiling these tests prove we no longer silently fall back to.
     private const int SdkDefaultExportIntervalMilliseconds = 60_000;
     private const int SdkDefaultExportTimeoutMilliseconds = 30_000;
 
@@ -64,9 +64,8 @@ public sealed class OtlpExportTests : IDisposable
         services.AddOtlpExport(Enabled);
         await using var provider = services.BuildServiceProvider();
 
-        // Force-build the providers, then prove each configured meter/source is actually
-        // listened to: Instrument.Enabled / ActivitySource.HasListeners() only turn true
-        // once a MeterListener/ActivityListener matching that name is live.
+        // Force-builds the providers, then probes each meter/source: Instrument.Enabled /
+        // ActivitySource.HasListeners() only turn true once a matching listener is live.
         provider.GetRequiredService<TracerProvider>();
         provider.GetRequiredService<MeterProvider>();
 
@@ -80,11 +79,9 @@ public sealed class OtlpExportTests : IDisposable
         toolMetrics.ActivitySource.HasListeners().ShouldBeTrue();
     }
 
-    // Regression guard for the ActivitySource/sampler/processor wiring outside a real HTTP
-    // request context (issue #181's actual root cause — an ambient unrecorded parent Activity
-    // from ASP.NET Core's request pipeline — only reproduces inside one; see
-    // OtlpTraceExportE2ETests). AddInMemoryExporter is chained onto the SAME TracerProviderBuilder
-    // AddOtlpExport already configured — AddOpenTelemetry() is idempotent per IServiceCollection.
+    // Guards ActivitySource/sampler/processor wiring outside a real HTTP request context — an
+    // ambient unrecorded parent Activity only reproduces inside one (see OtlpTraceExportE2ETests,
+    // ADR-0009). AddInMemoryExporter chains onto the same builder; AddOpenTelemetry() is idempotent.
     [Fact]
     public async Task ToolCallSpan_IsForceFlushedToTheConfiguredExporter()
     {
@@ -108,10 +105,39 @@ public sealed class OtlpExportTests : IDisposable
         exportedItems.ShouldContain(a => a.OperationName == "probe_tool");
     }
 
+    // Metrics' twin of ToolCallSpan_IsForceFlushedToTheConfiguredExporter above: a MetricCollector
+    // attached straight to the Meter proves nothing about whether a measurement reaches an
+    // exporter (ADR-0009). AddInMemoryExporter chains onto the same metrics builder AddOtlpExport
+    // already configured.
+    [Fact]
+    public async Task ToolCallMetric_IsForceFlushedToTheConfiguredExporter()
+    {
+        var services = new ServiceCollection();
+        var exportedItems = new List<Metric>();
+
+        services.AddOtlpExport(Enabled);
+        services.AddOpenTelemetry().WithMetrics(m => m.AddInMemoryExporter(exportedItems));
+        await using var provider = services.BuildServiceProvider();
+        var meterProvider = provider.GetRequiredService<MeterProvider>();
+
+        using var metrics = new ToolCallMetrics();
+        using (var toolActivity = new ToolExecutionActivity(metrics, "probe_tool", "probe-project"))
+        {
+            toolActivity.RecordInvocation();
+        }
+
+        meterProvider.ForceFlush();
+
+        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_invocations");
+        var invocationMetric = exportedItems.Single(m => m.Name == "ai_raccoon_tool_invocations");
+        HasToolTag(invocationMetric, "probe_tool").ShouldBeTrue();
+        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_duration_ms");
+    }
+
     [Fact]
     public async Task EndpointSet_DoesNotRegisterAspNetCoreInstrumentation()
     {
-        // Pins ADR 0002/0009's standing non-goal: no Kestrel span per request. ASP.NET
+        // Pins ADR-0002/ADR-0009's standing non-goal: no Kestrel span per request. ASP.NET
         // Core's own HTTP-request ActivitySource is "Microsoft.AspNetCore" (confirmed in
         // dotnet/aspnetcore's WebHostBuilder.cs); it must never gain a listener here.
         var services = new ServiceCollection();
@@ -126,8 +152,8 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet()
     {
-        // Owner reversal: stdio hosts recycle roughly every 5 minutes, too short-lived to
-        // pay the exporter's batch delay / provider shutdown grace — CreateWebHost only.
+        // Stdio hosts recycle too fast to pay the exporter's batch delay / shutdown grace —
+        // CreateWebHost only (ADR-0009, "Which host paths get the exporter").
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
@@ -137,15 +163,41 @@ public sealed class OtlpExportTests : IDisposable
         host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
     }
 
+    // Proves what StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet doesn't: a stdio tool
+    // call's own metric has no listener at all, not just that a provider type is absent
+    // (ADR-0009). Asserts a before/after delta rather than an absolute false, the same way
+    // CliCommandRunner_NeverWiresTheExporter below does — Enabled/HasListeners() reflect
+    // process-wide state, and another test's undisposed provider can leave a listener attached
+    // for the rest of the run. GetService(typeof(MeterProvider)) force-builds any provider that
+    // exists before the "after" reading — a listener only attaches once built, not merely
+    // registered — so this stays a real trap for a future stdio-wiring change.
+    [Fact]
+    public async Task StdioHost_ToolCallMetric_HasNoListener_SoInvocationsAreNeverExported()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+        using var probeMetrics = new ToolCallMetrics();
+        var enabledBefore = probeMetrics.Meter.CreateCounter<long>("probe_stdio_before_call").Enabled;
+        var hasListenersBefore = probeMetrics.ActivitySource.HasListeners();
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+        host.Services.GetService(typeof(MeterProvider));
+        var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
+        using (var toolActivity = new ToolExecutionActivity(metrics, "probe_tool", "probe-project"))
+        {
+            toolActivity.RecordInvocation();
+        }
+
+        metrics.Meter.CreateCounter<long>("probe_stdio_after_call").Enabled.ShouldBe(enabledBefore);
+        metrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
+    }
+
     [Fact]
     public async Task CliCommandRunner_NeverWiresTheExporter()
     {
-        // CliCommandRunner hand-composes without a DI container: there is no IServiceCollection
-        // to wire OTel into. Proven behaviorally — even with the endpoint set, running a
-        // one-shot verb must not attach a NEW listener to the application instruments.
-        // Delta, not an absolute false: Enabled/HasListeners() reflect *process-wide* listener
-        // state, so this only asserts CliCommandRunner itself changes nothing, robust to any
-        // unrelated listener another concurrently running test may have already attached.
+        // CliCommandRunner hand-composes without a DI container, so this asserts a delta: running
+        // a one-shot verb must not add a NEW listener, robust to listeners other concurrent tests
+        // already attached (Enabled/HasListeners() reflect process-wide state, not per-test).
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         using var toolMetrics = new ToolCallMetrics();
@@ -164,10 +216,8 @@ public sealed class OtlpExportTests : IDisposable
         toolMetrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
     }
 
-    // ADR 0009 "Default protocol and ports": explicit-endpoint assignment disables the SDK's
-    // own AppendSignalPathToEndpoint behavior, so http/protobuf needs the per-signal path
-    // appended here or the collector never receives traces/metrics — silently, per the ADR's
-    // failure posture. gRPC must stay verbatim: one endpoint, signal encoded in the RPC method.
+    // ADR-0009 "Default protocol and ports": explicit-endpoint assignment disables the SDK's own
+    // signal-path append, so http/protobuf needs it appended here; gRPC stays verbatim.
     [Fact]
     public void HttpProtobuf_AppendsTracesSignalPath()
     {
@@ -230,18 +280,11 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
     }
 
-    // ADR 0009 "Configuration channel": OTEL_METRIC_EXPORT_INTERVAL/_TIMEOUT are read explicitly
-    // for the same cleared-sources reason as the endpoint. Unlike SignalEndpoint, this cannot be
-    // proven with a pure-function unit test: the SDK core (not the exporter package) registers
-    // PeriodicExportingMetricReaderOptions through RegisterOptionsFactory bound to DI's
-    // IConfiguration, which McpServerSetup clears — so only the real CreateWebHost pipeline, with
-    // the real (cleared) host IConfiguration in play, can show whether the value actually reaches
-    // the reader. The bare ServiceCollection seam used elsewhere in this file does NOT reproduce
-    // this: with no host builder, AddOpenTelemetrySharedProviderBuilderServices's
-    // TryAddSingleton<IConfiguration> takes effect and reads real env vars regardless of our fix,
-    // masking the bug either way. Reflection reaches the internal Reader property (MeterProviderSdk)
-    // and the internal ExportIntervalMilliseconds/ExportTimeoutMilliseconds fields
-    // (PeriodicExportingMetricReader) — there is no public surface to assert the applied values.
+    // Must run through the real CreateWebHost pipeline (ADR-0009 "Configuration channel"): the SDK
+    // core reads reader options via DI's IConfiguration, which only the real host clears/restores —
+    // the bare-ServiceCollection seam used elsewhere in this file reads real env vars regardless
+    // and would mask the bug. Reflection reaches the interval/timeout fields since there is no
+    // public surface for them.
     [Fact]
     public async Task HttpHost_MetricExportInterval_IsAppliedToThePeriodicReader_WhenSet()
     {
@@ -292,11 +335,10 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
     }
 
-    // service.name is a fixed product identity (ADR 0009 2026-08-07 update): OTEL_SERVICE_NAME
-    // reaches CreateDefault()'s own environment detector now that McpServerSetup re-admits OTEL_*
-    // variables into config, but OtlpExport's explicit AddService(DefaultServiceName) is registered
-    // later in the resource-builder chain and later-registered-wins, so the explicit call still
-    // wins the merge. This is ADR 0009's own cited proof test for that claim.
+    // service.name is a fixed product identity: AddService(DefaultServiceName) is registered
+    // later in the resource-builder chain than CreateDefault()'s own environment detector, and
+    // later-registered-wins, so the explicit call still wins even though OTEL_SERVICE_NAME now
+    // reaches that detector too (ADR-0009's own cited proof test for this claim).
     [Fact]
     public async Task HttpHost_ServiceName_StaysAiRaccoon_EvenWhenOtelServiceNameIsSet()
     {
@@ -334,12 +376,12 @@ public sealed class OtlpExportTests : IDisposable
             .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
     }
 
-    // Root-cause test for the config-clearing bug (fixed here): OTEL_RESOURCE_ATTRIBUTES is parsed
-    // by the SDK's own environment detector through DI's IConfiguration, same mechanism that
-    // swallowed the export interval and the OTLP headers/compression. Before the fix, McpServerSetup
-    // clearing all config sources meant this attribute never reached the exported Resource.
+    // OTEL_RESOURCE_ATTRIBUTES reaches the SDK via DI's IConfiguration, the same channel
+    // McpServerSetup's config-clearing fix restores (ADR-0009, "Configuration channel"). Reads
+    // TracerProvider.Resource via reflection, so it proves the attribute reaches the provider,
+    // not that it crosses into an exporter payload on the wire.
     [Fact]
-    public async Task HttpHost_ResourceAttributesEnvVar_ReachesTheExportedResource()
+    public async Task HttpHost_ResourceAttributesEnvVar_ReachesTheProvidersResource()
     {
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
@@ -351,10 +393,9 @@ public sealed class OtlpExportTests : IDisposable
             .ShouldBe("probe-env");
     }
 
-    // The bare-ServiceCollection listener test elsewhere in this file cannot show this: it never
-    // starts a host, so it never exercises the path a running serve takes. If no listener is
-    // attached after the host starts, ActivitySource.StartActivity returns null and every tool
-    // call produces no span at all — traces would silently never leave the process.
+    // The bare-ServiceCollection test elsewhere in this file never starts a host, so it can't
+    // show this: without an attached listener after start, ActivitySource.StartActivity returns
+    // null and every tool call silently produces no span (ADR-0009's 2026-08-08 update).
     [Fact]
     public async Task StartedHttpHost_AttachesATraceListener_SoToolCallsProduceSpans()
     {
@@ -391,6 +432,23 @@ public sealed class OtlpExportTests : IDisposable
             .GetProperty("Attributes")!
             .GetValue(resource)!;
         return (string)attributes.Single(a => a.Key == key).Value;
+    }
+
+    /// <summary>ReadOnlyTagCollection has no LINQ surface, only a foreach-only enumerator.</summary>
+    private static bool HasToolTag(Metric metric, string toolName)
+    {
+        foreach (ref readonly var point in metric.GetMetricPoints())
+        {
+            foreach (var tag in point.Tags)
+            {
+                if (tag.Key == "tool" && (string)tag.Value! == toolName)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static int PeriodicReaderField(MeterProvider meterProvider, string fieldName)
