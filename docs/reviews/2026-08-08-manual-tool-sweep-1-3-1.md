@@ -23,6 +23,7 @@ of the workspace feature.
 | D2 | Medium | workspace family | Four different answers for the same unknown workspace |
 | D3 | Low | `memory_share` / `memory_delete` | Unknown hash handled two different ways |
 | D4 | Low | `memory_stats` | Returns every project's context list to a project-scoped caller |
+| D5 | High | `memory_search` (`scope=all`) | A one-entry scope tier ranks 1.0 for every query, whatever the topic |
 
 ## D1 — `memory_workspace_consolidate` rejects the value it documents
 
@@ -131,20 +132,71 @@ memory first and treat a hit as citable evidence. A live example from this sweep
 at `ranking: 1.0`, tied with the genuinely relevant ADR-0006 chunk. An agent trusting the number
 would cite the wrong one.
 
+## A small scope tier captures every `scope=all` search — D5, High
+
+Discovered by accident, then reproduced deliberately. It is the same normalization as above, in its
+damaging form.
+
+`scope=all` fuses a per-context result list. RRF scores each list independently and the fused score
+is divided by the maximum, so **the top entry of a one-item list scores `weight / (k + 1)` — the
+best score any list can produce.** A tier with one entry therefore always contributes a rank-1
+result, and after normalization it lands at or beside 1.0 regardless of what was asked.
+
+The sweep's `memory_share` test put exactly one entry into a previously empty shared tier. Every
+subsequent `scope=all` query returned it at `ranking: 1.0`:
+
+| query | top-3 contained the shared entry at |
+|---|---|
+| `"banana pancake recipe"` | **1.0000** |
+| `"how do I bake sourdough bread"` | **1.0000** |
+| `"kubernetes ingress controller TLS termination"` | **1.0000** |
+| `"promotion scoring tournament winner"` | **1.0000** |
+
+The entry was about SQLite schema write guards. A parallel review of the bank measured it surfacing
+at 0.83–1.0 in roughly 20 of 44 unrelated queries.
+
+`scope=project` was unaffected, which localises it to the cross-context fusion rather than to
+ranking generally. Removing the entry restored normal results — confirmed by re-running
+`"banana pancake recipe"` afterwards.
+
+This is not a quirk of an empty bank. **The shared tier is *designed* to be small** — CLAUDE.md
+calls it the curated, cross-project, sweep-exempt tier that "nothing is shared without explicit
+promotion" into. The smaller and more curated it is, the harder it captures every search. A
+ten-entry shared tier against a 2,400-entry project tier still puts its best match in the top few
+for any query at all.
+
+The sweep's entry has been deleted and the shared tier is empty again; the bank is back to 2,401
+entries across the five real projects. The defect is latent rather than fixed — it returns the
+moment anyone uses `memory_share`, which is a documented core feature.
+
 ## Promotion queue — quality assessment
 
 Measured across all 288 waiting candidates (`memory_promotion_list`, limit 1000).
 
 **Distribution is flat where it should discriminate.** 288 rows carry only **59 distinct scores**.
 **168 rows (58%) score exactly 2.500**; another 39 score exactly 3.500. **72% of the queue holds
-one of two values.** Per project the spread is worse: jsaa has 9 distinct scores across 93 rows.
-Since `memory_promotion_list` is documented as "ranked by score", most of the queue is not
-actually ranked — review order inside the plateau is whatever the tiebreak happens to be.
+one of two values.**
 
-**Two thirds of the queue is scored on metadata alone.** `('cross-project','recent')` accounts for
-156 rows and `('accessed','cross-project','recent')` for 35 — **191 of 288 (66%) with no
-content-evidence channel firing at all**. The content channels that promotion scoring v3 exists to
-apply (`adr`, `rule-language`, `verified-contract`, `measured-values`) reach roughly 60 rows.
+**The cause is not what this reads like, and the correction matters.** My first reading was that
+promotion scoring v3 collapses. A dedicated review of the scoring path established otherwise:
+**those rows were never scored by v3 at all.** The reason vocabulary gives it away —
+`cross-project`, `recent`, `accessed`, `organic-write` exist nowhere in the v3 code; they are the
+retired v1 incumbent's, and 2.500 is exactly v1's `+2 cross-project +0.5 recent`. ADR-0018 names
+this very distribution as the defect v2/v3 was built to fix.
+
+Restricted to the genuinely-v3 rows, scoring spreads fine: **60 distinct scores over 84 rows,
+1.90–3.90.**
+
+The mechanism is a re-scoring hole. A propose pass emits at most `limit` candidates
+(`SharedExtractionService.cs:74-76`, hosted loop passes `DefaultCandidateLimit = 20`), and scoring
+is deterministic — so every pass produces the *same* top 20. Rows ranked 21 and below are never
+re-emitted, never re-upserted, never re-scored. Every project with any v3 rows has **exactly 20**.
+The queue is a 20-row churning head on 204 rows of frozen v1 sediment, and the default `limit=50`
+review window is 100% v3 rows, which is why the sediment went unnoticed.
+
+**Two thirds of the queue is scored on metadata alone** — `('cross-project','recent')` on 156 rows,
+`('accessed','cross-project','recent')` on 35, **191 of 288 (66%)**. That is the same finding seen
+from the other side: those are the v1-scored rows, and v1 scored on metadata.
 
 **`mid-sentence` labels but does not penalize.** It appears in the reason list of several of the
 *highest* scorers (3.850). Those candidates are chunk fragments beginning mid-thought — e.g.
@@ -169,6 +221,43 @@ client's own response ceiling and had to be spilled to a file.
 
 **15 of 288 rows carry no `sourceFile`**, against a `CLAUDE.md` contract that entries carry source
 paths so a hit can be cited.
+
+## Retrieval quality, measured over 44 real queries
+
+A separate pass used the bank the way an agent is told to — `memory_search`, `projectId`
+`ai-raccoon`, `scope=all`, 2-3 formulations per question — across 16 information needs, and
+recorded what came back rather than what should have.
+
+**It mostly works.** 14 of 16 topics got a decisive hit in the top 3. Effectively every result
+carried a `sourceFile`.
+
+Three things degrade it:
+
+- **Two thirds of snippets open with `…` and cut into a sentence mid-stream**, unusable without
+  fetching more. Whether a snippet starts cleanly tracks where the match keyword sits inside the
+  chunk, not the query — re-phrasing does not reposition it usefully.
+- **There is no way to fetch a whole entry.** Answers had to be reassembled from overlapping
+  truncated snippets by repeated rephrasing. One entry — the docs-cleanup LANDMINE note — could not
+  be recovered in full by any formulation. This inverts the value of the "2-3 formulations" rule in
+  CLAUDE.md: rephrasing rarely surfaced a *different document*, but it was the only way to move the
+  snippet window and read the sentence actually wanted.
+- **Manually-written entries cite poorly.** Ingested document chunks carry real paths; the LANDMINE
+  note's `sourceFile` is a bare directory with no filename, and a promoted entry's is its own
+  storage blob rather than the document it describes.
+
+**One entry in the bank is actively wrong.** An entry sourced to
+`src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs` states *"There is no schema version marker in
+the memory bank: MemorySchema.cs has no PRAGMA…"*. That describes the pre-WI-5 state;
+`MemorySchema.cs:339,344` reads and writes `PRAGMA user_version` today. Read on its own it would
+send an agent the wrong way. **Left in place** — it is project data, not this sweep's to delete —
+but it should go.
+
+**A nuance on `minScore` worth recording.** ADR-0006's Decision section locks in `k=60`, 1:1
+weights and **`minScore = 0.0`** as the grid optimum. The shipped tool default is **0.7**
+(`SearchQuery.cs`, `MemoryTools.cs`). A prior doc audit reviewed that gap and marked it as holding,
+on the grounds that the parameter is measured inert at both values. That is true today and stops
+being true the moment the normalization changes — at which point a 0.7 default starts silently
+filtering results that ADR-0006 decided should not be filtered.
 
 ## Method
 
