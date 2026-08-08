@@ -6,6 +6,7 @@
 
     <ItemGroup>
         <PackageReference Include="Dapper"/>
+        <PackageReference Include="DotNext"/>
         <PackageReference Include="HiraokaHyperTools.sqlite-vec"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
         <PackageReference Include="Microsoft.Bcl.Memory"/>
