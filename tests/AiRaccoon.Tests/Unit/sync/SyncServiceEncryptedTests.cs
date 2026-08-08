@@ -6,11 +6,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.sync;
 
 /// <summary>
-///     Sync on an encrypted bank (upgrade doc docs/work/2026-08-06-sqlite3mc-2.4.0-upgrade.md in-flight
-///     item "sync checkpoint on an encrypted bank"). VACUUM INTO snapshots of an encrypted bank are
-///     themselves encrypted (measured docs/work/2026-08-06-sqlite3mc-feature-surface.md F9), so every
-///     snapshot access in the sync path must carry the bank key — local strip, quick_check, and the
-///     merge ATTACH. These tests pin the full encrypted push + pull/merge round trip.
+///     Sync on an encrypted bank: VACUUM INTO snapshots of an encrypted bank are themselves
+///     encrypted (docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md F9), so every snapshot
+///     access in the sync path must carry the bank key. Pins the full push + pull/merge round trip.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -124,7 +122,6 @@ public class SyncServiceEncryptedTests : IDisposable
         var remote = await cloud.PullAsync("obj", TestContext.Current.CancellationToken);
         remote.ShouldNotBeNull();
 
-        // The pushed snapshot is encrypted: unreadable without the key, readable with it.
         var pulledPath = Path.Combine(_dataRoot, "pulled.db");
         await File.WriteAllBytesAsync(pulledPath, remote.Data, TestContext.Current.CancellationToken);
 
@@ -164,7 +161,6 @@ public class SyncServiceEncryptedTests : IDisposable
 
         cloud.Set("obj", await File.ReadAllBytesAsync(remoteSnapshotPath, TestContext.Current.CancellationToken));
 
-        // Local encrypted bank holds its own entry; sync must pull + merge the encrypted remote.
         await InsertEntryAsync(_bankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
         var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshot(),

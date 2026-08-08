@@ -26,11 +26,8 @@ public sealed record EnsureResult(bool AllPresent, IReadOnlyList<string> Errors)
 
 /// <summary>
 ///     Bootstraps the pinned reference assets into Retrieval/assets (gitignored): sqlite-memory
-///     1.3.5 full + sqlite-vector 1.0.0 modules for the current platform and the all-MiniLM GGUF
-///     model. The manifest pins per-platform module archives (macOS .dylib, Linux .so); the model
-///     is platform-independent. Prefers verified local copies (~/.ai-raccoon), falls back to the
-///     pinned GitHub/HuggingFace URLs, and always verifies SHA-256 — a missing or mismatched asset
-///     is reported, never silently skipped.
+///     1.3.5 + sqlite-vector 1.0.0 for the current platform, plus the all-MiniLM GGUF model.
+///     Prefers verified local copies, falls back to pinned URLs, and always verifies SHA-256.
 /// </summary>
 public sealed class ReferenceAssets
 {

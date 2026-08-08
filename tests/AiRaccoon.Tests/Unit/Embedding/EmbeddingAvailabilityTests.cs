@@ -42,8 +42,8 @@ public sealed class EmbeddingAvailabilityTests
     [Fact]
     public async Task EmbeddingAvailability_WhenEnsureThrows_LogsWarning()
     {
-        // Pins the bare-catch path (e.g. the 30 s timeout surfacing as OperationCanceledException):
-        // the boot must continue with a warning, never a throw.
+        // Pins the bare-catch path (docs/reviews/2026-08-05-integration-review-pr24-26.md): the boot
+        // must continue with a warning, never a throw.
         var logger = new FakeLogger<EmbeddingAvailability>();
         var availability = new EmbeddingAvailability(logger, new ThrowingBundledModel());
 

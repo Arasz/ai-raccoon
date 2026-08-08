@@ -12,7 +12,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Extraction;
 
 /// <summary>memory_share_extract must score candidates against every known project — the same
-/// scope the background loop uses — not just the caller's requested subset (issue #117 item 3).</summary>
+/// scope the background loop uses — not just the caller's requested subset.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ShareExtractScoringScopeTests
@@ -25,10 +25,9 @@ public sealed class ShareExtractScoringScopeTests
     [Fact]
     public async Task ShareExtract_ScoresTheSameCandidate_AsTheBackgroundLoop()
     {
-        // The bank knows "acme" and "beta" (FakeExtractionStore.Projects default). The candidate
-        // lives under "acme" and mentions "beta" — a project that exists in the bank but is NOT
-        // among the ids the tool caller requests below, which is exactly the case where the
-        // +2 cross-project bonus is wrongly withheld today.
+        // "acme" and "beta" both exist in the bank; the candidate lives under "acme" and mentions
+        // "beta", which is NOT among the ids requested below — where the +2 cross-project bonus
+        // is wrongly withheld today.
         var store = new FakeExtractionStore();
         var queue = new FakePromotionQueue();
         var time = new FakeTimeProvider(FixedNow);

@@ -71,9 +71,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_VectorOnlyHit_SnippetFallsBackToTrimmedValue_WithEllipsis()
     {
-        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): a vector-only hit has no FTS5 snippet() — FR-NM-4 s1 (see docs/work/features-native-memory/native-memory.feature) still
-        // requires a snippet on every result, so the entry value is trimmed to ~200 chars
-        // ('…'-marked, keyed by hash) instead of an empty snippet.
+        // A vector-only hit has no FTS5 snippet(); FR-NM-4 s1 (docs/work/features-native-memory/native-memory.feature)
+        // still requires one, so the value is trimmed to ~200 chars, '…'-marked, keyed by hash.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
@@ -95,9 +94,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_VectorOnly_ReturnsExactlyLimitResults_WithCorrectSnippets_OutOfALargerCandidateSet()
     {
-        // Laziness proof (perf: snippet computation deferred to ranking survivors): N=8 vector-only
-        // candidates compete for a Limit=3 query. Every returned result must still carry the exact
-        // snippet SnippetFallback.From would have produced eagerly — deferral must not change output.
+        // Laziness proof: N=8 vector-only candidates compete for a Limit=3 query; every returned
+        // result must still carry the exact snippet SnippetFallback.From would produce eagerly.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
@@ -126,10 +124,9 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_FtsOnly_ReturnsExactlyLimitResults_WithNativeFtsSnippets_OutOfALargerCandidateSet()
     {
-        // Laziness proof for the FTS modality (docs/plans/2026-08-08-search-knn-perf.md WP7, issue
-        // #198), mirroring Search_VectorOnly_...OutOfALargerCandidateSet: N=8 FTS-only candidates
-        // compete for a Limit=3 query. Every survivor must carry the real FTS5 snippet() text
-        // (containing the matched term), resolved only for the K survivors.
+        // Laziness proof for the FTS modality (docs/plans/2026-08-08-search-knn-perf.md §WP7): N=8
+        // FTS-only candidates compete for a Limit=3 query; every survivor carries the real FTS5
+        // snippet() text, resolved only for the K survivors.
         var entries = new List<MemoryEntry>();
         for (var i = 0; i < 8; i++)
         {
@@ -152,10 +149,9 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_HashInBothFtsAndVectorLists_SnippetPrefersFtsNative_OverVectorFallback()
     {
-        // Precedence (docs/plans/2026-08-08-search-knn-perf.md WP7): ReciprocalRankFusion.Fuse
-        // fuses the FTS list first (payloads.TryAdd keeps the first list's payload), so a hash
-        // retrieved by both modalities must keep the FTS-native snippet() text, not the vector
-        // modality's SnippetFallback trim — deferral must not change that precedence.
+        // Precedence (docs/plans/2026-08-08-search-knn-perf.md §WP7): ReciprocalRankFusion.Fuse fuses
+        // the FTS list first, so a hash retrieved by both modalities keeps the FTS-native snippet()
+        // text, not the vector modality's SnippetFallback trim.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
@@ -173,7 +169,6 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var hit = results.ShouldHaveSingleItem();
         hit.Hash.ShouldBe(entry.Hash);
-        // FTS-native snippet must win over the vector fallback.
         hit.Snippet.ShouldContain("zebra");
         hit.Snippet.ShouldNotBe(SnippetFallback.From(longValue, hit.Hash));
     }
@@ -181,10 +176,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
-        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
-        // list must rank ascending (the exact-restatement doc, distance 0, first) and the
-        // fused Ranking must stay an RRF score in 0..1 with the top exactly 1.0, never the
-        // raw distance. ftsWeight 0 isolates the vector modality.
+        // vec_distance_cosine is a DISTANCE (0 = identical), so the vec list ranks ascending and
+        // the fused Ranking stays an RRF score in 0..1 (top exactly 1.0), never the raw distance.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
@@ -209,10 +202,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
     {
-        // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): per-modality candidate window K = max(limit*3, 100) — a doc
-        // ranked #2 in BOTH modalities must survive fusion for a limit-1 query, even though
-        // neither per-modality top-1 is that doc. a is written before the engine exists so it
-        // is FTS-only (rank 1 by exact restatement); c and x embed, and x is vec-rank 2.
+        // Per-modality candidate window K = max(limit*3, 100): a doc ranked #2 in both modalities
+        // survives fusion for a limit-1 query even though neither per-modality top-1 is that doc.
         var a = await _store.AddContentAsync("acme", "a.md",
             "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
             cancellationToken: TestContext.Current.CancellationToken);
@@ -243,10 +234,9 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     [Fact]
     public async Task Search_FusionWeights_FlipTheWinnerBetweenKeywordAndVectorFavoured()
     {
-        // d1 is written before any engine exists -> FTS-indexed, never embedded (pending), so
-        // it can only enter the keyword list. d2 is written after configuring the fake engine
-        // -> embedded, so it only enters the vector list. The RRF winner then depends purely
-        // on the configured weights (FR-NM-4 s3; see docs/work/features-native-memory/native-memory.feature, weights 2:1 vs 1:2).
+        // keywordFavoured is FTS-only (written before the engine exists); vectorFavoured is
+        // vector-only (written after). The RRF winner then depends purely on the configured
+        // weights (FR-NM-4 s3; docs/work/features-native-memory/native-memory.feature).
         var keywordFavoured = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "api contract design"),
             TestContext.Current.CancellationToken);
