@@ -14,8 +14,9 @@ releases behind `main`, so the sweep ran against what actually ships. Nothing be
 
 ## Result
 
-18 of 22 tools behave as documented. Four defects, one of them breaking the documented happy path
-of the workspace feature.
+Six defects across seven tools. Two are High: one breaks the documented happy path of the
+workspace feature, the other lets a small scope tier capture every search. The remaining fifteen
+tools behave as documented.
 
 | # | Severity | Tool | Defect |
 |---|---|---|---|
