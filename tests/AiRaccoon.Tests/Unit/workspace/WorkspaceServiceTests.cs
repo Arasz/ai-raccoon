@@ -85,7 +85,7 @@ public class WorkspaceServiceTests
         var result = await service.ConsolidateAsync("acme", "ws-1", ["h1"], TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(1);
-        result.Discarded.ShouldBe(2); // workspace context deleted entirely
+        result.Discarded.ShouldBe(1); // discarded counts entries dropped, not entries deleted from the outbox
         var promoted = store.PromotedContent.ShouldHaveSingleItem();
         promoted.Content.ShouldBe("durable fact");
         promoted.Path.ShouldBe("note.md");
@@ -132,6 +132,7 @@ public class WorkspaceServiceTests
         var result = await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
 
         result.Promoted.ShouldBe(2);
+        result.Discarded.ShouldBe(0); // nothing was dropped — keep=["all"] kept every entry
         store.PromotedContent.Count.ShouldBe(2);
     }
 

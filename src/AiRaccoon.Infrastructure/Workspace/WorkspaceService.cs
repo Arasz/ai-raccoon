@@ -63,11 +63,12 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
             promoted++;
         }
 
-        var discarded = await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken)
-            .ConfigureAwait(false);
+        // Consolidating always clears the whole outbox, kept or not — deletedCount is that row
+        // count, not a "dropped" count. Discarded is entries that were NOT kept.
+        await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
         await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
-        return new ConsolidationResult(promoted, discarded);
+        return new ConsolidationResult(promoted, entries.Count - promoted);
     }
 
     public async Task<int> DiscardAsync(string projectId, string workspaceId,

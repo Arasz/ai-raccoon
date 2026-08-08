@@ -261,7 +261,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Delete locally and record a tombstone.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -277,10 +276,8 @@ public class SyncServiceTests : IDisposable
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // Sync again.
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Verify the deleted entry was not resurrected.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -299,9 +296,8 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        // Seed local with three chunks of one source file, deliberately wrong chunk columns —
-        // passing this test proves the post-merge recompute actually ran, not that the seed
-        // happened to already be correct.
+        // Deliberately wrong chunk columns: proves the post-merge recompute actually ran, not
+        // that the seed happened to already be correct.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -314,8 +310,8 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // A remote snapshot carrying a tombstone for the middle chunk but no entries of its own
-        // — the merge's tombstone-apply path is what must remove h2 locally.
+        // Remote tombstone for the middle chunk, no entries of its own: the merge's
+        // tombstone-apply path must remove h2 locally.
         var remotePath = Path.Combine(_dataRoot, "remote.db");
         await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
@@ -356,15 +352,11 @@ public class SyncServiceTests : IDisposable
         survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
     }
 
-    //
-    // Scenario 5: workspace rows never leave the bank
-    //
     [Fact]
     public async Task MemorySync_WorkspaceRows_NotInSyncPayload()
     {
         var cloud = new FakeCloudStore();
 
-        // Create the workspace table and seed a workspace entry.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var ws = conn.CreateCommand();
@@ -393,7 +385,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Verify the cloud object does NOT contain the workspace row.
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         if (cloudObj is not null)
         {
@@ -417,15 +408,11 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Scenario 6: merged rows are reindexed
-    //
     [Fact]
     public async Task MemorySync_MergedRows_Reindexed()
     {
         var cloud = new FakeCloudStore();
 
-        // First, create and push bank A.
         var bankA = Path.GetTempFileName();
         try
         {
@@ -457,7 +444,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Check that the merged row was reindexed (embed_state reset to 'pending').
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -469,15 +455,11 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // FR-NM-6 s4 (see docs/work/features-native-memory/native-memory.feature): workspace exclusion — workspace rows should not appear in local bank stats
-    //
     [Fact]
     public async Task MemorySync_WorkspaceRowExcluded_Locally()
     {
         var cloud = new FakeCloudStore();
 
-        // Create workspace row in local bank (simulating workspace scenario).
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var ws = conn.CreateCommand();
@@ -503,7 +485,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // The cloud snapshot must not contain the workspace row.
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         if (cloudObj is not null)
         {
@@ -532,7 +513,6 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        // Seed remote with a row.
         var remotePath = Path.GetTempFileName();
         try
         {
@@ -553,7 +533,6 @@ public class SyncServiceTests : IDisposable
             File.Delete(remotePath);
         }
 
-        // Local also has a different row.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -575,7 +554,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Both rows should exist after merge.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -593,7 +571,6 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        // First sync to create a valid remote.
         var service = new SyncService(cloud,
             ct => CreateAndOpenAsync(BankPath, ct),
             OpenSnapshotAsync,
@@ -605,10 +582,8 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Corrupt the remote with invalid bytes.
         cloud.Set("test-object", [0x00, 0x01, 0x02]); // not a valid SQLite file
 
-        // Write a real local entry.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -620,11 +595,9 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // Attempting to sync should throw SyncCorruptFileException.
         await Should.ThrowAsync<SyncCorruptFileException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
 
-        // Local entry must still exist.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -637,16 +610,13 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // WI-1a: settings never leave the bank — the table holds cloud credentials and the
-    // embedding API key, so it must be stripped from every pushed snapshot, not just workspace rows.
-    //
+    // Settings (cloud credentials, embedding API key) must never leave the bank — stripped
+    // from every pushed snapshot, not just workspace rows (ADR-0014).
     [Fact]
     public async Task MemorySync_SettingsRows_NotInSyncPayload()
     {
         var cloud = new FakeCloudStore();
 
-        // Seed a settings row holding a secret (the S3 secret key sync itself reads to reach the store).
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -667,7 +637,6 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // The cloud object must not contain the settings row (credential exfiltration).
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         cloudObj.ShouldNotBeNull();
         var remotePath = Path.GetTempFileName();
@@ -689,16 +658,14 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // WI-1a: pulling/merging a snapshot with a stripped (empty) settings table must not error,
-    // and must leave the local settings untouched (nothing in remote.settings to overwrite them with).
-    //
+    // Pulling/merging a snapshot with a stripped (empty) settings table must not error, and
+    // must leave local settings untouched (ADR-0014).
     [Fact]
     public async Task MemorySync_MergeWithEmptySettingsRemote_SucceedsAndPreservesLocalSettings()
     {
         var cloud = new FakeCloudStore();
 
-        // Remote snapshot as produced by a stripped push: schema present, settings table empty.
+        // Remote snapshot as produced by a stripped push: settings table empty.
         var remoteBankPath = Path.GetTempFileName();
         try
         {
@@ -719,7 +686,6 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteBankPath);
         }
 
-        // Local bank keeps its own settings row.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -739,7 +705,6 @@ public class SyncServiceTests : IDisposable
                 return c;
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
 
-        // Must not throw merging a remote with an empty settings table.
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -752,12 +717,8 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Security regression: the settings/workspace strip only ran on the FIRST push
-    // (remote is null). When a remote object already exists the merge branch re-VACUUMs the
-    // live bank into mergedPath and pushes THAT unstripped — leaking cloud credentials and
-    // workspace-scoped entries into the very bucket those credentials unlock.
-    //
+    // The merge branch must strip settings and workspace rows too, not just the first push
+    // (ADR-0014).
     [Fact]
     public async Task MemorySync_MergeBranchWithExistingRemote_StripsSettingsAndWorkspaceFromPushedPayload()
     {
@@ -784,7 +745,6 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        // Local bank carries a fake secret in settings and a workspace-scoped entry.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var settings = conn.CreateCommand();
@@ -820,7 +780,6 @@ public class SyncServiceTests : IDisposable
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Inspect what actually got pushed to the cloud.
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         cloudObj.ShouldNotBeNull();
         var pushedPath = Path.GetTempFileName();
@@ -850,10 +809,8 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Same regression as above, but for the conflict-retry path: a push that hits
-    // SyncConflictException re-merges and re-VACUUMs into retryPath, which must be stripped too.
-    //
+    // Same regression, conflict-retry path: a push that hits SyncConflictException re-merges
+    // and re-VACUUMs into retryPath, which must be stripped too.
     [Fact]
     public async Task MemorySync_ConflictRetryBranch_StripsSettingsAndWorkspaceFromPushedPayload()
     {
@@ -882,7 +839,6 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        // Local bank carries a fake secret in settings and a workspace-scoped entry.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var settings = conn.CreateCommand();
@@ -920,7 +876,6 @@ public class SyncServiceTests : IDisposable
 
         cloud.ConflictWasRaised.ShouldBeTrue("The test must actually exercise the conflict-retry branch.");
 
-        // Inspect what actually got pushed to the cloud on the retry attempt.
         var cloudObj = await inner.PullAsync("test-object", TestContext.Current.CancellationToken);
         cloudObj.ShouldNotBeNull();
         var pushedPath = Path.GetTempFileName();
@@ -971,18 +926,13 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Issue #121: pull unconditionally clobbers local settings from the remote snapshot.
-    // Settings hold the sync credentials and the embedding API key/base URL — a remote
-    // snapshot must never be allowed to overwrite them, whether the source is a hostile
-    // writer to the shared object store or a stale pre-#88 replica.
-    //
+    // Settings hold the sync credentials and embedding API key/base URL — a remote snapshot
+    // must never overwrite them, whether from a hostile writer or a stale replica (ADR-0014).
     [Fact]
     public async Task MemorySync_PullWithHostileRemoteSettings_DoesNotOverwriteLocalSettings()
     {
         var cloud = new FakeCloudStore();
 
-        // Remote snapshot carries a hostile embedding.baseUrl pointing at an attacker host.
         var remoteSeedPath = Path.GetTempFileName();
         try
         {
@@ -1002,7 +952,6 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        // Local bank trusts its own embedding endpoint.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -1039,10 +988,8 @@ public class SyncServiceTests : IDisposable
     private static async Task<string> CreateCorruptSnapshotAsync(CancellationToken ct)
     {
         var path = Path.GetTempFileName();
-        // Pooling=False: without it, Microsoft.Data.Sqlite keeps this connection's native
-        // handle (and its in-memory page cache) alive in the pool after Dispose, so a later
-        // connection on the same path can read stale cached pages instead of the corrupted
-        // bytes the FileStream write below puts on disk.
+        // Pooling=False: otherwise Microsoft.Data.Sqlite keeps this connection's cached pages
+        // alive in the pool past Dispose, masking the corruption the FileStream write below puts on disk.
         await using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             await conn.OpenAsync(ct);
@@ -1088,12 +1035,9 @@ public class SyncServiceTests : IDisposable
         return path;
     }
 
-    //
-    // Issue #115: quick_check never runs on the bytes actually pushed by the merge branch.
     // A genuinely corrupt VACUUM INTO source fails VACUUM itself, so this substitutes a
-    // pre-corrupted file for the merged-snapshot check specifically — the same openReadOnly
-    // seam SyncService already calls quick_check through.
-    //
+    // pre-corrupted file for the merged-snapshot check via the same openReadOnly seam
+    // SyncService already calls quick_check through.
     [Fact]
     public async Task MemorySync_MergeBranchWithExistingRemote_CorruptMergedSnapshot_RejectedBeforeUpload()
     {
@@ -1134,11 +1078,8 @@ public class SyncServiceTests : IDisposable
         var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
         try
         {
-            // The merged snapshot is identified by path, not by call position: it is whatever
-            // path StripNonSyncableAsync (the openSnapshot seam) most recently ran on, as long
-            // as that path isn't the first one it ran on (the local snapshot, always stripped
-            // first). That stays correct even if a new openReadOnly call is inserted anywhere
-            // else in the flow.
+            // Identifies the merged snapshot by path (last one openSnapshot ran on, excluding
+            // the local snapshot) rather than call position, so it stays correct if another openReadOnly call is added elsewhere.
             string? localSnapshotPath = null;
             string? lastSnapshotPath = null;
 
@@ -1178,11 +1119,8 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Same regression as above, but for the conflict-retry path: the corrupt file is
-    // substituted only at the retry branch's own integrity-check call, so the first
+    // Substitutes the corrupt file only at the retry branch's integrity check, so the first
     // (valid) merge attempt still runs far enough to hit the forced conflict.
-    //
     [Fact]
     public async Task MemorySync_ConflictRetryBranch_CorruptRetrySnapshot_RejectedBeforeUpload()
     {
@@ -1224,11 +1162,8 @@ public class SyncServiceTests : IDisposable
         var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
         try
         {
-            // Same path-identity rule as the single-merge test above (last openSnapshot path,
-            // excluding the local snapshot), further narrowed to only the check that runs
-            // after a conflict was actually raised. Without that narrowing this would also
-            // match the first (valid) merge attempt's own check, which must stay valid or the
-            // conflict/retry branch is never reached.
+            // Same path-identity rule as above, further narrowed to only the check after a
+            // conflict is raised — otherwise it would also match the first (valid) merge attempt's check, and the retry branch would never be reached.
             string? localSnapshotPath = null;
             string? lastSnapshotPath = null;
 
@@ -1393,8 +1328,8 @@ public class SyncServiceTests : IDisposable
     [Fact]
     public async Task MemorySync_ResolvesTheCloudStorePerCall()
     {
-        // F13: the resolver runs inside each sync cycle, so `sync add/remove` (settings
-        // writes) take effect without a restart — two calls resolve twice.
+        // The resolver runs inside each sync cycle, so `sync add/remove` settings writes take
+        // effect without a restart — two calls resolve twice.
         var resolutions = 0;
         var service = new SyncService(
             _ =>

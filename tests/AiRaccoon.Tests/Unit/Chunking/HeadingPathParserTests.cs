@@ -5,7 +5,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Chunking;
 
 /// <summary>
-///     Heading-path extraction (plan C Wave 6): the chunk's heading-path context,
+///     Heading-path extraction: the chunk's heading-path context,
 ///     e.g. "ADR-0011: Frontend Chassis Stack > Decision", or "" when it has none.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
