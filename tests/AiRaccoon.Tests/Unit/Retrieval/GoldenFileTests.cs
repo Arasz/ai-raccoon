@@ -23,11 +23,8 @@ public sealed class GoldenFileTests
         // another platform reports every row as different — 680 of them on ubuntu — which is a
         // platform fact, not a regression. Skip loudly rather than leave the only unfiltered
         // gate permanently red; the structural check below still runs everywhere.
-        if (!OperatingSystem.IsMacOS() || RuntimeInformation.ProcessArchitecture != Architecture.Arm64)
-        {
-            Assert.Skip($"golden reference is pinned to osx-arm64; host is " +
-                        $"{RuntimeInformation.RuntimeIdentifier}");
-        }
+        var diagnosticOnly = !OperatingSystem.IsMacOS() ||
+                             RuntimeInformation.ProcessArchitecture != Architecture.Arm64;
 
         var run = await ReferenceRunCache.GetAsync();
         var goldenPath = Path.Combine(ReferenceAssets.AssetsDirectory, GoldenFile.FileName);
@@ -45,6 +42,19 @@ public sealed class GoldenFileTests
         golden.Queries.Count.ShouldBe(run.ResultsByQuery.Count);
 
         var differences = golden.Differences(run);
+        if (diagnosticOnly)
+        {
+            Console.WriteLine($"GOLDENDIAG host={RuntimeInformation.RuntimeIdentifier} count={differences.Count}");
+            Console.WriteLine($"GOLDENDIAG engine golden={golden.Engine} run={run.Engine}");
+            Console.WriteLine($"GOLDENDIAG model golden={golden.Model} run={run.Model}");
+            foreach (var d in differences.Take(12))
+            {
+                Console.WriteLine("GOLDENDIAG " + d);
+            }
+
+            Assert.Skip("diagnostic run: see GOLDENDIAG lines");
+        }
+
         differences.ShouldBeEmpty(
             "the committed golden reference is stale; regenerate with scripts/regenerate-retrieval-golden.py");
     }
