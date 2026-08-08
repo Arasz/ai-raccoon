@@ -53,8 +53,8 @@ internal static partial class ToolRefusals
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
 
     /// <summary>
-    ///     The CallToolFilter: a protocol exception or a cancellation of the request token always
-    ///     rethrows; a mapped refusal or a bare <see cref="McpException" /> (whose message is already
+    ///     The CallToolFilter: a protocol exception or a cancellation always rethrows; a mapped
+    ///     refusal or a bare <see cref="McpException" /> (whose message is already
     ///     the intended client-facing text) becomes an error result instead; anything else rethrows
     ///     and stays fail-level.
     /// </summary>
