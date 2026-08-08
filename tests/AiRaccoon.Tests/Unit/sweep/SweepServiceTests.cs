@@ -93,6 +93,20 @@ public class SweepServiceTests
         store.Deleted.ShouldBeEmpty();
     }
 
+    /// <summary>Rescued from the deleted extension-host test suite (WI-9/ADR-0016): SweepService deletes
+    /// through IMemoryStore, not around it — the sweep candidate it selects is the same hash the store
+    /// records as deleted, with no side channel between selection and deletion.</summary>
+    [Fact]
+    public async Task SweepAsync_DeletesThroughTheStore_NotAroundIt()
+    {
+        var store = new SweepableStore();
+        var service = new SweepService(store, TimeProvider.System);
+
+        await service.SweepAsync("acme", 0.3, dryRun: false, TestContext.Current.CancellationToken);
+
+        store.Deleted.ShouldContain("old-low");
+    }
+
     private sealed class FakeStore : IMemoryStore
     {
         public double? Rating { get; set; } = 0.1;
@@ -202,5 +216,102 @@ public class SweepServiceTests
         public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    /// <summary>Minimal recording IMemoryStore backing one sweep-eligible entry ("old-low", rating 0.1,
+    /// ttlDays 1), moved from the deleted extension-host test suite (WI-9/ADR-0016).</summary>
+    private sealed class SweepableStore : IMemoryStore
+    {
+        public List<string> Deleted { get; } = [];
+
+        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+        {
+            Deleted.Add(hash);
+            return Task.FromResult(true);
+        }
+
+        public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> DeleteSourcePathAsync(string projectId, string path,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default)
+        {
+            if (context == ContextNaming.SharedContext)
+            {
+                return Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+            }
+
+            var ancient = DateTimeOffset.UtcNow.AddYears(-5).ToUnixTimeSeconds();
+            return Task.FromResult<IReadOnlyList<MemoryEntry>>(
+                [new MemoryEntry("old-low", "note.md", context, "value", ancient)]);
+        }
+
+        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.1, 1));
+
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
     }
 }

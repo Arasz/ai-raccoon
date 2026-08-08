@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,8 +14,7 @@ internal sealed class WatchTestStack
 
     public WatchTestStack()
     {
-        var host = new MemoryExtensionHost(Memory, [Extension]);
-        Executor = new WatchDigestExecutor(host, Store, host, Time, NullLogger<WatchDigestExecutor>.Instance);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time, ScanGuard,
             NullLogger<WatchPipeline>.Instance);
@@ -28,8 +26,6 @@ internal sealed class WatchTestStack
     public FakeMemoryStore Memory { get; } = new();
 
     public FakeWatchStore Store { get; } = new();
-
-    public RecordingExtension Extension { get; } = new();
 
     public WatchScanGuard ScanGuard { get; } = new();
 
@@ -354,30 +350,4 @@ internal sealed class FakeMemoryStore : IMemoryStore
     public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
-}
-
-/// <summary>IMemoryExtension fake: records OnSourceChangedAsync dispatches, can be made to throw.</summary>
-internal sealed class RecordingExtension : IMemoryExtension
-{
-    public List<SourceChangedContext> SourceChanges { get; } = [];
-
-    public bool ThrowOnSourceChanged { get; set; }
-    public string Name => "Recording";
-
-    public Task OnSourceChangedAsync(SourceChangedContext context, CancellationToken cancellationToken)
-    {
-        if (ThrowOnSourceChanged)
-        {
-            throw new InvalidOperationException("hook boom");
-        }
-
-        SourceChanges.Add(context);
-        return Task.CompletedTask;
-    }
-
-    public Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }
