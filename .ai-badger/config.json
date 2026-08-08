@@ -58,7 +58,7 @@
   },
   "docs": {},
   "agentDocs": {
-    "maxChars": 15000,
-    "maxLines": 245
+    "maxChars": 17000,
+    "maxLines": 280
   }
 }
