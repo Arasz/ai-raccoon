@@ -7,7 +7,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Watch;
 
 /// <summary>
-///     FileSystemWatcher adapter: the four event types translate to WatchEvent with D3-normalized
+///     FileSystemWatcher adapter: the four event types translate to WatchEvent with normalized
 ///     paths, and adapter failures never throw — they surface as synthetic WatchEventError events.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -166,9 +166,8 @@ public sealed class WatchEventSourceTests
         source.IsWatching(Project, other.Path).ShouldBeFalse();
     }
 
-    // ── File-path watches (issue #44 / audit F7) ────────────────────────────
-    // A FILE registration must watch its parent directory and translate events
-    // for that file only — FileSystemWatcher itself requires a directory.
+    // FileSystemWatcher only accepts directories, so a FILE registration watches the parent
+    // directory and translates events for that file only.
 
     [Fact]
     public void Start_OnFilePath_IsWatching_AndNoErrorEvent()
@@ -214,7 +213,6 @@ public sealed class WatchEventSourceTests
         File.WriteAllText(file, "v2");
         WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Changed && e.Path == file), "changed event for target");
 
-        // A sibling's creation must NOT produce an event for this watch.
         File.WriteAllText(dir.File("sibling.md"), "noise");
         Thread.Sleep(300);
         events.ShouldNotContain(e => e.Path == dir.File("sibling.md"));

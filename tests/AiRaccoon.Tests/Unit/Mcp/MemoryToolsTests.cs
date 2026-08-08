@@ -211,9 +211,9 @@ public class MemoryToolsTests
         _store.Shared.ShouldBeNull();
     }
 
-    // F1: the composite of up to 8 project ids is unbounded cardinality on the counter (see
-    // ADR 0002), so the counter gets the "multi" sentinel while the span keeps the
-    // full comma-joined composite for traceability.
+    // The composite of up to 8 project ids is unbounded cardinality on the counter, so it gets
+    // the "multi" sentinel while the span keeps the full comma-joined composite for
+    // traceability (ADR-0009).
     [Fact]
     public async Task ShareExtract_BoundsCounterProjectId_ButKeepsFullCompositeOnTheSpan()
     {
@@ -320,10 +320,9 @@ public class MemoryToolsTests
         _store.Shared.ShouldBe(("acme", "h1"));
     }
 
-    // SyncTools no longer decides IsConfigured itself (SyncService does, via NullCloudStore —
-    // see SyncServiceTests.MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured); this
-    // proves the tool doesn't swallow or wrap whatever the service throws. The CallToolFilter
-    // maps the propagated exception to "sync-not-configured:" on the wire (see ToolRefusalsTests).
+    // SyncService decides IsConfigured, via NullCloudStore (see SyncServiceTests); this proves
+    // SyncTools propagates rather than swallows or wraps what the service throws. CallToolFilter
+    // maps it to "sync-not-configured:" on the wire (see ToolRefusalsTests).
     [Fact]
     public async Task Sync_WhenServiceThrowsSyncNotConfigured_PropagatesItUnchanged()
     {
@@ -347,7 +346,7 @@ public class MemoryToolsTests
         result.Data!.Received.ShouldBe(2);
         result.Data!.Reindexed.ShouldBe(5);
         // No objectKey override configured — the tool passes null through; SyncService owns the
-        // memory-{projectId}.db default now (see SyncServiceTests.MemorySync_WithNoObjectKey_DefaultsToMemoryDashProjectId).
+        // memory-{projectId}.db default (see SyncServiceTests).
         _sync.LastObjectKey.ShouldBeNull();
     }
 

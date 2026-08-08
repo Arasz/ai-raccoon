@@ -8,7 +8,6 @@ namespace AiRaccoon.Tests.Unit.Memory;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionCapacityPolicyTests
 {
-    // ------------------------------------------------------------------ reservation
     [Theory]
     [InlineData(1000, 5, 200)]
     [InlineData(1000, 1, 1000)]
@@ -28,7 +27,6 @@ public sealed class PromotionCapacityPolicyTests
         PromotionCapacityPolicy.ReservationFor(cap, projects).ShouldBe(0);
     }
 
-    // ------------------------------------------------------------------ eviction trigger
     [Theory]
     [InlineData(1001, 1000, true)]
     [InlineData(1000, 1000, false)]
@@ -39,7 +37,6 @@ public sealed class PromotionCapacityPolicyTests
         PromotionCapacityPolicy.NeedsEviction(total, cap).ShouldBe(expected);
     }
 
-    // ------------------------------------------------------------------ eviction target
     [Fact]
     public void EvictionTarget_PicksTheGreatestCountProject()
     {
@@ -74,7 +71,6 @@ public sealed class PromotionCapacityPolicyTests
         new UniformCountEvictionPolicy().EvictionTarget(new Dictionary<string, int>()).ShouldBeNull();
     }
 
-    // ------------------------------------------------------------------ capacity info
     [Fact]
     public void CapacityInfo_FlagsBorrowingAndReservations()
     {
@@ -102,15 +98,9 @@ public sealed class PromotionCapacityPolicyTests
             .ShouldBeEmpty();
     }
 
-    // ------------------------------------------------------------------ fair-share guarantee
     /// <summary>
-    ///     Characterization test, not TDD-red: this already holds today. ADR-0007 promises a
-    ///     per-project reservation that eviction never violates; UniformCountEvictionPolicy
-    ///     enforces that by construction (always evicts the greatest-count project, and
-    ///     whenever NeedsEviction is true some project necessarily exceeds cap÷n — see PR
-    ///     discussion for the proof), with no separate reservation check. This pins the two
-    ///     functions together as a contract so a future eviction-policy swap cannot silently
-    ///     break the promise while every other test stays green.
+    ///     Characterization test pinning ADR-0007's guarantee — eviction never leaves a project at
+    ///     or below its reservation — as a contract a future eviction-policy swap cannot silently break.
     /// </summary>
     [Theory]
     [MemberData(nameof(OverCapShapes))]
