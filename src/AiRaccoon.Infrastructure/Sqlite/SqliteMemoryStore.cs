@@ -153,6 +153,7 @@ public sealed partial class SqliteMemoryStore(
 
         var batches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
+        var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var context in contexts)
         {
@@ -185,7 +186,7 @@ public sealed partial class SqliteMemoryStore(
             var vectorResults = queryVector is null || query.VectorWeight == 0
                 ? []
                 : await QueryDualVectorBatchAsync(connection, filter,
-                    SearchParameters(""), alpha, cancellationToken).ConfigureAwait(false);
+                    SearchParameters(""), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
             // Per-context modality fusion; minScore/limit belong to the final merger pass.
             batches.Add(ReciprocalRankFusion.Fuse(
@@ -216,6 +217,7 @@ public sealed partial class SqliteMemoryStore(
 
         var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
+        merged = ResolveDeferredSnippets(merged, valueByHash);
         await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
         return merged;
     }
@@ -694,11 +696,13 @@ public sealed partial class SqliteMemoryStore(
     /// <summary>
     ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
     ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
-    ///     degrade to content-only order.
+    ///     degrade to content-only order. Snippet computation is deferred (perf: most candidates
+    ///     never reach the final top-K) — <paramref name="valueByHash" /> carries each survivor's
+    ///     raw value out so the caller can resolve it after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
         SqliteConnection connection, string filter, DynamicParameters parameters, double alpha,
-        CancellationToken cancellationToken)
+        IDictionary<string, string> valueByHash, CancellationToken cancellationToken)
     {
         var contentRows = (await connection.QueryAsync<VectorRow>(
                     new CommandDefinition(
@@ -723,15 +727,32 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        return
-        [
-            .. fused
-                .Select(rank => byHash[rank.Hash])
-                .Select(row => new MemorySearchResult(
-                    row.Hash, row.Seq, 0, row.Path, SnippetFallback.From(row.Value, row.Hash),
-                    row.SourceFile, row.ChunkIndex, row.TotalChunks))
-        ];
+        var rows = fused.Select(rank => byHash[rank.Hash]).ToList();
+        foreach (var row in rows)
+        {
+            valueByHash[row.Hash] = row.Value;
+        }
+
+        return BuildDualVectorResults(rows);
     }
+
+    /// <summary>Maps ranked vector rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
+    internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(IReadOnlyList<VectorRow> rows) =>
+        [
+            .. rows.Select(row => new MemorySearchResult(
+                row.Hash, row.Seq, 0, row.Path, string.Empty,
+                row.SourceFile, row.ChunkIndex, row.TotalChunks))
+        ];
+
+    /// <summary>Computes the deferred snippet for each result that still carries the unresolved placeholder.</summary>
+    private static IReadOnlyList<MemorySearchResult> ResolveDeferredSnippets(
+        IReadOnlyList<MemorySearchResult> results, IReadOnlyDictionary<string, string> valueByHash) =>
+        [
+            .. results.Select(result =>
+                result.Snippet.Length == 0 && valueByHash.TryGetValue(result.Hash, out var value)
+                    ? result with { Snippet = SnippetFallback.From(value, result.Hash) }
+                    : result)
+        ];
 
     private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -904,7 +925,7 @@ public sealed partial class SqliteMemoryStore(
         public int TotalChunks { get; set; }
     }
 
-    private sealed class VectorRow
+    internal sealed class VectorRow
     {
         public string Hash { get; set; } = "";
 
