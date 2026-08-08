@@ -2,9 +2,9 @@ namespace AiRaccoon.Core.Memory;
 
 /// <summary>
 ///     Mechanical shared-extraction scoring (no LLM): a provenance-archetype prior plus bounded
-///     content-shape evidence produce a ranked candidate list (docs/adr/0018-promotion-scoring-v2.md);
-///     dedup is exact (value/path) against the existing shared tier. Pure — the store feeds rows, the
-///     caller promotes. Recency is a sort tie-break only, never part of the score.
+///     content-shape evidence produce a ranked candidate list (docs/adr/0018-promotion-scoring-v2.md).
+///     Dedup is exact against the shared tier; pure — the store feeds rows, the caller promotes;
+///     recency is a sort tie-break only, never part of the score.
 /// </summary>
 public sealed class SharedExtractionService
 {
@@ -13,10 +13,7 @@ public sealed class SharedExtractionService
 
     private const int PreviewLength = 300;
 
-    /// <summary>Re-examined for v3 (docs/adr/0018-promotion-scoring-v2.md v3 section) and kept: every
-    /// hard-noise channel prior sits below 0.4 with no content rescue, and the weakest real channel
-    /// (plan, 0.70) can still fall below it under heavy ephemera — the same gap the floor was
-    /// originally derived from in v2.</summary>
+    /// <summary>Kept at 0.4 after re-examination for v3 (docs/adr/0018-promotion-scoring-v2.md).</summary>
     private const double CandidateFloor = 0.4;
 
     /// <summary>Scoring and (in promote mode) selection of rows to share. Never mutates anything.</summary>

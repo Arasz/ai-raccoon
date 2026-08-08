@@ -1,10 +1,8 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     Propose-tier capacity math: the total cap is split into per-project reservations
-///     (cap ÷ project count), projects may borrow each other's unused space, and eviction
-///     fires only when the queue is over the total cap. Pure functions — the store feeds
-///     counts, the policy decides.
+///     Propose-tier capacity math: the total cap splits into per-project reservations (cap ÷
+///     project count); projects may borrow unused space, and eviction fires only over the total cap.
 /// </summary>
 public static class PromotionCapacityPolicy
 {
@@ -35,10 +33,5 @@ public static class PromotionCapacityPolicy
     }
 }
 
-/// <summary>
-///     One project's position against its reservation: borrowing = used exceeds reserved.
-///     Shipped on the wire as-is (via PromotionMeta) — three primitives with no behavior, so a
-///     DTO/mapper pair was not worth adding; a wire-only shape can still split off later if this
-///     record ever needs to diverge (see #118).
-/// </summary>
+/// <summary>One project's position against its reservation: borrowing = used exceeds reserved.</summary>
 public sealed record PromotionCapacityInfo(int Reserved, int Used, bool Borrowing);

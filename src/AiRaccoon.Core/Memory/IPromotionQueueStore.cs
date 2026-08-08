@@ -2,9 +2,8 @@ namespace AiRaccoon.Core.Memory;
 
 /// <summary>
 ///     The propose tier's persistence port: waiting-for-promotion candidates, upserted by
-///     (project, hash), listed for review, drained by discard, and evicted per project when
-///     the queue is over capacity. The eviction victim *project* is chosen by IEvictionPolicy;
-///     this port executes the victim-row query within one project (lowest score, oldest first).
+///     (project, hash), listed for review, drained by discard, and evicted per project when over
+///     capacity — IEvictionPolicy picks the victim project; this port runs the victim-row query.
 /// </summary>
 public interface IPromotionQueueStore
 {

@@ -2,9 +2,8 @@ namespace AiRaccoon.Core.Memory;
 
 /// <summary>
 ///     The propose tier, as the tools and the extraction loop see it: persist candidates
-///     (propose), promote from the queue (never a fresh re-extraction), review the queue,
-///     discard what the agent rejects, and read what is waiting for the envelope meta.
-///     Capacity/eviction is internal to the implementation.
+///     (propose), promote from the queue (never a fresh re-extraction), review it, discard what
+///     the agent rejects, and read what is waiting for the envelope meta; capacity/eviction stays internal.
 /// </summary>
 public interface IPromotionQueue
 {
