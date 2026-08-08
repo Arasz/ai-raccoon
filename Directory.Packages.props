@@ -46,5 +46,9 @@
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
     <PackageVersion Include="System.CommandLine" Version="2.0.10"/>
+    <!-- Not in-box in .NET 10 despite stable tensor APIs; 10.0.10 matches the version
+         already resolving transitively into AiRaccoon.Benchmarks via Microsoft.Extensions.AI
+         (ADR 0017). -->
+    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.10"/>
   </ItemGroup>
 </Project>
