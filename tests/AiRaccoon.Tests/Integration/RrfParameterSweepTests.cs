@@ -15,11 +15,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Wave 4 sweep (see docs/plans/retrieval-improvement-c.md §3 Wave 4): RRF k, weight ratio,
-///     minScore, candidate window over the 96-point grid through the real pipeline; pins the
-///     chosen configuration (the defaults — measured grid optimum, see
-///     docs/adr/0006-rrf-parameter-optimization.md) to the Wave 4 gates. Source-affinity
-///     params fixed.
+///     Wave 4 sweep (docs/plans/retrieval-improvement-c.md §3 Wave 4): sweeps RRF k, weight
+///     ratio, minScore, and candidate window over the 96-point grid, then pins the chosen
+///     configuration (docs/adr/0006-rrf-parameter-optimization.md) to the Wave 4 gates.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -90,19 +88,14 @@ public sealed class RrfParameterSweepTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     The Wave 4 gate (see docs/plans/retrieval-improvement-c.md §3 Wave 4): the chosen
-    ///     configuration (the SearchQuery defaults) holds C2 at
-    ///     <= 3, shows no fusion regression, keeps every Wave 3 rank gate, and is the grid
-    ///     optimum — no point beats it on nDCG@5 while holding the gates. The full matrix is
-    ///     emitted to docs/work/2026-08-04-wave4-rrf-sweep.md.
+    ///     The chosen configuration (docs/plans/retrieval-improvement-c.md §3 Wave 4) must hold
+    ///     every Wave 4 gate and be the grid optimum on nDCG@5.
     /// </summary>
     [Fact]
     public async Task Sweep_ChosenRrfConfiguration_PassesAllGates()
     {
-        // The Wave 4 gates (see docs/adr/0006-rrf-parameter-optimization.md) were measured
-        // over the 11 expected-source queries that existed at sweep time. Wave 5b catalog
-        // additions (A8-A10, S1/S3-S6; see docs/plans/retrieval-improvement-c.md §3 Wave 5b) are scored by
-        // BaselineMetricsTests, not this sweep — otherwise every point's pinned numbers shift.
+        // Scoped to the 11 queries that existed at sweep time (docs/adr/0006-rrf-parameter-optimization.md);
+        // Wave 5b additions are scored by BaselineMetricsTests instead, not this sweep.
         var queries = LoadQueries()
             .Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
             .ToList();
@@ -123,22 +116,14 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         WriteSweepReport(rows, chosen, current, queries, fusion);
 
-        // Gate (b): C2's hybrid rank collapsed on the re-pinned corpus (vector >100, no
-        // structure signal — documented in docs/work/2026-08-06-baseline-repin-new-corpus.md);
-        // its honest gate is FTS-only rank 1 in QueryConstructionTests.
-        // Gate (a): invariants at their measured re-pinned ranks (2026-08-06).
+        // Gate (b): C2's hybrid rank collapsed on the re-pinned corpus
+        // (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md); its gate is FTS-only rank 1 in QueryConstructionTests.
         chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
         chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
         chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");
 
-        // Gate (c): no fusion regression — the hybrid never ranks the expected chunk below
-        // the best single modality (exact-chunk rank comparison). Re-pinned 2026-08-06 with
-        // the measured modality matrix on the re-pinned corpus (hybrid/fts/vector exact):
-        //   A1 1/3/1 ✓  A2 1/1/2 ✓  A3 4/4/3 ✗  A4 2/2/- ✓  A5 4/-/3 ✗  A6 6/2/- ✗
-        //   A7 7/2/- ✗  S2 -/3/- ✗  C1 1/2/1 ✓  C2 -/1/- ✗  C5 5/1/3 ✗
-        // The seven ✗ queries carry the documented corpus drift (see
-        // docs/work/2026-08-06-baseline-repin-new-corpus.md): the FTS side is often better
-        // than the fused hybrid. Excluded here; the four ✓ queries keep the strict gate.
+        // Gate (c): fusion — hybrid must not rank the expected chunk below the best single
+        // modality; the measured exclusions are documented in docs/work/archive/2026-08-06-baseline-repin-new-corpus.md.
         foreach (var item in fusion)
         {
             if (item.QueryId is "C2" or "A3" or "A5" or "A6" or "A7" or "C5" or "S2")
@@ -158,9 +143,8 @@ public sealed class RrfParameterSweepTests : IDisposable
                 $"{item.QueryId}: hybrid exact rank {item.HybridExactRank} must not exceed the best single modality's {bestSingle} (fts {item.FtsExactRank?.ToString() ?? "-"}, vector {item.VectorExactRank?.ToString() ?? "-"})");
         }
 
-        // Gate (d): measured re-pinned ranks on the new corpus (2026-08-06): A6 6/6 (new
-        // erasure ADRs outrank 0067), S2 file-level 1 (decision chunk outside top-10),
-        // A7 exact 7 (docs-structure ADRs outrank 0070).
+        // Gate (d): measured re-pinned ranks (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md,
+        // F1-F2) — A6/A7/S2 shifted by new competing ADRs in the re-pinned corpus.
         chosen.A1FileRank.ShouldBe(1, "A1 file rank must stay 1");
         chosen.A4FileRank.ShouldBe(1, "A4 file rank must stay 1");
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
@@ -174,14 +158,10 @@ public sealed class RrfParameterSweepTests : IDisposable
         chosen.ExactAt3Count.ShouldBeGreaterThanOrEqualTo(4,
             $"exact-chunk @3 must hold >= 4/11 (re-pinned); got {chosen.ExactAt3Count}/11");
 
-        // Gate (a): grid-optimality — the chosen point holds its measured re-pinned nDCG@5
-        // (0.674±0.001 on the re-pinned corpus; the old 0.722 baseline was measured on the
-        // Wave-2 corpus) and no grid point beats it while holding the gates (measured
-        // negative result on the old corpus; see docs/adr/0006-rrf-parameter-optimization.md
-        // and docs/work/2026-08-06-baseline-repin-new-corpus.md).
-        // Rank shifts of 1e-4..3e-3 among near-ties move nDCG@5 by ~1e-3 per platform
-        // (linux-x64 measured 0.6717 vs the osx-arm64 baseline 0.674), so the floor carries
-        // the shared cross-platform band instead of the old same-machine 0.001 (ADR-0015).
+        // Gate (a): grid-optimality on the re-pinned corpus (docs/adr/0006-rrf-parameter-optimization.md);
+        // no grid point beats the chosen point while holding the gates.
+        // Cross-platform rank tolerance (ADR-0015): near-tie shifts move nDCG@5 by ~1e-3 per
+        // platform, so the floor uses the measured band, not the old same-machine tolerance.
         chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.674 - GoldenFile.RankingTolerance,
             $"ADR nDCG@5 must hold at the re-pinned baseline 0.674 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
 

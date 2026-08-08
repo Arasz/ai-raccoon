@@ -57,11 +57,8 @@ public sealed class BaselineQueryCatalogTests
     {
         var queries = LoadQueries();
 
-        // Measured 2026-08-04 (hybrid k=60, 1:1, minScore 0.0), exact-chunk rank. Wave 5a pins were
-        // measured on main @ 6889ee8; Wave 5b additions measured in a later worktree after the
-        // Wave 3/4/6 feature merges:
-        // A2/A5/C1/C2/C5 exact@1; A1/A3 exact@2-3; A4/A7/S2 exact@4-5 (S2 @5 at 5a time, @3 post-W3);
-        // A6 exact outside top-5. New: A8/S3/S4/S6 exact@1; S1/S5 exact@2; A9 exact@3; A10 exact@2.
+        // Difficulty strata reflect the measured hybrid exact-chunk rank at delivery
+        // (docs/plans/retrieval-improvement-c.md, Wave 5a/5b "Delivered" sections).
         var expected = new Dictionary<string, string>
         {
             ["A2"] = "easy", ["A5"] = "easy", ["C1"] = "easy", ["C2"] = "easy", ["C5"] = "easy",
@@ -93,10 +90,8 @@ public sealed class BaselineQueryCatalogTests
             query.RelevanceGrade.ShouldBe(0, $"{query.Id}: coverage queries are not scored");
         }
 
-        // Pins: 5 = expected chunk fully answers; 4 = answer spans 2+ authoritative chunks/files
-        // (A6: ADR-0067 + ADR-0068 registry fan-out and what-erasure-does-not-erase; A7: 'about'
-        // question needs the whole ADR, not one chunk; S5: the frontend stack decision lives in
-        // ADR-0011 and frontend-architecture.md §2-3 — cross-document by design).
+        // Relevance-grade rubric (docs/plans/retrieval-improvement-c.md, Wave 5a "Delivered"):
+        // 5 = the chunk alone fully answers; 4 = the answer spans 2+ authoritative chunks/files.
         var expected = new Dictionary<string, int>
         {
             ["A1"] = 5, ["A2"] = 5, ["A3"] = 5, ["A4"] = 5, ["A5"] = 5,

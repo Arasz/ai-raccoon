@@ -13,10 +13,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
 /// <summary>
-///     ServeRunner acceptance: exact stdout URL line (A2), --port 0 bound-URL reporting
-///     with a live MCP client round trip (A3), foreign-listener PortInUse (A4/A16),
-///     idempotent attach to an existing ai-raccoon server (A14), bind-race recovery (A15),
-///     and the --mcp-entry / port-fallback / transport-warning surfaces (A9/A10, R7).
+///     ServeRunner acceptance: stdout URL reporting, foreign-listener PortInUse, idempotent
+///     attach to an existing ai-raccoon server, bind-race recovery, and the --mcp-entry /
+///     port-fallback / transport-warning surfaces.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -412,7 +411,6 @@ public sealed class ServeRunnerTests : IDisposable
         return port;
     }
 
-    // ── Helpers ──
 
     private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
 

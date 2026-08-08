@@ -9,11 +9,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Maintenance-config commands pin the settings-key contract the bank-maintenance
-///     hosted service reads: maintenance.checkpoint-interval-minutes.global (default 60)
-///     and maintenance.vacuum-interval-days.global (default 7). The list verb also
-///     reports live bank disk stats (db/WAL sizes, reclaimable bytes, delta vs the
-///     previous check via the maintenance-stats.json sidecar).
+///     Maintenance-config commands pin the settings-key contract the bank-maintenance hosted
+///     service reads (checkpoint interval, vacuum interval); the list verb also reports live
+///     bank disk stats with delta-vs-previous via the maintenance-stats.json sidecar.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
