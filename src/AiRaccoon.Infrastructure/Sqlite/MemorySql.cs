@@ -367,10 +367,14 @@ internal static class MemorySql
         "UPDATE entries SET embed_state = 'embedded', embedding = @embedding, " +
         "heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
 
-    // Structure-only counterpart to MarkEmbedded, for the healing pass (§3.6.3): the row is
-    // already embed_state='embedded' with content embedding set, so only the structure columns move.
+    // Structure-only counterpart to MarkEmbedded, for the healing pass: the row is already
+    // embed_state='embedded' with content embedding set, so only the structure columns move.
+    // The embed_state guard closes a race with a concurrent sync reindex: without it, a heal
+    // write that lands after the reindex already cleared the row (embed_state -> 'pending')
+    // would resurrect vec_structure for a row the clear-arm just invalidated.
     public const string MarkStructure =
-        "UPDATE entries SET heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
+        "UPDATE entries SET heading_path = @headingPath, structure_embedding = @structureEmbedding " +
+        "WHERE id = @id AND embed_state = 'embedded'";
 
     // Healing candidates for a bank embedded before WP5 (or a chunk whose heading never parsed):
     // embedded content with no structure yet. Bounded per call by @limit; every candidate this
