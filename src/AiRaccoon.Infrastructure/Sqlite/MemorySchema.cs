@@ -13,8 +13,8 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static class MemorySchema
 {
-    // workspace_id exists now for the P8 structural-isolation wave; the FK and the
-    // "workspace XOR committed scope" CHECK land with P8.
+    // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
+    // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
     private static readonly string Ddl = $"""
                                CREATE TABLE IF NOT EXISTS workspaces (
                                    id TEXT PRIMARY KEY,
@@ -68,15 +68,13 @@ internal static class MemorySchema
                                );
 
                                -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
-                               -- dimension if the model is not all-MiniLM (384). `ctx` is the partition key
-                               -- (docs/plans/2026-08-08-search-knn-perf.md §3.1): the vec0 KNN queries a
-                               -- single partition instead of a WHERE filter, and cosine is declared
-                               -- explicitly so a bare MATCH cannot silently fall back to L2.
+                               -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key
+                               -- (docs/plans/2026-08-08-search-knn-perf.md §3.1), queried instead of a WHERE
+                               -- filter; cosine is declared explicitly so a bare MATCH cannot fall back to L2.
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
-                               -- Structure modality: heading-path vectors, rowid = entry id.
-                               -- Written by the embed transition (EntryEmbedder, ADR-0004);
-                               -- the triggers below keep it consistent with entries.
+                               -- Structure modality: heading-path vectors, rowid = entry id. Written by the
+                               -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
@@ -92,12 +90,10 @@ internal static class MemorySchema
                                    INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
                                END;
 
-                               -- Clear arm for vec_structure (#190): merge-reindex invalidates a row by
-                               -- setting embed_state back to 'pending' (see SyncService's reindex UPDATE,
-                               -- which also nulls structure_embedding/heading_path in the same statement) —
-                               -- without this, the vec_structure row survives and structure search returns
-                               -- an entry whose content vector was deliberately invalidated. Mirrors
-                               -- vec_entries_pending exactly, keyed off embed_state, not structure_embedding.
+                               -- Clear arm for vec_structure: merge-reindex invalidates a row by setting
+                               -- embed_state back to 'pending' (see SyncService's reindex UPDATE, which also
+                               -- nulls structure_embedding/heading_path); without this the vec_structure row
+                               -- survives a deliberately invalidated content vector. Mirrors vec_entries_pending.
                                CREATE TRIGGER IF NOT EXISTS vec_structure_pending AFTER UPDATE OF embed_state ON entries
                                WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
                                BEGIN
@@ -121,10 +117,9 @@ internal static class MemorySchema
                                    VALUES (new.id, new.value, new.source_file, new.section);
                                END;
 
-                               -- vec0 has no triggers: embedding rows follow embed_state.
-                               -- Marking embedded upserts the vec row (delete-then-insert so a
-                               -- re-embed replaces rather than duplicates); marking pending or
-                               -- deleting the entry removes it.
+                               -- vec0 has no triggers: embedding rows follow embed_state. Marking embedded
+                               -- upserts the vec row (delete-then-insert, so a re-embed replaces rather than
+                               -- duplicates); marking pending or deleting the entry removes it.
                                CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
                                WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
                                BEGIN
@@ -155,7 +150,7 @@ internal static class MemorySchema
                                );
 
                                -- File-watcher feature: persisted watch registrations and per-path
-                               -- fingerprints (hash-skip). D3-normalized paths; runtime state is not persisted.
+                               -- fingerprints (hash-skip). Normalized paths; runtime state is not persisted.
                                CREATE TABLE IF NOT EXISTS watches (
                                    project_id            TEXT NOT NULL,
                                    path                  TEXT NOT NULL,
@@ -174,10 +169,9 @@ internal static class MemorySchema
                                    PRIMARY KEY (project_id, path)
                                );
 
-                               -- Propose tier: candidates waiting for promotion review. Separate from
-                               -- entries by design — queue rows are never searchable and never counted
-                               -- by memory_stats; capacity/eviction lives on this table only (shared
-                               -- tier stays curated and sweep-exempt).
+                               -- Propose tier: candidates waiting for promotion review, kept separate from
+                               -- entries — queue rows are never searchable and never counted by memory_stats.
+                               -- Capacity/eviction lives on this table only (the shared tier stays curated and sweep-exempt).
                                CREATE TABLE IF NOT EXISTS promotion_queue (
                                    id          INTEGER PRIMARY KEY,
                                    project_id  TEXT NOT NULL,
@@ -204,7 +198,7 @@ internal static class MemorySchema
 
 
     /// <summary>
-    ///     Bucket uniqueness (F3). Not part of <see cref="Ddl"/>: on a legacy bank the duplicates
+    ///     Bucket uniqueness. Not part of <see cref="Ddl"/>: on a legacy bank the duplicates
     ///     must be deleted before the index can be created, which is the ladder's job. A fresh
     ///     bank has no rows to violate it, so it gets the indexes directly.
     /// </summary>
@@ -289,8 +283,8 @@ internal static class MemorySchema
 
         if (healthy && storedVersion < 3)
         {
-            // Hard step (issue #200): heals rows a pre-guard binary wrote into a v2 bank without
-            // running the write-path chunk recompute.
+            // Hard step: heals rows a pre-guard binary wrote into a v2 bank without running the
+            // write-path chunk recompute.
             await MigrateToV3Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
@@ -302,9 +296,8 @@ internal static class MemorySchema
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys
-    ///     moved from watch.scope.* to ingest.scope.* (1.2). Carrying pre-1.2 rows over is not
-    ///     cosmetic: the scope is deny-by-default, so a bank that kept the old key would refuse
-    ///     every ingest and every watch add after the upgrade.
+    ///     moved from watch.scope.* to ingest.scope.*. Carrying old rows over is not cosmetic: the
+    ///     scope is deny-by-default, so a bank that kept the old key would refuse every ingest and watch add.
     /// </summary>
     private static async Task MigrateIngestScopeKeysAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -343,11 +336,10 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
     /// <summary>
-    ///     Ladder step 1 — everything shipped before the version marker existed: the four entries
-    ///     columns, the two watch-lease columns, the ingest-scope key move, the FTS rebuild and the
-    ///     bucket-uniqueness indexes. Every check is idempotent. Returns false when the soft
-    ///     bucket-index step did not complete, so the caller leaves the bank unstamped and the
-    ///     next open retries. Must complete (its dedupe especially) before <see cref="MigrateToV2Async"/>.
+    ///     Ladder step 1 — everything shipped before the version marker existed: entries/watch-lease
+    ///     columns, the ingest-scope key move, the FTS rebuild and the bucket-uniqueness indexes.
+    ///     Idempotent; returns false when the soft bucket-index step didn't complete (bank stays
+    ///     unstamped, retried next open) — must finish before <see cref="MigrateToV2Async"/>.
     /// </summary>
     private static async Task<bool> MigrateToV1Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -392,8 +384,8 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
         }
 
-        // WP4 cross-process scan lease (D-2; docs/plans/2026-08-07-watch-scan-runaway-fix.md):
-        // the lease lives on the watches row so DELETE FROM watches is lease release.
+        // Cross-process scan lease (docs/plans/2026-08-07-watch-scan-runaway-fix.md): the lease
+        // lives on the watches row, so DELETE FROM watches is lease release.
         var watchColumns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('watches')",
@@ -503,13 +495,12 @@ internal static class MemorySchema
             }
         }
 
-        // Bucket-uniqueness indexes (F3; see docs/work/archive/2026-08-06-extraction-followups-plan.md):
-        // one row per (path, hash) in the global shared tier, and per (path, hash, project,
-        // scope, context-label bucket) in the committed tiers. A violating legacy bank (the
-        // audited 14.2% duplicates) is deduped before the indexes are created, so creation
-        // can never fail on a real bank; if the dedupe itself fails the bank stays open
-        // (degraded — duplicates remain, indexes arrive on the next open). Deliberately
-        // softer than the FTS rebuild above, which rethrows: a bank must never fail to open.
+        // Bucket-uniqueness indexes (docs/work/archive/2026-08-06-extraction-followups-plan.md): one
+        // row per (path, hash) in the shared tier, and per (path, hash, project, scope,
+        // context-label) in the committed tiers. A violating legacy bank is deduped before the
+        // indexes are created (survivor = earliest row), so creation can never fail on a real bank;
+        // a dedupe failure leaves the bank open, degraded, retried on the next open — deliberately
+        // softer than the FTS rebuild above, which rethrows.
         var hasSharedIndex = await connection.ExecuteScalarAsync<long?>(
                 new CommandDefinition(
                     "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_shared_bucket'",
@@ -529,11 +520,9 @@ internal static class MemorySchema
                     .ConfigureAwait(false);
                 try
                 {
-                    // Dedupe first (survivor = earliest row; content is identical within a
-                    // group by construction — hash = SHA-256(path ‖ value)), then index.
-                    // The GROUP BY mirrors the index expressions exactly (COALESCE included);
-                    // NULL path/hash are guarded because GROUP BY equates them while the
-                    // UNIQUE indexes treat them as distinct.
+                    // Dedupe first (survivor = earliest row; content is identical within a group by
+                    // construction). The GROUP BY mirrors the index expressions exactly (COALESCE
+                    // included); NULL path/hash are guarded since GROUP BY equates them but UNIQUE treats them as distinct.
                     await connection.ExecuteAsync(
                             new CommandDefinition(
                                 """
@@ -590,12 +579,8 @@ internal static class MemorySchema
 
     /// <summary>
     ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
-    ///     (until now recomputed per query with a window function) and rebuilds vec_entries/vec_structure
-    ///     with the vec0 partition key that lets the vector queries drop their WHERE filter for a native
-    ///     KNN. One transaction, rethrown on failure — unlike the v1 step's soft bucket-index dedupe,
-    ///     an empty-shell vec_entries answers every vector query with silence, which is worse than the
-    ///     bank failing to open. Runs only after MigrateToV1Async's dedupe has completed, or the
-    ///     chunk-column numbering would bake in rows the dedupe would have deleted.
+    ///     and rebuilds vec_entries/vec_structure with the vec0 partition key. Rethrows on failure —
+    ///     an empty-shell vec_entries answers every query with silence, worse than failing to open.
     /// </summary>
     private static async Task MigrateToV2Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -689,11 +674,9 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Ladder step 3 (issue #200): a bank-wide self-heal recompute of chunk_index/total_chunks,
-    ///     reusing the exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService"/>'s merge uses
-    ///     — no duplicate. Heals rows a pre-#200 binary wrote into a v2 bank without running the
-    ///     write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3). One transaction,
-    ///     rethrown on failure, matching <see cref="MigrateToV2Async"/>'s hard-step pattern.
+    ///     Ladder step 3: a bank-wide self-heal recompute of chunk_index/total_chunks, reusing the
+    ///     exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService"/>'s merge uses. Heals rows
+    ///     an older binary wrote without running the write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3).
     /// </summary>
     private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
