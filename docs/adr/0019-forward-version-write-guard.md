@@ -35,14 +35,22 @@ if (storedVersion > CurrentVersion)
 }
 ```
 
-- This is the only surface that needs the check: the codebase has no separate read-only bank
-  open, and `EnsureAsync` runs on every read-write open and nowhere else — closing this one path
-  closes it for every writer (CLI verbs, MCP tools, the file watcher, sync merges).
-- `UnsupportedSchemaVersionException` (`AiRaccoon.Core.Memory`) is a plain `InvalidOperationException`
-  subtype, not mapped in `ToolRefusals.RefusalPrefixes`
-  (`src/AiRaccoon/Tools/ToolRefusals.cs`). It is therefore a genuine failure, not a typed refusal:
-  it escapes as a normal MCP tool-call error logged at `Error`, per the existing "anything
-  `ToolRefusals` does not recognize" contract (`docs/reference/agent-memory-server.md`).
+- `EnsureAsync` runs on every read-write open (`SqliteConnectionFactory.InitializeAsync`), which
+  covers CLI verbs, MCP tools and the file watcher.
+- **It does not cover sync merges.** `SyncService.MergeRemoteAsync` opens a pulled snapshot through
+  `openReadOnly` (`Dependencies.cs`) — a bare `OpenAsync` that deliberately skips
+  `InitializeAsync` — then `ATTACH`es it, so `EnsureAsync` never runs on that path. `VACUUM INTO`
+  preserves `user_version`, so a peer on a future binary produces a forward-stamped snapshot. The
+  merge path therefore carries its **own** check: a `PRAGMA remote.user_version` comparison
+  immediately after `ATTACH`, throwing the same exception before any merge statement runs.
+- `UnsupportedSchemaVersionException` (`AiRaccoon.Core.Memory`) is a plain
+  `InvalidOperationException` subtype and **is** mapped in `ToolRefusals.RefusalPrefixes`
+  (`src/AiRaccoon/Tools/ToolRefusals.cs`). Leaving it unmapped was tried and is wrong: an
+  unrecognized exception does not reach the caller as its own message — the SDK replaces it with
+  `"An error occurred invoking '<tool>'."`, measured against the live server. The whole value of
+  this guard is the sentence it throws, naming both versions and the fix; unmapped, that sentence
+  is discarded and the operator sees a generic crash. Mapping it keeps the message and stops the
+  refusal being logged as an SDK-level error.
 - The message names both versions and tells the operator the fix in one sentence: update
   `ai-raccoon`. No self-healing or downgrade path is attempted — the schema ladder only ever
   moves forward (ADR-0011), so an older binary cannot safely interpret a newer shape.
