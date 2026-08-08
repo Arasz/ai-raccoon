@@ -33,9 +33,33 @@ function readText(relativePath) {
 const MAX_PATTERN_LENGTH = 500;
 const MAX_SCAN_BYTES = 1_000_000;
 
+// True when a quantifier is applied to a group. `^(a+)+$` is seven characters, so the length
+// cap above never sees it, and it backtracks catastrophically against a non-matching input
+// (review B16). Node has no regex timeout, so such a pattern is refused rather than run.
+function quantifiesAGroup(pattern) {
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === "\\") {
+      i += 1;
+    } else if (inClass) {
+      inClass = ch !== "]";
+    } else if (ch === "[") {
+      inClass = true;
+    } else if (ch === ")" && "*+?{".includes(pattern[i + 1])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function compilePattern(pattern, flags) {
   if (typeof pattern !== "string" || pattern.length > MAX_PATTERN_LENGTH) {
     throw new Error(`pattern too long (over ${MAX_PATTERN_LENGTH} chars); simplify it`);
+  }
+  if (quantifiesAGroup(pattern)) {
+    throw new Error(`nested quantifier in pattern ${pattern}: a quantified group backtracks `
+      + `catastrophically; rewrite it without a quantifier after ")"`);
   }
   return new RegExp(pattern, flags);
 }

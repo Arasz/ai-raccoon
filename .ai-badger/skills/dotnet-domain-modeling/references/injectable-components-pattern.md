@@ -1,6 +1,6 @@
 # Injectable Components (Static-Class Policy)
 
-Rule (the project project convention): **the only allowed static classes are extensions and
+Rule (project convention): **the only allowed static classes are extensions and
 const/readonly value sources. Any class that contains logic must be an injectable component
 with an interface** — easy to mock in unit tests.
 
@@ -19,7 +19,7 @@ Any class whose methods contain non-trivial logic (control flow, I/O, decisions,
 or call external dependencies) must:
 
 1. Be an instance class (not static)
-2. Have a corresponding interface (e.g. `the encryption command interface`)
+2. Have a corresponding interface (e.g. `IEncryptionCommands`)
 3. Receive dependencies through constructor injection
 4. Be registered in DI or composed at the composition root
 
@@ -27,7 +27,7 @@ or call external dependencies) must:
 
 Before:
 ```csharp
-internal static partial class the config dispatcher
+internal static partial class ConfigDispatcher
 {
     private static async Task<int> EncryptionBitwardenAsync(
         ParseResult parseResult, IMemoryStore store,
@@ -44,7 +44,7 @@ internal static partial class the config dispatcher
 
 After:
 ```csharp
-public interface the encryption command interface
+public interface IEncryptionCommands
 {
     Task<int> BitwardenAsync(ParseResult parseResult, IMemoryStore store,
         TextWriter stdout, TextWriter stderr, TextReader stdin,
@@ -81,7 +81,7 @@ internal sealed class EncryptionCommands : IEncryptionCommands
 ```
 
 Benefits:
-- Tests can mock `the encryption command interface` instead of threading nullable params
+- Tests can mock `IEncryptionCommands` instead of threading nullable params
 - Dependencies are explicit at construction, not scattered through nullable optional params
 - Adding a dependency doesn't change the public interface's parameter list
 - New rule compliance: no static class with logic
@@ -102,7 +102,7 @@ state, or coordinate I/O. It does NOT apply to:
 
 ## Migration priority
 
-1. Command/verb handlers (e.g., `the config dispatcher`, `EncryptionCommands`) — highest priority,
+1. Command/verb handlers (e.g., `ConfigDispatcher`, `EncryptionCommands`) — highest priority,
    these have the most dependencies threaded through parameters
 2. CLI infrastructure (`CliArgs`, `CliRendering`) — parsing and rendering logic
 3. Composition roots (`ConfigVerbRunner`) — thin wrapper that becomes an injectable orchestrator

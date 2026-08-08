@@ -1,5 +1,7 @@
 ## Durable Functions Orchestrations
 
+Assumes Azure Durable Functions.
+
 When building Azure Durable Functions orchestrations (activities, orchestrators, concurrency gates), see `references/durable-functions-orchestration-pitfalls.md` for:
 - Non-deterministic API pitfalls (`Guid.NewGuid()`, `DateTime.UtcNow`)
 - Missing usings for workflow types (`LlmStepRetry`, `InterventionCause`)

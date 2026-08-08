@@ -244,7 +244,8 @@ def main(argv=None) -> int:
         try:
             fingerprint = bl.dir_content_hash(
                 dest_dir, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"],
-                exclude_rel=bl.nested_entry_targets(entries, rel),
+                exclude_rel=(bl.nested_entry_targets(entries, rel)
+                             + list(entry.get("projectOwned") or ())),
             )
             dest_hash = fingerprint["content_hash"]
         except (ValueError, OSError):

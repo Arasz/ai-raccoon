@@ -9,6 +9,7 @@ version: 0.1.0
 author: ai-badger
 license: MIT
 platforms: [linux, macos, windows]
+scope: default
 metadata:
   hermes:
     tags: [mcp, indexing, tool-discovery, prompt-compression]

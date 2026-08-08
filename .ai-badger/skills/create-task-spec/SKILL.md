@@ -11,6 +11,7 @@ version: 1.0.0
 author: ai-badger
 license: MIT
 platforms: [linux, macos, windows]
+scope: default
 metadata:
   hermes:
     tags: [specification, gherkin, requirements, contracts]

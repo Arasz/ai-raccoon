@@ -77,10 +77,10 @@ public sealed class SalaryRecommendationEngine
     public SalaryRecommendationEngine(TakeHomeCalculator calculator) { ... }
 
     public SalaryRecommendation Recommend(
-        Salary offer, CompensationProfile profile, string taxYear, PlTaxYearRates rates,
+        Salary offer, CompensationProfile profile, string taxYear, TaxYearRates rates,
         Salary? currentCompensation = null, CompensationProfile? currentProfile = null,
         LeverageFactors? leverageFactors = null, RiskFactors? riskFactors = null,
-        decimal marketPremiumPercent = 10m)
+        decimal marketPremiumPercent = 10m)  // example default — tune to your market data
     {
         // 1. Compute take-home for the offer via calculator
         var offerTakeHome = _calculator.Calculate(offer, profile, taxYear, rates);
@@ -130,7 +130,7 @@ Each heuristic gets 2+ tests with known inputs. Use pre-built `TakeHomeResult` f
 private static TakeHomeResult ComputedResult(decimal monthlyNet) => new()
 {
     Outcome = TakeHomeOutcome.Computed,
-    RateTableVersion = "PL-2026.1",
+    RateTableVersion = "2026.1",
     TaxYear = "2026",
     ContractType = CompensationContractType.Employment,
     Breakdown = new TakeHomeBreakdown { MonthlyNet = monthlyNet, /* ... */ }
@@ -139,17 +139,17 @@ private static TakeHomeResult ComputedResult(decimal monthlyNet) => new()
 
 ### Engine Integration Tests
 
-Use the real `TakeHomeCalculator` + `PolishCompProfile` + known rate table:
+Use the real `TakeHomeCalculator` + a concrete `ICountryCompProfile` implementation + known rate table:
 
 | Test | Asserts |
 |------|---------|
 | Source is always `Deterministic` | `rec.Source.ShouldBe(RecommendationSource.Deterministic)` |
 | Rationale always non-empty | `rec.Rationale.ShouldNotBeNullOrWhiteSpace()` |
 | Unsupported contract → refuse | `rec.IsRefused.ShouldBeTrue()`, `rec.RecommendedAmount.ShouldBe(0m)` |
-| Different contract types → different amounts | B2B ryczałt > UoP for same gross |
+| Different contract types → different amounts | e.g. flat-rate contractor > standard employment for the same gross (tune the expected ordering to your jurisdiction's rules) |
 | With current comp → floor in rationale | `rec.Rationale.ShouldContain("floor", Case.Insensitive)` |
 | With risk factors → adjusts amount | High risk < no risk |
-| Breakdown comes from calculator | `rec.TakeHomeBreakdown.RateTableVersion.ShouldBe("PL-2026.1")` |
+| Breakdown comes from calculator | `rec.TakeHomeBreakdown.RateTableVersion.ShouldBe("2026.1")` |
 
 ### StepType + InterventionSource Tests
 

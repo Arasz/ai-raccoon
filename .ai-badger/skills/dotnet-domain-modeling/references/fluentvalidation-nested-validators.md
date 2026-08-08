@@ -8,13 +8,13 @@ using FluentValidation;
 
 namespace MyApp.Domain.Feature;
 
-public sealed record LinkedInProfileProjection
+public sealed record ProfileProjection
 {
     public required string TemplateId { get; init; }
     public required string Headline { get; init; }
     public required IReadOnlyList<ProjectedPosition> Positions { get; init; }
 
-    public sealed class Validator : AbstractValidator<LinkedInProfileProjection>
+    public sealed class Validator : AbstractValidator<ProfileProjection>
     {
         public Validator()
         {
@@ -56,7 +56,7 @@ public sealed record ProjectedPosition
 | `sealed class Validator` nested inside validated type | Co-located, discoverable, no separate file |
 | `OverridePropertyName("camelCase")` on every rule | JSON error paths match API contract |
 | `SetValidator(new Child.Validator())` for nested records | Composable validation chains |
-| `MaximumLength(n)` for LinkedIn/platform limits | Hard enforcement, not warnings |
+| `MaximumLength(n)` for external-platform field limits | Hard enforcement, not warnings |
 | Validate the validator in tests: `new T.Validator().Validate(instance).IsValid` | Ensures test fixtures pass validation |
 
 ### Testing Validators
@@ -67,14 +67,14 @@ Test both positive (valid input passes) and negative (limit violations fail):
 [Fact]
 public void Validator_fails_when_headline_exceeds_220_chars()
 {
-    var projection = new LinkedInProfileProjection
+    var projection = new ProfileProjection
     {
         TemplateId = "cvt-1",
         Headline = new string('A', 221), // one over limit
         // ... other required fields
     };
 
-    var result = new LinkedInProfileProjection.Validator().Validate(projection);
+    var result = new ProfileProjection.Validator().Validate(projection);
     result.IsValid.ShouldBeFalse();
 }
 
@@ -83,7 +83,7 @@ public void Validator_passes_on_valid_projection()
 {
     var projection = /* valid fixture */;
 
-    var result = new LinkedInProfileProjection.Validator().Validate(projection);
+    var result = new ProfileProjection.Validator().Validate(projection);
     result.IsValid.ShouldBeTrue();
 }
 ```

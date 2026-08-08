@@ -1,0 +1,3 @@
+# Derive the list, or delete it
+
+A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them. Compute the list from the thing it describes so the two cannot disagree; where that is genuinely impossible, write the check that compares them and prove it fails when they differ. Best of all is neither: when the list only restates what the tree already says, delete it and read the tree. A count written into prose is the same defect in smaller packaging.

@@ -44,19 +44,92 @@ SESSION_SOURCES: dict = {}
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+# badger_lib.GIT_LOCATION_ENV, repeated because this ships into projects that have no framework
+# checkout to import it from. git exports GIT_DIR to its hooks and GIT_COMMON_DIR answers
+# `--git-common-dir` outright, so a child that inherits either reports another repository's
+# layout. tests/test_git_invocation.py pins every copy against the original.
+GIT_LOCATION_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                    "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                    "GIT_PREFIX", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES")
+
+
+def git_env(env=None) -> dict:
+    """`env` (default `os.environ`) minus every variable that pins git to another repository."""
+    out = dict(os.environ if env is None else env)
+    for name in GIT_LOCATION_ENV:
+        out.pop(name, None)
+    return out
+
+
+def _git_worktree_facts(project: Path) -> tuple:
+    """(toplevel, main checkout) for *project*, or (None, None) when git cannot say.
+
+    One `git rev-parse` for both answers: `--git-common-dir` is the shared `.git` a linked
+    worktree points back at, so its parent is the checkout that owns the tracking store.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project), "rev-parse", "--show-toplevel", "--git-common-dir"],
+            capture_output=True, text=True, check=False, timeout=10, env=git_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None, None
+    lines = result.stdout.split()
+    if result.returncode != 0 or len(lines) < 2:
+        return None, None
+    return Path(lines[0]).resolve(), (project / lines[1]).resolve().parent
+
+
+def collapse_worktree(project: Path) -> Path:
+    """The checkout a linked worktree belongs to, or *project* unchanged.
+
+    A task worktree carries its own copy of the `.ai-badger/config.json` marker, so the cwd
+    walk below stops there and the worktree gets an empty tracking store (B12). Only a
+    *linked worktree whose checkout is itself an ai-badger project* is collapsed: a vendored
+    project nested inside some other repo is not a working-tree root and stays where it is.
+    """
+    toplevel, checkout = _git_worktree_facts(project)
+    if checkout is None or toplevel != project.resolve() or checkout == project.resolve():
+        return project
+    if not (checkout / ".ai-badger" / "config.json").is_file():
+        return project
+    return checkout
+
+
+def project_above(start: Path, stop: Path | None = None) -> Path | None:
+    """The nearest ancestor of *start* holding `.ai-badger/config.json`, collapsed to its checkout.
+
+    `stop` is an ancestor the walk refuses to adopt or pass: `$HOME` for a walk that starts in
+    the Claude Code plugin cache, where every project's marker would otherwise be one home
+    directory away from every other project's.
+    """
+    for ancestor in (start, *start.parents):
+        if stop is not None and ancestor == stop:
+            return None
+        if (ancestor / ".ai-badger" / "config.json").is_file():
+            return collapse_worktree(ancestor)
+    return None
+
+
 def resolve_project_root(
-    env: dict | None = None, cwd: Path | None = None, script_dir: Path = SCRIPT_DIR
+        env: dict | None = None, cwd: Path | None = None, script_dir: Path = SCRIPT_DIR
 ) -> Path:
     """Resolve the ai-badger project root, in precedence order:
 
     1. `CLAUDE_PROJECT_DIR` env var, when set and pointing at an existing directory --
        authoritative for hook/statusLine invocations (Claude Code sets it; ai-badger's own
        scaffolded settings.json hooks already rely on it).
-    2. Walk up from `cwd` to the nearest ancestor containing `.ai-badger/config.json` (the
-       ai-badger contract marker) -- covers script invocations from anywhere in the repo.
-    3. Fallback: `script_dir.parents[3]` -- today's behavior for in-repo scaffolded copies
-       (`<repo>/.claude/skills/task/scripts` or `<repo>/.ai-badger/skills/task/scripts`)
-       invoked with no session context.
+    2. The marker walk up from `cwd` -- covers script invocations from anywhere in the repo.
+    3. The same marker walk up from `script_dir`, stopping at `$HOME` -- every in-repo copy of
+       these scripts (`features/common/skills/`, `.ai-badger/skills/`, `.claude/skills/`,
+       `skills/`) sits under the marker, so this answer does not depend on the cwd at all. The
+       plugin cache copy sits under `$HOME` instead, finds nothing, and falls through.
+    4. Fallback: `script_dir.parents[3]`, for a copy that is under no marker and reached from
+       no project -- the plugin cache with no session context.
+
+    Step 3 is why the catalog copy can no longer resolve `features/`: `parents[3]` of
+    `features/common/skills/task/scripts` is the catalog directory itself, and a process whose
+    cwd was outside any project used to land there and write its tracking state into it (N3).
 
     Deliberately does not walk up from `script_dir` looking for a `.claude/` directory (as
     poll_limit's old `_find_project_root` did): from a Claude Code plugin cache
@@ -69,10 +142,13 @@ def resolve_project_root(
     if env_dir and Path(env_dir).is_dir():
         return Path(env_dir)
 
-    start = Path.cwd() if cwd is None else Path(cwd)
-    for ancestor in (start, *start.parents):
-        if (ancestor / ".ai-badger" / "config.json").is_file():
-            return ancestor
+    from_cwd = project_above(Path.cwd() if cwd is None else Path(cwd))
+    if from_cwd is not None:
+        return from_cwd
+
+    from_script = project_above(script_dir, stop=Path.home())
+    if from_script is not None:
+        return from_script
 
     return script_dir.parents[3]  # .claude/skills/task/scripts -> repo root
 
@@ -508,7 +584,7 @@ def make_checkpoint(transcript_path: str) -> dict:
 
 
 def register_session_source(name: str, *, env_var: str, resolve, checkpoint, resume,
-                      delegation_usage=None, transcript: bool = False) -> None:
+                            delegation_usage=None, transcript: bool = False) -> None:
     """Register a session source (called by an agent adjustment's session source module).
 
     `resolve()` identifies the invoking session for this agent, returning
@@ -681,6 +757,7 @@ def state_json_updated_since(started_at: str) -> bool:
 # import must never fail the tracker over a module that was never installed.
 try:
     import importlib
+
     for _path in sorted(SCRIPT_DIR.glob("*_session_source.py")):
         importlib.import_module(_path.stem)
         sys.modules[_path.stem].register(sys.modules[__name__])

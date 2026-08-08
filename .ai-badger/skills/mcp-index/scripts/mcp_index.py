@@ -299,10 +299,11 @@ def _read_index_safe(target: str) -> tuple[Optional[dict[str, Any]], Optional[st
 
 
 def _try_import_badger_lib():
-    """Return the badger_lib module, or None when validation cannot run at all.
+    """Return the badger_lib module, or None when it is not importable at all.
 
-    Covers both causes uniformly: FRAMEWORK_ROOT is None (nothing on sys.path to import
-    from), or badger_lib itself fails to import (it imports jsonschema unguarded).
+    FRAMEWORK_ROOT is None (nothing on sys.path to import from), or the import itself fails.
+    Since 0.93.0 badger_lib imports jsonschema lazily, so a successful import here does not
+    mean validation can run — `_validate_against_schema` catches that.
     """
     if FRAMEWORK_ROOT is None:
         return None
@@ -322,7 +323,10 @@ def _validate_against_schema(data: dict[str, Any]) -> Optional[list[str]]:
     if not schema_path.is_file():
         return None
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    return bl.validate(data, schema)
+    try:
+        return bl.validate(data, schema)
+    except ImportError:
+        return None  # jsonschema absent: unavailable, the same answer as no framework root
 
 
 def _write_index(target: str, data: dict[str, Any], *, require_validation: bool) -> None:

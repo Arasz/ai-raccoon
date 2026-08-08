@@ -4,13 +4,13 @@ Patterns for building deterministic tax, payroll, and financial calculators as p
 
 ## Rate Table Pattern
 
-All statutory values live in a versioned record keyed by year. No value may appear as a `const` or literal in any method.
+All statutory values live in a versioned record keyed by effective period. No value may appear as a `const` or literal in any method.
 
 ```csharp
-public sealed record PlTaxYearRates
+public sealed record TaxYearRates
 {
     public required int TaxYear { get; init; }
-    public required string Version { get; init; }      // "PL-2026.1"
+    public required string Version { get; init; }      // e.g. "2026.1"
     public required DateOnly EffectiveFrom { get; init; }
     public required DateOnly? EffectiveTo { get; init; }
     public required string SourceUrl { get; init; }     // provenance travels with data
@@ -18,53 +18,55 @@ public sealed record PlTaxYearRates
     // All rates from the table, never hardcoded
     public required decimal MinimumWage { get; init; }
     public required ContributionRates Social { get; init; }
-    public required decimal HealthRateGeneral { get; init; }
-    // ... etc
+    public required decimal HealthContributionRate { get; init; }
+    // ... etc, one property per statutory figure your jurisdiction publishes
 }
 ```
 
-**Why keyed by year:** Statutory rates change every January. A year-keyed table with a startup fail-fast check when the current year's table is missing enforces the annual maintenance obligation by the build, not by memory.
+**Why keyed by period:** Statutory rates change on a fixed cycle (often annually). A period-keyed table with a startup fail-fast check when the current period's table is missing enforces the maintenance obligation by the build, not by memory.
 
-**Why no fallback:** Silently reusing last year's table produces a confidently wrong number. Refuse with `UnsupportedTaxYear` instead.
+**Why no fallback:** Silently reusing the previous period's table produces a confidently wrong number. Refuse with a typed error (e.g. `UnsupportedTaxYear`) instead.
 
 ## Rounding Helpers
 
-Polish payroll uses truncated rounding (toward zero) for grosze and zloty:
+Payroll math typically needs two rounding rules: one for the minor currency unit (cents) and one for the major unit (whole currency), and they aren't always the same rule.
 
 ```csharp
-private static decimal RoundGrosze(decimal value) =>
+private static decimal RoundToMinorUnit(decimal value) =>
     Math.Round(value, 2, MidpointRounding.ToZero);
 
-private static decimal RoundZloty(decimal value) =>
+private static decimal RoundToMajorUnit(decimal value) =>
     Math.Floor(value);
 ```
 
-**Pitfall:** `Math.Round(value, 2)` defaults to `MidpointRounding.ToEven` (banker's rounding), which rounds 94.3884 → 94.39 instead of 94.38. For financial calculations, always specify the rounding mode explicitly.
+**Pitfall:** `Math.Round(value, 2)` defaults to `MidpointRounding.ToEven` (banker's rounding). At an exact midpoint this differs from "normal" rounding: `Math.Round(2.005m, 2)` gives `2.00` (rounds to the nearest even digit), while `Math.Round(2.005m, 2, MidpointRounding.AwayFromZero)` gives `2.01`. For financial calculations, always specify the rounding mode explicitly — don't rely on the framework default matching what your regulator requires.
 
-**Rounding stages:**
-1. Social contributions → grosze (RoundGrosze)
-2. Health contribution → grosze (RoundGrosze)
-3. Tax base → full zloty (RoundZloty / Math.Floor)
-4. Tax advance → full zloty (RoundZloty / Math.Floor)
+**Rounding stages (example ordering):**
+1. Contribution A → minor unit
+2. Contribution B → minor unit
+3. Tax base → major unit
+4. Tax advance → major unit
+
+Confirm the actual stage-by-stage rounding order against your jurisdiction's rules — it is not always "round once at the end."
 
 ## Annual-Average Pattern for Progressive Tax
 
-When computing monthly take-home with annual thresholds (e.g. 12%/32% PIT at 120k PLN):
+When computing a periodic take-home figure under annual thresholds (example: a two-bracket progressive tax with a threshold — tune the bracket rates and threshold to your jurisdiction):
 
 ```csharp
 // Compute everything annually first
 var annualGross = grossMonthly * 12m;
-var annualSocial = /* annual ZUS with 30× cap */;
-var annualHealth = /* annual health */;
-var annualPit = CalculateProgressivePit(annualTaxBase, rates);
+var annualSocial = /* annual social contribution, honoring any cumulative-income cap */;
+var annualHealth = /* annual health contribution */;
+var annualTax = CalculateProgressiveTax(annualTaxBase, rates);
 
 // Derive monthly average
-var monthlyNet = (annualGross - annualSocial - annualHealth - annualPit) / 12m;
+var monthlyNet = (annualGross - annualSocial - annualHealth - annualTax) / 12m;
 ```
 
-**Why annual-first:** The 30× pension cap and the 12%→32% threshold crossing both depend on cumulative annual income. Computing month-by-month is more accurate but requires tracking cumulative state. Annual-average gives a deterministic, reproducible result.
+**Why annual-first:** A contribution cap that scales with cumulative annual income, and a bracket-threshold crossing, both depend on cumulative annual income. Computing month-by-month is more accurate but requires tracking cumulative state. Annual-average gives a deterministic, reproducible result.
 
-**Trade-off:** Monthly net varies throughout the year (higher after the cap/threshold is hit). The annual average hides this variation. For V1, this is acceptable; add month-by-month projection as a follow-up.
+**Trade-off:** The monthly figure varies throughout the year (higher after a cap or threshold is hit). The annual average hides this variation. For a first version this is often acceptable; add month-by-month projection as a follow-up if it isn't.
 
 ## Interface Design: Calculator vs. Entry Point
 
@@ -75,7 +77,7 @@ Split validation from computation:
 public sealed class TakeHomeCalculator(ICountryCompProfile countryProfile)
 {
     public TakeHomeResult Calculate(Salary offer, CompensationProfile profile,
-        string taxYear, PlTaxYearRates rates)
+        string taxYear, TaxYearRates rates)
     {
         // Validate tax year matches rates
         // Validate contract type is supported
@@ -89,25 +91,25 @@ public interface ICountryCompProfile
 {
     string Country { get; }
     TakeHomeResult Calculate(Salary offer, CompensationProfile profile,
-        string taxYear, PlTaxYearRates rates);
+        string taxYear, TaxYearRates rates);
 }
 ```
 
 **Why separate:** The entry point handles cross-cutting concerns (validation, provenance stamping). The country profile is a pure function of the inputs. One implementation per country.
 
-## B2B/JDG: Entrepreneur Pays Full ZUS Rate
+## Self-Employed: Individual Pays the Combined Contribution Rate
 
-For sole proprietors (JDG/B2B), there is no employer/employee split — the entrepreneur pays the **combined** rate:
+For sole proprietors / self-employed contractors, there is often no employer/employee split — the individual pays the **combined** rate that an employment relationship would otherwise split:
 
 ```csharp
-// ❌ Wrong: only employee portion
-var pension = social.PensionEmployee * zusBase;
+// ❌ Wrong: only the employee portion
+var pension = social.PensionEmployee * contributionBase;
 
 // ✅ Correct: full rate (employee + employer combined)
-var pension = (social.PensionEmployee + social.PensionEmployer) * zusBase;
+var pension = (social.PensionEmployee + social.PensionEmployer) * contributionBase;
 ```
 
-The `ContributionRates` record carries both splits (for UoP where they differ), but B2B sums them. No FGŚP for JDG.
+The `ContributionRates` record carries both splits (needed for standard employment where they differ), but the self-employed path sums them. Check whether your jurisdiction also drops any employer-only levies (e.g. a guarantee-fund contribution) for this category — don't assume the self-employed rate is a simple sum without verifying against the statute.
 
 ## Rate Table Provenance Test
 
@@ -118,9 +120,9 @@ Prove that no statutory value is hardcoded by modifying a rate and verifying the
 public void All_rates_come_from_the_table_not_hardcoded()
 {
     var (calc, _) = CreateSut();
-    var modifiedRates = CreatePl2026Rates() with
+    var modifiedRates = CreateExampleRates() with
     {
-        Social = CreatePl2026Rates().Social with { PensionEmployee = 0.10m }
+        Social = CreateExampleRates().Social with { PensionEmployee = 0.10m }
     };
     var result = calc.Calculate(offer, profile, "2026", modifiedRates);
     result.Breakdown!.MonthlyNet.ShouldNotBe(GOLDEN_FIXTURE_NET);
@@ -129,20 +131,20 @@ public void All_rates_come_from_the_table_not_hardcoded()
 
 ## Factory Method for Rate Tables in Tests
 
-Create a factory method with the full rate table, annotated with source citations:
+Create a factory method with the full rate table, annotated with source citations — cite the actual statute/regulation and publication for each figure so a future maintainer can re-verify it:
 
 ```csharp
 /// <summary>
-/// 2026 Polish statutory rates, sourced from:
-/// - Dz.U. 2025 poz. 1242 (minimum wage)
-/// - M.P. 2025 poz. 1206 (forecast average wage, 30× cap)
-/// - podatki.gov.pl PIT thresholds
-/// See docs/research/beta-epics/spike-199-salary-calculator.md §4
+/// Example statutory rates for tax year 2026 — placeholder values only.
+/// Replace with your jurisdiction's real published figures and cite each source:
+/// - the statute or regulation that sets the minimum wage
+/// - the official publication that sets the contribution-cap multiplier
+/// - the tax authority's published bracket thresholds
 /// </summary>
-private static PlTaxYearRates CreatePl2026Rates() => new()
+private static TaxYearRates CreateExampleRates() => new()
 {
     TaxYear = 2026,
-    Version = "PL-2026.1",
+    Version = "2026.1",
     // ... all values with source citations in comments
 };
 ```

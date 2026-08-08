@@ -8,7 +8,7 @@ platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [mcp, testing, tools, e2e]
-    related_skills: [mcp-index, dotnet-mcp-server]
+    related_skills: [mcp-index]
 ---
 
 # MCP tool-surface testing

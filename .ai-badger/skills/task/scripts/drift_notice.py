@@ -12,11 +12,37 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
+
+def _parse_major_minor(version: str) -> Optional[Tuple[int, int]]:
+    """(major, minor) from a `x.y[.z]` string, or None when it does not parse."""
+    parts = version.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def versions_diverge(scaffolded: str, running: str) -> bool:
+    """True when a re-scaffold could change something a consumer would see.
+
+    Compares (major, minor) only — a patch-only difference is stamp noise, the same
+    tolerance `gates/scaffold_freshness_guard.py`'s STAMP_KEYS already grant (B10). An
+    unparseable version on either side falls back to plain string inequality.
+    """
+    parsed_scaffolded = _parse_major_minor(scaffolded)
+    parsed_running = _parse_major_minor(running)
+    if parsed_scaffolded is None or parsed_running is None:
+        return scaffolded != running
+    return parsed_scaffolded != parsed_running
 
 
 def scaffold_drift_notice(project_root: Path, plugin_root: Optional[str]) -> Optional[str]:
-    """Return a one-line notice when the scaffold and the running plugin are different versions.
+    """Return a one-line notice when the scaffold and the running plugin diverge (see
+    `versions_diverge`) — a patch-only version bump does not count.
 
     Two local file reads, no network (ADR-0001 decision 5). Silent on match, on an
     unscaffolded project, and on any read error — a hook must never break session start, and a
@@ -34,7 +60,9 @@ def scaffold_drift_notice(project_root: Path, plugin_root: Optional[str]) -> Opt
         plugin_version = (Path(plugin_root) / "VERSION").read_text(encoding="utf-8").strip()
     except (OSError, ValueError, AttributeError):
         return None
-    if not scaffold_version or not plugin_version or scaffold_version == plugin_version:
+    if not scaffold_version or not plugin_version:
+        return None
+    if not versions_diverge(scaffold_version, plugin_version):
         return None
     return (
         f"[ai-badger] .ai-badger/ was scaffolded by {scaffold_version} but the running "

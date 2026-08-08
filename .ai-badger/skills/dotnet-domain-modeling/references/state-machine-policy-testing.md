@@ -4,35 +4,35 @@ Reusable test helpers and techniques for testing policy objects that depend on a
 
 ## Walking a State Machine Forward in Tests
 
-When testing a policy that needs an `Application` in a specific state, build a helper
+When testing a policy that needs a `Ticket` in a specific state, build a helper
 that walks the happy path forward. This avoids creating separate factory methods for
 each state and stays aligned with the real transition rules.
 
 ```csharp
-private static Application NewApplication(ApplicationState state = ApplicationState.Draft)
+private static Ticket NewTicket(TicketState state = TicketState.Draft)
 {
-    var app = Application.Create("app-1", "user-1", "offer-1", SomeInstant);
+    var theTicket = Ticket.Create("ticket-1", "user-1", "offer-1", SomeInstant);
 
-    // Walk the app forward to the desired state along the happy path
+    // Walk the ticket forward to the desired state along the happy path
     var path = new[]
     {
-        ApplicationState.CvReady,
-        ApplicationState.CvSent,
-        ApplicationState.AutoResponseReceived,
-        ApplicationState.ResponseReceived,
-        ApplicationState.Interview,
-        ApplicationState.OfferReceived,
-        ApplicationState.Hired
+        TicketState.Ready,
+        TicketState.Submitted,
+        TicketState.AutoAckReceived,
+        TicketState.ResponseReceived,
+        TicketState.InReview,
+        TicketState.OfferReceived,
+        TicketState.Approved
     };
 
     foreach (var s in path)
     {
-        if (app.State == state) break;
-        if (s == ApplicationState.Hired && state != ApplicationState.Hired) break;
-        app = app.TransitionTo(s, SomeInstant, TransitionTrigger.System);
+        if (theTicket.State == state) break;
+        if (s == TicketState.Approved && state != TicketState.Approved) break;
+        theTicket = theTicket.TransitionTo(s, SomeInstant, TransitionTrigger.System);
     }
 
-    return app;
+    return theTicket;
 }
 ```
 
@@ -47,19 +47,19 @@ forward path. This is cheaper than consulting the state machine and gives a clea
 "skip" signal.
 
 ```csharp
-private static readonly ApplicationState[] ForwardPath =
+private static readonly TicketState[] ForwardPath =
 [
-    ApplicationState.Draft,
-    ApplicationState.CvReady,
-    ApplicationState.CvSent,
-    ApplicationState.AutoResponseReceived,
-    ApplicationState.ResponseReceived,
-    ApplicationState.Interview,
-    ApplicationState.OfferReceived,
-    ApplicationState.Hired
+    TicketState.Draft,
+    TicketState.Ready,
+    TicketState.Submitted,
+    TicketState.AutoAckReceived,
+    TicketState.ResponseReceived,
+    TicketState.InReview,
+    TicketState.OfferReceived,
+    TicketState.Approved
 ];
 
-private static bool IsAtOrPast(ApplicationState current, ApplicationState target)
+private static bool IsAtOrPast(TicketState current, TicketState target)
 {
     var currentIdx = Array.IndexOf(ForwardPath, current);
     var targetIdx = Array.IndexOf(ForwardPath, target);
@@ -104,11 +104,11 @@ private static ChannelSignal NewSignal(
     {
         Id = "signal-1",
         UserId = "user-1",
-        Source = "linkedin",
+        Source = "gmail",
         ExternalId = "ext-123",
         ReceivedAt = SomeInstant,
-        RawExcerpt = "We'd like to schedule an interview",
-        ApplicationId = "app-1",
+        RawExcerpt = "We'd like to schedule a call",
+        TicketId = "ticket-1",
         Classification = classification,
         Disposition = disposition,
         CreatedAt = SomeInstant
@@ -121,10 +121,10 @@ When the policy must behave identically for all terminal states, use `[Theory]`:
 
 ```csharp
 [Theory]
-[InlineData(ApplicationState.Hired)]
-[InlineData(ApplicationState.Failed)]
-[InlineData(ApplicationState.Declined)]
-public void NoOp_when_application_terminal(ApplicationState terminal) { ... }
+[InlineData(TicketState.Approved)]
+[InlineData(TicketState.Failed)]
+[InlineData(TicketState.Declined)]
+public void NoOp_when_ticket_terminal(TicketState terminal) { ... }
 ```
 
 ### Note Content Verification
@@ -162,31 +162,32 @@ to avoid brittle assertions.
 
 ## Transition Matrix Theory Test
 
-When a policy evaluates multiple dimensions (app state × target state × confidence),
+When a policy evaluates multiple dimensions (ticket state × target state × confidence),
 use a `[Theory]` with `[InlineData]` for the full matrix. This catches regressions
-across the entire decision space:
+across the entire decision space. The confidence values below are illustrative —
+replace them with your own auto-apply threshold and tune per class of signal:
 
 ```csharp
 [Theory]
-[InlineData(ApplicationState.CvSent, ApplicationState.AutoResponseReceived, 0.90, TransitionDecisionType.Apply)]
-[InlineData(ApplicationState.CvSent, ApplicationState.AutoResponseReceived, 0.60, TransitionDecisionType.Propose)]
-[InlineData(ApplicationState.CvSent, ApplicationState.ResponseReceived, 0.85, TransitionDecisionType.Apply)]
-[InlineData(ApplicationState.CvSent, ApplicationState.ResponseReceived, 0.50, TransitionDecisionType.Propose)]
-[InlineData(ApplicationState.CvSent, ApplicationState.Interview, 0.90, TransitionDecisionType.Apply)]
-[InlineData(ApplicationState.CvSent, ApplicationState.Interview, 0.70, TransitionDecisionType.Propose)]
-[InlineData(ApplicationState.CvSent, ApplicationState.OfferReceived, 0.85, TransitionDecisionType.Apply)]
-[InlineData(ApplicationState.CvSent, ApplicationState.Failed, 1.00, TransitionDecisionType.Propose)]  // no-regret
-[InlineData(ApplicationState.CvSent, ApplicationState.Failed, 0.90, TransitionDecisionType.Propose)]  // no-regret
-[InlineData(ApplicationState.CvSent, ApplicationState.Failed, 0.50, TransitionDecisionType.Propose)]  // no-regret
-[InlineData(ApplicationState.Interview, ApplicationState.OfferReceived, 0.90, TransitionDecisionType.Apply)]
-[InlineData(ApplicationState.ResponseReceived, ApplicationState.Interview, 0.90, TransitionDecisionType.Apply)]
-public void Transition_matrix(ApplicationState appState, ApplicationState target, double confidence, TransitionDecisionType expected)
+[InlineData(TicketState.Submitted, TicketState.AutoAckReceived, 0.90, TransitionDecisionType.Apply)]
+[InlineData(TicketState.Submitted, TicketState.AutoAckReceived, 0.60, TransitionDecisionType.Propose)]
+[InlineData(TicketState.Submitted, TicketState.ResponseReceived, 0.85, TransitionDecisionType.Apply)]
+[InlineData(TicketState.Submitted, TicketState.ResponseReceived, 0.50, TransitionDecisionType.Propose)]
+[InlineData(TicketState.Submitted, TicketState.InReview, 0.90, TransitionDecisionType.Apply)]
+[InlineData(TicketState.Submitted, TicketState.InReview, 0.70, TransitionDecisionType.Propose)]
+[InlineData(TicketState.Submitted, TicketState.OfferReceived, 0.85, TransitionDecisionType.Apply)]
+[InlineData(TicketState.Submitted, TicketState.Failed, 1.00, TransitionDecisionType.Propose)]  // no-regret
+[InlineData(TicketState.Submitted, TicketState.Failed, 0.90, TransitionDecisionType.Propose)]  // no-regret
+[InlineData(TicketState.Submitted, TicketState.Failed, 0.50, TransitionDecisionType.Propose)]  // no-regret
+[InlineData(TicketState.InReview, TicketState.OfferReceived, 0.90, TransitionDecisionType.Apply)]
+[InlineData(TicketState.ResponseReceived, TicketState.InReview, 0.90, TransitionDecisionType.Apply)]
+public void Transition_matrix(TicketState ticketState, TicketState target, double confidence, TransitionDecisionType expected)
 {
     var classification = new SignalClassification { TransitionTo = target, Confidence = confidence, Summary = $"Test {target}" };
     var signal = NewSignal(classification: classification);
-    var app = NewApplication(appState);
+    var theTicket = NewTicket(ticketState);
 
-    var decision = Policy().Evaluate(signal, app);
+    var decision = Policy().Evaluate(signal, theTicket);
 
     decision.Type.ShouldBe(expected);
     decision.TargetState.ShouldBe(target);
@@ -194,41 +195,41 @@ public void Transition_matrix(ApplicationState appState, ApplicationState target
 ```
 
 **Minimum coverage:** ≥ 12 rows covering Apply/Propose/NoOp decisions across at least
-3 different app states. Always include terminal-target rows (Failed) at multiple
+3 different ticket states. Always include terminal-target rows (Failed) at multiple
 confidence levels to prove the no-regret guarantee.
 
 ### Late Rejection Tests
 
-A rejection arriving after the app has progressed is a special case — it should still
+A rejection arriving after the ticket has progressed is a special case — it should still
 Propose (not NoOp) because the target is terminal:
 
 ```csharp
 [Fact]
-public void Propose_late_rejection_on_active_app()
+public void Propose_late_rejection_on_active_ticket()
 {
-    // App is Interview; signal says Failed (late rejection)
-    var classification = new SignalClassification { TransitionTo = ApplicationState.Failed, Confidence = 0.90, Summary = "Late rejection" };
+    // Ticket is InReview; signal says Failed (late rejection)
+    var classification = new SignalClassification { TransitionTo = TicketState.Failed, Confidence = 0.90, Summary = "Late rejection" };
     var signal = NewSignal(classification: classification);
-    var app = NewApplication(ApplicationState.Interview);
+    var theTicket = NewTicket(TicketState.InReview);
 
-    var decision = Policy().Evaluate(signal, app);
+    var decision = Policy().Evaluate(signal, theTicket);
 
     decision.Type.ShouldBe(TransitionDecisionType.Propose);
-    decision.TargetState.ShouldBe(ApplicationState.Failed);
+    decision.TargetState.ShouldBe(TicketState.Failed);
 }
 
 [Fact]
-public void NoOp_late_rejection_on_terminal_app()
+public void NoOp_late_rejection_on_terminal_ticket()
 {
-    // App is Hired; signal says Failed — NoOp (app is terminal)
-    var classification = new SignalClassification { TransitionTo = ApplicationState.Failed, Confidence = 0.90, Summary = "Rejection after hire" };
+    // Ticket is Approved; signal says Failed — NoOp (ticket is terminal)
+    var classification = new SignalClassification { TransitionTo = TicketState.Failed, Confidence = 0.90, Summary = "Rejection after approval" };
     var signal = NewSignal(classification: classification);
-    var app = NewApplication(ApplicationState.Hired);
+    var theTicket = NewTicket(TicketState.Approved);
 
-    var decision = Policy().Evaluate(signal, app);
+    var decision = Policy().Evaluate(signal, theTicket);
 
     decision.Type.ShouldBe(TransitionDecisionType.NoOp);
 }
 ```
 
-The distinction: active app + terminal target → Propose. Terminal app + any target → NoOp.
+The distinction: active ticket + terminal target → Propose. Terminal ticket + any target → NoOp.

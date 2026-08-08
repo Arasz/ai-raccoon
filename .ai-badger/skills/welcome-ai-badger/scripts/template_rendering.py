@@ -5,15 +5,12 @@ template files, and assembles agent discovery documents.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
+import frontmatter as fm
 from _shared import MANAGED_HEADER, _MANAGED_PREFIX
 from scaffold_context import ScaffoldContext
-
-# A frontmatter key: at the start of its line, so an indented continuation is not one.
-_KEY_RE = re.compile(r"([A-Za-z][A-Za-z0-9_-]*):")
 
 # The lane a persona that names no `model:` runs in — whatever model the session already uses.
 SESSION_DEFAULT_LANE = "session default"
@@ -22,23 +19,8 @@ DELEGATION_TEMPLATE = "delegation.md.tmpl"
 
 
 def frontmatter_fields(text: str) -> Dict[str, str]:
-    """Each top-level frontmatter key mapped to its value, a folded block joined into one line.
-
-    Line-based rather than YAML-parsed: pyyaml is optional here (ADR-0002).
-    """
-    if not text.startswith("---\n"):
-        return {}
-    block = text[4:].split("\n---", 1)[0]
-    fields: Dict[str, str] = {}
-    key = None
-    for line in block.splitlines():
-        match = _KEY_RE.match(line)
-        if match:
-            key = match.group(1)
-            fields[key] = line[match.end():].strip().lstrip(">|").strip()
-        elif key and line.strip():
-            fields[key] = (fields[key] + " " + line.strip()).strip()
-    return fields
+    """Each top-level frontmatter key mapped to its value, a folded block joined into one line."""
+    return fm.fields(text)
 
 
 def first_sentence(text: str) -> str:
@@ -60,17 +42,9 @@ _MANAGED_SCAN_LINES = 10
 
 
 def _frontmatter_end(body: str) -> int:
-    """Offset just past the closing fence of `body`'s frontmatter, or -1 when it has none.
-
-    Only a fence at offset 0 counts — a `---` further down is a thematic break or code (#241).
-    """
-    for newline in ("\r\n", "\n"):
-        fence = "---" + newline
-        if not body.startswith(fence):
-            continue
-        end = body.find(newline + fence, len(fence) - len(newline))
-        return -1 if end == -1 else end + len(newline) + len(fence)
-    return -1
+    """Offset just past the closing fence of `body`'s frontmatter, or -1 when it has none."""
+    split = fm.split(body)
+    return len(split.head) if split.present else -1
 
 
 def _with_managed_header(body: str, name: str) -> str:

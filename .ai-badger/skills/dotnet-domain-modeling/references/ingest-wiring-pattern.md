@@ -1,5 +1,6 @@
 # Ingest Wiring Pattern (Transport → Repository with Cursor Durability)
 
+Assumes Azure Durable Functions for the orchestration layer; the transport and repository pieces are store/vendor-agnostic (worked example below uses Gmail + Cosmos) — swap the orchestration for your own scheduler if the project has no Durable Functions.
 
 When wiring a transport (`IGmailTransport`) to a repository (`IChannelSignalRepository`) for incremental data ingestion with cursor-based pagination.
 

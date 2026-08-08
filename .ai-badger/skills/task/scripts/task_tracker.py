@@ -55,7 +55,7 @@ WORKTREE_DIR = ".ai-badger/worktrees"
 def _git(root, *args, check=True):
     """Run git in `root` and return stdout. Returns '' when check is False and git fails."""
     result = subprocess.run(["git", "-C", str(root), *args],
-                            capture_output=True, text=True, check=False)
+                            capture_output=True, text=True, check=False, env=lib.git_env())
     if result.returncode != 0 and check:
         raise subprocess.CalledProcessError(result.returncode, result.args,
                                             result.stdout, result.stderr)

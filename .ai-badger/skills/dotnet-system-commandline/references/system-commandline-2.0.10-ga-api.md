@@ -2,7 +2,7 @@
 
 Verified empirically against the installed `system.commandline/2.0.10` package (net8.0 lib)
 and its XML docs (`lib/net8.0/System.CommandLine.xml`) while implementing parse-first CLI
-args for the the MCP server. The GA release differs sharply from the 2.0.0-beta/rc
+args for the MCP server. The GA release differs sharply from the 2.0.0-beta/rc
 API that most blog posts (and the plan being executed) assumed.
 
 ## Parse — no CommandLineBuilder, no UseDefaults

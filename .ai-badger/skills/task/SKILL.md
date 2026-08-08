@@ -10,6 +10,7 @@ version: 1.0.0
 author: ai-badger
 license: MIT
 platforms: [linux, macos]
+scope: default
 metadata:
   hermes:
     tags: [task, orchestration, delegation, worktree]
@@ -25,7 +26,7 @@ dead session can be resumed.
 
 **All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
 a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
-Scripts live in this skill's `scripts/`.
+Scripts live in this skill's `scripts/`. Read `references/file-schemas.md` before hand-writing or repairing any tracking file — it carries the exact shape of each one.
 
 ## When NOT to Use
 
@@ -75,6 +76,10 @@ sections share a file — those serialise, the rest do not.
 **Two levels of dispatch, no more.** You dispatch; those agents may dispatch once; nothing
 deeper. The cap is about the machine rather than the design: every live agent costs memory and a
 share of the CPU, and a tree that widens without bound starves the work already running.
+
+**Write the brief so the lane can improve on it.** Before dispatching an agent that owns a
+unit of work end to end, read `references/lane-dispatch-brief.md` — it carries the prompt
+shape, and the reason each part of it is there.
 
 **Reach for whatever tool makes the work smaller.** A code graph, an MCP server, an existing
 skill, a script the repo already has — check what is installed before writing something that

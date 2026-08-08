@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python
-> Scaffolded by ai-badger 0.87.1. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.107.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Non-negotiable invariants
 
@@ -17,6 +17,10 @@ Before calling any design or change finished, ask whether it is over-engineered 
 ### Check the source, not your own reasoning
 
 Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you. Re-reading your own reasoning twice over costs the same effort and finds nothing new, so spend the check where the error actually lives.
+
+### Derive the list, or delete it
+
+A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them. Compute the list from the thing it describes so the two cannot disagree; where that is genuinely impossible, write the check that compares them and prove it fails when they differ. Best of all is neither: when the list only restates what the tree already says, delete it and read the tree. A count written into prose is the same defect in smaller packaging.
 
 ### Guard clauses over hand-rolled null checks
 
@@ -57,6 +61,10 @@ The exception lifts the PR requirement and nothing else. Every gate still runs b
 
 Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts. "Done" means there is evidence the thing works — a test that passes, a run you watched, a gate that went green — not that the code was written. If you cannot point at the evidence, the work is not done yet.
 
+### A check you have not seen fail is not a check
+
+Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success. This is not the TDD red step restated: red for the wrong reason is worth nothing, and a test pinned to the path a previous fix patched stays green while the defect it named moves one directory over, so re-prove the check whenever the code beneath it moves. Keep the two claims apart as well — "I could not make it fail" is a fact about your attempt, "it cannot fail" is a claim about the system, and only a failure you produced carries you from one to the other.
+
 ### Screaming architecture
 
 Organize folders and modules by domain/business concept, not by generic technical bucket. A new folder name should tell a reader what the system *does*, not what kind of file lives there — avoid catch-all `Services/`, `Controllers/`, `Utils/` buckets in favor of concept-named ones. A shared technical chassis (logging, DI wiring, cross-cutting middleware) is the one accepted exception.
@@ -75,7 +83,28 @@ Every release records the version it went out at and what changed in it, using w
 
 ### Clean layering
 
-Keep the domain/pure-logic layer free of framework, persistence, HTTP, and third-party-SDK dependencies. A new dependency on the domain layer is an architecture-level decision that needs an ADR, not a routine `dotnet add package`.
+Keep the domain/pure-logic layer free of framework, persistence, HTTP, and
+third-party-SDK dependencies. Find that layer by shape, not by name: it's the
+assembly other layers reference but that itself references none of them, with
+no `PackageReference` on a web/data/cloud SDK — usually named `*.Domain` or
+`*.Core`. If no project matches that shape, treat this rule as not yet
+applicable rather than guessing which one is "the domain."
+
+"Framework" means anything an ArchUnitNET-style `ForbiddenPattern` would
+catch: ASP.NET Core, EF Core (`Microsoft.EntityFrameworkCore`),
+Azure/`Microsoft.Azure` SDKs, `System.Net.Http`, and other
+serialization/HTTP-transport namespaces. Extend that list when a new SDK
+crosses the boundary; don't extend the boundary to fit the SDK.
+
+A new dependency on the domain layer is an architecture-level decision.
+Record it wherever this project already records decisions (ADR, design doc,
+changelog entry); if it keeps none of those, say so explicitly in the PR
+description instead of adding the dependency silently.
+
+This stays advisory until it's a failing build: wire the ArchUnitNET check
+from `dotnet-domain-modeling`'s "Domain Purity Enforcement" section
+(`Types().That().ResideInAssembly(...).Should().NotDependOnAny(...)`) into
+CI. Without that test, nothing actually stops the dependency from landing.
 
 ### High-performance logging
 
@@ -162,7 +191,7 @@ Every call passes project_id. Plain writes land in committed project memory; act
 isolate in-progress notes (consolidate on finish); promote durable cross-project facts with
 memory_share — shared entries are curated and never swept. Keep the docs directory searchable:
 check memory_watch_status, then memory_watch_add (project_id + absolute path) when no watch
-exists. One-time CLI setup: `ai-raccoon ingest scope add` / `ai-raccoon watch enable`. HTTP mode: `ai-raccoon serve > serve.log 2>&1 &` once, then `hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp`
+exists. One-time CLI setup: `ai-raccoon watch scope add` / `ai-raccoon watch enable`. HTTP mode: `ai-raccoon serve > serve.log 2>&1 &` once, then `hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp`
 — one long-lived process (no ~5-min stdio recycle), 4h idle watchdog, second serve attaches.
 
 

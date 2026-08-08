@@ -211,24 +211,24 @@ public sealed partial class GmailChannelMonitor(...) : IChannelMonitor
 | Pitfall | Fix |
 |---|---|
 | Transport interface in Domain layer | Keep it in Infrastructure — Domain only sees the monitor interface |
-| Logging message bodies or tokens | Log IDs, counts, outcomes only — ADR-0026 §6 compliance |
+| Logging message bodies or tokens | Log IDs, counts, outcomes only — check whether your project has a logging/PII ADR to comply with |
 | Non-deterministic intervention IDs | Use SHA-256 hash of (userId, interventionType) → Guid for upsert idempotency |
 | Forgetting dedup on transport results | Always `GroupBy(ExternalId).Select(First())` before mapping |
 | Using `IEnumerable<T>` in transport interface | Use `IReadOnlyList<T>` for async methods |
 | Missing `CancellationToken` | Every async method must accept `CancellationToken ct` as last param |
 | Fake transport doesn't record inputs | Add `LastRequestedHistoryId` etc. so tests can verify passthrough |
 | Fake needed by multiple test projects | Move to shared `Testing` project; add Infrastructure project reference to `Testing.csproj` |
-| Conditional DI registration for optional transports | When the monitor depends on a transport (e.g. `IGmailTransport`) that requires OAuth/credentials and may not be registered, guard the registration: `if (services.Any(d => d.ServiceType == typeof(IGmailTransport))) { services.AddSingleton<IChannelMonitor, LinkedInChannelMonitor>(); }`. Without this guard, `ValidateOnBuild` fails with "Unable to resolve service for type 'IGmailTransport'." |
-| Test data doesn't match domain parser regex | When the monitor's integration tests use email subjects/snippets that the domain parser's regex can't recognize, the parser returns `Unknown` or `null` and the test assertions fail with unexpected raw excerpts. Before writing test data, read the domain parser's `ClassifyEventType` + regex patterns to find subjects that actually match. E.g., "Your application for X at Y was sent" does NOT match `Contains("applied")` or `Contains("application sent")` — use "You applied for X at Y" instead. |
+| Conditional DI registration for optional transports | When the monitor depends on a transport (e.g. `IGmailTransport`) that requires OAuth/credentials and may not be registered, guard the registration: `if (services.Any(d => d.ServiceType == typeof(IGmailTransport))) { services.AddSingleton<IChannelMonitor, GmailChannelMonitor>(); }`. Without this guard, `ValidateOnBuild` fails with "Unable to resolve service for type 'IGmailTransport'." |
+| Test data doesn't match domain parser regex | When the monitor's integration tests use inputs (email subjects/snippets, etc.) that the domain parser's regex can't recognize, the parser returns `Unknown` or `null` and the test assertions fail with unexpected raw excerpts. Before writing test data, read the domain parser's actual classification method and regex patterns to find inputs that really match — don't guess a phrasing that "should" match and assume it does. |
 
 ## Sharing Fakes Across Test Projects
 
 When a fake (e.g. `FakeGmailTransport`) is needed by both Infrastructure.Tests and Api.Tests, move it to the shared Testing project:
 
-1. Move from `tests/.../Infrastructure.Tests/Gmail/FakeMyTransport.cs` → `tests/JobSearchAiAssistant.Testing/Fakes/FakeMyTransport.cs`
-2. Change namespace to `JobSearchAiAssistant.Testing.Fakes`
+1. Move from `tests/.../Infrastructure.Tests/Gmail/FakeMyTransport.cs` → `tests/MyApp.Testing/Fakes/FakeMyTransport.cs`
+2. Change namespace to `MyApp.Testing.Fakes`
 3. Add Infrastructure project reference to `Testing.csproj` (the fake implements an Infrastructure-layer interface)
-4. Update the original test project: `using JobSearchAiAssistant.Testing.Fakes;`
+4. Update the original test project: `using MyApp.Testing.Fakes;`
 5. Delete or empty the original file in Infrastructure.Tests
 
 **Why Infrastructure reference in Testing:** The Testing project originally only references Domain. Fakes for Infrastructure interfaces (transport, service boundaries) need the Infrastructure project. This is a one-time setup — all subsequent Infrastructure-interface fakes go directly in Testing.
