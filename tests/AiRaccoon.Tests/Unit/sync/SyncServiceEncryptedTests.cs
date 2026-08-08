@@ -41,6 +41,7 @@ public class SyncServiceEncryptedTests : IDisposable
                               path TEXT,
                               value TEXT,
                               source_file TEXT NULL,
+                              section TEXT NULL,
                               scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
                               project_id TEXT NULL,
                               context_label TEXT NULL,

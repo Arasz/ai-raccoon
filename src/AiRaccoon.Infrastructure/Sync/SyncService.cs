@@ -265,11 +265,11 @@ public partial class SyncService(
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     mergeEntries.CommandText = """
-                                               INSERT OR IGNORE INTO entries (hash, path, value, scope, project_id, context_label,
+                                               INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
                                                                                access_count, last_accessed_at, rating, ttl_days,
                                                                                embed_state, embedding)
-                                               SELECT r.hash, r.path, r.value, r.scope, r.project_id, r.context_label,
+                                               SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, r.project_id, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
                                                       r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
                                                       'pending', NULL
@@ -356,11 +356,9 @@ public partial class SyncService(
                 }
 
                 // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): the
-                // merge's tombstone DELETE above can remove group members; bank-wide is cheap
-                // (56 ms / 4,423 rows measured) and sync is rare, so there is no reason to scope
-                // it to the affected groups. The merge INSERT never needs this — it lands rows
-                // with source_file = NULL (a pre-existing, out-of-scope bug, §1.5) so it can never
-                // join a group.
+                // merge's tombstone DELETE can remove group members and the merge INSERT above
+                // can add new source_file-bearing rows to a group; bank-wide is cheap and sync
+                // is rare, so there is no reason to scope this to the affected groups.
                 await using (var recompute = conn.CreateCommand())
                 {
                     recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWide;

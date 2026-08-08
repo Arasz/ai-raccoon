@@ -44,6 +44,7 @@ public class SyncServiceTests : IDisposable
                               path TEXT,
                               value TEXT,
                               source_file TEXT NULL,
+                              section TEXT NULL,
                               scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
                               project_id TEXT NULL,
                               context_label TEXT NULL,
@@ -73,9 +74,6 @@ public class SyncServiceTests : IDisposable
         return conn;
     }
 
-    //
-    // Scenario 1: sync without credentials errors sync-not-configured
-    //
     [Fact]
     public async Task MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured()
     {
@@ -94,7 +92,7 @@ public class SyncServiceTests : IDisposable
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
     }
 
-    /// <summary>An unconfigured sync must fail before VACUUMing the local bank — no wasted local work for a call that is guaranteed to fail (see SyncTools thinning, PR body).</summary>
+    /// <summary>An unconfigured sync must fail before VACUUMing the local bank — no wasted local work for a call that is guaranteed to fail.</summary>
     [Fact]
     public async Task MemorySync_WithoutConfiguredCloudStore_FailsBeforeTouchingTheLocalBank()
     {
@@ -140,9 +138,6 @@ public class SyncServiceTests : IDisposable
         stored.ShouldNotBeNull("the default object key memory-acme.db must be the one actually pushed to");
     }
 
-    //
-    // Scenario 2: sync pushes a consistent snapshot with conditional write + integrity check
-    //
     [Fact]
     public async Task MemorySync_FreshBank_PushesSnapshotAndRecordsETag()
     {
@@ -161,7 +156,6 @@ public class SyncServiceTests : IDisposable
 
         result.Sent.ShouldBeGreaterThanOrEqualTo(0);
 
-        // Verify the ETag watermark was recorded in sync_meta.
         await using var conn = new SqliteConnection($"Data Source={BankPath}");
         await conn.OpenAsync(TestContext.Current.CancellationToken);
         await using var cmd = conn.CreateCommand();
@@ -170,15 +164,11 @@ public class SyncServiceTests : IDisposable
         etag.ShouldNotBeNullOrWhiteSpace();
     }
 
-    //
-    // Scenario 3: concurrent remote change triggers merge — never silently drops local writes
-    //
     [Fact]
     public async Task MemorySync_RemoteChanged_LocalEntriesNotLost()
     {
         var cloud = new FakeCloudStore();
 
-        // Seed local bank with one entry.
         await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
@@ -189,7 +179,6 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // First sync — pushes local snapshot.
         var service = new SyncService(cloud,
             ct => Task.FromResult(new SqliteConnection($"Data Source={BankPath}"))
                 .ContinueWith(async t =>
@@ -207,11 +196,9 @@ public class SyncServiceTests : IDisposable
             }, TimeProvider.System, NullLogger<SyncService>.Instance);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Now simulate a remote change — push different content to the cloud.
         var bankBytes = await File.ReadAllBytesAsync(BankPath, TestContext.Current.CancellationToken);
         cloud.Set("test-object", bankBytes); // simulate same content to avoid merge
 
-        // Write a NEW local entry (not in the remote).
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -223,10 +210,8 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // Second sync — pushes to same remote.
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
-        // Verify all entries still exist.
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
         {
             await conn.OpenAsync(TestContext.Current.CancellationToken);
@@ -239,9 +224,6 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    //
-    // Scenario 4: deletes propagate through sync_tombstones — no resurrection
-    //
     [Fact]
     public async Task MemorySync_TombstonePropagation_NoResurrection()
     {
@@ -253,8 +235,6 @@ public class SyncServiceTests : IDisposable
             return conn;
         }
 
-        // Seed local bank with a row and sync.
-        // Initialize schema first.
         if (!File.Exists(BankPath))
         {
             var _ = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken);
@@ -1288,6 +1268,62 @@ public class SyncServiceTests : IDisposable
         {
             File.Delete(corruptPath);
         }
+    }
+
+    [Fact]
+    public async Task MemorySync_MergedRows_CarrySourceFileAndSectionAndAreCorrectlyGrouped()
+    {
+        var cloud = new FakeCloudStore();
+
+        // Two chunks of the same remote source file, sharing a (ctx, source_file) group.
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at)
+                                 VALUES ('r1', 'doc.md#0', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1),
+                                        ('r2', 'doc.md#1', 'chunk two', 'doc.md', 'Body', 'project', 'acme', 2, 2)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+        await using var select = check.CreateCommand();
+        select.CommandText =
+            "SELECT hash, source_file, section, chunk_index, total_chunks FROM entries WHERE source_file = 'doc.md' ORDER BY id";
+        var rows = new List<(string Hash, string? SourceFile, string? Section, long ChunkIndex, long TotalChunks)>();
+        await using (var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken))
+        {
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                rows.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt64(3), reader.GetInt64(4)));
+            }
+        }
+
+        rows.Select(r => r.Hash).ShouldBe(["r1", "r2"]);
+        rows.Select(r => r.SourceFile).ShouldBe(["doc.md", "doc.md"],
+            "a pulled row must keep its source_file, or chunk grouping and the FTS source-weight can never apply to it.");
+        rows.Select(r => r.Section).ShouldBe(["Intro", "Body"],
+            "a pulled row must keep its section, or it search-ranks as body-weight only.");
+        rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)],
+            "pulled rows sharing a source_file must be grouped by the post-merge chunk-column recompute.");
     }
 
     [Fact]
