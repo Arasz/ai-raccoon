@@ -101,7 +101,7 @@ public sealed class SqlitePromotionQueueStore(
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         // The single stalest row's age: an average hides one very old row once enough fresh
-        // rows join the same queue, and nothing else drains a propose-only queue (B1).
+        // rows join the same queue, and nothing else drains a propose-only queue.
         var oldestWait = await connection.ExecuteScalarAsync<double?>(
                 new CommandDefinition(
                     "SELECT CAST(max(@Now - created_at) AS REAL) FROM promotion_queue",
