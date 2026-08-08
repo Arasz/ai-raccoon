@@ -142,3 +142,16 @@ v2 organic-only subset (id > 1000, 86 candidates): Spearman = 0.5690
 
 Gates: v1 full-set >= 0.60, v2 full-set >= 0.45, v2 organic-subset >= 0.50 — all three
 pass with margin.
+
+**Informational, no gate.** A third-round fixture (292 candidates: the 147 above plus a
+further organic backup slice, 231 total with `id > 1000`) landed after this PR opened.
+Not wired into `PromotionScoringRealDataTests` as a gate — it arrived after the model
+was finalized, so treating it as a gate would mean tuning against data the model has
+already been validated on, the same overfitting risk the eval report's own "honest
+caveat" flags for the archetype priors. `dotnet test` against it locally: full-set
+Spearman **0.4512** (Python prototype: +0.456, consistent), organic-only subset (n=231)
+**0.3875** — lower than the 147-candidate round's 0.5690. The organic-only subset does
+not hold up as well as the smaller round did, which is worth a follow-up look at
+`OrganicRefinement`'s status/durable-language lexicons against the harder cases in this
+slice, but does not block this PR: the two committed gates (v1, v2) are unaffected and
+both still measure against the same reference-labeled data the model was designed for.
