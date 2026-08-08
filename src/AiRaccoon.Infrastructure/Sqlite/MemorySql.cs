@@ -1,8 +1,93 @@
+using AiRaccoon.Core.Memory;
+
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>SQL over our memory.db tables (see docs/work/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
+    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1): one expression maps
+    // an entries row to its search context, used identically by the vec0 triggers, the v2 migration
+    // backfill and the chunk-column recompute. Length-prefixed (not ':'-joined) because a bare
+    // 'custom:' || project_id || ':' || label collides: (project_id='a:b', label='c') and
+    // (project_id='a', label='b:c') both produce 'custom:a:b:c'.
+    public static string ContextKeyExpression(string prefix) => $"""
+                                                                  CASE
+                                                                      WHEN {prefix}workspace_id IS NOT NULL
+                                                                           THEN 'workspace:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || {prefix}workspace_id
+                                                                      WHEN {prefix}scope = 'shared'  THEN 'shared'
+                                                                      WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id
+                                                                      ELSE 'custom:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || COALESCE({prefix}context_label, '')
+                                                                  END
+                                                                  """;
+
+    /// <summary>
+    ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
+    ///     (see SearchContexts/FilterFor) into the same key. Mirrors FilterFor's branches exactly,
+    ///     including its quirks (the project branch reads the project id out of the context string,
+    ///     not the <paramref name="projectId" /> argument) so the two never diverge on a real query.
+    /// </summary>
+    public static string ContextKeyFor(string context, string projectId)
+    {
+        if (context == ContextNaming.SharedContext)
+        {
+            return "shared";
+        }
+
+        if (context.StartsWith("project:", StringComparison.Ordinal))
+        {
+            return $"project:{context["project:".Length..]}";
+        }
+
+        if (context.StartsWith("workspace:", StringComparison.Ordinal))
+        {
+            return $"workspace:{projectId.Length}:{projectId}:{context["workspace:".Length..]}";
+        }
+
+        if (context.StartsWith("label:", StringComparison.Ordinal))
+        {
+            var rest = context["label:".Length..];
+            var colon = rest.IndexOf(':');
+            if (colon > 0)
+            {
+                return $"custom:{projectId.Length}:{projectId}:{rest[(colon + 1)..]}";
+            }
+        }
+
+        return $"custom:{projectId.Length}:{projectId}:{context}";
+    }
+
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recompute
+    // chunk_index/total_chunks for one (ctx, source_file) group after a write that can change
+    // group membership. Numbered per ctx rather than per raw scope/project/label/workspace
+    // columns — the project-scope asymmetry (a labelled project row ignores its label) only
+    // holds when both the trigger and this recompute key off the same ctx expression.
+    public static readonly string RecomputeChunkColumnsForContext = $"""
+                                                                      WITH numbered AS (
+                                                                          SELECT id,
+                                                                                 ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
+                                                                                 COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                          FROM entries
+                                                                          WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile)
+                                                                      UPDATE entries
+                                                                         SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                             total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                       WHERE entries.id IN (SELECT id FROM numbered)
+                                                                      """;
+
+    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2 migration backfill and after a sync merge.</summary>
+    public static readonly string RecomputeChunkColumnsBankWide = $"""
+                                                                    WITH numbered AS (
+                                                                        SELECT id,
+                                                                               ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
+                                                                               COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                        FROM entries
+                                                                        WHERE source_file IS NOT NULL)
+                                                                    UPDATE entries
+                                                                       SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                           total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                     WHERE entries.id IN (SELECT id FROM numbered)
+                                                                    """;
+
     // embed_state defaults to 'pending': every write lands deferred until the embed pipeline runs.
     // ON CONFLICT DO NOTHING (bare — expression/partial unique indexes cannot be conflict targets)
     // makes concurrent same-bucket inserts converge: the loser returns the winner's row via the

@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -94,6 +96,238 @@ public sealed class MemorySchemaVersionTests
 
         (await SettingExistsAsync(connection, "watch.scope.acme")).ShouldBeFalse();
         (await SettingExistsAsync(connection, "ingest.scope.acme")).ShouldBeTrue();
+    }
+
+    /// <summary>docs/plans/2026-08-08-search-knn-perf.md §3.2: the v2 ladder step persists chunk_index/total_chunks and repartitions vec_entries/vec_structure.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV1Bank_AddsChunkColumns_AndBackfillsThem()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection,
+            ("h1", "doc.md", "project", "acme", null, null, "doc.md", true),
+            ("h2", "doc.md", "project", "acme", null, null, "doc.md", true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await ColumnsAsync(connection, "entries");
+        columns.ShouldContain("chunk_index");
+        columns.ShouldContain("total_chunks");
+
+        var rows = (await connection.QueryAsync<(string Hash, int ChunkIndex, int TotalChunks)>(
+                new CommandDefinition(
+                    "SELECT hash AS Hash, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY id",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldBe([("h1", 0, 2), ("h2", 1, 2)]);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_OnAV1Bank_RebuildsVecEntries_WithPartitionKeyAndCosine_HoldingEmbeddedRowsOnly()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection,
+            ("h1", "a.md", "project", "acme", null, null, "a.md", true),
+            ("h2", "b.md", "project", "acme", null, null, "b.md", false));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var sql = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_entries'",
+                cancellationToken: TestContext.Current.CancellationToken));
+        sql.ShouldNotBeNull();
+        sql.ShouldContain("partition key");
+        sql.ShouldContain("distance_metric=cosine");
+
+        var vecCount = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("SELECT count(*) FROM vec_entries", cancellationToken: TestContext.Current.CancellationToken));
+        vecCount.ShouldBe(1, "only the embedded row should have made it into the rebuilt table");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_OnAV1Bank_WithANonDefaultDimension_PreservesItThroughTheRebuild()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection, dimension: 256, ("h1", "a.md", "project", "acme", null, null, "a.md", true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var sql = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_entries'",
+                cancellationToken: TestContext.Current.CancellationToken));
+        sql.ShouldNotBeNull();
+        sql.ShouldContain("float[256]");
+    }
+
+    /// <summary>The encoding lives in two languages (SQL trigger, C# builder); this is the check that they cannot silently diverge.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV1Bank_TriggerComputedCtx_MatchesTheCSharpBuilder_ForEveryContextShape()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection,
+            ("h-shared", "shared/a.md", "shared", "acme", null, null, null, true),
+            ("h-project", "p.md", "project", "acme", null, null, null, true),
+            ("h-custom", "c.md", "custom", "acme", "my-label", null, null, true),
+            ("h-workspace", "w.md", null, "acme", null, "ws-1", null, true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string Hash, string Ctx)>(
+                new CommandDefinition(
+                    "SELECT e.hash AS Hash, v.ctx AS Ctx FROM vec_entries v JOIN entries e ON e.id = v.rowid",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToDictionary(r => r.Hash, r => r.Ctx, StringComparer.Ordinal);
+
+        rows["h-shared"].ShouldBe(MemorySql.ContextKeyFor(ContextNaming.SharedContext, "acme"));
+        rows["h-project"].ShouldBe(MemorySql.ContextKeyFor(ContextNaming.ProjectContext("acme"), "acme"));
+        rows["h-custom"].ShouldBe(MemorySql.ContextKeyFor("my-label", "acme"));
+        rows["h-workspace"].ShouldBe(MemorySql.ContextKeyFor(ContextNaming.WorkspaceContext("ws-1"), "acme"));
+    }
+
+    [Fact]
+    public async Task EnsureAsync_TwiceOnAV1Bank_TheSecondCallSkipsTheLadder()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection, ("h1", "a.md", "project", "acme", null, null, "a.md", true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // Witness a v2-shaped bank whose ladder truly stopped running: replace vec_entries with
+        // a stub table a second ladder pass would repopulate, and prove it stays untouched.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TABLE vec_entries; CREATE TABLE vec_entries (rowid INTEGER PRIMARY KEY, ctx TEXT, embedding BLOB);",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("SELECT count(*) FROM vec_entries", cancellationToken: TestContext.Current.CancellationToken));
+        count.ShouldBe(0, "a stamped v2 bank must not re-run the rebuild");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_V2Migration_IsReentrant_AfterASimulatedMidRebuildCrash()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection, ("h1", "a.md", "project", "acme", null, null, "a.md", true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // A crash between the v2 step's COMMIT and the stamp would leave the bank exactly here:
+        // rebuilt, but still reporting version 1 on the next open.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 1", cancellationToken: TestContext.Current.CancellationToken));
+
+        await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
+
+        var vecCount = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("SELECT count(*) FROM vec_entries", cancellationToken: TestContext.Current.CancellationToken));
+        vecCount.ShouldBe(1, "a re-run of the rebuild must not duplicate rows");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    // The pre-v2 shape: entries without chunk_index/total_chunks, vec_entries/vec_structure
+    // without the ctx partition key — i.e. the schema exactly as it existed the moment before
+    // this migration, already stamped past ladder step 1 (source_file, section, bucket indexes
+    // all present).
+    private const string V1Ddl = """
+                                 CREATE TABLE workspaces (
+                                     id TEXT PRIMARY KEY,
+                                     project_id TEXT NOT NULL,
+                                     status TEXT NOT NULL,
+                                     created_at INTEGER NOT NULL
+                                 );
+
+                                 CREATE TABLE entries (
+                                     id INTEGER PRIMARY KEY,
+                                     hash TEXT,
+                                     path TEXT,
+                                     value TEXT,
+                                     source_file TEXT,
+                                     section TEXT,
+                                     scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                                     project_id TEXT NULL,
+                                     context_label TEXT NULL,
+                                     workspace_id TEXT NULL,
+                                     agent_id TEXT NULL,
+                                     created_at INTEGER NOT NULL,
+                                     updated_at INTEGER NOT NULL,
+                                     access_count INTEGER NOT NULL DEFAULT 0,
+                                     last_accessed_at INTEGER NULL,
+                                     rating REAL NOT NULL DEFAULT 0.5,
+                                     ttl_days INTEGER NULL,
+                                     embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                                     embedding BLOB NULL,
+                                     heading_path TEXT NULL,
+                                     structure_embedding BLOB NULL
+                                 );
+
+                                 CREATE VIRTUAL TABLE entries_fts USING fts5(
+                                     value, source_file, section, content='entries', content_rowid='id'
+                                 );
+
+                                 CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                                     INSERT INTO entries_fts(rowid, value, source_file, section)
+                                     VALUES (new.id, new.value, new.source_file, new.section);
+                                 END;
+
+                                 CREATE UNIQUE INDEX uq_entries_shared_bucket
+                                     ON entries(path, hash) WHERE scope = 'shared';
+                                 CREATE UNIQUE INDEX uq_entries_committed_bucket
+                                     ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                                     WHERE scope IN ('project', 'custom');
+                                 """;
+
+    /// <summary>Builds a v1-shaped bank (stamped user_version = 1) with vec_entries at the given dimension and the given rows.</summary>
+    private static async Task SeedV1BankAsync(SqliteConnection connection,
+        params (string Hash, string Path, string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId, string? SourceFile, bool Embedded)[] rows) =>
+        await SeedV1BankAsync(connection, dimension: 384, rows);
+
+    private static async Task SeedV1BankAsync(SqliteConnection connection, int dimension,
+        params (string Hash, string Path, string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId, string? SourceFile, bool Embedded)[] rows)
+    {
+        await connection.ExecuteAsync(new CommandDefinition(V1Ddl, cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"CREATE VIRTUAL TABLE vec_entries USING vec0(embedding float[{dimension}])",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"CREATE VIRTUAL TABLE vec_structure USING vec0(embedding float[{dimension}])",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var workspaceIds = rows.Select(r => r.WorkspaceId).Where(id => id is not null).Distinct().ToList();
+        foreach (var workspaceId in workspaceIds)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO workspaces (id, project_id, status, created_at) VALUES (@id, 'acme', 'Active', 1)",
+                new { id = workspaceId }, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        foreach (var row in rows)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, workspace_id,
+                                      created_at, updated_at, embed_state, embedding)
+                VALUES (@hash, @path, 'seeded', @sourceFile, @scope, @projectId, @contextLabel, @workspaceId,
+                        1, 1, @embedState, @embedding)
+                """,
+                new
+                {
+                    hash = row.Hash,
+                    path = row.Path,
+                    sourceFile = row.SourceFile,
+                    scope = row.Scope,
+                    projectId = row.ProjectId,
+                    contextLabel = row.ContextLabel,
+                    workspaceId = row.WorkspaceId,
+                    embedState = row.Embedded ? "embedded" : "pending",
+                    embedding = row.Embedded ? EmbeddingBlob.ToBytes(new float[dimension]) : null
+                },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 1", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static async Task<SqliteConnection> OpenAsync()
