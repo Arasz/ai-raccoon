@@ -226,6 +226,105 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
+    /// <summary>
+    ///     Issue #200: an old binary opening a bank a newer binary already migrated must refuse to
+    ///     write rather than silently no-op through write paths that skip that schema's maintenance.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_WhenStoredVersionIsAheadOfCurrent_ThrowsNamingBothVersions()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        var aheadVersion = MemorySchema.CurrentVersion + 1;
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"PRAGMA user_version = {aheadVersion}", cancellationToken: TestContext.Current.CancellationToken));
+
+        var exception = await Should.ThrowAsync<UnsupportedSchemaVersionException>(
+            () => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
+
+        exception.Message.ShouldContain(aheadVersion.ToString());
+        exception.Message.ShouldContain(MemorySchema.CurrentVersion.ToString());
+    }
+
+    /// <summary>
+    ///     Issue #200 / docs/plans/2026-08-08-search-knn-perf.md §3.3: the v3 ladder step heals rows
+    ///     an old pre-guard binary wrote into a v2 bank without running the write-path chunk
+    ///     recompute, leaving chunk_index/total_chunks at their 0/0 defaults.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV2Bank_WithDriftedChunkColumns_HealsThemBankWide()
+    {
+        await using var connection = await OpenAsync();
+        // A fully-current bank first (gets us the v2-shaped entries/vec_entries without hand DDL),
+        // then simulate the drift: three chunks of one group land with their column defaults
+        // untouched — exactly what a pre-#200 binary's write path left behind — and the bank is
+        // forced back to reporting v2 so EnsureAsync sees it as needing the v3 step.
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state)
+            VALUES ('h1', 'doc.md', 'chunk 1', 'doc.md', 'project', 'acme', 1, 1, 'pending'),
+                   ('h2', 'doc.md', 'chunk 2', 'doc.md', 'project', 'acme', 1, 1, 'pending'),
+                   ('h3', 'doc.md', 'chunk 3', 'doc.md', 'project', 'acme', 1, 1, 'pending');
+            PRAGMA user_version = 2;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string Hash, int ChunkIndex, int TotalChunks)>(
+                new CommandDefinition(
+                    "SELECT hash AS Hash, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries WHERE source_file = 'doc.md' ORDER BY id",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldBe([("h1", 0, 3), ("h2", 1, 3), ("h3", 2, 3)]);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>The v3 step must not re-run on a bank already stamped v3.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAStampedV3Bank_SkipsTheRecomputeStep()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state)
+            VALUES ('h1', 'doc.md', 'chunk 1', 'doc.md', 'project', 'acme', 1, 1, 'pending'),
+                   ('h2', 'doc.md', 'chunk 2', 'doc.md', 'project', 'acme', 1, 1, 'pending');
+            UPDATE entries SET chunk_index = 99, total_chunks = 99 WHERE hash = 'h1';
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var chunkIndex = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT chunk_index FROM entries WHERE hash = 'h1'",
+                cancellationToken: TestContext.Current.CancellationToken));
+        chunkIndex.ShouldBe(99, "a stamped v3 bank must not re-run the bank-wide recompute");
+    }
+
+    /// <summary>A v1 bank migrates straight through v2 and v3 in one open — reuses the v1 seed harness (§WP1) rather than hand-writing a v2 fixture.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV1Bank_RunsTheFullLadderThroughV3()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV1BankAsync(connection,
+            ("h1", "doc.md", "project", "acme", null, null, "doc.md", true),
+            ("h2", "doc.md", "project", "acme", null, null, "doc.md", true));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+        var rows = (await connection.QueryAsync<(string Hash, int ChunkIndex, int TotalChunks)>(
+                new CommandDefinition(
+                    "SELECT hash AS Hash, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY id",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldBe([("h1", 0, 2), ("h2", 1, 2)]);
+    }
+
     // The pre-v2 shape: entries without chunk_index/total_chunks, vec_entries/vec_structure
     // without the ctx partition key — i.e. the schema exactly as it existed the moment before
     // this migration, already stamped past ladder step 1 (source_file, section, bucket indexes

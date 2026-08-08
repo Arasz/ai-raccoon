@@ -106,7 +106,10 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
         }
 
-        // Structure backfill (§3.6.3), one batch per call — see HealStructureAsync for why.
+        // Structure backfill (§3.6.3): runs to completion regardless of the caller's `limit`,
+        // which bounds pending-row embedding (a generator call per row) — the heal pass makes no
+        // generator call for a headingless row and pays only for each batch's distinct headings,
+        // so it stays cheap even over a large backlog and there's no reason to leave it half-done.
         await HealStructureAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
 
         return processed;
@@ -156,34 +159,38 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
     }
 
     /// <summary>
-    ///     Backfills structure vectors for rows embedded before the structure writer existed, one
-    ///     batch per call (§3.6.3); every candidate touched gets a real heading path or the ''
-    ///     sentinel, so it leaves the candidate set and the window advances across calls.
+    ///     Backfills structure vectors for rows embedded before the structure writer existed
+    ///     (§3.6.3), looping batches to completion: every candidate a batch touches gets a real
+    ///     heading path or the '' sentinel, which removes it from SelectStructureHealCandidates'
+    ///     WHERE clause, so each iteration shrinks the candidate set and the loop terminates.
     /// </summary>
     private async Task HealStructureAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken)
     {
-        var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
-                new { projectId, limit = BatchSize }, cancellationToken))
-            .ConfigureAwait(false)).ToList();
-        if (candidates.Count == 0)
+        while (true)
         {
-            return;
-        }
+            var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
+                    new { projectId, limit = BatchSize }, cancellationToken))
+                .ConfigureAwait(false)).ToList();
+            if (candidates.Count == 0)
+            {
+                return;
+            }
 
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
-        var generator = embeddings.CreateGenerator(settings);
-        var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-        var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
-            .ConfigureAwait(false);
-
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            var headingPath = headingPaths[i];
-            structure.TryGetValue(headingPath, out var structureEmbedding);
-            await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
-                    new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
+            var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+            var generator = embeddings.CreateGenerator(settings);
+            var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
+            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
                 .ConfigureAwait(false);
+
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var headingPath = headingPaths[i];
+                structure.TryGetValue(headingPath, out var structureEmbedding);
+                await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
+                        new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
+                    .ConfigureAwait(false);
+            }
         }
     }
 
