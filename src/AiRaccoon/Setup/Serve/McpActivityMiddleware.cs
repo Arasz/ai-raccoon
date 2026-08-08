@@ -1,7 +1,8 @@
 namespace AiRaccoon.Setup.Serve;
 
 /// <summary>
-///     Counts /mcp requests as watchdog activity; other paths (404s) never signal (R4).
+///     Counts /mcp requests as watchdog activity; other paths (404s) never signal
+///     (docs/plans/2026-08-06-http-serve-mode-plan.md R4).
 /// </summary>
 public sealed class McpActivityMiddleware
 {

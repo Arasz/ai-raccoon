@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Setup.Serve;
 
 /// <summary>
-///     Shuts the host down after a period without /mcp activity: requests reset the
-///     deadline (IActivitySignaler), background passes never count (design §3.3).
+///     Shuts the host down after a period without /mcp activity: requests reset the deadline
+///     (IActivitySignaler); background passes never count (docs/work/archive/2026-08-06-http-serve-design.md §3.3).
 /// </summary>
 public sealed partial class IdleWatchdog : BackgroundService, IActivitySignaler
 {
@@ -33,8 +33,8 @@ public sealed partial class IdleWatchdog : BackgroundService, IActivitySignaler
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // R2: tick = min(60s, timeout/4) — a fixed 60s tick would shut a 2s-timeout
-        // host down up to 62s late.
+        // Tick = min(60s, timeout/4) (docs/plans/2026-08-06-http-serve-mode-plan.md R2): a fixed
+        // 60s tick would shut a 2s-timeout host down up to 62s late.
         var tick = _timeout / 4 < TimeSpan.FromSeconds(60) ? _timeout / 4 : TimeSpan.FromSeconds(60);
         using var timer = new PeriodicTimer(tick, _timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken))
