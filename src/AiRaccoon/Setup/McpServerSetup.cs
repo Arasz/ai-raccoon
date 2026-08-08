@@ -90,6 +90,13 @@ internal static partial class McpServerSetup
         builder.Services.AddOtlpExport();
         builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        // Per-request chatter at default level (owner report from a live serve.log): every
+        // /mcp POST produces 4 ASP.NET Core INFO lines plus the MCP server's own handler-called
+        // /completed pair. Neither carries information an operator acts on above Warning, so both
+        // categories are floored here regardless of --quiet, which otherwise silences AiRaccoon's
+        // own Information logs too.
+        builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+        builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
         if (config.Options.Quiet)
         {
             builder.Logging.SetMinimumLevel(LogLevel.Warning);

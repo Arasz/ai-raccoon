@@ -19,8 +19,12 @@ RENDERED_NOTE = (
 
 
 def append_rendered(rendered: List[str], local_dir: Path, delivered: Set[str],
-                    demote: Callable[[str], str], notes: List[str]) -> None:
-    """Append each non-empty local file's demoted markdown, then report what happened."""
+                    summarize: Callable[[str, str], str], notes: List[str]) -> None:
+    """Append each non-empty local file's summary bullet, then report what happened.
+
+    The link points into `local/`, where these files stay — they are project-owned and are never
+    copied up beside the delivered ones.
+    """
     before = len(rendered)
     for path in sorted(local_dir.glob("*.md")):
         if not path.is_file():
@@ -30,6 +34,6 @@ def append_rendered(rendered: List[str], local_dir: Path, delivered: Set[str],
             notes.append(NAME_COLLISION_NOTE.format(path.stem, path.stem))
         if not text:
             continue
-        rendered.append(demote(text))
+        rendered.append(summarize(text, f"local/{path.stem}"))
     if len(rendered) > before:
         notes.append(RENDERED_NOTE.format(len(rendered) - before))

@@ -151,7 +151,7 @@ The three views answer different questions:
 
 | Verb | Shows | Notes |
 |---|---|---|
-| `counters` | GC, CPU, working set, thread pool | `dotnet-counters` with no `--counters` monitors `System.Runtime` alone; append `--counters AiRaccoon.MemoryTools` to swap in the tool metrics instead |
+| `counters` | GC, CPU, working set, thread pool | `dotnet-counters` with no `--counters` monitors `System.Runtime` alone; append `--counters AiRaccoon.MemoryTools` to swap in the tool metrics, broken out by `project_id` on the invocation counter |
 | `trace` | one span per tool call, with `tool`, `project_id`, `result`, `error_type` | |
 | `otlp` | everything, to your collector | tool metrics, promotion-queue metrics, runtime metrics and traces |
 

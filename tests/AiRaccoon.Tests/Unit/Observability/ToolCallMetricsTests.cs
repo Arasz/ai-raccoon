@@ -26,7 +26,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
 
-        metrics.RecordInvocation("memory_write", TimeSpan.FromMilliseconds(42), false);
+        metrics.RecordInvocation("memory_write", "acme", TimeSpan.FromMilliseconds(42), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
@@ -41,7 +41,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
 
-        metrics.RecordInvocation("memory_sync", TimeSpan.FromMilliseconds(500), true, "SyncConflictException");
+        metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(500), true, "SyncConflictException");
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
@@ -57,7 +57,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
 
-        metrics.RecordInvocation("memory_search", TimeSpan.FromMilliseconds(250), false);
+        metrics.RecordInvocation("memory_search", "acme", TimeSpan.FromMilliseconds(250), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
@@ -72,7 +72,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
 
-        metrics.RecordInvocation("memory_sync", TimeSpan.FromMilliseconds(1500), true, "SyncConflictException");
+        metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(1500), true, "SyncConflictException");
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
@@ -140,7 +140,33 @@ public class ToolCallMetricsTests
 
         // MS5: MetricCollector<long> smoke test
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        metrics.RecordInvocation("memory_stats", TimeSpan.FromMilliseconds(10), false);
+        metrics.RecordInvocation("memory_stats", "acme", TimeSpan.FromMilliseconds(10), false);
         collector.GetMeasurementSnapshot().Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Counter_TagsProjectId()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+
+        metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
+
+        var measurements = collector.GetMeasurementSnapshot();
+        measurements.Count.ShouldBe(1);
+        measurements[0].Tags["project_id"].ShouldBe("jsaa");
+    }
+
+    [Fact]
+    public void Histogram_DoesNotTagProjectId()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+
+        metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
+
+        var measurements = collector.GetMeasurementSnapshot();
+        measurements.Count.ShouldBe(1);
+        measurements[0].Tags.ContainsKey("project_id").ShouldBeFalse();
     }
 }

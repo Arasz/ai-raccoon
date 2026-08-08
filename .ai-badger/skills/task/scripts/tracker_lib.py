@@ -183,8 +183,11 @@ STATE_IN_PROGRESS = "IN_PROGRESS"
 STATE_FINISHED = "FINISHED"
 
 CLAUDE_MD = _PATHS["claude_md"]
-CLAUDE_MD_MAX_CHARS = 12000
-CLAUDE_MD_MAX_LINES = 110
+# Reachable by the floor: one stack, one agent renders 158-221 lines depending on the stack, so
+# 110 put every consumer over budget on day one. The budget test scaffolds every stack and holds
+# these to what the generator renders; chars move with lines or the line budget is unreachable.
+CLAUDE_MD_MAX_CHARS = 17000
+CLAUDE_MD_MAX_LINES = 260
 
 # Every agent's discovery file pays the same context cost, so all of them share the budget.
 AGENT_DOC_FILES = ("CLAUDE.md", "HERMES.md", ".hermes.md", "AGENTS.md",

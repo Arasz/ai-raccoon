@@ -18,31 +18,21 @@ Record it wherever this project already records decisions (ADR, design doc,
 changelog entry); if it keeps none of those, say so explicitly in the PR
 description instead of adding the dependency silently.
 
-This stays advisory until it's a failing build. Two ways to enforce it, and
-the cheaper one is usually the better one.
+This stays advisory until it's a failing build. Prefer a **reference
+allowlist**: assert the domain assembly's `GetReferencedAssemblies()` is a
+subset of an approved set. It runs in milliseconds, needs no extra test-project
+dependencies, and rejects the next infrastructure package nobody thought to
+deny — a denylist only catches what someone remembered to name.
 
-**A reference allowlist.** Assert that the domain assembly's
-`GetReferencedAssemblies()` is a subset of an approved set. It runs in
-milliseconds, needs no extra test-project dependencies, and rejects the next
-infrastructure package nobody thought to deny — a denylist only catches what
-someone remembered to name.
+Reach for an **ArchUnitNET rule** only when you need type-level granularity,
+and know two things first. A rule over types that were never loaded matches
+nothing, and a rule over an empty set passes — silently, with no zero-match
+diagnostic — so `Types().That().ResideInNamespaceMatching(...)` passes on every
+input if the loader was given only the domain assembly. Loading the forbidden
+types' assemblies fixes that, at the cost of the domain *test* project
+referencing the very closure the rule excludes. And a namespace is not an
+assembly: `IHttpClientFactory` is in `System.Net.Http` but ships in
+`Microsoft.Extensions.Http`, so the two rule shapes disagree about it.
 
-**An ArchUnitNET rule**, if you want type-level granularity. Two failure modes
-to know about first:
-
-- **A rule over types that were never loaded matches nothing, and a rule over
-  an empty set passes.** `Types().That().ResideInNamespaceMatching(...)`
-  filters against the architecture you built, so if the loader was given only
-  the domain assembly, the forbidden types are absent and every input passes.
-  There is no error and no zero-match diagnostic. Load the assemblies holding
-  the forbidden types, and expect that to cost both suite time and a test-project
-  reference to the very dependency closure the rule exists to exclude.
-- **A namespace is not an assembly.** `IHttpClientFactory` lives in namespace
-  `System.Net.Http` but ships in `Microsoft.Extensions.Http`, so a namespace
-  rule and an assembly rule disagree about it. Whichever you pick, know which
-  question you are asking.
-
-Either way, [prove the check fails](../../common/invariants/prove-the-check-fails.md)
-before trusting it: add a type that violates the rule, watch it go red, remove
-it. A gate that has only ever passed is indistinguishable from one that cannot
-fail, and this one has a documented history of being the latter.
+Either way, put a violating type in front of the check and watch it go red
+before trusting it — see the `prove-the-check-fails` invariant.
