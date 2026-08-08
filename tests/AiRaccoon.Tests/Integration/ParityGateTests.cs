@@ -225,6 +225,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine(
             $"{$"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | {(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | "}{fixture.Harness.QueryLatenciesMs.Count} |");
 
+        Directory.CreateDirectory(managedDir);
         File.WriteAllText(Path.Combine(managedDir, "parity-report.md"), report.ToString());
         output.WriteLine($"wrote {Path.Combine(managedDir, "parity-report.md")}");
     }
@@ -283,10 +284,10 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var assets = Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Retrieval", "assets");
+            var assets = Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Unit", "Retrieval", "assets");
             if (File.Exists(Path.Combine(assets, ReferenceAssets.ManifestFileName)))
             {
-                return Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Retrieval", "Managed");
+                return Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Unit", "Retrieval", "Managed");
             }
         }
 
