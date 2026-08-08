@@ -112,6 +112,14 @@ public sealed partial class SqliteMemoryStore(
             throw new InvalidOperationException($"Insert stored no row for context '{context}'.");
         }
 
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): a write
+        // carrying a source_file can join or grow an existing (ctx, source_file) group.
+        if (request.SourceFile is not null)
+        {
+            await RecomputeChunkColumnsAsync(connection, context, request.ProjectId, request.SourceFile,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
         return ToEntry(row);
     }
@@ -321,6 +329,12 @@ public sealed partial class SqliteMemoryStore(
         var scope = await connection.QueryFirstOrDefaultAsync<string?>(
                 Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId }, cancellationToken))
             .ConfigureAwait(false);
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read
+        // alongside the scope lookup above, before the delete, so a removed chunk's siblings can
+        // be renumbered afterward.
+        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
 
         var deleted = await connection.ExecuteAsync(
                 Def(MemorySql.DeleteByHashAndProject, new { hash, projectId }, cancellationToken))
@@ -333,6 +347,14 @@ public sealed partial class SqliteMemoryStore(
                         new { hash, scope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
                         cancellationToken))
                 .ConfigureAwait(false);
+        }
+
+        if (deleted > 0 && recomputeContext?.SourceFile is not null)
+        {
+            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                recomputeContext.WorkspaceId, projectId);
+            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return deleted > 0;
@@ -545,6 +567,15 @@ public sealed partial class SqliteMemoryStore(
         {
             throw new InvalidOperationException(
                 $"memory_add_content stored no row for '{path}' in '{resolvedContext}'.");
+        }
+
+        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): scoped to the
+        // TARGET context — ShareAsync/promotion write into a different context than the source
+        // row, and only the target's group changed.
+        if (sourceFile is not null)
+        {
+            await RecomputeChunkColumnsAsync(connection, resolvedContext, projectId, sourceFile, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
@@ -852,20 +883,37 @@ public sealed partial class SqliteMemoryStore(
 
     private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
 
-    private static string ContextStringOf(EntryRow row)
+    private static string ContextStringOf(EntryRow row) =>
+        ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
+
+    /// <summary>Inverse of <see cref="EntryBucket.For"/>: the bucket columns a row was stored under, back to the context string that would retrieve it.</summary>
+    private static string ContextStringOf(string? scope, string? contextLabel, string? workspaceId, string projectId)
     {
-        if (row.WorkspaceId is not null)
+        if (workspaceId is not null)
         {
-            return ContextNaming.WorkspaceContext(row.WorkspaceId);
+            return ContextNaming.WorkspaceContext(workspaceId);
         }
 
-        return row.Scope switch
+        return scope switch
         {
             "shared" => ContextNaming.SharedContext,
-            "project" => ContextNaming.ProjectContext(row.ProjectId),
-            "custom" => row.ContextLabel ?? "",
+            "project" => ContextNaming.ProjectContext(projectId),
+            "custom" => contextLabel ?? "",
             _ => ""
         };
+    }
+
+    /// <summary>
+    ///     Recomputes chunk_index/total_chunks for one (ctx, sourceFile) group after a write that
+    ///     can change its membership (docs/plans/2026-08-08-search-knn-perf.md §3.3).
+    /// </summary>
+    private static async Task RecomputeChunkColumnsAsync(SqliteConnection connection, string context,
+        string projectId, string sourceFile, CancellationToken cancellationToken)
+    {
+        var ctx = MemorySql.ContextKeyFor(context, projectId);
+        await connection.ExecuteAsync(
+                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile }, cancellationToken))
+            .ConfigureAwait(false);
     }
 
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
@@ -961,6 +1009,8 @@ public sealed partial class SqliteMemoryStore(
     }
 
     private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section);
+
+    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
 
     private sealed record SharedRow(string Path, string Value);
 

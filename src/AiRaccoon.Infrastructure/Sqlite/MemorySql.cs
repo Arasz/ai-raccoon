@@ -241,6 +241,16 @@ internal static class MemorySql
     public const string SelectScopeByHashAndProject =
         "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
 
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
+    // SelectScopeByHashAndProject, before the delete, so the (ctx, source_file) group the row
+    // belonged to can be recomputed afterward.
+    public const string SelectDeleteRecomputeContext = """
+                                                        SELECT scope AS Scope, context_label AS ContextLabel,
+                                                               workspace_id AS WorkspaceId, source_file AS SourceFile
+                                                        FROM entries
+                                                        WHERE hash = @hash AND project_id = @projectId
+                                                        """;
+
     public const string UpsertTombstone =
         "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
         "ON CONFLICT(hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";

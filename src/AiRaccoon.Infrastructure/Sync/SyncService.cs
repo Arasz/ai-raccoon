@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -331,6 +332,18 @@ public partial class SyncService(
                                                )
                                              """;
                     reindexed = await reindexCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): the
+                // merge's tombstone DELETE above can remove group members; bank-wide is cheap
+                // (56 ms / 4,423 rows measured) and sync is rare, so there is no reason to scope
+                // it to the affected groups. The merge INSERT never needs this — it lands rows
+                // with source_file = NULL (a pre-existing, out-of-scope bug, §1.5) so it can never
+                // join a group.
+                await using (var recompute = conn.CreateCommand())
+                {
+                    recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWide;
+                    await recompute.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 return (received, reindexed);

@@ -40,6 +40,7 @@ public class SyncServiceEncryptedTests : IDisposable
                               hash TEXT,
                               path TEXT,
                               value TEXT,
+                              source_file TEXT NULL,
                               scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
                               project_id TEXT NULL,
                               context_label TEXT NULL,
@@ -52,7 +53,9 @@ public class SyncServiceEncryptedTests : IDisposable
                               rating REAL NOT NULL DEFAULT 0.5,
                               ttl_days INTEGER NULL,
                               embed_state TEXT NOT NULL DEFAULT 'pending',
-                              embedding BLOB NULL
+                              embedding BLOB NULL,
+                              chunk_index INTEGER NOT NULL DEFAULT 0,
+                              total_chunks INTEGER NOT NULL DEFAULT 0
                           );
                           CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
