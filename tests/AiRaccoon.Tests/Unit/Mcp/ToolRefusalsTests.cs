@@ -6,6 +6,12 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
+using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Serve;
@@ -37,11 +43,61 @@ public sealed class ToolRefusalsTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
-    public async Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog()
+    public Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog() =>
+        AssertRefusalOverRealServerAsync(_dataRoot, "memory_ingest_file",
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
+            "path-outside-scope");
+
+    /// <summary>
+    ///     #151/e2e-prefix-coverage: only path-outside-scope was ever proven through a real
+    ///     McpServer; access-denied (project set read-only, then a write tool) and
+    ///     unknown-workspace (memory_write against a workspaceId that doesn't exist) now are too.
+    ///     Sync prefixes are skipped here — they need real cloud config, not just a local bank.
+    /// </summary>
+    public static TheoryData<string, Dictionary<string, object?>, string, string?> RealServerRefusalCases => new()
+    {
+        {
+            "memory_write",
+            new Dictionary<string, object?> { ["projectId"] = "acme-ro", ["content"] = "x" },
+            "access-denied",
+            "acme-ro"
+        },
+        {
+            "memory_write",
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
+            "unknown-workspace",
+            null
+        }
+    };
+
+    [Theory]
+    [MemberData(nameof(RealServerRefusalCases))]
+    public async Task KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog(string toolName,
+        Dictionary<string, object?> arguments, string expectedPrefix, string? readOnlyProjectId)
+    {
+        var dataRoot = TestData.CreateTempRoot($"tool-refusals-e2e-{expectedPrefix}");
+        try
+        {
+            if (readOnlyProjectId is not null)
+            {
+                await SeedProjectAccessModeAsync(dataRoot, readOnlyProjectId, "ro",
+                    TestContext.Current.CancellationToken);
+            }
+
+            await AssertRefusalOverRealServerAsync(dataRoot, toolName, arguments, expectedPrefix);
+        }
+        finally
+        {
+            Directory.Delete(dataRoot, true);
+        }
+    }
+
+    private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,
+        Dictionary<string, object?> arguments, string expectedPrefix)
     {
         var port = FreePort();
         var host = McpServerSetup.CreateServerHost(
-            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(_dataRoot), default));
+            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
         var fakeLogs = new FakeLoggerProvider();
         host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
 
@@ -62,13 +118,12 @@ public sealed class ToolRefusalsTests : IDisposable
             await using var client = await McpClient.CreateAsync(transport,
                 cancellationToken: TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync("memory_ingest_file",
-                new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
+            var result = await client.CallToolAsync(toolName, arguments,
                 cancellationToken: TestContext.Current.CancellationToken);
 
             result.IsError.ShouldBe(true);
             var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
-            text.ShouldStartWith("path-outside-scope:");
+            text.ShouldStartWith($"{expectedPrefix}:");
 
             // The defect #151 names: every fail-level record here is a real crash, none are refusals.
             var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
@@ -78,6 +133,19 @@ public sealed class ToolRefusalsTests : IDisposable
         {
             await host.StopAsync(TestContext.Current.CancellationToken);
         }
+    }
+
+    /// <summary>Writes the per-project access mode row directly (same DataRoot the server host reads per call — see McpServerFactory).</summary>
+    private static async Task SeedProjectAccessModeAsync(string dataRoot, string projectId, string mode,
+        CancellationToken cancellationToken)
+    {
+        var options = TestData.CreateInfrastructureOptions(dataRoot);
+        var store = new SqliteMemoryStore(
+            new SqliteConnectionFactory(options,
+                new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                    [new EnvEncryptionKeyProvider()])),
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+        await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
     }
 
     private static int FreePort()
