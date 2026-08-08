@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -12,7 +14,7 @@ internal static class MemorySchema
 {
     // workspace_id exists now for the P8 structural-isolation wave; the FK and the
     // "workspace XOR committed scope" CHECK land with P8.
-    private const string Ddl = """
+    private static readonly string Ddl = $"""
                                CREATE TABLE IF NOT EXISTS workspaces (
                                    id TEXT PRIMARY KEY,
                                    project_id TEXT NOT NULL,
@@ -45,6 +47,8 @@ internal static class MemorySchema
                                    embedding BLOB NULL,
                                    heading_path TEXT NULL,
                                    structure_embedding BLOB NULL,
+                                   chunk_index INTEGER NOT NULL DEFAULT 0,
+                                   total_chunks INTEGER NOT NULL DEFAULT 0,
                                    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
                                    CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
@@ -63,16 +67,28 @@ internal static class MemorySchema
                                );
 
                                -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
-                               -- dimension if the model is not all-MiniLM (384).
-                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(embedding float[384]);
+                               -- dimension if the model is not all-MiniLM (384). `ctx` is the partition key
+                               -- (docs/plans/2026-08-08-search-knn-perf.md §3.1): the vec0 KNN queries a
+                               -- single partition instead of a WHERE filter, and cosine is declared
+                               -- explicitly so a bare MATCH cannot silently fall back to L2.
+                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                -- Structure modality: heading-path vectors, rowid = entry id.
                                -- Populated for the committed corpus (backfill since removed);
                                -- the delete trigger keeps orphan rows out when an entry goes away.
-                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(embedding float[384]);
+                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
                                    DELETE FROM vec_structure WHERE rowid = OLD.id;
+                               END;
+
+                               -- Dormant until a structure writer exists (WP5): no code path sets
+                               -- structure_embedding yet, so this never fires today. Mirrors vec_entries_au.
+                               CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
+                               WHEN NEW.structure_embedding IS NOT NULL
+                               BEGIN
+                                   DELETE FROM vec_structure WHERE rowid = NEW.id;
+                                   INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
                                END;
 
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
@@ -100,7 +116,7 @@ internal static class MemorySchema
                                WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
                                BEGIN
                                    DELETE FROM vec_entries WHERE rowid = NEW.id;
-                                   INSERT INTO vec_entries(rowid, embedding) VALUES (NEW.id, NEW.embedding);
+                                   INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
                                END;
 
                                CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
@@ -191,9 +207,9 @@ internal static class MemorySchema
 
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
-    ///     matching ladder step in <see cref="MigrateAsync"/> (ADR-0011).
+    ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/> (ADR-0011).
     /// </summary>
-    internal const int CurrentVersion = 1;
+    internal const int CurrentVersion = 2;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -229,10 +245,25 @@ internal static class MemorySchema
             return;
         }
 
-        // Stamped only when the ladder completed: the bucket-index step is deliberately soft
-        // (a bank must never fail to open), and a bank stamped past a step that silently
-        // failed would never retry it.
-        if (await MigrateAsync(connection, cancellationToken).ConfigureAwait(false))
+        // Stamped only when the ladder completed: the v1 step's bucket-index dedupe is
+        // deliberately soft (a bank must never fail to open), and a bank stamped past a step
+        // that silently failed would never retry it. The v1 step must run — and its dedupe
+        // complete — before the v2 step, or chunk-column numbering bakes in rows the dedupe
+        // would have deleted (docs/plans/2026-08-08-search-knn-perf.md).
+        var healthy = true;
+        if (storedVersion < 1)
+        {
+            healthy = await MigrateToV1Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 2)
+        {
+            // Hard step, deliberately not soft: an empty-shell vec_entries answers every vector
+            // query with silence, which is worse than the bank failing to open.
+            await MigrateToV2Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
         }
@@ -285,9 +316,9 @@ internal static class MemorySchema
     ///     columns, the two watch-lease columns, the ingest-scope key move, the FTS rebuild and the
     ///     bucket-uniqueness indexes. Every check is idempotent. Returns false when the soft
     ///     bucket-index step did not complete, so the caller leaves the bank unstamped and the
-    ///     next open retries.
+    ///     next open retries. Must complete (its dedupe especially) before <see cref="MigrateToV2Async"/>.
     /// </summary>
-    private static async Task<bool> MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task<bool> MigrateToV1Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
@@ -520,5 +551,151 @@ internal static class MemorySchema
         }
 
         return true;
+    }
+
+    private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
+
+    private const int DefaultEmbeddingDimension = 384;
+
+    /// <summary>
+    ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
+    ///     (until now recomputed per query with a window function) and rebuilds vec_entries/vec_structure
+    ///     with the vec0 partition key that lets the vector queries drop their WHERE filter for a native
+    ///     KNN. One transaction, rethrown on failure — unlike the v1 step's soft bucket-index dedupe,
+    ///     an empty-shell vec_entries answers every vector query with silence, which is worse than the
+    ///     bank failing to open. Runs only after MigrateToV1Async's dedupe has completed, or the
+    ///     chunk-column numbering would bake in rows the dedupe would have deleted.
+    /// </summary>
+    private static async Task MigrateToV2Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('entries')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("chunk_index"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT 0",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!columns.Contains("total_chunks"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN total_chunks INTEGER NOT NULL DEFAULT 0",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        // The embedder owns the dimension when the model is not all-MiniLM (384); read each
+        // table's own declared dimension rather than re-hardcoding, so a bank on a different
+        // model keeps its vectors through the rebuild.
+        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken)
+            .ConfigureAwait(false);
+        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken)
+            .ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
+                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken)
+                .ConfigureAwait(false);
+            await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
+                    "structure_embedding IS NOT NULL", cancellationToken)
+                .ConfigureAwait(false);
+
+            // vec_entries_pending/vec_entries_ad need no ctx and are unchanged in shape; dropped
+            // and recreated anyway so every trigger on the table comes from one place post-rebuild.
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        $"""
+                        DROP TRIGGER IF EXISTS vec_entries_au;
+                        DROP TRIGGER IF EXISTS vec_entries_pending;
+                        DROP TRIGGER IF EXISTS vec_entries_ad;
+
+                        CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
+                        WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                        BEGIN
+                            DELETE FROM vec_entries WHERE rowid = NEW.id;
+                            INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                        END;
+
+                        CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                        WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                        BEGIN
+                            DELETE FROM vec_entries WHERE rowid = OLD.id;
+                        END;
+
+                        CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
+                            DELETE FROM vec_entries WHERE rowid = OLD.id;
+                        END;
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Drops and recreates one vec0 table in the partitioned shape, repopulating it from <paramref name="sourceColumn"/>.</summary>
+    private static async Task RebuildVecTableAsync(SqliteConnection connection, string table, int dimension,
+        string sourceColumn, string wherePredicate, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                    INSERT INTO {table}(rowid, ctx, embedding)
+                    SELECT id, {MemorySql.ContextKeyExpression("")}, {sourceColumn} FROM entries WHERE {wherePredicate}
+                    """,
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Reads the embedding dimension a vec0 table was declared with, falling back to 384 when the table (or a recognizable declaration) is absent.</summary>
+    private static async Task<int> ReadVecDimensionAsync(SqliteConnection connection, string table,
+        CancellationToken cancellationToken)
+    {
+        var sql = await connection.ExecuteScalarAsync<string?>(
+                new CommandDefinition(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
+                    new { table }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (sql is null)
+        {
+            return DefaultEmbeddingDimension;
+        }
+
+        var match = VecDimensionPattern.Match(sql);
+        return match.Success
+            ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
+            : DefaultEmbeddingDimension;
     }
 }
