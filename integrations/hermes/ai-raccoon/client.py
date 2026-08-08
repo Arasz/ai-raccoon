@@ -97,7 +97,7 @@ class _MCPClient:
             raise AiRaccoonError(f"ai-raccoon call {name} failed: {e}") from e
         if getattr(result, "isError", False):
             raise AiRaccoonError(f"ai-raccoon {name} returned an error: {_text(result)}")
-        return _text(result)
+        return _unwrap(_text(result))
 
     # -- duck-typed surface (snake_case; camelCase over the wire) -----------
 
@@ -212,3 +212,13 @@ def _text(result: Any) -> Any:
             except json.JSONDecodeError:
                 return text
     raise AiRaccoonError("ai-raccoon tool result contained no text content")
+
+
+def _unwrap(payload: Any) -> Any:
+    """Strip the server's ApiEnvelope: every tool answers {data, meta}.
+
+    Both keys are required so a payload with its own ``data`` field survives.
+    """
+    if isinstance(payload, dict) and "data" in payload and "meta" in payload:
+        return payload["data"]
+    return payload
