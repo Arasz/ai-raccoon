@@ -97,7 +97,7 @@ public class MemoryToolsTests
 
         result.Data!.Candidates.ShouldHaveSingleItem();
         result.Data!.Candidates[0].Hash.ShouldBe("h1");
-        result.Data!.Candidates[0].Reasons.ShouldContain("organic-write");
+        result.Data!.Candidates[0].Reasons.ShouldContain("organic-note");
         result.Data!.PromotedHashes.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
     }

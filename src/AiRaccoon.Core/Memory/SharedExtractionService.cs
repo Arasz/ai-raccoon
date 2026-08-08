@@ -1,9 +1,10 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     Mechanical shared-extraction scoring (no LLM): organic writes, cross-project references,
-///     usage and recency produce a ranked candidate list; dedup is exact (value/path) against the
-///     existing shared tier. Pure — the store feeds rows, the caller promotes.
+///     Mechanical shared-extraction scoring (no LLM): a provenance-archetype prior plus bounded
+///     content-shape evidence produce a ranked candidate list (docs/adr/0018-promotion-scoring-v2.md);
+///     dedup is exact (value/path) against the existing shared tier. Pure — the store feeds rows, the
+///     caller promotes. Recency is a sort tie-break only, never part of the score.
 /// </summary>
 public sealed class SharedExtractionService
 {
@@ -11,7 +12,10 @@ public sealed class SharedExtractionService
     public const int DefaultCandidateLimit = 20;
 
     private const int PreviewLength = 300;
-    private const double CandidateFloor = 1.0;
+
+    /// <summary>Recalibrated for the v2 scale (docs/adr/0018-promotion-scoring-v2.md): the winning
+    /// scorer put doc-index chunks at or below 0.4 on the reference-labeled data.</summary>
+    private const double CandidateFloor = 0.4;
 
     /// <summary>Scoring and (in promote mode) selection of rows to share. Never mutates anything.</summary>
     public ShareExtractResult Run(
@@ -35,36 +39,14 @@ public sealed class SharedExtractionService
                 continue;
             }
 
+            var (score, scoreReasons) = PromotionScorer.Score(row, projectId, allProjectIds);
             var reasons = new List<string>();
-            var score = 0.0;
             if (row.TtlDays is not null)
             {
                 reasons.Add("ttl-row");
             }
 
-            if (string.IsNullOrEmpty(row.SourceFile))
-            {
-                score += 2;
-                reasons.Add("organic-write");
-            }
-
-            if (MentionsOtherProject(row, projectId, allProjectIds))
-            {
-                score += 2;
-                reasons.Add("cross-project");
-            }
-
-            if (row.AccessCount > 0 || row.Rating > 0.5)
-            {
-                score += 1;
-                reasons.Add("accessed");
-            }
-
-            if (row.CreatedAt >= now.AddDays(-30))
-            {
-                score += 0.5;
-                reasons.Add("recent");
-            }
+            reasons.AddRange(scoreReasons);
 
             if (score >= CandidateFloor)
             {
@@ -102,26 +84,6 @@ public sealed class SharedExtractionService
         }
 
         return new ShareExtractResult(candidates, promoted);
-    }
-
-    private static bool MentionsOtherProject(
-        ExtractionCandidateRow row, string projectId, IReadOnlyList<string> allProjectIds)
-    {
-        foreach (var other in allProjectIds)
-        {
-            if (string.Equals(other, projectId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (row.Value.Contains(other, StringComparison.OrdinalIgnoreCase) ||
-                row.SourceFile?.Contains(other, StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool IsDuplicate(

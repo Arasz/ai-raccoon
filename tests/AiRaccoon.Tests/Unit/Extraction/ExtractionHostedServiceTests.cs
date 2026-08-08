@@ -272,8 +272,16 @@ public sealed class ExtractionHostedServiceTests
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Candidates["acme"] =
         [
-            Row("h1", null, "organic fact about beta"), // organic-write + cross-project
-            Row("h2", null, "another organic fact"), // organic-write only
+            // organic-note + rule-language + foreign-subject: clearly outscores h2.
+            Row("h1", null,
+                "The retry queue must never drop a message silently; this is a hard invariant recorded " +
+                "here so nobody has to relearn it after beta hit the same failure mode independently " +
+                "last quarter and traced it back to the same root cause in its own dispatcher."),
+            // organic-note only, no rule language or foreign mention.
+            Row("h2", null,
+                "The retry queue clears completed messages once every consumer has acknowledged them, " +
+                "keeping memory bounded during long backlogs without any operator intervention at all " +
+                "during normal day to day operation across every environment this service runs in."),
             Row("h3", "docs/x.md", "plain fact") // below floor → excluded
         ];
 
@@ -285,9 +293,9 @@ public sealed class ExtractionHostedServiceTests
         records[0].Message.ShouldContain("#1");
         records[0].Message.ShouldContain("acme");
         records[0].Message.ShouldContain("h1.md");
-        records[0].Message.ShouldContain("organic-write");
-        records[0].Message.ShouldContain("cross-project");
-        records[0].Message.ShouldContain("organic fact about beta");
+        records[0].Message.ShouldContain("organic-note");
+        records[0].Message.ShouldContain("foreign-subject");
+        records[0].Message.ShouldContain("rule-language");
         // Rank ordering: #1 before #2 in emission order (the list is pre-sorted by score).
         records[1].Message.ShouldContain("#2");
         // Counts line still emitted alongside the details.
