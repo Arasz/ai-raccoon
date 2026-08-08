@@ -28,14 +28,25 @@ public sealed class SharedExtractionRunner(
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
-        // Every eligible row is queued (refreshing its score), not just the top `limit` returned
-        // to the caller — otherwise a row ranked outside the display window is never re-scored.
         var ranked = extraction.RankAll(projectId, allProjectIds, rows,
             sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
         if (ranked.Count > 0)
         {
-            await queue.ProposeAsync(projectId, ToQueueCandidates(rows, ranked), cancellationToken)
-                .ConfigureAwait(false);
+            // Refreshing an already-queued row and enqueueing a new one are different operations:
+            // a queued row is refreshed regardless of rank, but a not-yet-queued row is bounded by
+            // `limit`, so one pass cannot insert the whole eligible pool.
+            var alreadyQueued = (await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
+                    .ConfigureAwait(false))
+                .Select(r => r.Hash)
+                .ToHashSet(StringComparer.Ordinal);
+            var toQueue = ranked.Where(c => alreadyQueued.Contains(c.Hash))
+                .Concat(ranked.Where(c => !alreadyQueued.Contains(c.Hash)).Take(limit))
+                .ToList();
+            if (toQueue.Count > 0)
+            {
+                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue), cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         return ranked.Take(limit).ToList();
