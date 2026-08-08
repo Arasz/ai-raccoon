@@ -160,7 +160,7 @@ public sealed class ToolRefusalsTests : IDisposable
     public static TheoryData<Exception, string> MappedRefusals => new()
     {
         { new PathOutsideScopeException("/etc"), "path-outside-scope" },
-        { new PathNotFound("/missing"), "path-not-found" },
+        { new PathNotFoundException("/missing"), "path-not-found" },
         { new UnknownWorkspaceException("ws-1", "acme"), "unknown-workspace" },
         { new WatchDisabledException("acme"), "watching-disabled" },
         { new SyncNotConfiguredException(), "sync-not-configured" },

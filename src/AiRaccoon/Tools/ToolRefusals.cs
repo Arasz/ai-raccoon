@@ -22,7 +22,7 @@ internal static partial class ToolRefusals
     internal static readonly IReadOnlyDictionary<Type, string> RefusalPrefixes = new Dictionary<Type, string>
     {
         [typeof(PathOutsideScopeException)] = "path-outside-scope",
-        [typeof(PathNotFound)] = "path-not-found",
+        [typeof(PathNotFoundException)] = "path-not-found",
         [typeof(UnknownWorkspaceException)] = "unknown-workspace",
         [typeof(WatchDisabledException)] = "watching-disabled",
         [typeof(SyncNotConfiguredException)] = "sync-not-configured",

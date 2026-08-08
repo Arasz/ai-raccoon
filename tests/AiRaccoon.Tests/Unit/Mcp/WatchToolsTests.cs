@@ -85,9 +85,9 @@ public sealed class WatchToolsTests
     [Fact]
     public async Task Add_PathNotFound_PropagatesTheDomainException()
     {
-        _watch.AddError = new PathNotFound("/missing");
+        _watch.AddError = new PathNotFoundException("/missing");
 
-        var ex = await Should.ThrowAsync<PathNotFound>(() =>
+        var ex = await Should.ThrowAsync<PathNotFoundException>(() =>
             _tools.Add("proj-a", "/missing", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("/missing");

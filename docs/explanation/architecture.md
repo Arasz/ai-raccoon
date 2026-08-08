@@ -530,7 +530,7 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
   Chunking/                 IChunker port, MarkdownChunker (pure splitter)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
-  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFound
+  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFoundException
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
