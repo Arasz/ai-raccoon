@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using System.ComponentModel;
 using AiRaccoon.Access;
-using AiRaccoon.Core;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
