@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     IMemoryStore over the single-file memory.db (see docs/work/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
+///     IMemoryStore over the single-file memory.db (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
 ///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
 public sealed partial class SqliteMemoryStore(
@@ -218,7 +218,7 @@ public sealed partial class SqliteMemoryStore(
             {
                 var parameters = new DynamicParameters();
                 parameters.Add("query", ftsExpression);
-                // Per-modality candidate window (see docs/work/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
+                // Per-modality candidate window (see docs/work/archive/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
                 // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
                 // the caller's limit and minScore still apply in the final merger pass.
                 parameters.Add("limit", limit);

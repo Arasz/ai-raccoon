@@ -180,7 +180,7 @@ identical to the committed ones — the whole 96-point grid is unmoved.
 
 Note for future readers: the header text of the sweep report and the "0.722 / 0.929 / 0.617
 / 11-11" figures in the original Decision section above predate the 2026-08-06 corpus
-re-pin (docs/work/2026-08-06-baseline-repin-new-corpus.md). The live pinned floor asserted
+re-pin (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md). The live pinned floor asserted
 by `RrfParameterSweepTests` is nDCG@5 **0.674**; the numbers in the table above are the
 current ones.
 

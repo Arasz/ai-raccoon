@@ -15,7 +15,7 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// </summary>
 internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, TimeProvider timeProvider)
 {
-    // Chunk bounds (see docs/work/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
+    // Chunk bounds (see docs/work/archive/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
     // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
     // chunk size is clamped to the configured engine's window where the engine knows it.
     private const int DefaultMaxTokens = 256;

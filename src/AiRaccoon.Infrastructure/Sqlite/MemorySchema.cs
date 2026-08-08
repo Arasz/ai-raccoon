@@ -7,7 +7,7 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Single-file bank schema (see docs/work/2026-08-03-native-memory-plan.md §2.2): entries, workspaces, settings, an FTS5
+///     Single-file bank schema (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2): entries, workspaces, settings, an FTS5
 ///     external-content index (value, source_file, section) and content + structure vec0
 ///     tables. Idempotent on every bank open; legacy banks migrate (see MigrateAsync).
 /// </summary>
@@ -503,7 +503,7 @@ internal static class MemorySchema
             }
         }
 
-        // Bucket-uniqueness indexes (F3; see docs/work/2026-08-06-extraction-followups-plan.md):
+        // Bucket-uniqueness indexes (F3; see docs/work/archive/2026-08-06-extraction-followups-plan.md):
         // one row per (path, hash) in the global shared tier, and per (path, hash, project,
         // scope, context-label bucket) in the committed tiers. A violating legacy bank (the
         // audited 14.2% duplicates) is deduped before the indexes are created, so creation

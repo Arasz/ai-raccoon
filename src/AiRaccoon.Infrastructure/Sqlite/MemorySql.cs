@@ -2,7 +2,7 @@ using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>SQL over our memory.db tables (see docs/work/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
+/// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
     // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1): one expression maps
@@ -91,7 +91,7 @@ internal static class MemorySql
     // embed_state defaults to 'pending': every write lands deferred until the embed pipeline runs.
     // ON CONFLICT DO NOTHING (bare — expression/partial unique indexes cannot be conflict targets)
     // makes concurrent same-bucket inserts converge: the loser returns the winner's row via the
-    // post-insert bucket-key re-read (F3; see docs/work/2026-08-06-extraction-followups-plan.md).
+    // post-insert bucket-key re-read (F3; see docs/work/archive/2026-08-06-extraction-followups-plan.md).
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                            workspace_id, agent_id, created_at, updated_at)
