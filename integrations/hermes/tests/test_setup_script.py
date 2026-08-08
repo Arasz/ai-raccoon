@@ -11,15 +11,14 @@ from __future__ import annotations
 
 import os
 import pathlib
+import pytest
 import subprocess
 import sys
 import textwrap
 
-import pytest
-
-REPO = pathlib.Path(__file__).resolve().parent.parent.parent
+REPO = pathlib.Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "scripts" / "hermes-provider-setup.py"
-SOURCE_PLUGIN = REPO / "hermes-provider" / "ai-raccoon"
+SOURCE_PLUGIN = REPO / "integrations" / "hermes" / "ai-raccoon"
 HERMES_VENV_PYTHON = pathlib.Path("/Users/arasz/.hermes/hermes-agent/venv/bin/python")
 
 FAKE_HERMES = textwrap.dedent("""\
@@ -86,6 +85,13 @@ def test_check_reports_not_installed_without_changing(temp_home, fake_hermes):
     assert not (temp_home / "plugins" / "ai-raccoon").exists()
     assert "provider: holographic" in (temp_home / "config.yaml").read_text(encoding="utf-8")
     assert not fake_hermes.exists()  # no config set was issued (log never created)
+
+
+def test_default_source_resolves_to_shipped_plugin(temp_home, fake_hermes):
+    """Without --source the script must find the plugin that ships in this repo."""
+    result = run_setup("--check")
+    assert result.returncode == 0, result.stderr
+    assert f"plugin source:    {SOURCE_PLUGIN}" in result.stdout, result.stdout
 
 
 def test_install_copies_plugin_and_activates(temp_home, fake_hermes):

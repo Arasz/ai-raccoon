@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """First-time setup for the ai-raccoon Hermes memory provider plugin.
 
-Installs ``hermes-provider/ai-raccoon`` into ``$HERMES_HOME/plugins/``,
+Installs ``integrations/hermes/ai-raccoon`` into ``$HERMES_HOME/plugins/``,
 probes it through Hermes' memory-plugin discovery (spawning a real
 server against a TEMP ``--data-root`` bank, so the probe never touches
 the real bank), activates it with ``hermes config set memory.provider
@@ -67,7 +67,7 @@ def hermes_home() -> Path:
 
 
 def default_source() -> Path:
-    return Path(__file__).resolve().parent.parent / "hermes-provider" / PLUGIN_NAME
+    return Path(__file__).resolve().parent.parent / "integrations" / "hermes" / PLUGIN_NAME
 
 
 def read_provider_setting(home: Path) -> str:
@@ -199,7 +199,7 @@ def check(home: Path, source: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=None,
-                        help="plugin directory to install (default: repo hermes-provider/ai-raccoon)")
+                        help="plugin directory to install (default: repo integrations/hermes/ai-raccoon)")
     parser.add_argument("--python", default=None,
                         help="hermes runtime python for the discovery probe (default: auto)")
     parser.add_argument("--check", action="store_true",

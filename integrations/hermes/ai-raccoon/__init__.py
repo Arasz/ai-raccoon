@@ -31,9 +31,8 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Dict, List, Optional
-
 from agent.memory_provider import MemoryProvider
+from typing import Any, Dict, List, Optional
 
 try:
     from .status import MemoryOperationLog, status_word

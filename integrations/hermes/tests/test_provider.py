@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import shutil
-
 import pytest
+import shutil
 
 CURATED_TOOLS = {"memory_search", "memory_write", "memory_stats", "memory_share"}
 

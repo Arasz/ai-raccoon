@@ -10,12 +10,11 @@ AIRACCOON_DATA_ROOT env var is a test-host-only construct), so the real
 from __future__ import annotations
 
 import json
+import pytest
 import re
 import shutil
 import subprocess
 import time
-
-import pytest
 
 pytestmark = pytest.mark.slow
 

@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
-import sys
-
 import pytest
+import sys
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parent.parent / "ai-raccoon"
 sys.path.insert(0, str(PLUGIN_DIR))  # absolute-import fallback inside the plugin
