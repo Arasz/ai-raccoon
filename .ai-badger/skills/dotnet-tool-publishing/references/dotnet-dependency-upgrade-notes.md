@@ -1,7 +1,19 @@
 # Upgrading a .NET tool's dependencies to current majors (2026-08, reference tool)
 
 Session knowledge bank: net8.0 -> net10.0, xunit 2 -> v3, Octokit 9 -> 14,
-FluentAssertions 6 -> 8, Microsoft.NET.Test.Sdk 17 -> 18, coverlet.collector 10.
+Microsoft.NET.Test.Sdk 17 -> 18, coverlet.collector 10.
+
+> **Do not copy the FluentAssertions 6 -> 8 jump from this record.** FluentAssertions
+> changed owner and licence at v8: 7.x and earlier ship under
+> [Apache-2.0](https://www.nuget.org/packages/FluentAssertions/7.2.0), 8.x ships under the
+> [Xceed Community License](https://www.nuget.org/packages/FluentAssertions/8.0.0/License),
+> which is free only for non-commercial use — commercial or revenue-generating use needs a
+> paid per-developer licence from [Xceed](https://xceed.com/products/unit-testing/fluent-assertions/).
+> Pin `[7.*,8.0)` if you need to stay put, or migrate to **Shouldly**, which the rest of this
+> catalog already standardises on. `latest stable` version-bump automation will walk a
+> repository into the paid licence without anyone noticing — exclude the package from it.
+> **FluentValidation is a different package by a different author and is unaffected** — it is
+> still [Apache-2.0](https://www.nuget.org/packages/FluentValidation). Do not conflate them.
 
 ## Finding latest stable versions (NuGet flatcontainer)
 

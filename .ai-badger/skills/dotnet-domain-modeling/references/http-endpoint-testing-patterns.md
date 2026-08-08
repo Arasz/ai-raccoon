@@ -87,7 +87,7 @@ options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 | `TakeHomeOutcome.UnsupportedTaxYear` | `"unsupportedTaxYear"` |
 | `RecommendationSource.Deterministic` | `"deterministic"` |
 | `CompensationContractType.Employment` | `"employment"` |
-| `ApplicationState.CvReady` | `"cvReady"` |
+| `CaseState.Ready` | `"ready"` |
 
 **In tests, assert lowercase:**
 
@@ -187,7 +187,7 @@ client.GetInstanceAsync(instanceId, Arg.Any<CancellationToken>()).Returns(
         {
             RuntimeStatus = OrchestrationRuntimeStatus.Completed,
             CompletedAt = completedAt,
-            SerializedOutput = """{"checkedApplicationIds":["app-1","app-2"]}"""
+            SerializedOutput = """{"checkedCaseIds":["case-1","case-2"]}"""
         }));
 
 // Test: no orchestration ever run

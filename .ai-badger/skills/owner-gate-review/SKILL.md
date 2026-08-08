@@ -10,6 +10,7 @@ version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+scope: default
 metadata:
   hermes:
     tags: [review, decisions, design, feedback]

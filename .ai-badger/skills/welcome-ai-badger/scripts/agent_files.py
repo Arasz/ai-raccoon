@@ -64,7 +64,7 @@ class AgentFiles:
                 continue
 
             if file_entry["source"].startswith("templates/"):
-                self.ctx.record_template(source, target)
+                self.ctx.record_template(source, target, seed_once=seed_once)
 
             # Determine the body content
             source_of_truth = aib_copy or file_entry["target"]

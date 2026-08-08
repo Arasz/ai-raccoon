@@ -1,5 +1,7 @@
 # Azure Durable Functions Orchestration Pitfalls
 
+Assumes Azure Durable Functions.
+
 ## Non-Deterministic APIs in Orchestrators
 
 Durable Functions orchestrators replay from the history log. Any non-deterministic call produces different values on replay, breaking replay correctness.
@@ -23,22 +25,22 @@ Other non-deterministic APIs to avoid in orchestrators:
 
 ## Missing Usings for Workflow Types
 
-New orchestrations in the `Applications/Interviews/` folder need these usings that the parent folder's existing orchestrations have but aren't obvious:
+New orchestrations in the `<Feature>/<SubFeature>/` folder need these usings that the parent folder's existing orchestrations have but aren't obvious:
 
 ```csharp
-using JobSearchAiAssistant.Api.Workflow;              // LlmStepRetry.Options
-using JobSearchAiAssistant.Api.Workflow.Orchestrations; // StepResolutionEvent, StepResolution
-using JobSearchAiAssistant.Domain.Workflows;          // InterventionCause, Intervention
-using JobSearchAiAssistant.Domain.Workflows.Steps;    // StepType, StepExecutionMetadata
+using MyApp.Api.Workflow;              // LlmStepRetry.Options
+using MyApp.Api.Workflow.Orchestrations; // StepResolutionEvent, StepResolution
+using MyApp.Domain.Workflows;          // InterventionCause, Intervention
+using MyApp.Domain.Workflows.Steps;    // StepType, StepExecutionMetadata
 ```
 
 ### Common build errors when these are missing:
 
 | Missing Type | Using Needed | Error |
 |---|---|---|
-| `LlmStepRetry` | `JobSearchAiAssistant.Api.Workflow` | CS0103 |
-| `InterventionCause` | `JobSearchAiAssistant.Domain.Workflows` | CS0103 |
-| `StepResolutionEvent` | `JobSearchAiAssistant.Api.Workflow.Orchestrations` | CS0246 |
+| `LlmStepRetry` | `MyApp.Api.Workflow` | CS0103 |
+| `InterventionCause` | `MyApp.Domain.Workflows` | CS0103 |
+| `StepResolutionEvent` | `MyApp.Api.Workflow.Orchestrations` | CS0246 |
 | `CustomStatuses` (no, this is local) | N/A | N/A |
 
 ## `JsonNode.Deserialize<T>()` Requires System.Text.Json
@@ -62,13 +64,13 @@ Orchestrations that use `ExecuteStepAsync` get the full step lifecycle (park →
 
 ```csharp
 var step = await context.ExecuteStepAsync(
-    new ApplicationStepExecutionContext<TOutput>(context.InstanceId, applicationDocument, initialSnapshot,
+    new CaseStepExecutionContext<TOutput>(context.InstanceId, caseDocument, initialSnapshot,
         () => context.CallActivityAsync<TOutput>(nameof(MyActivity), input, RetryOptions)
     ),
-    new StepExecutionMetadata(StepType.MyStep, "Success description", ApplicationInterventionSource.MySource)
+    new StepExecutionMetadata(StepType.MyStep, "Success description", CaseInterventionSource.MySource)
 );
 
-applicationDocument = step.Document; // may have been updated by the step lifecycle
+caseDocument = step.Document; // may have been updated by the step lifecycle
 
 switch (step.Status)
 {
@@ -89,23 +91,23 @@ switch (step.Status)
 
 ## Conflict Retry Pattern
 
-Orchestrations that mutate the application document use `SaveWithConflictRetryAsync` which handles ETag conflicts by reloading and retrying:
+Orchestrations that mutate the case document use `SaveWithConflictRetryAsync` which handles ETag conflicts by reloading and retrying:
 
 ```csharp
 state = await context.SaveWithConflictRetryAsync(state,
-    vd => vd.Document.AddPracticeSession(interviewId, session)
-        .ClearInterventionFrom(ApplicationInterventionSource.InterviewPrepGeneration));
+    vd => vd.Document.AddNote(noteId, note)
+        .ClearInterventionFrom(CaseInterventionSource.ReportGeneration));
 ```
 
-The mutate function receives the reloaded `VersionedDocument<Application>` and must return the mutated `Application`.
+The mutate function receives the reloaded `VersionedDocument<Case>` and must return the mutated `Case`.
 
 ## Concurrency Gate for New Pipeline Types
 
 When adding a new orchestration pipeline, the concurrency gate needs:
 
-1. Instance ID methods in `ApplicationOrchestrationInstanceIds` (one per orchestration type)
+1. Instance ID methods in `CaseOrchestrationInstanceIds` (one per orchestration type)
 2. A gate method in `IPipelineConcurrencyGate` + `PipelineConcurrencyGate` that checks `Pending/Running/Suspended` status
-3. A domain exception (e.g. `PracticeSessionGenerationInProgressException`) for when the gate blocks
+3. A domain exception (e.g. `ReportGenerationInProgressException`) for when the gate blocks
 4. Wire the exception into `DomainExceptionProblemMapper` (triple: type constant + switch case + mapping method)
 
 The gate checks both orchestration instance IDs when a single logical operation maps to multiple orchestrations (e.g. generation + scoring both block a new generation).
@@ -118,14 +120,14 @@ The original gate pattern had a TOCTOU window: `EnsureXxxNotRunningAsync` checks
 
 ```csharp
 // ❌ TOCTOU: check-then-schedule
-await gate.EnsureCoverLetterNotRunningAsync(client, appId, ct);
+await gate.EnsureReportNotRunningAsync(client, caseId, ct);
 // ← window: another caller could schedule here
 await client.ScheduleNewOrchestrationInstanceAsync(...);
 
 // ✅ Atomic: schedule-then-verify
 await gate.ScheduleWithConcurrencyGuardAsync(client, instanceId,
     nameof(MyOrchestration), input,
-    id => new CoverLetterGenerationInProgressException(appId), ct);
+    id => new ReportGenerationInProgressException(caseId), ct);
 ```
 
 Implementation: try to schedule with a deterministic instance ID. If `OrchestrationAlreadyExistsException`, check runtime status — throw the domain exception if still active (Pending/Running/Suspended), return normally if terminal (Completed/Failed/Terminated).
@@ -207,7 +209,7 @@ When the domain layer produces types that differ from the API contract (e.g., do
 ```
 Domain BootstrapImportPreview (RecordIndex, no OperationId)
     ↓ RunDryRunImportActivity maps to ↓
-API LinkedInImportPreview (PreviewId as RecordIndex.ToString(), OperationId, Summary)
+API ExternalImportPreview (PreviewId as RecordIndex.ToString(), OperationId, Summary)
 ```
 
 The activity:

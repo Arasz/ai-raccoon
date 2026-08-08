@@ -5,22 +5,10 @@ assembly and by reading the v2.0.0 sources (`AIFunctionMcpServerTool.cs`, `McpSe
 `McpServerBuilderExtensions.cs`). Full notes + a reusable probe recipe:
 `references/mcp-csharp-sdk-2.0-apis.md`.
 
-**Backing the server with the sqliteai native extensions (sqlite-memory/vector/sync)?**
-Store-layer traps — module basename ↔ `sqlite3_<name>_init` entry point, `memory_add_text`
-returning 1 not the hash, deferred-embeddings requirement, real-extension integration-test
-pattern — are in `references/sqlite-ai-store-integration.md` (verified against the real
-binaries). NOTE: that file documents the SUPERSEDED extension-backed store; the current
-managed `memory.db` design (idempotent schema init, FTS5 external-content search, sqlite-vec
-from NuGet, Dapper record-vs-class DTO traps, `...`-spread CS8635) is
-`references/managed-sqlite-store-patterns.md`. Only the cloudsync extension still loads, until
-the own-sync wave removes it.
-
-**Local GGUF embedding model for the llama.cpp engine?** Model pick (all-MiniLM-L6-v2
-Q5_K_M ~21 MB Apache-2.0 verified; nomic-embed-text-v1.5 Q8_0 as the documented reference),
-pinned download recipe + SHA-256, `<APP>_TEST_GGUF` test-gating, the verified engine
-matrix (local vs vectors.space ONLY — LM Studio/Ollama are not configurable, the remote URL
-is hardcoded), and the `memory_search` Dapper blob-affinity/record-ctor trap:
-`references/local-gguf-embedding-model.md`.
+**Backing the server with SQLite?** Prefer a self-managed database over loading
+third-party native SQLite extensions: idempotent schema init, FTS5 external-content search,
+sqlite-vec from NuGet, and the Dapper record-vs-class DTO traps are in
+`references/managed-sqlite-store-patterns.md` — read it before designing the store layer.
 
 ### Prompts: `[McpServerPrompt]` + `WithPrompts<T>()`
 

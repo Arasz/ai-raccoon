@@ -1,11 +1,9 @@
 # Managed SQLite store layer (Microsoft.Data.Sqlite + Dapper + FTS5 + sqlite-vec)
 
-Verified while replacing the sqliteai-extension store with our own `memory.db`
-layer (the project P1): schema init, FTS5 external-content search, vec0 from
-NuGet, and the Dapper/C# traps that cost real debugging time. This is the
-CURRENT store design — `sqlite-ai-store-integration.md` documents the
-extension era it replaced (only the cloudsync extension still loads, until
-the own-sync wave).
+Verified while replacing a native-SQLite-extension store with a self-managed
+`memory.db` layer: schema init, FTS5 external-content search, vec0 from NuGet,
+and the Dapper/C# traps that cost real debugging time. Prefer this shape over
+loading third-party SQLite extensions — it is the one with a test story.
 
 ## Schema-init-on-every-open
 

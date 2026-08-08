@@ -1,7 +1,8 @@
 # Common File Layout
 
-
 ### Domain + Infrastructure + Tests
+
+```
 src/MyApp.Domain/
   Feature/
     MyAggregate.cs          # sealed record with behavior

@@ -91,7 +91,7 @@ with a library call.
 
 ```csharp
 // ❌ CS8714: string? doesn't match notnull
-Guard.IsEqualTo(ApplicationId, null, nameof(ApplicationId));
+Guard.IsEqualTo(CaseId, null, nameof(CaseId));
 
 // ❌ CS0315: enum doesn't implement IEquatable<T>
 Guard.IsEqualTo(Disposition, SignalDisposition.Proposed, nameof(Disposition));
@@ -101,9 +101,9 @@ Guard.IsEqualTo(Disposition, SignalDisposition.Proposed, nameof(Disposition));
 
 ```csharp
 // Nullable check
-if (ApplicationId is not null)
+if (CaseId is not null)
     ThrowHelper.ThrowInvalidOperationException(
-        $"Signal is already correlated to application '{ApplicationId}'.");
+        $"Signal is already correlated to case '{CaseId}'.");
 
 // Enum check
 if (Disposition != SignalDisposition.Proposed)

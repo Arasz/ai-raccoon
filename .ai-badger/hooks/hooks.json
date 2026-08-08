@@ -60,6 +60,16 @@
         ]
       },
       {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/welcome-ai-badger/scripts/generated_file_guard.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/welcome-ai-badger/scripts/generated_file_guard.py\"; elif [ -f \".ai-badger/skills/welcome-ai-badger/scripts/generated_file_guard.py\" ]; then python3 \".ai-badger/skills/welcome-ai-badger/scripts/generated_file_guard.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/welcome-ai-badger/scripts/generated_file_guard.py not found - hook skipped\"}'; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Grep|Glob|Bash",
         "hooks": [
           {

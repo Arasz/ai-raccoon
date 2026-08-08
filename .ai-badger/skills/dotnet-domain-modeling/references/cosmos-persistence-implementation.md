@@ -1,19 +1,21 @@
 # Cosmos Persistence Implementation Pattern
 
-When adding a new Cosmos-backed entity to this project, follow this exact multi-step sequence. Skipping any step causes test or build failures.
+Assumes Azure Cosmos DB. For another store, keep the store-agnostic shape (repository interface in Domain, contract test suite, InMemory fake, adapter in Infrastructure) and swap steps 5-9 below for your store's equivalent.
+
+When adding a new Cosmos-backed entity to a Clean-Architecture .NET solution, follow this sequence. Skipping a step tends to surface as a test or build failure later, so it pays to work through them in order.
 
 ## Step-by-Step Checklist
 
 ### 1. Domain Layer (pure C#, no Azure deps)
 
-Ensure these exist under `src/JobSearchAiAssistant.Domain/<Feature>/`:
+Ensure these exist under `src/MyApp.Domain/<Feature>/`:
 - **Entity** — `sealed record` with `required string Id`, `required string UserId` (partition key), `required DateTimeOffset CreatedAt`, and domain behavior methods
 - **Repository interface** — `I<Feature>Repository` with `CancellationToken ct` as last param, `string userId` for partition scoping, `IReadOnlyList<T>` for collections, nullable return for single-entity lookups
 - **Enum/value objects** — any status enums, classification records, etc.
 
 ### 2. Contract Test Suite (TDD — write FIRST)
 
-File: `tests/JobSearchAiAssistant.Infrastructure.Tests/Contracts/<Feature>RepositoryContract.cs`
+File: `tests/MyApp.Infrastructure.Tests/Contracts/<Feature>RepositoryContract.cs`
 
 ```csharp
 public abstract class <Feature>RepositoryContract
@@ -35,7 +37,7 @@ public abstract class <Feature>RepositoryContract
 ```
 
 **Conventions:**
-- Use `Guid.CreateVersion7().ToString()` for IDs (matches ADR-0004)
+- Use `Guid.CreateVersion7().ToString()` for IDs (time-ordered GUIDs — check whether your project has an ADR pinning an ID-generation strategy)
 - Use `TestContext.Current.CancellationToken` (xUnit v3)
 - Use Shouldly assertions
 - Test user isolation: GetById for other user returns null, query for other user returns empty
@@ -43,7 +45,7 @@ public abstract class <Feature>RepositoryContract
 
 ### 3. InMemory Fake
 
-File: `tests/JobSearchAiAssistant.Testing/Fakes/InMemory<Feature>Repository.cs`
+File: `tests/MyApp.Testing/Fakes/InMemory<Feature>Repository.cs`
 
 ```csharp
 public sealed class InMemory<Feature>Repository : I<Feature>Repository
@@ -60,7 +62,7 @@ public sealed class InMemory<Feature>Repository : I<Feature>Repository
 
 ### 4. Wire Contract into InMemoryContractTests
 
-File: `tests/JobSearchAiAssistant.Infrastructure.Tests/InMemory/InMemoryContractTests.cs`
+File: `tests/MyApp.Infrastructure.Tests/InMemory/InMemoryContractTests.cs`
 
 Add:
 ```csharp
@@ -71,11 +73,11 @@ public sealed class InMemory<Feature>RepositoryContractTests : <Feature>Reposito
 }
 ```
 
-Add `using JobSearchAiAssistant.Domain.<Feature>;` to the imports.
+Add `using MyApp.Domain.<Feature>;` to the imports.
 
 ### 5. CosmosOptions Property
 
-File: `src/JobSearchAiAssistant.Infrastructure/Cosmos/CosmosOptions.cs`
+File: `src/MyApp.Infrastructure/Cosmos/CosmosOptions.cs`
 
 Add property following the existing pattern:
 ```csharp
@@ -84,9 +86,9 @@ public string <Feature>Container { get; init; } = "<camelCaseName>";
 
 ### 6. Cosmos Repository Implementation
 
-File: `src/JobSearchAiAssistant.Infrastructure/Cosmos/Cosmos<Feature>Repository.cs`
+File: `src/MyApp.Infrastructure/Cosmos/Cosmos<Feature>Repository.cs`
 
-Pattern (follow `CosmosAdjustmentRuleRepository.cs`):
+Pattern (follow the shape of your other Cosmos repository implementations):
 
 ```csharp
 public sealed class Cosmos<Feature>Repository(CosmosClient client, CosmosOptions options) : I<Feature>Repository
@@ -110,11 +112,11 @@ public sealed class Cosmos<Feature>Repository(CosmosClient client, CosmosOptions
 
 ### 7. DI Registration
 
-File: `src/JobSearchAiAssistant.Infrastructure/InfrastructureDependencies.cs`
+File: `src/MyApp.Infrastructure/InfrastructureDependencies.cs`
 
 Add after existing repository registrations:
 ```csharp
-using JobSearchAiAssistant.Domain.<Feature>;  // if not already imported
+using MyApp.Domain.<Feature>;  // if not already imported
 services.AddSingleton<I<Feature>Repository, Cosmos<Feature>Repository>();
 ```
 
@@ -152,7 +154,7 @@ dotnet test --filter "RequiresInfra!=true"                # all pass
 dotnet test --filter "FullyQualifiedName~<Feature>"       # contract tests pass
 ```
 
-## Encrypted Document Sub-Pattern (ADR-0012)
+## Encrypted Document Sub-Pattern
 
 When an entity contains sensitive data (API keys, compensation, credentials), encrypt the entire document before persisting. The domain entity stays clean; encryption is transparent in the repository.
 
@@ -275,7 +277,7 @@ public async Task<string> SaveAsync(string userId, string entityId, T entity, st
 
 ### Contract Test Pattern
 
-Following `UserConfigurationRepositoryContract.cs`:
+Following the naming convention of your other repository contract tests:
 - `Get_returns_null_when_unconfigured`
 - `Save_then_get_round_trips_with_the_returned_etag`
 - `Save_with_null_etag_on_already_exists_throws_ConcurrencyConflictException`
@@ -379,9 +381,9 @@ services.AddSingleton(cosmosOptions);
 services.AddSingleton<IProfileSink, ExportSink>();
 
 // Guard optional dependencies — only register when the transport is available
-if (services.Any(d => d.ServiceType == typeof(IGmailTransport)))
+if (services.Any(d => d.ServiceType == typeof(IEmailTransport)))
 {
-    services.AddSingleton<IChannelMonitor, LinkedInChannelMonitor>();
+    services.AddSingleton<IChannelMonitor, EmailChannelMonitor>();
 }
 ```
 
@@ -450,42 +452,42 @@ When a runtime `InvalidOperationException: Unable to resolve service for type 'I
 
 ### Stub Pattern for Missing Implementations
 
-When an interface has no implementation yet (e.g., `IDmaApiClient` for a future API integration), create a stub that throws a domain exception. This unblocks DI resolution without implementing the real adapter:
+When an interface has no implementation yet (e.g., `IExternalApiClient` for a future third-party integration), create a stub that throws a domain exception. This unblocks DI resolution without implementing the real adapter:
 
 ```csharp
-// src/JobSearchAiAssistant.Infrastructure/LinkedIn/StubDmaApiClient.cs
-using JobSearchAiAssistant.Domain.LinkedIn;
+// src/MyApp.Infrastructure/ExternalIntegration/StubExternalApiClient.cs
+using MyApp.Domain.ExternalIntegration;
 
-namespace JobSearchAiAssistant.Infrastructure.LinkedIn;
+namespace MyApp.Infrastructure.ExternalIntegration;
 
 /// <summary>
-/// Placeholder IDmaApiClient until the real DMA Snapshot API adapter is implemented.
-/// Every call throws LinkedInApiUnavailableException so callers get a clear
+/// Placeholder IExternalApiClient until the real adapter is implemented.
+/// Every call throws ExternalApiUnavailableException so callers get a clear
 /// "not yet available" signal rather than a DI resolution failure at startup.
 /// </summary>
-public sealed class StubDmaApiClient : IDmaApiClient
+public sealed class StubExternalApiClient : IExternalApiClient
 {
     public Task ValidateTokenAsync(string accessToken, CancellationToken ct)
     {
-        throw new LinkedInApiUnavailableException();
+        throw new ExternalApiUnavailableException();
     }
 
-    public Task<IReadOnlyList<LinkedInSnapshotRecord>> FetchSnapshotAsync(string accessToken, CancellationToken ct)
+    public Task<IReadOnlyList<ExternalSnapshotRecord>> FetchSnapshotAsync(string accessToken, CancellationToken ct)
     {
-        throw new LinkedInApiUnavailableException();
+        throw new ExternalApiUnavailableException();
     }
 }
 ```
 
 Register alongside real implementations:
 ```csharp
-services.AddSingleton<ILinkedInConnectionRepository, CosmosLinkedInConnectionRepository>();
-services.AddSingleton<IDmaApiClient, StubDmaApiClient>();  // stub until issue #184
+services.AddSingleton<IExternalConnectionRepository, CosmosExternalConnectionRepository>();
+services.AddSingleton<IExternalApiClient, StubExternalApiClient>();  // stub until the real adapter ships
 ```
 
 ### Using Directive Pitfall
 
-When adding a registration for an interface in a namespace not already imported in `InfrastructureDependencies.cs`, the `using` directive must be added. Common miss: `Domain.LinkedIn` is a different namespace from `Domain.LinkedInProfileUpdate` — both exist and both are needed.
+When adding a registration for an interface in a namespace not already imported in `InfrastructureDependencies.cs`, the `using` directive must be added. Common miss: two similarly-named namespaces (e.g. `Domain.Integration` and `Domain.IntegrationProfileUpdate`) are different namespaces — both exist and both are needed.
 
 **Detection:** `CS0246: The type or namespace name 'IFoo' could not be found`
 
@@ -503,4 +505,4 @@ When adding a registration for an interface in a namespace not already imported 
 | Query not partitioned | Always set `PartitionKey` in `QueryRequestOptions` |
 | `ShouldNotContain(string, string)` on Shouldly strings | The `(string, string)` overload doesn't exist — second arg matches `Expression<Func<char, bool>>`. Use `ShouldNotContain(marker)` without custom message |
 | Encrypted doc test needs `ISecretCipher` but CosmosEmulatorFixture has none | Create ephemeral cipher: `DataProtectionProvider.Create("scope")` + `new DataProtectionSecretCipher(provider)` — no blob/key-vault setup |
-| `CosmosCompensationProfileDocument` is `internal` but tests need it | Infrastructure.csproj has `InternalsVisibleTo` for test project — `internal` is fine |
+| A Cosmos document wrapper is `internal` but tests need it | Infrastructure.csproj has `InternalsVisibleTo` for test project — `internal` is fine |

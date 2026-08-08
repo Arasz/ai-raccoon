@@ -77,11 +77,11 @@ For behavior (result conversion, error handling, name derivation), read the v2.0
 - **Ctor injection**: `WithTools<T>()`/`WithPrompts<T>()` (no-target overload) create the target per
   invocation via `ActivatorUtilities.CreateInstance(services, type)`.
 
-## Applied example — the project "agent memory server" Wave 3 (repo state snapshot)
+## Applied example — the "agent memory server" project, Wave 3 (repo state snapshot)
 
-Repo: `~/RiderProjects/ai-raccon/the project`, worktree `.ai-badger/worktrees/agent-memory-server`,
-branch `task/agent-memory-server`. `TreatWarningsAsErrors`, `Directory.Packages.props` central
-versions, `InternalsVisibleTo the project.Tests` per project. Store integration tests are NOT run
+Snapshot verified against MCP C# SDK 2.0.0, Wave 3 of the project's MCP integration.
+`TreatWarningsAsErrors`, `Directory.Packages.props` central
+versions, `InternalsVisibleTo AgentMemoryServer.Tests` per project. Store integration tests are NOT run
 against real sqlite-memory extensions — they assert SQL strings/pure logic (so new port methods are
 tested at the SQL-string + fake level only).
 
@@ -93,13 +93,13 @@ tested at the SQL-string + fake level only).
   `memory_sweep`. `DegradationPolicy` exists in Core but has no service surface → `memory_sweep`
   stubs unless a sweep service is added. Task brief claims NSubstitute is already a testing dep —
   **it is not** (`Directory.Packages.props` has no NSubstitute); existing tests use hand-written
-  fakes (see `tests/the project.Tests/Domain/MemoryStorePortTests.cs` `RecordingStore`).
+  fakes (see `tests/AgentMemoryServer.Tests/Domain/MemoryStorePortTests.cs` `RecordingStore`).
 - **Tool error codes** (spec §7): `invalid-params: project_id is required`, `workspace-not-found`,
   `embedding-api-key-missing`, `sync-not-configured` — surface via `McpException` throws or
   `CallToolResult { IsError = true }` returns (message-drop trap above).
 - **Dual-transport Program.cs**: `McpTransportSelector.UseHttp(MCP_TRANSPORT)` unchanged; both
   branches call a shared `ConfigureServices(IServiceCollection)`; register
-  `InfrastructureOptions` (from `AIRACCON_DATA_ROOT`/`AIRACCON_INSTALL_SCOPE`),
-  `SyncOptions` (`AIRACCON_SQLITECLOUD_DB_ID`/`_API_KEY`), `SqliteConnectionFactory`,
+  `InfrastructureOptions` (from `AIRACCOON_DATA_ROOT`/`AIRACCOON_INSTALL_SCOPE`),
+  `SyncOptions` (`AIRACCOON_SQLITECLOUD_DB_ID`/`_API_KEY`), `SqliteConnectionFactory`,
   `IMemoryStore → SqliteMemoryStore`, sync factory with `loadCloudSync: true` via factory lambda,
   `SyncService`; then `.WithTools<MemoryTools>().WithPrompts<MemoryPrompts>()`.

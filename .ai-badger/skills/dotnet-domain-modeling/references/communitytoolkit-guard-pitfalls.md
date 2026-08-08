@@ -40,11 +40,11 @@ public static void IsEqualTo<T>(T value, T target, [CallerArgumentExpression(nam
 ### Pattern 1: Nullable reference check → if + ThrowHelper
 
 ```csharp
-// ❌ Guard.IsEqualTo(ApplicationId, null, nameof(ApplicationId));
+// ❌ Guard.IsEqualTo(CaseId, null, nameof(CaseId));
 // ✅
-if (ApplicationId is not null)
+if (CaseId is not null)
     ThrowHelper.ThrowInvalidOperationException(
-        $"Signal is already correlated to application '{ApplicationId}'.");
+        $"Signal is already correlated to case '{CaseId}'.");
 ```
 
 ### Pattern 2: Enum state check → if + ThrowHelper

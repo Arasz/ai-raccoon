@@ -108,12 +108,29 @@ def build_message(count: int, reason: str, fires: int, at_risk: bool = False) ->
             f"{convention}. {reason}").strip()
 
 
+# badger_lib.GIT_LOCATION_ENV, repeated because this ships into projects that have no framework
+# checkout to import it from. git exports GIT_DIR to its hooks and GIT_COMMON_DIR answers
+# `--git-common-dir` outright, so a child that inherits either reports another repository's
+# layout. tests/test_git_invocation.py pins every copy against the original.
+GIT_LOCATION_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                    "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                    "GIT_PREFIX", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES")
+
+
+def git_env(env=None) -> dict:
+    """`env` (default `os.environ`) minus every variable that pins git to another repository."""
+    out = dict(os.environ if env is None else env)
+    for name in GIT_LOCATION_ENV:
+        out.pop(name, None)
+    return out
+
+
 def uncommitted_files(root: str, timeout: float = 5.0) -> List[str]:
     """Run `git status --porcelain` in ``root``; `[]` on any failure, never raises."""
     try:
         result = subprocess.run(
             ["git", "-C", root, "status", "--porcelain"],
-            capture_output=True, text=True, timeout=timeout, check=False,
+            capture_output=True, text=True, timeout=timeout, check=False, env=git_env(),
         )
     except (subprocess.TimeoutExpired, OSError):
         return []

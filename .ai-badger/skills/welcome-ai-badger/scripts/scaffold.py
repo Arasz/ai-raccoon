@@ -151,8 +151,7 @@ from _shared import (  # noqa: E402 — re-exported for backward compatibility
     cfg_get, requirement_met, _condition_met, _within,
 )
 
-# Declared once in badger_lib.SKILL_SCOPES so the scaffold and the plugin ship list cannot
-# disagree about what a project gets without asking. Resolved against the catalog
+# Read from each skill's own `scope:` frontmatter (ADR-0018), against the catalog
 # scaffold_skills actually reads, so a default-scope skill shipped from another stack is
 # not offered here and then reported as missing.
 DEFAULT_SKILLS = bl.default_skills_in(FRAMEWORK_ROOT / "features" / "common" / "skills")
@@ -334,15 +333,17 @@ class Scaffolder:
     def _note_inclusions(self) -> None:
         """Report each inclusion: what it added, and what it could not add — never fatal."""
         self.notes.extend(bl.inclusion_notes(
-            self.included["skills"], self.excluded["skills"], self.addable_skills))
+            self.included["skills"], self.excluded["skills"], self.addable_skills,
+            bl.default_skills_in(self.root / "features" / "common" / "skills")))
 
     # -- provenance -----------------------------------------------------------------
-    def record(self, feature: str, stack: str, name: str, source: Path, target: Path) -> None:
+    def record(self, feature: str, stack: str, name: str, source: Path, target: Path,
+               **extra: Any) -> None:
         """Append a manifest entry recording where a scaffolded item came from and went.
 
         Feature types the registry marks `hashes_source` record the framework source's hash
         rather than the written file's, because drift.compare re-hashes the source for file
-        entries and any other choice can never match (ADR-0006).
+        entries and any other choice can never match (ADR-0006). `extra` is merged in verbatim.
         """
         entry = {
             "feature": feature, "stack": stack, "name": name,
@@ -355,11 +356,11 @@ class Scaffolder:
             # TARGET dir and answers "did this project edit its copy?"; `sourceHash` covers the
             # framework SOURCE and is the only one that can answer "has the framework moved
             # ahead?", because the target is rendered output the source is not comparable to.
-            # Both exclude extensions/, which config gating keeps or prunes per project and so
-            # is not part of the skill's own identity; extension files carry their own entries.
+            # Both exclude extensions/ (config-gated per project, with entries of their own);
+            # `hash` also drops `projectOwned`, which the project edits and this run preserved.
             fingerprint = bl.dir_content_hash(
-                target, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"]
-            )
+                target, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"],
+                exclude_rel=extra.get("projectOwned"))
             entry["hash"] = fingerprint["content_hash"]
             entry["dirMeta"] = {
                 "file_count": fingerprint["file_count"],
@@ -376,7 +377,7 @@ class Scaffolder:
         else:
             hash_from = source if bl.feature_type(feature).hashes_source else target
             entry["hash"] = bl.sha256_file(hash_from)
-        self.entries.append(entry)
+        self.entries.append({**entry, **extra})
 
     def copy_file(self, feature: str, stack: str, item: Dict[str, Any], dest_dir: Path) -> Path:
         """Copy one index item's source file into dest_dir and record its provenance."""
@@ -387,10 +388,11 @@ class Scaffolder:
         self.record(feature, stack, item["name"], src, dest)
         return dest
 
-    def record_template(self, src: Path, dest: Path) -> None:
-        """Record a template's provenance, named by its path under the stack's templates dir."""
+    def record_template(self, src: Path, dest: Path, seed_once: bool = False) -> None:
+        """Record a template's provenance; `seed_once` marks one the scaffold never rewrites."""
         rel = src.relative_to(self.root / "features").parts
         self.record("templates", rel[0], Path(*rel[2:]).as_posix(), src, dest)
+        self.entries[-1]["seedOnce"] = seed_once
 
     def generated_config_records(self) -> List[Dict[str, Any]]:
         """Every generated-but-not-owned config path the manifest should carry (#194)."""
@@ -412,12 +414,10 @@ class Scaffolder:
         """Copy src to dest only on first scaffold. If dest already exists, it is project-owned
         and left untouched (--reset-seed-files overrides this and reseeds from src)."""
         if src.exists():
-            self.record_template(src, dest)
+            self.record_template(src, dest, seed_once=True)
         if dest.exists() and not self.reset_seed_files:
-            self.notes.append(
-                f"preserved seed-once {label} (already exists; not re-seeded; "
-                "pass --reset-seed-files to reset)"
-            )
+            self.notes.append(f"preserved seed-once {label} (already exists; not re-seeded; "
+                              "pass --reset-seed-files to reset)")
             return
         if src.exists():
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -624,6 +624,9 @@ class Scaffolder:
                         "feature_dir": self.root / "features" / agent_name / "adjustments",
                         "target_dir": self.aib,
                         "target": self.target,
+                        # --no-install reaches the adjustments: user-global state
+                        # (~/.hermes/plugins) is never written when it is set.
+                        "install": self.install,
                         "skills": agent_skills,
                         "personas": [item for _stack, item in bl.applicable_feature_items(
                             self.index, self.config, "personas")],
@@ -697,7 +700,8 @@ class Scaffolder:
         self.skill_delivery.discover_stack_local()
         self.skill_delivery.scaffold_skills()
         self._record_progress("skills")
-        self._outside_project("hermes skill symlinks", self.symlink_hermes_skills)
+        if self.install:  # links point at --target; a throwaway target leaves them dangling
+            self._outside_project("hermes skill symlinks", self.symlink_hermes_skills)
         self.scaffold_agent_instructions()
         self.scaffold_templates()
         self.mcp.fill_mcp_described()

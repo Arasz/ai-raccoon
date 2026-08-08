@@ -1,6 +1,6 @@
 # Pure Domain Project Scaffolding (.NET)
 
-How to add a new pure-domain class library to an existing .NET solution, TDD-first, without touching other layers. Validated in the project agent-memory worktree (`src/<Proj>.Core`, net10.0, xunit.v3 + Shouldly, TreatWarningsAsErrors repo).
+How to add a new pure-domain class library to an existing .NET solution, TDD-first, without touching other layers. Validated pattern (`src/<Proj>.Core`, net10.0, xunit.v3 + Shouldly, TreatWarningsAsErrors repo).
 
 ## Project shape
 

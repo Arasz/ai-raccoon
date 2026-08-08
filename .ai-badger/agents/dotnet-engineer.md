@@ -10,7 +10,8 @@ description: >
   mechanical refactors — anything that isn't primarily an architecture
   decision, a test-suite design pass, a security/quality review, or
   infrastructure work (those have dedicated personas: architect,
-  test-engineer, code-reviewer, cloud-infra-engineer).
+  test-engineer, code-reviewer, plus whatever infrastructure persona this
+  project's cloud stack contributes).
 model: sonnet
 ---
 

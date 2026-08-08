@@ -1,6 +1,8 @@
 # Testing .NET Durable Functions Pipelines
 
-Patterns for testing orchestrations, activities, HTTP-triggered functions, and LLM-calling generators in the the reference repo codebase.
+Assumes Azure Durable Functions.
+
+Patterns for testing orchestrations, activities, HTTP-triggered functions, and LLM-calling generators in a Durable Functions codebase.
 
 ## Test Stack
 

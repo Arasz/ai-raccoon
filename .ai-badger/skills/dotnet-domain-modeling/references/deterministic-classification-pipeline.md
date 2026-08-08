@@ -9,11 +9,11 @@ src/MyApp.Domain/ChannelMonitoring/Classification/
     GmailHeaders.cs           # Primary constructor record — data shape
     RelevanceConfig.cs        # Injectable config record
     EmailRelevanceFilter.cs   # Static — IsRelevant() → bool
-    SignalCorrelator.cs       # Static — Correlate() → string? (application ID)
+    SignalCorrelator.cs       # Static — Correlate() → string? (case ID)
     CheapClassifier.cs        # Static — Classify() → SignalClassification? (null = uncertain)
 
 tests/MyApp.Domain.Tests/ChannelMonitoring/Classification/
-    RelevanceFilterTests.cs   # 5-6 tests: ATS domain, unknown domain, contact email, LinkedIn, subject keywords, negative
+    RelevanceFilterTests.cs   # 5-6 tests: known vendor domain, unknown domain, contact email, known sender allowlist, subject keywords, negative
     SignalCorrelatorTests.cs  # 4-6 tests: InReplyTo threading, recipient alias, company domain, no match, empty list
     CheapClassifierTests.cs   # 4-6 tests: auto-ack, rejection templates, uncertain returns null, null body
     ClassificationPipelineTests.cs  # 2-3 integration tests: full pipeline happy path, early exit, rejection path
@@ -25,8 +25,8 @@ tests/MyApp.Domain.Tests/ChannelMonitoring/Classification/
 
 ```csharp
 private static GmailHeaders Headers(
-    string from = "noreply@ats.com",
-    string subject = "Application update",
+    string from = "noreply@known-vendor.example",
+    string subject = "Status update",
     string to = "me@gmail.com",
     string? inReplyTo = null,
     string? references = null,
@@ -42,14 +42,14 @@ private static GmailHeaders Headers(
 );
 ```
 
-### Static factory for test Application
+### Static factory for test Case
 
 ```csharp
-private static Application TestApplication(
-    string id = "app-1",
+private static Case TestCase(
+    string id = "case-1",
     string userId = "user-1",
     string offerId = "offer-1",
-    ApplicationState state = ApplicationState.CvSent,
+    CaseState state = CaseState.Submitted,
     IReadOnlyList<ContactChannel>? channels = null) => new()
 {
     Id = id,
@@ -65,12 +65,12 @@ private static Application TestApplication(
 
 ```csharp
 private static readonly RelevanceConfig DefaultConfig = new(
-    KnownAtsDomains: new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    // Example vendor domains — replace with the actual known-vendor domains for your data
+    KnownVendorDomains: new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "greenhouse.io", "lever.co", "workable.com", "smartrecruiters.com",
-        "myworkday.com", "teamtailor.com", "recruitee.com"
+        "vendor-a.example", "vendor-b.example", "vendor-c.example"
     },
-    LinkedInSenderPatterns: ["notifications-noreply@linkedin.com", "messages-noreply@linkedin.com"]
+    KnownSenderPatterns: ["notifications-noreply@platform.example", "messages-noreply@platform.example"]
 );
 ```
 
@@ -80,34 +80,34 @@ The integration test exercises all three stages in sequence with realistic data.
 
 ```csharp
 [Fact]
-public void Full_pipeline_ATS_auto_ack_is_relevant_correlated_and_classified()
+public void Full_pipeline_known_vendor_auto_ack_is_relevant_correlated_and_classified()
 {
-    // Arrange — application with known contact channel
-    var app = CreateApplication("app-1", "user-1", "offer-1",
+    // Arrange — case with known contact channel
+    var theCase = CreateCase("case-1", "user-1", "offer-1",
     [
-        new ContactChannel { Id = "ch-1", Type = ContactChannelType.Email, Value = "jobs@greenhouse.io" }
+        new ContactChannel { Id = "ch-1", Type = ContactChannelType.Email, Value = "notify@vendor-a.example" }
     ]);
 
     var headers = new GmailHeaders(
-        From: "notifications@greenhouse.io",
-        Subject: "Application Received - Software Engineer",
+        From: "notifications@vendor-a.example",
+        Subject: "Submission Received - Example Role",
         Date: SomeInstant,
         InReplyTo: null, References: null,
         To: "me@gmail.com",
-        MessageId: "<greenhouse-123@greenhouse.io>"
+        MessageId: "<vendor-a-123@vendor-a.example>"
     );
-    var body = "Thank you! We have received your application and will review it shortly.";
+    var body = "Thank you! We have received your submission and will review it shortly.";
 
     // Act + Assert — each stage independently
     var isRelevant = EmailRelevanceFilter.IsRelevant(headers, DefaultConfig, []);
-    isRelevant.ShouldBeTrue("ATS domain should be relevant");
+    isRelevant.ShouldBeTrue("known vendor domain should be relevant");
 
-    var appId = SignalCorrelator.Correlate(headers, [app]);
-    appId.ShouldBe("app-1");
+    var caseId = SignalCorrelator.Correlate(headers, [theCase]);
+    caseId.ShouldBe("case-1");
 
     var classification = CheapClassifier.Classify(headers, body);
     classification.ShouldNotBeNull();
-    classification!.TransitionTo.ShouldBe(ApplicationState.AutoResponseReceived);
+    classification!.TransitionTo.ShouldBe(CaseState.AutoAckReceived);
 }
 ```
 
@@ -125,7 +125,7 @@ public void Full_pipeline_unknown_sender_is_not_relevant()
         ...);
 
     var isRelevant = EmailRelevanceFilter.IsRelevant(headers, DefaultConfig, []);
-    isRelevant.ShouldBeFalse("Unknown non-job domain should not be relevant");
+    isRelevant.ShouldBeFalse("Unknown domain should not be relevant");
     // No need to correlate or classify — early exit
 }
 ```
@@ -157,16 +157,16 @@ private static string ExtractDomain(string email)
 
 | Strategy | How it works | When it fires |
 |---|---|---|
-| Recipient alias | `user+app-42@gmail.com` → extract `app-42` after `+` | Emails routed through +alias forwarding |
-| Channel email match | Sender email matches a `ContactChannel.Value` on the application | Direct reply from a known recruiter |
+| Recipient alias | `user+case-42@gmail.com` → extract `case-42` after `+` | Emails routed through +alias forwarding |
+| Channel email match | Sender email matches a `ContactChannel.Value` on the case | Direct reply from a known contact |
 | Domain match | Sender domain matches a channel's domain | Different person at same company replies |
 | In-Reply-To threading | `InReplyTo` header matches a stored message ID | Reply to a previously tracked outbound |
 
 **Priority:** Alias match > exact email match > domain match. Return first hit.
 
-## Pitfall: Application doesn't carry company name directly
+## Pitfall: Case doesn't carry company name directly
 
-The `Application` aggregate has `OfferId` pointing to a `JobOffer` with `Company`, but the correlator shouldn't load that cross-aggregate. Instead, use the `ContactChannel` values on the application — the channel email's domain IS the company domain for correlation purposes. If no channel email exists, domain matching is skipped (not an error).
+The `Case` aggregate has `OfferId` pointing to an `Offer` with `Company`, but the correlator shouldn't load that cross-aggregate. Instead, use the `ContactChannel` values on the case — the channel email's domain IS the company domain for correlation purposes. If no channel email exists, domain matching is skipped (not an error).
 
 ## CheapClassifier Pattern-Matching Rules
 
@@ -183,15 +183,15 @@ private static readonly string[] RejectionPatterns =
 
 private static readonly string[] AutoAckPatterns =
 [
-    "we received your application", "has been received",
-    "thank you for your application", "application received",
-    "we have received your application", "successfully submitted"
+    "we received your submission", "has been received",
+    "thank you for your submission", "submission received",
+    "we have received your submission", "successfully submitted"
 ];
 ```
 
-**Order matters:** Check rejection before auto-ack — "we regret to inform you that we received your application" should classify as rejection, not ack.
+**Order matters:** Check rejection before auto-ack — "we regret to inform you that we received your submission" should classify as rejection, not ack.
 
-**Confidence value:** Use 0.90 for deterministic rejection (terminal — always proposed per no-regret guarantee). Use 0.85–0.90 for non-terminal pattern matches. These sit above the default auto-apply threshold (0.8), so the policy will Auto-Apply for non-terminal high-confidence matches.
+**Confidence value (example — tune to your data):** Use a high value (e.g. 0.90) for deterministic rejection (terminal — always proposed per no-regret guarantee). Use a slightly lower band (e.g. 0.85–0.90) for non-terminal pattern matches. These should sit above your policy's auto-apply threshold (example: 0.8), so the policy will Auto-Apply for non-terminal high-confidence matches.
 
 ### Expanding the CheapClassifier
 
@@ -210,8 +210,8 @@ Prefer specific phrases over conversational fragments:
 | Pattern | Problem |
 |---|---|
 | `"available for a call"` | Matches "are you available for a call?" (uncertain inquiry, not a human reply) |
-| `"schedule a call"` | More specific — implies recruiter-initiated scheduling |
-| `"next steps"` | Generic but acceptable — rarely appears in non-job emails |
+| `"schedule a call"` | More specific — implies the other party is initiating scheduling |
+| `"next steps"` | Generic but acceptable — rarely appears in unrelated emails |
 | `"would like to discuss"` | Good — professional follow-up language |
 
 When a new pattern breaks the "uncertain returns null" test, remove or narrow the pattern rather than changing the test — the test is the specification.
@@ -226,7 +226,7 @@ public async Task Integration_CheapClassifier_null_then_LLM_classifies()
 {
     // Arrange: email CheapClassifier can't handle
     var headers = new GmailHeaders(
-        From: "recruiter@acme.com",
+        From: "contact@example.com",
         Subject: "Quick question about your availability",
         Date: SomeInstant, InReplyTo: null, References: null,
         To: "me@gmail.com", MessageId: "<test@mail.example.com>");
@@ -251,5 +251,3 @@ public async Task Integration_CheapClassifier_null_then_LLM_classifies()
     result.Confidence.ShouldBe(0.4);
 }
 ```
-
-For the full LLM classifier implementation, schema contracts, budget guard testing, and FakeLlmClient patterns, see `references/llm-classifier-integration.md`.

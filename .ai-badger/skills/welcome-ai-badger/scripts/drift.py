@@ -326,9 +326,12 @@ def _dir_entry_verdict(source: Path, entry: Dict[str, Any], project_copy: Option
     `owned_elsewhere` names paths inside the project's copy that other manifest entries
     wrote. Only the local question excludes them: the framework source never received them,
     and hashing them would answer "did the project edit this?" with the adjustments the
-    scaffolder itself ran (#224).
+    scaffolder itself ran (#224). The entry's own `projectOwned` drops out of the same hash
+    for the same reason, one step further: the scaffold preserves those and the project owns
+    them, so an edit to one is not a modification to report.
     """
     exclude = bl.SKILL_EXCLUDE_PATTERNS + ["extensions"]
+    unhashed = list(owned_elsewhere or ()) + list(entry.get("projectOwned") or ())
     source_hash = entry.get("sourceHash")
     if source_hash is None:
         if project_copy is not None:
@@ -339,7 +342,7 @@ def _dir_entry_verdict(source: Path, entry: Dict[str, Any], project_copy: Option
     moved = _differs(bl.dir_content_hash(source, exclude=exclude), source_hash,
                      entry.get("sourceMeta"))
     edited = project_copy is not None and _differs(
-        bl.dir_content_hash(project_copy, exclude=exclude, exclude_rel=owned_elsewhere),
+        bl.dir_content_hash(project_copy, exclude=exclude, exclude_rel=unhashed),
         entry.get("hash"), entry.get("dirMeta"), compare_dir_count=not owned_elsewhere)
     return moved, edited
 

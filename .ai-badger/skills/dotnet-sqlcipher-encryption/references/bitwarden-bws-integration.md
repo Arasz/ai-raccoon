@@ -7,10 +7,13 @@ supersedes report F28 where they differ).
 ## Provisioned environment (owner-managed store)
 
 - bws CLI installed, access token configured by the user (BWS_ACCESS_TOKEN in their env).
-- Project: id configured via `AIRACCOON_BITWARDEN_PROJECT_ID` / `AIRACCOON_BITWARDEN_SECRET_ID`.
-- Secret: referenced by id, not name (names change).
+- Project: a Bitwarden project id, e.g. `00000000-0000-0000-0000-000000000000`.
+- Secret: a named secret and its id, e.g. `<app>-encryption` / `11111111-1111-1111-1111-111111111111`.
 - ALWAYS use the secret ID, not the name (IDs are stable; names change).
-- The secret's VALUE is an unencrypted ed25519 SSH private key (per owner f:); the provider derives the SQLCipher raw key with the measured scheme.
+- Record the project and secret ids in local configuration, never in a tracked file — they
+  identify which vault entry holds the key, which is reconnaissance even without the token.
+- The secret's VALUE is the key material the provider derives the SQLCipher raw key from.
+  Do not document what form that material takes for a specific deployment.
 
 ## SDK vs CLI (decided: CLI)
 
@@ -42,4 +45,4 @@ supersedes report F28 where they differ).
 - Azure Key Vault: Azure.Security.KeyVault.Secrets 4.11.0 + Azure.Identity 1.21.0 (MIT, net10); bootstrap = DefaultAzureCredential → az login state under ~/.azure.
 - AWS Secrets Manager: AWSSDK.SecretsManager 4.0.100.7 (Apache-2.0, net10, same v4 SDK generation as AWSSDK.S3); bootstrap = standard AWS chain (~/.aws/credentials, SSO cache). Don't copy the static BasicAWSCredentials pattern used by the
   repo's S3 sync.
-- Keychain-direct stays the general recommendation; Bitwarden is the opt-in tier the owner chose for this project.
+- Keychain-direct stays the general recommendation; Bitwarden is an opt-in tier for teams that already run a shared vault.
