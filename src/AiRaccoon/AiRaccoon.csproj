@@ -11,7 +11,7 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>ai-raccoon</PackageId>
         <ToolCommandName>ai-raccoon</ToolCommandName>
-        <PackageVersion>1.3.0</PackageVersion>
+        <PackageVersion>1.3.1</PackageVersion>
         <InformationalVersion>1.3.0</InformationalVersion>
         <AssemblyVersion>1.3.0</AssemblyVersion>
         <PackageTags>ai mcp mcp-server model-context-protocol agent agents agent-memory memory knowledge knowledge-base server dotnet-tool global-tool tool cli sqlite vector vector-search embeddings semantic-search hybrid-search search retrieval rag llm stdio http dotnet</PackageTags>
