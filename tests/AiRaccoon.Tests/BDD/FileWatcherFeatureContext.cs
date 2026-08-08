@@ -13,11 +13,9 @@ using Xunit;
 namespace AiRaccoon.Tests.BDD;
 
 /// <summary>
-///     Shared state for the file-watcher feature scenarios — one instance per scenario.
-///     Real temp dirs under DataRoot, real SqliteMemoryStore, FakeTimeProvider-driven ticks and
-///     bounded polling for OS event delivery (R7). The watch stack is composed exactly like DI
-///     (Dependencies.RegisterMemoryServices): WatchPipeline/EventSource/CatchUp/HostedService,
-///     WatchTools over the guard, all backed directly by the base context's IMemoryStore.
+///     Shared state for the file-watcher feature scenarios — one instance per scenario. Real
+///     temp dirs, a real SqliteMemoryStore and FakeTimeProvider-driven ticks; the watch stack is
+///     composed exactly like DI (Dependencies.RegisterMemoryServices).
 /// </summary>
 public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 {
@@ -106,10 +104,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     /// <summary>
     ///     Bounded poll: advance 100ms fake time + one tick + a short real sleep for OS event
-    ///     delivery until the condition holds or the budgets expire. maxFakeSeconds enforces
-    ///     feature timing claims ("within one second"); maxRealSeconds is only a hang-stop, so
-    ///     it is generous — at 5s it was the budget that expired first on a loaded machine, and
-    ///     a scenario then failed for a reason with nothing to do with what it asserts.
+    ///     delivery until the condition holds or the budgets expire. maxRealSeconds is a generous
+    ///     hang-stop only, not the timing assertion (docs/work/archive/2026-08-06-http-serve-code-review-gate.md).
     /// </summary>
     public async Task<bool> StepUntilAsync(Func<Task<bool>> condition, int maxFakeSeconds = 2,
         int maxRealSeconds = 30, CancellationToken cancellationToken = default)

@@ -131,9 +131,8 @@ public class MemoryToolsInstrumentationTests
         durations[0].Value.ShouldBeGreaterThanOrEqualTo(50.0);
     }
 
-    // SyncService now owns the IsConfigured decision (via NullCloudStore — see
-    // SyncServiceTests.MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured); this
-    // proves the tool's metrics wrapper still records an error when the service throws it.
+    // SyncService owns the IsConfigured decision (NullCloudStore); this proves the tool's
+    // metrics wrapper still records an error when the service throws it.
     [Fact]
     public async Task Sync_WhenServiceThrowsSyncNotConfigured_RecordsError()
     {

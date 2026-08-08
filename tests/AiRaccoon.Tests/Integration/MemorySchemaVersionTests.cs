@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     WI-5 / ADR-0011: the bank carries its schema shape in `PRAGMA user_version` instead of
+///     ADR-0011: the bank carries its schema shape in `PRAGMA user_version` instead of
 ///     re-deriving it from a column-and-index probe on every open.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -30,8 +30,6 @@ public sealed class MemorySchemaVersionTests
     public async Task EnsureAsync_OnAnUnstampedBank_RunsTheLadder_ThenStamps()
     {
         await using var connection = await OpenAsync();
-        // A pre-versioning bank: the entries table exists in its oldest shape, and nothing
-        // records which migrations it has seen.
         await connection.ExecuteAsync(new CommandDefinition("""
             CREATE TABLE entries (
                 id INTEGER PRIMARY KEY,
@@ -62,10 +60,7 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    /// <summary>
-    ///     The point of the marker: a stamped bank skips the ladder. Observed through the
-    ///     bucket index, which only the ladder creates on an existing bank.
-    /// </summary>
+    /// <summary>Observed through the bucket index, which only the ladder creates on an existing bank.</summary>
     [Fact]
     public async Task EnsureAsync_OnAStampedBank_SkipsTheLadder()
     {
@@ -227,8 +222,8 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>
-    ///     Issue #200: an old binary opening a bank a newer binary already migrated must refuse to
-    ///     write rather than silently no-op through write paths that skip that schema's maintenance.
+    ///     An old binary opening a bank a newer binary already migrated must refuse to write
+    ///     rather than silently no-op through write paths that skip that schema's maintenance.
     /// </summary>
     [Fact]
     public async Task EnsureAsync_WhenStoredVersionIsAheadOfCurrent_ThrowsNamingBothVersions()
@@ -247,18 +242,16 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>
-    ///     Issue #200 / docs/plans/2026-08-08-search-knn-perf.md §3.3: the v3 ladder step heals rows
-    ///     an old pre-guard binary wrote into a v2 bank without running the write-path chunk
-    ///     recompute, leaving chunk_index/total_chunks at their 0/0 defaults.
+    ///     docs/plans/2026-08-08-search-knn-perf.md §3.3: the v3 ladder step heals rows an old
+    ///     pre-guard binary wrote into a v2 bank without running the write-path chunk recompute,
+    ///     leaving chunk_index/total_chunks at their 0/0 defaults.
     /// </summary>
     [Fact]
     public async Task EnsureAsync_OnAV2Bank_WithDriftedChunkColumns_HealsThemBankWide()
     {
         await using var connection = await OpenAsync();
-        // A fully-current bank first (gets us the v2-shaped entries/vec_entries without hand DDL),
-        // then simulate the drift: three chunks of one group land with their column defaults
-        // untouched — exactly what a pre-#200 binary's write path left behind — and the bank is
-        // forced back to reporting v2 so EnsureAsync sees it as needing the v3 step.
+        // Simulate the drift: three chunks land with their column defaults untouched, and the
+        // bank is forced back to reporting v2 so EnsureAsync sees it as needing the v3 step.
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             """
@@ -281,7 +274,6 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    /// <summary>The v3 step must not re-run on a bank already stamped v3.</summary>
     [Fact]
     public async Task EnsureAsync_OnAStampedV3Bank_SkipsTheRecomputeStep()
     {
@@ -305,7 +297,7 @@ public sealed class MemorySchemaVersionTests
         chunkIndex.ShouldBe(99, "a stamped v3 bank must not re-run the bank-wide recompute");
     }
 
-    /// <summary>A v1 bank migrates straight through v2 and v3 in one open — reuses the v1 seed harness (§WP1) rather than hand-writing a v2 fixture.</summary>
+    /// <summary>A v1 bank migrates straight through v2 and v3 in one open — reuses the v1 seed harness rather than hand-writing a v2 fixture.</summary>
     [Fact]
     public async Task EnsureAsync_OnAV1Bank_RunsTheFullLadderThroughV3()
     {
@@ -325,10 +317,7 @@ public sealed class MemorySchemaVersionTests
         rows.ShouldBe([("h1", 0, 2), ("h2", 1, 2)]);
     }
 
-    // The pre-v2 shape: entries without chunk_index/total_chunks, vec_entries/vec_structure
-    // without the ctx partition key — i.e. the schema exactly as it existed the moment before
-    // this migration, already stamped past ladder step 1 (source_file, section, bucket indexes
-    // all present).
+    // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.
     private const string V1Ddl = """
                                  CREATE TABLE workspaces (
                                      id TEXT PRIMARY KEY,
