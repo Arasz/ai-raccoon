@@ -1,4 +1,4 @@
-namespace AiRaccoon.Infrastructure.Sync;
+namespace AiRaccoon.Core.Sync;
 
 /// <summary>The remote snapshot changed while building our merge — caller must re-pull and retry.</summary>
 public sealed class SyncConflictException(string message) : InvalidOperationException(message);
