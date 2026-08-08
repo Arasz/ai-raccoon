@@ -9,13 +9,14 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
 
 namespace AiRaccoon.Tests.BDD;
 
 /// <summary>
 ///     Shared state for the file-watcher feature scenarios — one instance per scenario.
 ///     Real temp dirs under DataRoot, real SqliteMemoryStore, FakeTimeProvider-driven ticks and
-///     bounded polling (≤5s real time) for OS event delivery (R7). The watch stack is composed
+///     bounded polling for OS event delivery (R7). The watch stack is composed
 ///     exactly like DI (Dependencies.RegisterMemoryServices): MemoryExtensionHost-decorated
 ///     IMemoryStore, WatchPipeline/EventSource/CatchUp/HostedService, WatchTools over the guard.
 /// </summary>
@@ -109,21 +110,35 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     /// <summary>
     ///     Bounded poll: advance 100ms fake time + one tick + a short real sleep for OS event
     ///     delivery until the condition holds or the budgets expire. maxFakeSeconds enforces
-    ///     feature timing claims ("within one second"); maxRealSeconds bounds OS delivery (R7).
+    ///     feature timing claims ("within one second"); maxRealSeconds is only a hang-stop, so
+    ///     it is generous — at 5s it was the budget that expired first on a loaded machine, and
+    ///     a scenario then failed for a reason with nothing to do with what it asserts.
     /// </summary>
     public async Task<bool> StepUntilAsync(Func<Task<bool>> condition, int maxFakeSeconds = 2,
-        int maxRealSeconds = 5, CancellationToken cancellationToken = default)
+        int maxRealSeconds = 30, CancellationToken cancellationToken = default)
     {
-        var realDeadline = DateTime.UtcNow.AddSeconds(maxRealSeconds);
+        var startedAt = DateTime.UtcNow;
+        var realDeadline = startedAt.AddSeconds(maxRealSeconds);
         var fakeStart = TimeProvider.GetUtcNow();
+        var steps = 0;
         while (!await condition().ConfigureAwait(false))
         {
-            if (TimeProvider.GetUtcNow() - fakeStart >= TimeSpan.FromSeconds(maxFakeSeconds) ||
-                DateTime.UtcNow >= realDeadline)
+            var fakeSpent = TimeProvider.GetUtcNow() - fakeStart;
+            var fakeExpired = fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds);
+            var realExpired = DateTime.UtcNow >= realDeadline;
+            if (fakeExpired || realExpired)
             {
+                // Which budget ran out is the whole diagnosis, and the caller only sees a bool.
+                // Without this a load-induced timeout and a genuine behaviour break read alike.
+                TestContext.Current.TestOutputHelper?.WriteLine(
+                    $"StepUntilAsync gave up after {steps} steps: " +
+                    $"{(fakeExpired ? "fake-time budget" : "real-time hang-stop")} expired " +
+                    $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s, " +
+                    $"real {(DateTime.UtcNow - startedAt).TotalSeconds:F1}s/{maxRealSeconds}s)");
                 return false;
             }
 
+            steps++;
             TimeProvider.Advance(TimeSpan.FromMilliseconds(100));
             await Pipeline.TickOnceAsync(cancellationToken).ConfigureAwait(false);
             await Task.Delay(20, cancellationToken).ConfigureAwait(false);
