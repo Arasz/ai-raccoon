@@ -3,151 +3,76 @@
 C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
-> Stacks: dotnet, mcp, python
-> Scaffolded by ai-badger 0.110.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Stacks: dotnet, mcp, python, github
+> Scaffolded by ai-badger 0.113.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Non-negotiable invariants
 
-### Ask if a simpler shape would do
+- **Ask if a simpler shape would do** — Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like.
+  → `.ai-badger/invariants/ask-if-simpler.md`
 
-Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like. Take the simpler shape whenever it serves architecture, maintainability and performance as well — an abstraction added before a real caller needs it is a cost with no buyer.
+- **Check the source, not your own reasoning** — Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you.
+  → `.ai-badger/invariants/check-sources-not-yourself.md`
 
-### Check the source, not your own reasoning
+- **Derive the list, or delete it** — A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them.
+  → `.ai-badger/invariants/derive-or-delete-the-list.md`
 
-Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you. Re-reading your own reasoning twice over costs the same effort and finds nothing new, so spend the check where the error actually lives.
+- **Guard clauses over hand-rolled null checks** — Prefer a dedicated guard/throw-helper for argument validation over hand-rolled `x ?? throw ...` or ad hoc `if (x == null) throw` blocks — a guard reads as intent, not boilerplate, and keeps the exception type/message consistent across the codebase.
+  → `.ai-badger/invariants/guard-clauses.md`
 
-### Derive the list, or delete it
+- **Measure only when the measurement pays** — Run your own benchmark or experiment when the time it costs is repaid by the decision it settles, and not otherwise.
+  → `.ai-badger/invariants/measure-when-it-pays.md`
 
-A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them. Compute the list from the thing it describes so the two cannot disagree; where that is genuinely impossible, write the check that compares them and prove it fails when they differ. Best of all is neither: when the list only restates what the tree already says, delete it and read the tree. A count written into prose is the same defect in smaller packaging.
+- **Minimal comments** — Keep doc comments to 1-3 lines stating the contract, not the provenance or rationale — point at an ADR or spec doc for the "why" instead of writing an essay inline.
+  → `.ai-badger/invariants/minimal-comments.md`
 
-### Guard clauses over hand-rolled null checks
+- **No hand-rolled crypto or security orchestration** — Never implement security/cryptographic orchestration yourself — key derivation, token signing, session/cookie protection, encryption-at-rest schemes.
+  → `.ai-badger/invariants/no-hand-rolled-crypto.md`
 
-Prefer a dedicated guard/throw-helper for argument validation over hand-rolled `x ?? throw ...`
-or ad hoc `if (x == null) throw` blocks — a guard reads as intent, not boilerplate, and keeps
-the exception type/message consistent across the codebase. Use the idiomatic guard utility for
-the language/stack in use, and fail fast at the boundary rather than letting invalid state flow in.
+- **No hardcoded secrets** — No credentials, connection strings, API keys, or tokens in tracked files, examples, or fixtures.
+  → `.ai-badger/invariants/no-hardcoded-secrets.md`
 
-### Measure only when the measurement pays
+- **Plain names** — Name things with the simplest accurate word — variables, functions, types, files, folders, flags.
+  → `.ai-badger/invariants/plain-names.md`
 
-Run your own benchmark or experiment when the time it costs is repaid by the decision it settles, and not otherwise. When it does not pay, cite an existing measurement or say plainly that the number is unverified — a guessed figure presented as measured is worse than no figure at all.
+- **One PR per task** — Every unit of work ends in a pull request; never push directly to the main/trunk branch.
+  → `.ai-badger/invariants/pr-per-task.md`
 
-### Minimal comments
+- **Done means proven** — Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts.
+  → `.ai-badger/invariants/proof-of-done.md`
 
-Keep doc comments to 1-3 lines stating the contract, not the provenance or rationale — point at an ADR or spec doc for the "why" instead of writing an essay inline. Test doc comments are one sentence or none; the test name and body should carry the intent.
+- **A check you have not seen fail is not a check** — Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success.
+  → `.ai-badger/invariants/prove-the-check-fails.md`
 
-### No hand-rolled crypto or security orchestration
+- **Screaming architecture** — Organize folders and modules by domain/business concept, not by generic technical bucket.
+  → `.ai-badger/invariants/screaming-architecture.md`
 
-Never implement security/cryptographic orchestration yourself — key derivation, token signing, session/cookie protection, encryption-at-rest schemes. Delegate to an audited, platform-provided library rather than composing audited primitives into your own protocol, even when the primitives themselves are sound.
+- **Small commits, early draft PR** — Commit one coherent work package at a time and push often.
+  → `.ai-badger/invariants/small-commits-early-draft-pr.md`
 
-### No hardcoded secrets
+- **Route state transitions through a state machine** — Where a domain object has explicit states, make the declared transitions the only way it moves between them, and record what triggered each move.
+  → `.ai-badger/invariants/state-transitions-through-a-machine.md`
 
-No credentials, connection strings, API keys, or tokens in tracked files, examples, or fixtures. Read secrets from configuration or environment variables, and keep sample/test values obviously fake.
+- **TDD is mandatory** — Write a failing, behavior-focused test before any production code change.
+  → `.ai-badger/invariants/tdd-mandatory.md`
 
-### Plain names
+- **Releases are traceable** — Every release records the version it went out at and what changed in it, using whatever version marker and release notes this project already keeps.
+  → `.ai-badger/invariants/traceable-releases.md`
 
-Name things with the simplest accurate word — variables, functions, types, files, folders, flags. Reach for a rare or invented word only when the concept genuinely has no common word for it, because every reader after you pays for the lookup.
+- **Clean layering** — Keep the domain/pure-logic layer free of framework, persistence, HTTP, and third-party-SDK dependencies.
+  → `.ai-badger/invariants/clean-architecture-layering.md`
 
-### One PR per task
+- **High-performance logging** — Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed methods (taking `ILogger` as a parameter, with an explicit `EventId`) instead of calling `logger.LogInformation(...)`/`LogError(...)` etc. directly — it avoids boxing/allocation on the hot path and keeps event ids centrally discoverable.
+  → `.ai-badger/invariants/high-performance-logging.md`
 
-Every unit of work ends in a pull request; never push directly to the main/trunk branch. One task maps to one PR — don't bundle unrelated work into the same change so review and rollback stay scoped.
+- **Static classes: extensions, constants, and pure functions only** — Static classes are allowed for extensions, constants, and pure functions — no state, no I/O, no injectable dependencies.
+  → `.ai-badger/invariants/static-classes.md`
 
-**The one exception is an explicit instruction from the person you are working with.** When they ask you to merge locally, push straight to main, or skip the PR for a particular change, that is theirs to decide. An agent never grants itself this exception — not to save a step, not because the change looks trivial, and not because a rebase turned awkward. Absent that instruction, the rule above is absolute.
+- **MCP stays thin** — An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own.
+  → `.ai-badger/invariants/mcp-thin.md`
 
-The exception lifts the PR requirement and nothing else. Every gate still runs before the push: the PR was the record, not the safety net.
-
-### Done means proven
-
-Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts. "Done" means there is evidence the thing works — a test that passes, a run you watched, a gate that went green — not that the code was written. If you cannot point at the evidence, the work is not done yet.
-
-### A check you have not seen fail is not a check
-
-Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success. This is not the TDD red step restated: red for the wrong reason is worth nothing, and a test pinned to the path a previous fix patched stays green while the defect it named moves one directory over, so re-prove the check whenever the code beneath it moves. Keep the two claims apart as well — "I could not make it fail" is a fact about your attempt, "it cannot fail" is a claim about the system, and only a failure you produced carries you from one to the other.
-
-### Screaming architecture
-
-Organize folders and modules by domain/business concept, not by generic technical bucket. A new folder name should tell a reader what the system *does*, not what kind of file lives there — avoid catch-all `Services/`, `Controllers/`, `Utils/` buckets in favor of concept-named ones. A shared technical chassis (logging, DI wiring, cross-cutting middleware) is the one accepted exception.
-
-### Small commits, early draft PR
-
-Commit one coherent work package at a time and push often. Open a draft PR from the first commit of a unit of work so progress is visible in-flight, rather than surfacing a single large diff at the end.
-
-### Route state transitions through a state machine
-
-Where a domain object has explicit states, make the declared transitions the only way it moves between them, and record what triggered each move. A status field assigned in one place and read in five is a state machine nobody can see, and it becomes unreviewable the first time two writers disagree. Keep a "needs human attention" signal a flag on the entity rather than a state of its own, or every real state acquires a shadow twin and the transition table doubles.
-
-### TDD is mandatory
-
-Write a failing, behavior-focused test before any production code change. No production code without a test that demanded it — implementation follows the test, never the other way around.
-
-### Releases are traceable
-
-Every release records the version it went out at and what changed in it, using whatever version marker and release notes this project already keeps. Do not invent a versioning scheme or a release-notes tree for a project that has none — if there is no release process here, there is nothing to record.
-
-### Clean layering
-
-Keep the domain/pure-logic layer free of framework, persistence, HTTP, and
-third-party-SDK dependencies. Find that layer by shape, not by name: it's the
-assembly other layers reference but that itself references none of them, with
-no `PackageReference` on a web/data/cloud SDK — usually named `*.Domain` or
-`*.Core`. If no project matches that shape, treat this rule as not yet
-applicable rather than guessing which one is "the domain."
-
-"Framework" means anything an ArchUnitNET-style `ForbiddenPattern` would
-catch: ASP.NET Core, EF Core (`Microsoft.EntityFrameworkCore`),
-Azure/`Microsoft.Azure` SDKs, `System.Net.Http`, and other
-serialization/HTTP-transport namespaces. Extend that list when a new SDK
-crosses the boundary; don't extend the boundary to fit the SDK.
-
-A new dependency on the domain layer is an architecture-level decision.
-Record it wherever this project already records decisions (ADR, design doc,
-changelog entry); if it keeps none of those, say so explicitly in the PR
-description instead of adding the dependency silently.
-
-This stays advisory until it's a failing build. Two ways to enforce it, and
-the cheaper one is usually the better one.
-
-**A reference allowlist.** Assert that the domain assembly's
-`GetReferencedAssemblies()` is a subset of an approved set. It runs in
-milliseconds, needs no extra test-project dependencies, and rejects the next
-infrastructure package nobody thought to deny — a denylist only catches what
-someone remembered to name.
-
-**An ArchUnitNET rule**, if you want type-level granularity. Two failure modes
-to know about first:
-
-- **A rule over types that were never loaded matches nothing, and a rule over
-  an empty set passes.** `Types().That().ResideInNamespaceMatching(...)`
-  filters against the architecture you built, so if the loader was given only
-  the domain assembly, the forbidden types are absent and every input passes.
-  There is no error and no zero-match diagnostic. Load the assemblies holding
-  the forbidden types, and expect that to cost both suite time and a test-project
-  reference to the very dependency closure the rule exists to exclude.
-- **A namespace is not an assembly.** `IHttpClientFactory` lives in namespace
-  `System.Net.Http` but ships in `Microsoft.Extensions.Http`, so a namespace
-  rule and an assembly rule disagree about it. Whichever you pick, know which
-  question you are asking.
-
-Either way, [prove the check fails](../../common/invariants/prove-the-check-fails.md)
-before trusting it: add a type that violates the rule, watch it go red, remove
-it. A gate that has only ever passed is indistinguishable from one that cannot
-fail, and this one has a documented history of being the latter.
-
-### High-performance logging
-
-Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed methods (taking `ILogger` as a parameter, with an explicit `EventId`) instead of calling `logger.LogInformation(...)`/`LogError(...)` etc. directly — it avoids boxing/allocation on the hot path and keeps event ids centrally discoverable.
-
-### Static classes: extensions, constants, and pure functions only
-
-Static classes are allowed for extensions, constants, and pure functions — no state,
-no I/O, no injectable dependencies. Anything with state, I/O, or dependencies is an
-injectable component (constructor injection, interface + implementation pair), not a
-static class. A static dispatcher with optional interface parameters is the one
-sanctioned exception: it exists to cap test churn, and it stays a dispatcher, never a
-logic holder.
-
-### MCP stays thin
-
-An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own. Frontend and MCP are both clients of the same API — never let either write to the datastore directly, and never let the MCP layer branch on business rules the API doesn't already enforce.
+- **Pin actions to a commit SHA; declare least-privilege permissions** — Every third-party GitHub Action referenced in a workflow is pinned to a full commit SHA, never a tag or branch — a mutable tag is remote code you re-fetch on every run, not a fixed dependency.
+  → `.ai-badger/invariants/pin-actions-to-sha.md`
 
 ## Commands
 
@@ -158,10 +83,11 @@ An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no 
 
 Before editing matching files, read the applicable scoped instruction file:
 
-- `documentation.instructions.md` → `.ai-badger/instructions/documentation.instructions.md`
-- `csharp.instructions.md` → `.ai-badger/instructions/csharp.instructions.md`
-- `mcp.instructions.md` → `.ai-badger/instructions/mcp.instructions.md`
-- `python.instructions.md` → `.ai-badger/instructions/python.instructions.md`
+- `docs/**/*.md,README.md,CLAUDE.md` → `.ai-badger/instructions/documentation.instructions.md`
+- `**/*.cs,**/*.csproj,Directory.Build.props,Directory.Packages.props` → `.ai-badger/instructions/csharp.instructions.md`
+- `**/*Mcp*/**` → `.ai-badger/instructions/mcp.instructions.md`
+- `**/*.py` → `.ai-badger/instructions/python.instructions.md`
+- `**/.github/workflows/*.yml,**/.github/workflows/*.yaml` → `.ai-badger/instructions/github-actions.instructions.md`
 
 ## Agent delegation
 
@@ -183,42 +109,29 @@ This project understands prompt markers (see `.ai-badger/skills/prompt-markers`)
 ## MCP Tools: code-review-graph
 
 **This project has a knowledge graph. Reach for the code-review-graph MCP tools before
-Grep/Glob/Read** — they cost fewer tokens and return structural context (callers,
-dependents, test coverage) that file scanning cannot. Fall back to Grep/Glob/Read only
-where the graph doesn't reach.
-
-Entry points: `semantic_search_nodes_tool` to locate code, `query_graph_tool` to trace
-callers/callees/imports/tests, `detect_changes_tool` for review, `get_impact_radius_tool`
-for blast radius, `get_architecture_overview_tool` for structure. Each tool's own
-description covers the rest; the graph auto-updates on file change.
+Grep/Glob/Read** — they cost fewer tokens and return structural context (callers, dependents,
+test coverage) that file scanning cannot. Start at `semantic_search_nodes_tool`; fall back to
+Grep/Glob/Read only where the graph doesn't reach. Each tool's own description covers the rest.
 
 <!-- Hermes MCP tools -->
 ## MCP Tools: hermes
 
-Hermes Agent exposes a stdio MCP bridge for connected messaging platforms. Use it when another
-agent needs to list conversations, read history, poll live events, send text messages, browse
-channels, or manage approval requests through Hermes.
-
-The server is started by the client with `hermes mcp serve`. Read operations use Hermes's session
-store without a running gateway; sending messages requires the gateway and its platform adapters.
-
-The common declaration is conditional: ai-badger emits it only when `hermes` resolves on PATH.
+Read operations use Hermes's session store and work without a running gateway; sending messages
+needs the gateway and its platform adapters. The server's own tool descriptions cover the rest.
 
 <!-- ai-raccoon MCP tools -->
 ## MCP Tools: ai-raccoon
 
-AiRaccoon is the project memory server. Search memory FIRST — before web search, code search,
-or asking the user — with memory_search (project_id, scope=all) and 2-3 query formulations.
-Entries carry source paths; a decisive hit is evidence, so cite it. Escalate by result: a partial
-hit → one targeted external search; no hit → search externally, then write the finding back with
-memory_write (include the source path).
+AiRaccoon is the project memory server. Search memory FIRST — before web search, code search, or
+asking the user — with `memory_search` (project_id, scope=all) and 2-3 query formulations. Entries
+carry source paths, so a decisive hit is evidence: cite it. Escalate by result — a partial hit gets
+one targeted external search; no hit means search externally, then write the finding back with
+`memory_write` including the source path.
 
 Every call passes project_id. Plain writes land in committed project memory; active workspaces
-isolate in-progress notes (consolidate on finish); promote durable cross-project facts with
-memory_share — shared entries are curated and never swept. Keep the docs directory searchable:
-check memory_watch_status, then memory_watch_add (project_id + absolute path) when no watch
-exists. One-time CLI setup: `ai-raccoon watch scope add` / `ai-raccoon watch enable`. HTTP mode: `ai-raccoon serve > serve.log 2>&1 &` once, then `hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp`
-— one long-lived process (no ~5-min stdio recycle), 4h idle watchdog, second serve attaches.
+isolate in-progress notes and consolidate on finish; `memory_share` promotes durable cross-project
+facts. Keep the docs directory searchable: check `memory_watch_status`, then `memory_watch_add`
+(project_id + absolute path) when no watch exists.
 
 
 

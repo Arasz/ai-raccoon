@@ -1,10 +1,10 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.110.0. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.113.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
-dotnet, mcp, python
+dotnet, mcp, python, github
 
 ## Personas available here
 
@@ -30,4 +30,4 @@ dotnet, mcp, python
 
 - `ai-raccoon` — AiRaccoon is the project memory server
 - `code-review-graph` — This project has a knowledge graph
-- `hermes` — Hermes Agent exposes a stdio MCP bridge for connected messaging platforms
+- `hermes` — Read operations use Hermes's session store and work without a running gateway; sending messages needs the gateway and its platform adapters
