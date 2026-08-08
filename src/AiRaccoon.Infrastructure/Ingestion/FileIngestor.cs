@@ -42,10 +42,17 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
     public async Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken)
     {
-        await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        RequireInScope(scope, path);
 
+        // Directory.EnumerateFiles descends into directory symlinks, so a link inside the scoped
+        // root can point anywhere on disk; a per-file recheck against the same scope list is the
+        // only thing that actually enforces containment for what gets read. A file whose symlink
+        // (directly, or via a symlinked ancestor directory) resolves outside scope is skipped, not
+        // treated as a reason to refuse the whole directory — one stray link must not DoS an
+        // otherwise legitimate ingest.
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => !IsHidden(file) && IsIndexableFile(file))
+            .Where(file => !IsHidden(file) && IsIndexableFile(file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
@@ -175,20 +182,31 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        var scope = IngestScopeKeys.Parse(
-                        await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken)
-                            .ConfigureAwait(false))
-                    ?? IngestScopeKeys.Parse(
-                        await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken)
-                            .ConfigureAwait(false))
-                    ?? [];
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        RequireInScope(scope, path);
+    }
 
+    private static async Task<IReadOnlyList<string>> ReadScopeAsync(SqliteConnection connection, string projectId,
+        CancellationToken cancellationToken) =>
+        IngestScopeKeys.Parse(
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken)
+                .ConfigureAwait(false))
+        ?? IngestScopeKeys.Parse(
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken)
+                .ConfigureAwait(false))
+        ?? [];
+
+    private static void RequireInScope(IReadOnlyList<string> scope, string path)
+    {
         var normalized = IngestPath.Normalize(path);
-        if (!scope.Any(entry => IngestPath.IsWithinScope(normalized, entry)))
+        if (!IsInScope(scope, normalized))
         {
             throw new PathOutsideScopeException(normalized);
         }
     }
+
+    private static bool IsInScope(IReadOnlyList<string> scope, string path) =>
+        scope.Any(entry => IngestPath.IsWithinScope(path, entry));
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>
