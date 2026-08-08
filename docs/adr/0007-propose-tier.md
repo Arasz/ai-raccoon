@@ -45,7 +45,7 @@ common response envelope that surfaces what is waiting.
   tied one) — a project within its reservation is unreachable as a victim (see #117
   item 5 / `PromotionCapacityPolicyTests.EvictionTarget_NeverPicksAProjectAtOrBelowItsReservation`).
   `PromotionCapacityPolicy.CapacityInfo` is the reporting surface for this — per-project
-  `Reserved`/`Used`/`Borrowing`, surfaced in `GetMetaAsync`'s `ResponseMeta.CapacityByProject`
+  `Reserved`/`Used`/`Borrowing`, surfaced in `GetMetaAsync`'s `PromotionMeta.CapacityByProject`
   — not an enforcement gate.
 - **Review surface.** `memory_promotion_list` shows the queue; `memory_promotion_discard`
   drops rows or a whole project's queue. The background extraction loop (propose mode)
@@ -75,3 +75,41 @@ common response envelope that surfaces what is waiting.
 - The shared tier's curation promise is untouched — eviction never touches it.
 - Existing banks gain the table idempotently on open (CREATE TABLE IF NOT EXISTS); no
   migration beyond DDL, consistent with the schema's established pattern.
+
+## Addendum — what a re-score means for eviction (#135, ruled 2026-08-08)
+
+`PromotionQueueSql.Upsert` overwrites `score` on conflict. #135 asked whether that is a bug,
+since the score is also the eviction key (`ORDER BY score ASC, created_at ASC`) and a routine
+re-propose can therefore demote a long-waiting candidate into the victim slot.
+
+**Ruling: the score is a current assessment. Overwrite stays, and eviction keeps keying on it.**
+
+The reasoning that settles it is the direction of the two effects, checked against the code
+rather than argued from first principles:
+
+- The only decaying term is `recent` (+0.5 for `created_at >= now - 30d`). Every other term is
+  ≥ 1 (`organic-write` +2, `cross-project` +2, `accessed` +1), so losing recency can only
+  reorder rows whose durable score is otherwise equal.
+- Within an equal score, eviction already prefers the **oldest** row (`created_at ASC`). Recency
+  decay pushes in the same direction. It is not an inversion of the policy; it is the policy,
+  reached a second way.
+
+So the demotion #135 describes is real and intended. A row that has waited past the recency
+window, with no durable signal that any other waiting row lacks, is exactly the row the queue
+should give up when it is over cap.
+
+Rejected alternatives, with why:
+
+- **High-water mark (keep the max on conflict).** Freezes an expired recency bonus forever, so a
+  row that was once recent outranks a genuinely recent one indefinitely. Strictly worse than
+  today; already rejected once during #117.
+- **A separate decay-free eviction key (extra column, or stored score components).** Buys a
+  reordering that only applies within an equal-durable-score band, where `created_at ASC` already
+  produces the same victim. A schema column with no behavioural difference to show for it.
+
+`created_at` survives re-propose (it is absent from the `DO UPDATE SET` list), which is what
+keeps both the wait-time metric and the tie-break honest —
+`SqlitePromotionQueueStoreTests.Upsert_InsertsNewRows_AndRefreshesExistingWithoutDuplicating`
+pins it, and `SharedExtractionServiceTests.Propose_AfterTheRecencyWindow_ScoresTheSameRowLower`
+pins the demotion itself as intended behaviour rather than an accident.
+

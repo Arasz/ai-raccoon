@@ -185,4 +185,25 @@ public sealed class SharedExtractionServiceTests
         result.Candidates.ShouldHaveSingleItem();
         result.Candidates[0].ValuePreview.Length.ShouldBeLessThanOrEqualTo(300);
     }
+
+    /// <summary>
+    ///     The #135 ruling: the score is a current assessment, so a re-propose after the recency
+    ///     window legitimately returns a lower number for the same unchanged row. The queue's
+    ///     unconditional `score = excluded.score` is what makes that visible downstream.
+    /// </summary>
+    [Fact]
+    public void Propose_AfterTheRecencyWindow_ScoresTheSameRowLower()
+    {
+        var row = Row("b", sourceFile: null, value: "agent-written fact", createdAt: Now);
+
+        var fresh = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, [row], [], [], false, 20, Now);
+        var aged = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, [row], [], [], false, 20,
+            Now.AddDays(31));
+
+        fresh.Candidates.ShouldHaveSingleItem();
+        aged.Candidates.ShouldHaveSingleItem();
+        aged.Candidates[0].Score.ShouldBe(fresh.Candidates[0].Score - 0.5);
+        fresh.Candidates[0].Reasons.ShouldContain("recent");
+        aged.Candidates[0].Reasons.ShouldNotContain("recent");
+    }
 }
