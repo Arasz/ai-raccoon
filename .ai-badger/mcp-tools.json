@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-06T20:00:49Z",
+  "generated_at": "2026-08-08T17:17:28Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -936,7 +936,7 @@
     },
     {
       "name": "code-review-graph",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "build_or_update_graph_tool": {
           "tags": [
@@ -1528,25 +1528,25 @@
           "intent": "Stop mirroring a watched path; a no-op when the path is not watched.",
           "origin": "catalog"
         },
-        "get_prompt": {
-          "tags": [
-            "read"
-          ],
-          "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
-          "origin": "manual"
-        },
-        "list_prompts": {
-          "tags": [
-            "read"
-          ],
-          "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
-          "origin": "manual"
-        },
         "memory_share_extract": {
           "tags": [
             "read"
           ],
           "intent": "Extract entries from the shared promotion tier of project memory for cross-project reuse",
+          "origin": "manual"
+        },
+        "memory_promotion_list": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Lists the propose tier — candidates waiting for promotion review, ranked by score",
+          "origin": "manual"
+        },
+        "memory_promotion_discard": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Removes a candidate from the propose tier without promoting it (the agent's 'no')",
           "origin": "manual"
         }
       }
@@ -1559,6 +1559,48 @@
     {
       "name": "superpowers",
       "status": "disabled",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Google Drive",
+      "status": "unknown",
+      "url": "https://drivemcp.googleapis.com/mcp/v1",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Microsoft 365",
+      "status": "unauthenticated",
+      "url": "https://microsoft365.mcp.claude.com/mcp",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Google Calendar",
+      "status": "unknown",
+      "url": "https://calendarmcp.googleapis.com/mcp/v1",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Calendly",
+      "status": "unauthenticated",
+      "url": "https://mcp.calendly.com",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Indeed",
+      "status": "unauthenticated",
+      "url": "https://mcp.indeed.com/claude/mcp",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Vercel",
+      "status": "unknown",
+      "url": "https://mcp.vercel.com",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Gmail",
+      "status": "unknown",
+      "url": "https://gmailmcp.googleapis.com/mcp/v1",
       "tools": {}
     }
   ]
