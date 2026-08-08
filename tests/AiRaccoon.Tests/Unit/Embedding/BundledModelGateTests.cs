@@ -6,8 +6,8 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 
 /// <summary>
 ///     Gate: the bundled int8 ONNX model (and its BERT vocab) must exist and verify after
-///     bootstrap. This FAILS (never skips) when the asset is missing or mismatched — the
-///     FR-NM-3 (see docs/work/features-native-memory/native-memory.feature): the default engine must ship inside the tool package, not degrade silently.
+///     bootstrap; fails rather than skips when missing or mismatched. The default engine
+///     must ship inside the tool package (docs/work/features-native-memory/native-memory.feature).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

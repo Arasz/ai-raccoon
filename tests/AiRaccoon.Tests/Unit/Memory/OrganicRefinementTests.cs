@@ -4,13 +4,10 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's organic_adjust() and the organic-note branch of score_candidate()
-/// (see docs/adr/0018-promotion-scoring-v2.md v3 section). v3 change: routing (organic vs not) now lives
-/// entirely in ProvenanceArchetypeClassifier — OrganicRefinement.Apply is only ever called for the
-/// organic-note channel, so the old "non-organic entries pass through unchanged" guard is gone. The
-/// floor moved 2.2 -> 2.4 and the clamp range -2.8..1.5 -> -2.2..1.6; several new pushes/pulls (foreign
-/// subject, pointer/table/contents-index shapes, metadata headers, imperative checklists, directory
-/// READMEs, finding rows, superseded) came over from the doc-channel evidence.</summary>
+/// <summary>
+///     Ports agentC/scorer.py's organic_adjust() and the organic-note branch of score_candidate()
+///     (docs/adr/0018-promotion-scoring-v2.md, v3 section).
+/// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class OrganicRefinementTests
@@ -34,7 +31,7 @@ public sealed class OrganicRefinementTests
         statusDump.Score.ShouldBeLessThan(plainFact.Score);
     }
 
-    /// <summary>v3: the opener check strips leading markdown decoration before taking the 80-char head.</summary>
+    /// <summary>The opener check strips leading markdown decoration before taking the 80-char head.</summary>
     [Fact]
     public void StatusOpener_BehindMarkdownDecoration_IsStillDetected()
     {
@@ -45,7 +42,7 @@ public sealed class OrganicRefinementTests
         decorated.Reasons.ShouldContain("status-opener");
     }
 
-    /// <summary>v3: a generic "<X> complete/done/closed/finished/delivered" opener is now recognized,
+    /// <summary>A generic "<X> complete/done/closed/finished/delivered" opener is recognized,
     /// not just the earlier enumerated literal openers.</summary>
     [Fact]
     public void GenericCompleteOpener_IsRecognized()

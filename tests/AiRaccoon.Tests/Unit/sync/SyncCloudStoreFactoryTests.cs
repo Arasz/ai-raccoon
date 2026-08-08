@@ -8,9 +8,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.sync;
 
 /// <summary>
-///     Per-call cloud-store resolution (findings F13): the store is rebuilt from the
-///     CURRENT settings rows on every memory_sync call, so `sync add/remove` take effect
-///     without a restart. Secrets come from the settings table, not the environment.
+///     Per-call cloud-store resolution: the store is rebuilt from the CURRENT settings rows
+///     on every memory_sync call, so `sync add/remove` take effect without a restart. Secrets
+///     come from the settings table, not the environment.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -80,7 +80,6 @@ public class SyncCloudStoreFactoryTests
     [Fact]
     public async Task Create_WithProviderAzureAndS3RowsOnly_ReturnsNullCloudStore()
     {
-        // The silently-dead trap: provider says azure but only s3 rows exist.
         var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "azure" } };
         SeedFull(store);
 

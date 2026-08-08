@@ -31,7 +31,6 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 
     private static readonly string[] ExpectedToolNames =
     [
-        // 19 memory_* tools
         "memory_write",
         "memory_search",
         "memory_list",
@@ -51,7 +50,6 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         "memory_sync",
         "memory_promotion_list",
         "memory_promotion_discard",
-        // 3 watch_* tools
         "memory_watch_add",
         "memory_watch_status",
         "memory_watch_remove"
@@ -88,23 +86,19 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     [Fact]
     public async Task UncoveredTools_RoundTripOverTheWire()
     {
-        // memory_list: answers on a fresh project.
         var list = await CallAsync("memory_list", ("projectId", ProjectId));
         Text(list).ShouldNotBeNullOrWhiteSpace();
 
-        // memory_delete: write a row, then delete it by its hash.
         var write = await CallAsync("memory_write", ("projectId", ProjectId), ("content", "surface parity fact"));
         var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("data").GetProperty("hash").GetString();
         hash.ShouldNotBeNullOrWhiteSpace();
         var delete = await CallAsync("memory_delete", ("projectId", ProjectId), ("hash", hash));
         JsonDocument.Parse(Text(delete)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
-        // memory_delete_context: write a row, then purge its context.
         await CallAsync("memory_write", ("projectId", ProjectId), ("content", "context purge me"));
         var deleteContext = await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
         JsonDocument.Parse(Text(deleteContext)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
-        // memory_ingest_file: index one temp file.
         var file = Path.Combine(Path.GetTempPath(), $"ai-raccoon-surface-{Guid.NewGuid():N}.txt");
         await File.WriteAllTextAsync(file, "ingested surface fact", TestContext.Current.CancellationToken);
         try
@@ -117,7 +111,6 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             File.Delete(file);
         }
 
-        // memory_ingest_directory: index one temp directory.
         var dir = Directory.CreateTempSubdirectory("ai-raccoon-surface-");
         await File.WriteAllTextAsync(Path.Combine(dir.FullName, "note.md"), "directory surface fact", TestContext.Current.CancellationToken);
         try
@@ -151,7 +144,6 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         JsonDocument.Parse(Text(promotionDiscard)).RootElement.GetProperty("data").GetProperty("discarded").GetInt32()
             .ShouldBe(0);
 
-        // watch trio: enabled + scoped via settings, then add -> status -> remove.
         var watchDir = Directory.CreateTempSubdirectory("ai-raccoon-surface-watch-");
         try
         {
@@ -180,12 +172,10 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             }
             catch (IOException)
             {
-                // Background scan may still hold a handle on a loaded machine; the
-                // factory's temp root is removed at dispose anyway.
+                // An in-flight background scan may still hold a file handle; best-effort cleanup.
             }
         }
 
-        // Clean up the dedicated project context.
         await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
     }
 

@@ -21,10 +21,8 @@ public sealed record ReferenceRun(
 
 /// <summary>
 ///     Runs the pinned sqlite-memory 1.3.5 extension (the reference oracle) against a temp
-///     memory.db. Self-contained: its own inline SQL mirrors the extension surface and does not
-///     touch src/AiRaccoon.Infrastructure/Sqlite, whose rewrite must not move this oracle.
-///     Deferral defaults on; embeddings run explicitly after the corpus load, so output is
-///     deterministic (same model file, same machine, same corpus — same rankings).
+///     memory.db; self-contained, does not touch src/AiRaccoon.Infrastructure/Sqlite. Deferral
+///     defaults on, with an explicit embed-pending pass, so output is deterministic.
 /// </summary>
 public static class ReferenceRunner
 {
@@ -71,15 +69,13 @@ public static class ReferenceRunner
             connection.LoadExtension(ReferenceAssets.VectorModulePath);
             connection.LoadExtension(ReferenceAssets.MemoryModulePath);
 
-            // Oracle configuration mirrors the production factory (FR-MEM-1.12; see docs/work/features-agent-memory/spec-issue-1.md): deferral on,
-            // path-scoped hashes on. Rows stay pending until the explicit embed below.
+            // Oracle configuration mirrors the production factory (docs/work/features-agent-memory/spec-issue-1.md):
+            // deferral on, path-scoped hashes on. Rows stay pending until the explicit embed below.
             SetOption(connection, "defer_embeddings", 1);
             SetOption(connection, "preserve_duplicate_paths", 1);
 
-            // The extension filters below min_score 0.7 by default and caps rows at 20, which
-            // would leave most corpus queries with zero or truncated results. The golden needs
-            // the full top-k, so the oracle captures everything and the harness applies its own
-            // cutoffs (k sweep up to 60). Hybrid weights stay at extension defaults (0.6/0.4).
+            // The extension defaults to min_score 0.7 and caps at 20 rows, truncating most corpus
+            // queries; the oracle captures everything (min_score 0, max_results 200) for a full top-k.
             SetOption(connection, "min_score", 0);
             SetOption(connection, "max_results", 200);
 
