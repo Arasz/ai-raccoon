@@ -53,10 +53,8 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         foreach (var hash in hashes)
         {
             var entry = byHash[hash];
-            // Promote via memory_add_content(path, value, 'project:<id>') — preserves the
-            // entry's logical path and lands it in the project context (see docs/work/features-agent-memory/spec-issue-1.md §3.2). Using
-            // add_content rather than add_text avoids the global content-hash dedup, which
-            // would skip content that already exists in the workspace context.
+            // Promote via memory_add_content, preserving the entry's logical path
+            // (docs/work/features-agent-memory/spec-issue-1.md §3.2); add_content, not add_text, to skip the global content-hash dedup.
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
