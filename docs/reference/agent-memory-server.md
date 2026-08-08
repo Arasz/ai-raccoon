@@ -205,9 +205,12 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 Beyond that, the only other environment variables read are the `OTEL_*` ones the
 OpenTelemetry SDK itself reads for OTLP export (serve/HTTP mode only, opt-in) —
 notably `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`,
-`OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_METRIC_EXPORT_TIMEOUT`, and `OTEL_SERVICE_NAME` —
+`OTEL_METRIC_EXPORT_INTERVAL`, and `OTEL_METRIC_EXPORT_TIMEOUT` —
 see [OTLP export](#serve-mode) below and [ADR 0009](../adr/0009-otlp-export.md) for the
 current set and behavior rather than treating this list as exhaustive.
+`OTEL_SERVICE_NAME` is read by the SDK but has no effect here: `service.name` is a
+fixed product identity (`ai-raccoon`) that this codebase's own resource registration
+always wins over.
 
 All other configuration (access modes, embedding engine, retrieval alpha, sweep,
 sync, watch) lives in the settings table and is changed with the CLI verbs below —
