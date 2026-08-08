@@ -1,3 +1,5 @@
+using System.Numerics.Tensors;
+
 namespace AiRaccoon.Core.Embedding;
 
 /// <summary>
@@ -25,11 +27,7 @@ public static class EmbeddingMath
             }
 
             active++;
-            var offset = s * dim;
-            for (var d = 0; d < dim; d++)
-            {
-                pooled[d] += hidden[offset + d];
-            }
+            TensorPrimitives.Add(pooled, hidden.Slice(s * dim, dim), pooled);
         }
 
         if (active == 0)
@@ -37,27 +35,15 @@ public static class EmbeddingMath
             return pooled;
         }
 
-        for (var d = 0; d < dim; d++)
-        {
-            pooled[d] /= active;
-        }
+        TensorPrimitives.Divide(pooled, (float)active, pooled);
 
-        double lengthSquared = 0;
-        foreach (var v in pooled)
-        {
-            lengthSquared += (double)v * v;
-        }
-
-        var norm = MathF.Sqrt((float)lengthSquared);
+        var norm = TensorPrimitives.Norm((ReadOnlySpan<float>)pooled);
         if (!(norm > 0))
         {
             return pooled;
         }
 
-        for (var d = 0; d < dim; d++)
-        {
-            pooled[d] /= norm;
-        }
+        TensorPrimitives.Divide(pooled, norm, pooled);
 
         return pooled;
     }

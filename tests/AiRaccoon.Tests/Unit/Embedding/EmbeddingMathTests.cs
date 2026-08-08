@@ -64,4 +64,58 @@ public sealed class EmbeddingMathTests
 
         result.ShouldAllBe(v => v == 0);
     }
+
+    /// <summary>
+    ///     dim = 384 (production dimension) exercises a full SIMD lane; every other test in this
+    ///     class uses dim = 3, which is entirely vector tail. Mask is active-first at ~60%
+    ///     density, matching OnnxEmbeddingGenerator.RunBatch's layout.
+    /// </summary>
+    [Fact]
+    public void MeanPoolAndNormalize_AtProductionDimension_MatchesNaiveReference()
+    {
+        const int dim = 384;
+        const int seqLen = 256;
+        const int active = 154; // ~60% of 256, active-first.
+
+        var random = new Random(20260808);
+        var hidden = new float[seqLen * dim];
+        for (var i = 0; i < hidden.Length; i++)
+        {
+            hidden[i] = (float)(random.NextDouble() * 2 - 1);
+        }
+
+        var mask = new int[seqLen];
+        for (var s = 0; s < active; s++)
+        {
+            mask[s] = 1;
+        }
+
+        var result = EmbeddingMath.MeanPoolAndNormalize(hidden, mask, seqLen, dim);
+
+        var reference = new double[dim];
+        for (var s = 0; s < active; s++)
+        {
+            var offset = s * dim;
+            for (var d = 0; d < dim; d++)
+            {
+                reference[d] += hidden[offset + d];
+            }
+        }
+
+        for (var d = 0; d < dim; d++)
+        {
+            reference[d] /= active;
+        }
+
+        var norm = Math.Sqrt(reference.Sum(v => v * v));
+        for (var d = 0; d < dim; d++)
+        {
+            reference[d] /= norm;
+        }
+
+        for (var d = 0; d < dim; d++)
+        {
+            result[d].ShouldBe((float)reference[d], 1e-5);
+        }
+    }
 }
