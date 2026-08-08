@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AiRaccoon.Core.Memory;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -219,13 +220,26 @@ internal static class MemorySchema
 
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
-    ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/> (ADR-0011).
+    ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/>/
+    ///     <see cref="MigrateToV3Async"/> (ADR-0011).
     /// </summary>
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        // Issue #200: a bank stamped by a newer binary must refuse an older binary's write, not
+        // silently no-op through write paths that skip that schema's maintenance — that gap is
+        // how the drift in #200 happened. EnsureAsync only ever runs on the read-write open path
+        // (SqliteConnectionFactory.InitializeAsync); the codebase has no separate read-only open
+        // that reaches it, so this is the one surface that gates every writer.
+        if (storedVersion > CurrentVersion)
+        {
+            throw new UnsupportedSchemaVersionException(
+                $"bank schema v{storedVersion} is newer than this binary supports (v{CurrentVersion}); update ai-raccoon");
+        }
+
         // A pre-versioning bank and a brand-new file both read 0 and need opposite treatment.
         // What separates them is whether the file holds any table at all — checked before the
         // DDL creates them, and not keyed to one table: the oldest banks predate `entries`.
@@ -273,6 +287,13 @@ internal static class MemorySchema
             // Hard step, deliberately not soft: an empty-shell vec_entries answers every vector
             // query with silence, which is worse than the bank failing to open.
             await MigrateToV2Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 3)
+        {
+            // Hard step (issue #200): heals rows a pre-guard binary wrote into a v2 bank without
+            // running the write-path chunk recompute.
+            await MigrateToV3Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         if (healthy)
@@ -656,6 +677,36 @@ internal static class MemorySchema
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 3 (issue #200): a bank-wide self-heal recompute of chunk_index/total_chunks,
+    ///     reusing the exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService"/>'s merge uses
+    ///     — no duplicate. Heals rows a pre-#200 binary wrote into a v2 bank without running the
+    ///     write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3). One transaction,
+    ///     rethrown on failure, matching <see cref="MigrateToV2Async"/>'s hard-step pattern.
+    /// </summary>
+    private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
