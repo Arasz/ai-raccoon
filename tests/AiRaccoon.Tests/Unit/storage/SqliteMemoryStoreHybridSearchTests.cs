@@ -124,6 +124,61 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Search_FtsOnly_ReturnsExactlyLimitResults_WithNativeFtsSnippets_OutOfALargerCandidateSet()
+    {
+        // Laziness proof for the FTS modality (docs/plans/2026-08-08-search-knn-perf.md WP7, issue
+        // #198), mirroring Search_VectorOnly_...OutOfALargerCandidateSet: N=8 FTS-only candidates
+        // compete for a Limit=3 query. Every survivor must carry the real FTS5 snippet() text
+        // (containing the matched term), resolved only for the K survivors.
+        var entries = new List<MemoryEntry>();
+        for (var i = 0; i < 8; i++)
+        {
+            var longValue = $"zebra opens candidate {i}. " + string.Join(" ", Enumerable.Range(1, 40).Select(n =>
+                $"sentence number {n} with enough prose to exceed the two hundred character window"));
+            entries.Add(await _store.WriteAsync(
+                new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken));
+        }
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 3, MinScore: 0.0,
+                RrfK: 60, FtsWeight: 1, VectorWeight: 0),
+            TestContext.Current.CancellationToken);
+
+        results.Count.ShouldBe(3, "3 survivors out of 8 FTS candidates");
+        results.ShouldAllBe(hit => hit.Snippet.Contains("zebra", StringComparison.Ordinal),
+            "survivors must carry the real FTS snippet() text, resolved lazily for ranking survivors only");
+    }
+
+    [Fact]
+    public async Task Search_HashInBothFtsAndVectorLists_SnippetPrefersFtsNative_OverVectorFallback()
+    {
+        // Precedence (docs/plans/2026-08-08-search-knn-perf.md WP7): ReciprocalRankFusion.Fuse
+        // fuses the FTS list first (payloads.TryAdd keeps the first list's payload), so a hash
+        // retrieved by both modalities must keep the FTS-native snippet() text, not the vector
+        // modality's SnippetFallback trim — deferral must not change that precedence.
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+
+        var longValue = "zebra opens the paragraph. " + string.Join(" ", Enumerable.Range(1, 40).Select(n =>
+            $"sentence number {n} with enough prose to exceed the two hundred character window"));
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
+
+        // A single embedded doc is always vector-rank-1 for any query; "zebra" also gives it an
+        // FTS match, so it is retrieved by both modalities.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 5, MinScore: 0.0,
+                RrfK: 60, FtsWeight: 1, VectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        // FTS-native snippet must win over the vector fallback.
+        hit.Snippet.ShouldContain("zebra");
+        hit.Snippet.ShouldNotBe(SnippetFallback.From(longValue, hit.Hash));
+    }
+
+    [Fact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
         // ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): vec_distance_cosine is a DISTANCE (0 = identical) — the vec
