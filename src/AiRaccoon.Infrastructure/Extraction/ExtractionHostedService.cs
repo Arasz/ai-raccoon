@@ -114,12 +114,15 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
 
-                // The loop's review surface: ranked candidates, one log line each (S4).
+                // The loop's review surface: ranked candidates, one log line each (S4). Debug-only
+                // and preview-free — counts belong to metrics, not to a default-level serve.log
+                // (owner: "there is no need to log this info, it should be just counted by metrics"),
+                // and the content preview never belonged in logs at all.
                 for (var i = 0; i < candidates.Count; i++)
                 {
                     var candidate = candidates[i];
-                    Log.Candidate(_logger, i + 1, projectId, candidate.Path,
-                        string.Join(", ", candidate.Reasons), candidate.ValuePreview);
+                    Log.Candidate(_logger, i + 1, projectId, candidate.Hash, candidate.Path,
+                        string.Join(", ", candidate.Reasons));
                 }
 
                 Log.Pass(_logger, projectId, mode, candidates.Count, 0);
@@ -153,7 +156,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
         [LoggerMessage(EventId = 501, Level = LogLevel.Debug, Message = "No projects in the bank; skipping")]
         public static partial void NoProjects(ILogger logger);
 
-        [LoggerMessage(EventId = 502, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 502, Level = LogLevel.Debug,
             Message = "Extraction pass for {ProjectId} ({Mode}): {Candidates} candidates, {Promoted} promoted")]
         public static partial void Pass(ILogger logger, string projectId, ExtractMode mode, int candidates,
             int promoted);
@@ -162,10 +165,12 @@ public sealed partial class ExtractionHostedService : BackgroundService
             Message = "Extraction pass failed for {ProjectId}")]
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
 
-        [LoggerMessage(EventId = 507, Level = LogLevel.Information,
-            Message = "Extraction candidate #{Rank} for {ProjectId}: {Path} ({Reasons}) — {Preview}")]
+        /// <summary>No content preview (data-leak risk) — hash/path/reasons only, and Debug-only:
+        /// candidate counts are metered (ai_raccoon_queue_queued), not logged, at Information.</summary>
+        [LoggerMessage(EventId = 507, Level = LogLevel.Debug,
+            Message = "Extraction candidate #{Rank} for {ProjectId}: {Hash} {Path} ({Reasons})")]
         public static partial void Candidate(ILogger logger, int rank, string projectId,
-            string path, string reasons, string preview);
+            string hash, string path, string reasons);
 
         [LoggerMessage(EventId = 504, Level = LogLevel.Information,
             Message = "Extraction pass complete: {Projects} projects, {Promoted} promoted")]
