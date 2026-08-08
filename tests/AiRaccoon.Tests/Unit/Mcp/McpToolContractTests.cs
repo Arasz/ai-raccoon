@@ -35,7 +35,7 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_ingest_file(projectId:string!, path:string!, context:string|null?)
                                             memory_list(projectId:string!)
                                             memory_promotion_discard(projectId:string!, hash:string|null?)
-                                            memory_promotion_list(projectId:string|null?, limit:integer?)
+                                            memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
                                             memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minScore:number?, rrfK:integer?, ftsWeight:integer?, vectorWeight:integer?, contextLabel:string|null?)
                                             memory_share(projectId:string!, hash:string!)
                                             memory_share_extract(projectIds:array!, mode:string?, limit:integer|null?, includeTtlRows:boolean?, autoPromote:boolean?, confirm:boolean?)
