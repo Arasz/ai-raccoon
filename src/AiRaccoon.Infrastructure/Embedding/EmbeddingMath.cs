@@ -49,12 +49,14 @@ internal static class EmbeddingMath
         }
 
         var norm = MathF.Sqrt((float)lengthSquared);
-        if (norm > 0)
+        if (!(norm > 0))
         {
-            for (var d = 0; d < dim; d++)
-            {
-                pooled[d] /= norm;
-            }
+            return pooled;
+        }
+
+        for (var d = 0; d < dim; d++)
+        {
+            pooled[d] /= norm;
         }
 
         return pooled;

@@ -109,7 +109,7 @@ internal static partial class McpServerSetup
         }
 
         builder.ConfigureMcpServer(transports);
-        return builder.Build().ConfigureMcpEndpoints(transports, armWatchdog: config.IdleTimeout > TimeSpan.Zero);
+        return builder.Build().ConfigureMcpEndpoints(transports, config.IdleTimeout > TimeSpan.Zero);
     }
 
     extension(WebApplication webApplication)
@@ -144,7 +144,7 @@ internal static partial class McpServerSetup
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
-                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo: quietInfo)
+                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo)
                 .WithTools<MemoryTools>()
                 .WithTools<ShareTools>()
                 .WithTools<WorkspaceTools>()
@@ -171,8 +171,6 @@ internal static partial class McpServerSetup
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
             ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
-            // #151: one registration reaches every transport chain below (app-host and web-host both
-            // call this extension) — no per-tool catch/rethrow needed to keep a refusal off the error log.
             mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
 
             if (selectedTransports.Count == 0)
@@ -196,22 +194,13 @@ internal static partial class McpServerSetup
 
         private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder, bool quietInfo = false)
         {
-            AddStderrConsoleLogging(loggingBuilder, quietInfo: quietInfo);
+            AddStderrConsoleLogging(loggingBuilder, quietInfo);
             return mcpServerBuilder.WithStdioServerTransport();
         }
 
-        private IMcpServerBuilder HandleHttpTransport() =>
-            mcpServerBuilder.WithHttpTransport(options =>
-            {
-                // Stateless mode is recommended for servers that don't need
-                // server-to-client requests like sampling or elicitation.
-                options.Stateless = true;
-            });
+        private IMcpServerBuilder HandleHttpTransport() => mcpServerBuilder.WithHttpTransport(options => { options.Stateless = true; });
 
-        private IMcpServerBuilder HandleHttpsTransport() =>
-            // Unsupported: no transport is configured for https; the warning is emitted
-            // once in ConfigureMcpEndpoints where the app logger is available.
-            mcpServerBuilder;
+        private IMcpServerBuilder HandleHttpsTransport() => mcpServerBuilder;
     }
 
     internal static partial class Log

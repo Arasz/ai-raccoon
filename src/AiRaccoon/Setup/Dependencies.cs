@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
@@ -11,15 +10,15 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Tools;
-using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Observability;
+using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup;
@@ -59,21 +58,27 @@ public static partial class Dependencies
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
 
-            static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
-            {
-                // Snapshot files of an encrypted bank are encrypted copies — open them
-                // with the bank key (null = unencrypted bank, plain open), read-write
-                // (the strip DELETE + VACUUM) and with vec0 loaded (entry triggers).
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, readOnly: false));
-                await conn.OpenAsync(ct);
-                conn.EnableExtensions();
-                conn.LoadVector();
-                return conn;
-            }
+            services.AddSingleton<WorkspaceService>();
+            services.AddSingleton<SweepService>();
+            services.AddSingleton<SharedExtractionService>();
+            services.AddSingleton<SharedExtractionRunner>();
+
+
+            services.AddSingleton<ForgettingPolicyService>();
+            services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(sp.GetRequiredService<IMemoryStore>()));
+            services.AddSingleton<ToolGate>();
+            services.AddSingleton<ToolCallMetrics>();
+
+            services.RegisterWatchServices();
+
+            services.RegisterExtractionBackgroundService(mcpTransport);
+            services.RegisterWatchSyncBackgroundService();
+            services.AddHostedService<BankMaintenanceHostedService>();
+            return;
 
             static async Task<SqliteConnection> OpenSnapshotReadOnly(IServiceProvider sp, string path, CancellationToken ct)
             {
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, readOnly: true));
+                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, true));
                 await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
@@ -96,22 +101,14 @@ public static partial class Dependencies
                 return csb.ToString();
             }
 
-            services.AddSingleton<WorkspaceService>();
-            services.AddSingleton<SweepService>();
-            services.AddSingleton<SharedExtractionService>();
-            services.AddSingleton<SharedExtractionRunner>();
-
-
-            services.AddSingleton<ForgettingPolicyService>();
-            services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(sp.GetRequiredService<IMemoryStore>()));
-            services.AddSingleton<ToolGate>();
-            services.AddSingleton<ToolCallMetrics>();
-
-            services.RegisterWatchServices();
-
-            services.RegisterExtractionBackgroundService(mcpTransport);
-            services.RegisterWatchSyncBackgroundService();
-            services.AddHostedService<BankMaintenanceHostedService>();
+            static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
+            {
+                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, false));
+                await conn.OpenAsync(ct);
+                conn.EnableExtensions();
+                conn.LoadVector();
+                return conn;
+            }
         }
 
         private void RegisterExtractionBackgroundService(IReadOnlyCollection<McpTransport> mcpTransport)
@@ -129,10 +126,7 @@ public static partial class Dependencies
             services.AddSingleton<WatchRetryPolicy>();
             services.AddSingleton<WatchDigestExecutor>();
             services.AddSingleton<WatchScheduler>();
-            // Singleton is load-bearing: a transient guard silently defeats single-flight (R8).
             services.AddSingleton<WatchScanGuard>();
-            // Singleton is load-bearing here too: the owner id is per-instance, and a transient
-            // lease would hand every call a new owner, so renew and release could never match.
             services.AddSingleton<IWatchScanLease, SqliteWatchScanLease>();
             services.AddSingleton<WatchPipeline>();
             services.AddSingleton<IWatchService, WatchService>();

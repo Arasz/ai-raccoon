@@ -10,15 +10,15 @@ public sealed record OtlpExportState(bool Enabled, string? Endpoint, string? Pro
 {
     /// <summary>Identifies this process to a collector. Without it the SDK falls back to
     /// "unknown_service:&lt;process&gt;", which is what collectors actually displayed.</summary>
-    public const string DefaultServiceName = "ai-raccoon";
-
-    /// <summary>service.name on the exported resource; OTEL_SERVICE_NAME overrides it.</summary>
-    public string ServiceName { get; init; } = DefaultServiceName;
+    private const string DefaultServiceName = "ai-raccoon";
 
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string ServiceNameVar = "OTEL_SERVICE_NAME";
     private const string DefaultProtocol = "grpc";
+
+    /// <summary>service.name on the exported resource; OTEL_SERVICE_NAME overrides it.</summary>
+    public string ServiceName { get; private init; } = DefaultServiceName;
 
     /// <summary>Reads OTEL_EXPORTER_OTLP_ENDPOINT/OTEL_EXPORTER_OTLP_PROTOCOL; disabled unless
     /// the endpoint is set.</summary>

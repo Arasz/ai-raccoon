@@ -14,6 +14,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 internal sealed class EntryEmbedder(EmbeddingService embeddings)
 {
     private const int BatchSize = 32;
+    private const string BundledModel = "bundled";
 
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
     public async Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
@@ -22,8 +23,6 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
         var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken)
             .ConfigureAwait(false);
 
-        // The CLI contract is a consistent engine state: a null model/baseUrl clears the
-        // row (switching provider must not leave stale rows behind).
         await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
             .ConfigureAwait(false);
         await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
@@ -35,18 +34,16 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
         await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
             new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken)).ConfigureAwait(false);
 
-        // Engine change → re-embed the whole bank with the new engine (FR-NM-3 s6; see
-        // docs/work/features-native-memory/native-memory.feature): settings are bank-global, so
-        // every embedded row re-embeds; the pending queue is untouched — memory_embed_pending
-        // owns it (s5).
-        if (!string.Equals(previous, engine, StringComparison.Ordinal))
+        if (string.Equals(previous, engine, StringComparison.Ordinal))
         {
-            var reEmbed = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllEmbedded, cancellationToken))
-                .ConfigureAwait(false)).ToList();
-            await EmbedAsync(connection, reEmbed, cancellationToken).ConfigureAwait(false);
+            return new EmbeddingConfig(provider, model ?? BundledModel, engine);
         }
 
-        return new EmbeddingConfig(provider, model ?? "bundled", engine);
+        var reEmbed = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllEmbedded, cancellationToken))
+            .ConfigureAwait(false)).ToList();
+        await EmbedAsync(connection, reEmbed, cancellationToken).ConfigureAwait(false);
+
+        return new EmbeddingConfig(provider, model ?? BundledModel, engine);
     }
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
@@ -96,7 +93,7 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
     }
 
     /// <summary>Embeds a set of rows with the configured engine; missing rows are skipped.</summary>
-    public async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
+    private async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
         CancellationToken cancellationToken)
     {
         if (rows.Count == 0)
@@ -158,16 +155,14 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken)
             : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken)).ConfigureAwait(false);
 
-    private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken) =>
-        new(sql, parameters, cancellationToken: cancellationToken);
+    private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken) => new(sql, parameters, cancellationToken: cancellationToken);
 
-    private static CommandDefinition Def(string sql, CancellationToken cancellationToken) =>
-        new(sql, cancellationToken: cancellationToken);
+    private static CommandDefinition Def(string sql, CancellationToken cancellationToken) => new(sql, cancellationToken: cancellationToken);
 
-    internal sealed class EmbedRow
+    internal sealed record EmbedRow
     {
-        public long Id { get; set; }
+        public long Id { get; init; }
 
-        public string Value { get; set; } = "";
+        public string Value { get; init; } = "";
     }
 }

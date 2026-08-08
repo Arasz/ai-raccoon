@@ -16,18 +16,12 @@ if (!CliArgs.TryParse(args, out var cliParseResult))
 var cancellationTokenSource = new CancellationTokenSource();
 
 var serverConfig = cliParseResult.Options.ToServerConfig();
-if (cliParseResult.CommandPath is ["serve", "observability"])
+switch (cliParseResult.CommandPath)
 {
-    // Routes above the generic "serve" branch: observability queries a running serve
-    // process and needs none of the bank/encryption/embedding setup serve itself performs.
-    return await ObservabilityRunner.RunAsync(cliParseResult, Console.Out, Console.Error, cancellationTokenSource.Token);
-}
-
-if (cliParseResult.CommandPath is ["serve"])
-{
-    // R11: serve routes to ServeRunner BEFORE the generic verb branch — CliCommandRunner's
-    // catch-all must never see serve.
-    return await ServeRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, cancellationTokenSource.Token);
+    case ["serve", "observability"]:
+        return await ObservabilityRunner.RunAsync(cliParseResult, Console.Out, Console.Error, cancellationTokenSource.Token);
+    case ["serve"]:
+        return await ServeRunner.RunAsync(cliParseResult, serverConfig, Console.Out, Console.Error, cancellationTokenSource.Token);
 }
 
 if (cliParseResult.CommandPath.Length > 0)

@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// </summary>
 public sealed class WatchRetryPolicy
 {
-    public const int MaxFailures = 5;
+    private const int MaxFailures = 5;
 
     private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
 
