@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Shouldly;
 using Xunit;
 
@@ -11,21 +10,13 @@ public sealed class GoldenFileTests
     public const string RegenerateEnvVar = "AIRACCOON_HARNESS_REGENERATE_GOLDEN";
 
     /// <summary>
-    ///     Gate: a fresh reference run must reproduce the committed golden top-k exactly (same
-    ///     hashes in the same order, rankings within 1e-6). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
-    ///     (or run scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
+    ///     Gate: a fresh reference run must reproduce the committed golden top-k within the
+    ///     portable band (ADR-0015). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1 (or run
+    ///     scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
     /// </summary>
     [Fact]
     public async Task GoldenFile_MatchesFreshReferenceRun()
     {
-        // The golden is an osx-arm64 artifact: its hashes and rankings come from that host's
-        // ONNX output (docs/work/archive/2026-08-03-native-memory-plan.md). Comparing it on
-        // another platform reports every row as different — 680 of them on ubuntu — which is a
-        // platform fact, not a regression. Skip loudly rather than leave the only unfiltered
-        // gate permanently red; the structural check below still runs everywhere.
-        var diagnosticOnly = !OperatingSystem.IsMacOS() ||
-                             RuntimeInformation.ProcessArchitecture != Architecture.Arm64;
-
         var run = await ReferenceRunCache.GetAsync();
         var goldenPath = Path.Combine(ReferenceAssets.AssetsDirectory, GoldenFile.FileName);
         var regenerate = Environment.GetEnvironmentVariable(RegenerateEnvVar) == "1";
@@ -42,19 +33,6 @@ public sealed class GoldenFileTests
         golden.Queries.Count.ShouldBe(run.ResultsByQuery.Count);
 
         var differences = golden.Differences(run);
-        if (diagnosticOnly)
-        {
-            Console.WriteLine($"GOLDENDIAG host={RuntimeInformation.RuntimeIdentifier} count={differences.Count}");
-            Console.WriteLine($"GOLDENDIAG engine golden={golden.Engine} run={run.Engine}");
-            Console.WriteLine($"GOLDENDIAG model golden={golden.Model} run={run.Model}");
-            foreach (var d in differences.Take(12))
-            {
-                Console.WriteLine("GOLDENDIAG " + d);
-            }
-
-            Assert.Skip("diagnostic run: see GOLDENDIAG lines");
-        }
-
         differences.ShouldBeEmpty(
             "the committed golden reference is stale; regenerate with scripts/regenerate-retrieval-golden.py");
     }

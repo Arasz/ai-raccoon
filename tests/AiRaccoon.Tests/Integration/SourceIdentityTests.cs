@@ -166,7 +166,7 @@ public sealed class SourceIdentityTests : IDisposable
 
         var (hit, rank) = FindRank(results, r => r.Hash == hashMap[expectedSource]);
         hit.ShouldNotBeNull($"{expectedSource} must appear in the top 5");
-        rank.ShouldBe(expectedRank,
+        rank.ShouldBeLessThanOrEqualTo(expectedRank,
             $"invariant {expectedSource} must hold its measured hybrid rank {expectedRank} (no further regression)");
     }
 

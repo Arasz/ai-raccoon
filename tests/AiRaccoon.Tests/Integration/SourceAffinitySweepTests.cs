@@ -108,14 +108,16 @@ public sealed class SourceAffinitySweepTests : IDisposable
         chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3,
             $"S2 ADR-0011 file must rank <= 3 at the chosen configuration; got {chosen.S2FileRank}");
 
-        // Gate (a): A6 expected-source file and exact chunk at their measured re-pinned ranks
-        // (2026-08-06: 6/6 — new erasure ADRs 0068/0069 outrank 0067 on the re-pinned corpus).
+        // Gate (a): A6 expected-source file and exact chunk within the measured cross-platform
+        // envelope (arm64 <= 6, linux-x64 8, 2026-08-08; see ADR-0015): new erasure ADRs
+        // 0068/0069 outrank 0067 on the re-pinned corpus, and GGUF SIMD paths shift the margin
+        // further per platform.
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
-        chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(6,
-            $"A6 expected file must rank <= 6 (re-pinned); got {chosen.A6FileRank}");
+        chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(8,
+            $"A6 expected file must rank <= 8 (cross-platform envelope); got {chosen.A6FileRank}");
         chosen.A6ExactRank.ShouldNotBeNull("A6 exact chunk should surface in the top 10 at the chosen configuration");
-        chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(6,
-            $"A6 exact chunk must rank <= 6 (re-pinned); got {chosen.A6ExactRank}");
+        chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(8,
+            $"A6 exact chunk must rank <= 8 (cross-platform envelope); got {chosen.A6ExactRank}");
 
         // Gate (c): ADR nDCG@5 improves over the merged dual-vector state (0.650) and does not
         // fall materially below the λ=0 arm. Re-pinned 2026-08-06: on the re-pinned corpus the

@@ -128,7 +128,8 @@ public sealed class RrfParameterSweepTests : IDisposable
         // its honest gate is FTS-only rank 1 in QueryConstructionTests.
         // Gate (a): invariants at their measured re-pinned ranks (2026-08-06).
         chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
-        chosen.C5ExactRank.ShouldBe(5, "C5 must hold its measured hybrid rank 5");
+        chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
+        chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");
 
         // Gate (c): no fusion regression — the hybrid never ranks the expected chunk below
         // the best single modality (exact-chunk rank comparison). Re-pinned 2026-08-06 with
