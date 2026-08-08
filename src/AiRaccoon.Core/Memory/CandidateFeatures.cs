@@ -77,7 +77,10 @@ internal static partial class CandidateFeatureExtractor
         var datedWindow = v.Length > DatedFactWindowChars ? v[..DatedFactWindowChars] : v;
 
         var stripped = v.TrimStart();
-        var firstChar = stripped.Length > 0 ? stripped[0] : '\0';
+        // Leading markdown emphasis/quote markup must not hide a lowercase mid-sentence opener
+        // behind it (e.g. "**minscore is measured..." is a fragment, not a sentence start).
+        var midSentenceHead = v.TrimStart('*', '#', '>', '-', '–', ' ', '\t', '\n');
+        var midSentenceChar = midSentenceHead.Length > 0 ? midSentenceHead[0] : '\0';
 
         return new CandidateFeatures(
             RuleDensity: Per100(RuleLanguage().Matches(v).Count, nWords),
@@ -93,7 +96,7 @@ internal static partial class CandidateFeatureExtractor
             Frontmatter: Frontmatter().IsMatch(v.TrimStart()),
             NChars: v.Length,
             NWords: nWords,
-            MidSentence: char.IsLower(firstChar) || firstChar is ')' or ',' or ';',
+            MidSentence: char.IsLower(midSentenceChar) || midSentenceChar is ')' or ',' or ';',
             HeadingStart: stripped.StartsWith('#'),
             ForeignProjects: others.Count(id =>
                 AliasesFor(id).Any(alias => v.Contains(alias, StringComparison.OrdinalIgnoreCase))),
