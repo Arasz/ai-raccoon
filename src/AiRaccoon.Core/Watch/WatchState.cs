@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace AiRaccoon.Core.Watch;
 
-/// <summary>Live watch status states (D4).</summary>
+/// <summary>Live watch status states (docs/plans/file-watcher-implementation.md D4).</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum WatchState
 {
