@@ -127,6 +127,24 @@ shape, and repopulated from `entries` (ADR 0003).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
 
+### Schema versioning
+
+`MemorySchema.EnsureAsync` reads `PRAGMA user_version` before the DDL runs and walks an
+ordered ladder (`MigrateToV1Async` → `MigrateToV2Async` → `MigrateToV3Async`) up to
+`CurrentVersion` (currently 3) on every read-write open (ADR 0011). A fresh bank is
+stamped at the current version directly and never walks the ladder; a stamped bank at the
+current version skips it entirely.
+
+The ladder only ever moves a bank forward. If the stored version is *ahead of* the
+binary's own `CurrentVersion` — an older binary opening a bank a newer one already
+migrated — `EnsureAsync` refuses the open with `UnsupportedSchemaVersionException` rather
+than silently no-oping past the check, which is what let issue #200 write stale-shaped
+rows into a newer bank undetected. The fix is updating the binary; there is no downgrade
+path (ADR 0019).
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:220-240` (`CurrentVersion`,
+> the forward-version guard)
+
 ## Write path
 
 ```mermaid
@@ -471,8 +489,10 @@ stable — identical content written twice maps to the same logical path.
 
 Each modality list contributes `weight / (k + rank)` to a result's fused score.
 Default `k = 60`, default weights = 1:1. The fused scores are normalised to
-their maximum so the top result is always 1.0. Results below `minScore` (default
-0.7) are filtered out.
+their maximum so the top result is always 1.0, and results below `minScore`
+(default 0.7) are filtered out — but at the default `limit=20` the threshold
+cannot bite until past rank ~28, so `minScore` is measured inert at the shipped
+defaults rather than an active relevance control (see [ADR-0006](../adr/0006-rrf-parameter-optimization.md)).
 
 The first modality list that carries a result supplies the payload (so FTS5's
 `snippet()` wins when both modalities retrieve the same hash). An empty list
