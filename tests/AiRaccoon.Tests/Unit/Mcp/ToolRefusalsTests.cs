@@ -116,6 +116,16 @@ public sealed class ToolRefusalsTests : IDisposable
         ToolRefusals.PrefixFor(new BankKeyMismatchException("bank open failed")).ShouldBeNull();
     }
 
+    [Theory]
+    [InlineData("sync-network", LogLevel.Warning)]
+    [InlineData("sync-corrupt-file", LogLevel.Warning)]
+    [InlineData("path-outside-scope", LogLevel.Information)]
+    [InlineData("access-denied", LogLevel.Information)]
+    [InlineData("invalid-params", LogLevel.Information)]
+    [InlineData("confirm-required", LogLevel.Information)]
+    public void LevelFor_LogsInfrastructureFaultsAtWarning(string prefix, LogLevel expectedLevel) =>
+        ToolRefusals.LevelFor(prefix).ShouldBe(expectedLevel);
+
     /// <summary>
     ///     Doc/code drift guard, both directions: every prefix the reference doc's error-shapes
     ///     table row promises must exist in code, and every code-known prefix (mapped exception
