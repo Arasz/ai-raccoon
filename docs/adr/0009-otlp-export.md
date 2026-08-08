@@ -185,6 +185,29 @@ already exposes (endpoint, protocol, headers, timeout, per-signal overrides,
 > reported service; #107's actual goal — no more `unknown_service:<process>`
 > — is unaffected, since that goal never depended on honoring the override.
 
+> **2026-08-08 update (issue #181).** Traces silently never reached the collector in HTTP serve
+> mode, even though metrics did: `StartedHttpHost_AttachesATraceListener_SoToolCallsProduceSpans`
+> only proved `ActivitySource.StartActivity` returns non-null outside a real request — it never
+> ran inside one. Handling a real MCP tool call, ASP.NET Core's hosting layer creates its own
+> `Microsoft.AspNetCore.Hosting.HttpRequestIn` `Activity` per request — unrelated to and
+> unaffected by the "no ASP.NET/HTTP auto-instrumentation" non-goal above, since it is created
+> independent of any OTel listener — and that Activity becomes `Activity.Current`, the ambient
+> parent for every tool-call span. It is never recorded (`Recorded = false`). The SDK's default
+> `ParentBased(AlwaysOnSampler)` sampler's local-parent-not-sampled branch is `AlwaysOffSampler`,
+> so `ToolCallMetrics.ActivitySource.StartActivity` returns **null** for every tool call made
+> inside a real request — confirmed directly (`Activity.Current` logged as `HttpRequestIn`,
+> `Recorded=False`, and the returned Activity was `null`), not inferred from the OTLP payload's
+> absence alone.
+>
+> `OtlpExport.AddOtlpExport` now calls `.SetSampler(new AlwaysOnSampler())` on the tracing
+> builder. This corrects the "Configuration channel" 2026-08-07 update's claim above that
+> `OTEL_TRACES_SAMPLER`/`_ARG` reach the SDK through the restored `OTEL_*` config channel: an
+> explicit `.SetSampler(...)` call always wins over the SDK's own env-var-driven sampler
+> resolution, so those two variables no longer have any effect. That claim was never covered by
+> a test and does not survive this fix. Accepted because `AiRaccoon.MemoryTools` is the only
+> registered source and this app propagates no incoming distributed trace context — there is no
+> genuine remote-parent case for a configurable sampler to arbitrate.
+
 ### Which host paths get the exporter
 
 | Host path | Exporter wired? | Why |

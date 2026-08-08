@@ -34,6 +34,10 @@ internal static class OtlpExport
                     .AddMeter("System.Runtime")
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
+                    // ASP.NET Core's unrecorded per-request Activity becomes the local parent for
+                    // every tool-call span; the SDK's default ParentBased sampler drops those
+                    // (issue #181, ADR 0009 amendment 2026-08-08).
+                    .SetSampler(new AlwaysOnSampler())
                     .AddSource("AiRaccoon.MemoryTools")
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
 
