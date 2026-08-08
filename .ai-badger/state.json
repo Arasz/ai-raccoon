@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-07T21:15:00Z",
+  "lastUpdated": "2026-08-08T08:20:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "continue-resolving",
+      "title": "Resolve the open post-integration-review issues (#115 #117 #118 #119 #120 #121)",
+      "finished": "2026-08-08T08:20:00Z",
+      "pr": "128,129,130,131,132,133,134,136,140,141(sup),145,152 (+peer 137/139/143/144)",
+      "summary": "All six post-integration-review issues closed. Sync: pull-side settings clobber removed, push integrity on all three paths, corruption tests re-keyed on path identity, ADR-0014 (settings never sync). Promotion: counter drift fixed via snapshot-diff upsert in one immediate transaction, Volatile on utilization, CapacityInfo surfaced with fair-share invariant test, share-extract scores against all known projects (parameter deleted), score-overwrite ruling recorded (#135->#143 peer). Encryption: ToString redaction, seed zeroing, side-effect-free migrate probe, rekey-gate tests, real ssh key + second real PEM replaced with synthetic vectors, owner Bitwarden ids scrubbed from all tracked files. Architecture: unreachable extension hooks deleted (ADR-0013), Core/Common retired, SweepThreshold single home, PromotionMeta rename + ApiEnvelope move behind first-ever MCP outputSchema pin. Found+fixed main red twice: #130/#126 merge dropped a using (#131); four ingest tests predating deny-by-default (#141, superseded by peer). CI gate overhaul (#145): 324/1622 tests ran in no PR job, nightly red on every run ever; added build-slow, SpeedGateCoverageTests guard, portable retrieval bands ADR-0015 (5e-3 tolerance, rank ceilings, cross-platform envelope) - first-ever green retrieval contract on linux-x64. Manual sweep of all 22 tools on source-built server: found FK leak -> unknown-workspace typed error + silent-write-to-discarded-workspace fix (#152). Filed #147 #148 #150 #151 #153. Learned: nightly log first-failure masking hides duplicated pins; xUnit prints green summary after catastrophic crash; sweep tests rewrite tracked docs (day-long churn mystery)."
+    },
     {
       "id": "ai-rc-integration-review",
       "title": "Post-MoE integration review: 7-lane audit of everything since v1.1.2, 10 blockers fixed, release 1.2.0",
@@ -406,7 +413,7 @@
       "hasNotes": true
     }
   ],
-  "next": null,
+  "next": "airacimprovcont: MemoryExtensionHost removal (WI-9), WI-8 step 2 ingest, #147 #148 #150 #151 #153",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
