@@ -22,7 +22,7 @@ internal static partial class ToolRefusals
     internal static readonly IReadOnlyDictionary<Type, string> RefusalPrefixes = new Dictionary<Type, string>
     {
         [typeof(PathOutsideScopeException)] = "path-outside-scope",
-        [typeof(PathNotFound)] = "path-not-found",
+        [typeof(PathNotFoundException)] = "path-not-found",
         [typeof(UnknownWorkspaceException)] = "unknown-workspace",
         [typeof(WatchDisabledException)] = "watching-disabled",
         [typeof(SyncNotConfiguredException)] = "sync-not-configured",
@@ -34,12 +34,27 @@ internal static partial class ToolRefusals
         [typeof(ValidationException)] = "invalid-params"
     };
 
+    /// <summary>
+    ///     Wire prefixes thrown directly as a bare <see cref="McpException" /> message rather than
+    ///     mapped from an exception type here — throw sites: ToolGate.cs ("invalid-params"),
+    ///     MemoryTools.cs ("invalid-params"), ShareTools.cs ("invalid-params", "confirm-required"),
+    ///     PromotionTools.cs ("invalid-params"). Kept next to <see cref="RefusalPrefixes" /> so the
+    ///     doc-drift test's expected set stays code-derived rather than hand-duplicated.
+    /// </summary>
+    internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params", "confirm-required"];
+
+    /// <summary>Prefixes that are infrastructure faults (remote corruption, transport failure) rather than user mistakes; kept out of Information so log-based alerting still fires.</summary>
+    private static readonly HashSet<string> WarningPrefixes = ["sync-network", "sync-corrupt-file"];
+
     /// <summary>The wire prefix for a known refusal, or null when the exception is a genuine failure.</summary>
     internal static string? PrefixFor(Exception exception) => RefusalPrefixes.GetValueOrDefault(exception.GetType());
 
+    /// <summary>The log level for a refused prefix: <see cref="WarningPrefixes" /> log at Warning, everything else at Information.</summary>
+    internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
+
     /// <summary>
-    ///     The CallToolFilter: a protocol exception or a cancellation of the request token always
-    ///     rethrows; a mapped refusal or a bare <see cref="McpException" /> (whose message is already
+    ///     The CallToolFilter: a protocol exception or a cancellation always rethrows; a mapped
+    ///     refusal or a bare <see cref="McpException" /> (whose message is already
     ///     the intended client-facing text) becomes an error result instead; anything else rethrows
     ///     and stays fail-level.
     /// </summary>
@@ -61,21 +76,30 @@ internal static partial class ToolRefusals
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {
-                return Refused(request, $"{prefix}: {ex.Message}", ex);
+                return Refused(request, $"{prefix}: {ex.Message}", ex, LevelFor(prefix));
             }
             catch (McpException ex)
             {
-                return Refused(request, ex.Message, ex);
+                // Every prefix thrown directly as a bare McpException (invalid-params,
+                // confirm-required) is a user-input mistake, never an infrastructure fault.
+                return Refused(request, ex.Message, ex, LogLevel.Information);
             }
         };
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
-        Exception exception)
+        Exception exception, LogLevel level)
     {
         var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
         if (logger is not null)
         {
-            Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, message, exception);
+            if (level == LogLevel.Warning)
+            {
+                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, message, exception);
+            }
+            else
+            {
+                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, message, exception);
+            }
         }
 
         return new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = message }] };
@@ -85,5 +109,8 @@ internal static partial class ToolRefusals
     {
         [LoggerMessage(EventId = 910, Level = LogLevel.Information, Message = "\"{ToolName}\" refused: {Reason}")]
         public static partial void ToolRefused(ILogger logger, string toolName, string reason, Exception exception);
+
+        [LoggerMessage(EventId = 911, Level = LogLevel.Warning, Message = "\"{ToolName}\" refused: {Reason}")]
+        public static partial void ToolRefusedAtWarning(ILogger logger, string toolName, string reason, Exception exception);
     }
 }

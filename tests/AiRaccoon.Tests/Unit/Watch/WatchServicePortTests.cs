@@ -20,13 +20,13 @@ public sealed class WatchServicePortTests
 
     [Fact]
     public void PathNotFound_CarriesPathInMessage() =>
-        new PathNotFound("/repo").Message.ShouldContain("/repo");
+        new PathNotFoundException("/repo").Message.ShouldContain("/repo");
 
     [Fact]
     public void ErrorTypes_AreInvalidOperationExceptions()
     {
         new WatchDisabledException("acme").ShouldBeAssignableTo<InvalidOperationException>();
         new PathOutsideScopeException("/repo").ShouldBeAssignableTo<InvalidOperationException>();
-        new PathNotFound("/repo").ShouldBeAssignableTo<InvalidOperationException>();
+        new PathNotFoundException("/repo").ShouldBeAssignableTo<InvalidOperationException>();
     }
 }

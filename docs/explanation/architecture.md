@@ -530,7 +530,7 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
   Chunking/                 IChunker port, MarkdownChunker (pure splitter)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
-  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFound
+  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFoundException
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
@@ -544,7 +544,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
-  Sync/                     SyncService, S3CloudStore, FakeCloudStore
+  Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
   Chunking/                 TokenizerChunker (o200k_base)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService

@@ -130,14 +130,17 @@ public class MemoryToolsInstrumentationTests
         durations[0].Value.ShouldBeGreaterThanOrEqualTo(50.0);
     }
 
+    // SyncService now owns the IsConfigured decision (via NullCloudStore — see
+    // SyncServiceTests.MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured); this
+    // proves the tool's metrics wrapper still records an error when the service throws it.
     [Fact]
-    public async Task Sync_NotConfigured_PreCheck_RecordsError()
+    public async Task Sync_WhenServiceThrowsSyncNotConfigured_RecordsError()
     {
         var metrics = new ToolCallMetrics();
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
 
         var store = new SimpleFakeStore();
-        var tools = new SyncTools(new SimpleFakeSyncService(),
+        var tools = new SyncTools(new SimpleFakeSyncService { Exception = new SyncNotConfiguredException() },
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
             new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
 
@@ -277,9 +280,11 @@ public class MemoryToolsInstrumentationTests
         {
         }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
+        public Exception? Exception { get; set; }
+
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SyncResult(0, 0, 0));
+            Exception is not null ? throw Exception : Task.FromResult(new SyncResult(0, 0, 0));
     }
 
     private sealed class SimpleFakeCloudStore : ICloudStore

@@ -1,5 +1,7 @@
 # MoE panel — Expert A: Layering & module boundaries
 
+*Superseded 2026-08-08 by WI-8/WI-9/#151 shipping (PRs #161/#162/#163) — see 2026-08-07-moe-integrated-plan.md for current status.*
+
 Date: 2026-08-07
 Scope: the three-project split (`AiRaccoon.Core` / `AiRaccoon.Infrastructure` / `AiRaccoon`),
 port/adapter discipline, folder naming, cohesion/coupling, god types, over-engineering.

@@ -46,7 +46,7 @@ public sealed class WatchServiceTests
         stack.Enable();
         stack.AllowScope(dir.Path);
 
-        await Should.ThrowAsync<PathNotFound>(
+        await Should.ThrowAsync<PathNotFoundException>(
             () => stack.Service.AddAsync(Project, missing, TestContext.Current.CancellationToken));
     }
 

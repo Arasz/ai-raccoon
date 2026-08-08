@@ -1,5 +1,7 @@
 # MoE panel — Expert C: host composition, MCP surface & CLI
 
+*Superseded 2026-08-08 by WI-8/WI-9/#151 shipping (PRs #161/#162/#163) — see 2026-08-07-moe-integrated-plan.md for current status.*
+
 Reviewer lane: `src/AiRaccoon/Program.cs`, `Setup/`, `Tools/`, `Access/`, `Observability/`, `Prompts/`.
 Worktree: `.ai-badger/worktrees/full-project-review`. Read-only review; no production code touched.
 

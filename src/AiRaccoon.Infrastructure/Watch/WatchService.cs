@@ -27,7 +27,7 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
 
         if (!File.Exists(normalized) && !Directory.Exists(normalized))
         {
-            throw new PathNotFound(normalized);
+            throw new PathNotFoundException(normalized);
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();

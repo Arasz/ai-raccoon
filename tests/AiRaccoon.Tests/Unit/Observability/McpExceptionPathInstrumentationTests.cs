@@ -209,7 +209,7 @@ public class McpExceptionPathInstrumentationTests
         {
         }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string objectKey,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new SyncResult(0, 0, 0));
     }
