@@ -1,6 +1,7 @@
 # Worked case: Hermes ai-raccoon memory-provider plugin review (PR #61)
 
-Review scope: Python MemoryProvider plugin (`hermes-provider/ai-raccoon/`),
+Review scope: Python MemoryProvider plugin (`integrations/hermes/ai-raccoon/`, named
+`hermes-provider/ai-raccoon/` at review time),
 its tests, and the design doc, against the Hermes MemoryProvider ABC and the
 ai-raccoon MCP server. Verdict: APPROVE-WITH-CHANGES (1 MUST-FIX, 3
 SHOULD-FIX, rest NIT). This file keeps the reusable evidence patterns; the

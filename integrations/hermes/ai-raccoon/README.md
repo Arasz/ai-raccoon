@@ -6,14 +6,23 @@ MCP memory server. Implements the `MemoryProvider` ABC
 the AiRaccoon bank: per-turn prefetch, background sync, a system-prompt block, and
 mirroring of built-in memory writes.
 
-Design record: `docs/work/2026-08-06-hermes-ai-raccoon-provider-protocol.md` (in the
-ai-raccoon repo). Interface record: `docs/work/2026-08-06-hermes-memory-provider-interface.md`.
+Lives at `integrations/hermes/ai-raccoon/` in the ai-raccoon repo. Design record:
+`docs/work/archive/2026-08-06-hermes-ai-raccoon-provider-protocol.md`. Interface record:
+`docs/work/archive/2026-08-06-hermes-memory-provider-interface.md`.
 
 ## Install
 
+One-shot, from the repo root — installs, probes and activates:
+
+```bash
+python3 scripts/hermes-provider-setup.py
+```
+
+Or by hand:
+
 ```bash
 mkdir -p ~/.hermes/plugins
-cp -R ai-raccoon ~/.hermes/plugins/ai-raccoon
+cp -R integrations/hermes/ai-raccoon ~/.hermes/plugins/ai-raccoon
 hermes plugins list        # ai-raccoon should appear as a memory provider
 ```
 
@@ -96,12 +105,15 @@ provider emits both signals itself.
 
 ## Tests
 
+From the repo root (`integrations/hermes/tests` is not in `pyproject.toml`'s `testpaths`,
+so it needs an explicit path):
+
 ```bash
 # unit (no server needed)
-python3 -m pytest tests/
+python3 -m pytest integrations/hermes/tests
 
 # + integration: spawns a REAL ai-raccoon server against a temp bank
-python3 -m pytest tests/ --run-slow
+python3 -m pytest integrations/hermes/tests --run-slow
 ```
 
 Requires the hermes runtime venv (has `mcp` + `pytest`), e.g.

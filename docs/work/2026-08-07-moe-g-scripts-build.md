@@ -2,6 +2,10 @@
 
 Date: 2026-08-07 · Reviewer: Expert G (scripts/, hermes-provider/, pyproject.toml, build/packaging, CI/CD, secrets)
 
+> Path note (2026-08-08): `hermes-provider/` was renamed to `integrations/hermes/`. Every
+> `hermes-provider/...` path below reads as `integrations/hermes/...` today; the findings
+> themselves are unchanged. This record is left at its review-date wording on purpose.
+
 ## Verdict
 
 The Python side of this repo is in noticeably better shape than the average "scripts/ dir" — a

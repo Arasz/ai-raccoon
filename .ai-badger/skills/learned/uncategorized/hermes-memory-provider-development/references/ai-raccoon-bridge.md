@@ -1,8 +1,9 @@
 # AiRaccoon Hermes provider — implementation record (2026-08-06)
 
-Repo: `hermes-provider/ai-raccoon/` in Arasz/ai-raccoon (PR #61). Protocol design:
-`docs/work/2026-08-06-hermes-ai-raccoon-provider-protocol.md` (owner-ratified).
-Interface record: `docs/work/2026-08-06-hermes-memory-provider-interface.md`.
+Repo: `integrations/hermes/ai-raccoon/` in Arasz/ai-raccoon (PR #61; the directory was
+`hermes-provider/` until 2026-08-08). Protocol design:
+`docs/work/archive/2026-08-06-hermes-ai-raccoon-provider-protocol.md` (owner-ratified).
+Interface record: `docs/work/archive/2026-08-06-hermes-memory-provider-interface.md`.
 
 ## Ratified decisions
 
