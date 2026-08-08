@@ -87,6 +87,52 @@ public class SyncServiceTests : IDisposable
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
     }
 
+    /// <summary>An unconfigured sync must fail before VACUUMing the local bank — no wasted local work for a call that is guaranteed to fail (see SyncTools thinning, PR body).</summary>
+    [Fact]
+    public async Task MemorySync_WithoutConfiguredCloudStore_FailsBeforeTouchingTheLocalBank()
+    {
+        var openBankCalls = 0;
+        var service = new SyncService(new NullCloudStore(),
+            ct =>
+            {
+                openBankCalls++;
+                return CreateAndOpenAsync(BankPath, ct);
+            },
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await Should.ThrowAsync<SyncNotConfiguredException>(() =>
+            service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
+
+        openBankCalls.ShouldBe(0);
+    }
+
+    /// <summary>The default objectKey is the service's concern, not the caller's — matches the memory-{projectId}.db convention when the caller passes none.</summary>
+    [Fact]
+    public async Task MemorySync_WithNoObjectKey_DefaultsToMemoryDashProjectId()
+    {
+        var cloud = new FakeCloudStore();
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
+
+        var stored = await cloud.PullAsync("memory-acme.db", TestContext.Current.CancellationToken);
+        stored.ShouldNotBeNull("the default object key memory-acme.db must be the one actually pushed to");
+    }
+
     //
     // Scenario 2: sync pushes a consistent snapshot with conditional write + integrity check
     //

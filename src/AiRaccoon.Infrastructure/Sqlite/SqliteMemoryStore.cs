@@ -28,7 +28,11 @@ public sealed partial class SqliteMemoryStore(
     : IMemoryStore
 {
     private readonly EntryEmbedder _embedder = new(embeddings);
-    private readonly FileIngestor _ingestor = new(chunker, new EntryEmbedder(embeddings), timeProvider);
+
+    // A field initializer can't reference another instance field (CS0236), so the shared
+    // _embedder is wired in lazily on first use rather than duplicated via a second `new`.
+    private FileIngestor? _ingestorInstance;
+    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider);
 
     // The remote API key is a settings row (embedding.apiKey) — the single-channel
     // ruling (2026-08-04) moved it out of process memory and environment.
@@ -415,7 +419,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await _ingestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
+        return await Ingestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -426,7 +430,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await _ingestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
+        return await Ingestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
     }
 

@@ -35,14 +35,10 @@ public sealed class SyncTools(
         {
             await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
 
+            // Reads the configured objectKey override, if any — SyncService owns both the
+            // IsConfigured decision and the default objectKey naming convention now.
             var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
-            if (!syncSettings.IsConfigured)
-            {
-                throw new SyncNotConfiguredException();
-            }
-
-            var objectKey = syncSettings.ObjectKey ?? $"memory-{projectId}.db";
-            var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
+            var result = await sync.MemorySyncAsync(projectId, syncSettings.ObjectKey, cancellationToken);
             var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
             var envelope = await gate.WrapAsync(syncResult, cancellationToken);
             activity.RecordInvocation();

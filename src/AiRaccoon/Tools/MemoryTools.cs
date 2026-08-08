@@ -107,7 +107,7 @@ public sealed class MemoryTools(
                 "all" => SearchScope.All,
                 "project" => SearchScope.Project,
                 "shared" => SearchScope.Shared,
-                _ => throw new McpException($"Invalid scope '{scope}': expected all, project, or shared.")
+                _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
             };
 
             var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
