@@ -46,7 +46,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentNullException.ThrowIfNull(request);
 
         var context = ContextResolver.Resolve(request);
-        var bucket = BucketFor(context, request.ProjectId);
+        var bucket = EntryBucket.For(context, request.ProjectId);
 
         // memory_write carries no logical path; derive a stable one from the content itself so
         // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
@@ -501,7 +501,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
 
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
-        var bucket = BucketFor(resolvedContext, projectId);
+        var bucket = EntryBucket.For(resolvedContext, projectId);
         var bucketParams = new { path, scope = bucket.Scope, projectId = bucket.ProjectId, contextLabel = bucket.ContextLabel, workspaceId = bucket.WorkspaceId };
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
@@ -822,7 +822,7 @@ public sealed partial class SqliteMemoryStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
-        var bucket = BucketFor(resolvedContext, projectId);
+        var bucket = EntryBucket.For(resolvedContext, projectId);
         var (chunkMaxTokens, chunkOverlayTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
         var chunks = chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens);
@@ -965,27 +965,6 @@ public sealed partial class SqliteMemoryStore(
 
         return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
             new Dictionary<string, object?> { ["contextLabel"] = context, ["projectId"] = projectId });
-    }
-
-    private static (string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId) BucketFor(
-        string context, string projectId)
-    {
-        if (context == ContextNaming.SharedContext)
-        {
-            return ("shared", projectId, null, null);
-        }
-
-        if (context.StartsWith("project:", StringComparison.Ordinal))
-        {
-            return ("project", context["project:".Length..], null, null);
-        }
-
-        if (context.StartsWith("workspace:", StringComparison.Ordinal))
-        {
-            return (null, projectId, null, context["workspace:".Length..]);
-        }
-
-        return ("custom", projectId, context, null);
     }
 
     private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
