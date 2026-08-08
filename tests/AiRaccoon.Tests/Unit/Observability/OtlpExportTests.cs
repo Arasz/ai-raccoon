@@ -264,13 +264,13 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
     }
 
-    // service.name is a deliberate fixed product identity (PR #107), not an operator knob: now that
-    // McpServerSetup re-admits OTEL_* variables into config (this fix), the SDK's own environment
-    // AddService wins the resource merge over CreateDefault()'s own environment detector, so
-    // OTEL_SERVICE_NAME only takes effect because Resolve() reads it into state.ServiceName.
-    // Operators running several environments need this knob to tell them apart.
+    // service.name is a fixed product identity (ADR 0009 2026-08-07 update): OTEL_SERVICE_NAME
+    // reaches CreateDefault()'s own environment detector now that McpServerSetup re-admits OTEL_*
+    // variables into config, but OtlpExport's explicit AddService(DefaultServiceName) is registered
+    // later in the resource-builder chain and later-registered-wins, so the explicit call still
+    // wins the merge. This is ADR 0009's own cited proof test for that claim.
     [Fact]
-    public async Task HttpHost_ServiceName_HonoursOtelServiceNameWhenSet()
+    public async Task HttpHost_ServiceName_StaysAiRaccoon_EvenWhenOtelServiceNameIsSet()
     {
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
@@ -278,7 +278,7 @@ public sealed class OtlpExportTests : IDisposable
 
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
 
-        ServiceName(host.Services.GetRequiredService<TracerProvider>()).ShouldBe("probe-service");
+        ServiceName(host.Services.GetRequiredService<TracerProvider>()).ShouldBe("ai-raccoon");
     }
 
     [Fact]
@@ -299,7 +299,6 @@ public sealed class OtlpExportTests : IDisposable
     {
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
-        Environment.SetEnvironmentVariable(ServiceNameVar, "shared-name");
 
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
 

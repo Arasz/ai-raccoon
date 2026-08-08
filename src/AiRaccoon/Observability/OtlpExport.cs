@@ -24,9 +24,10 @@ internal static class OtlpExport
             }
 
             services.AddOpenTelemetry()
-                // Registered after CreateDefault()'s environment detector, so it wins the resource
-                // merge — hence resolving OTEL_SERVICE_NAME here rather than leaving it to the SDK.
-                .ConfigureResource(r => r.AddService(state.ServiceName))
+                // Fixed product identity (ADR 0009 2026-08-07 update): registered after
+                // CreateDefault()'s environment detector, so it wins the resource merge even
+                // though OTEL_SERVICE_NAME now reaches that detector too.
+                .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))
                 .WithMetrics(m => m
                     .AddMeter("AiRaccoon.MemoryTools")
                     .AddMeter("AiRaccoon.PromotionQueue")
