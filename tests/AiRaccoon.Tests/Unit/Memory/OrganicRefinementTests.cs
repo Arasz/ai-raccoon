@@ -4,42 +4,65 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports refine.py's organic-entry refinement layer (docs/adr/0018-promotion-scoring-v2.md):
-/// on the 86-entry organic-only backup slice, the un-refined archetype+evidence model alone scored
-/// +0.145 Spearman because status/turn-mirror dumps and test-count numbers read as measurements.</summary>
+/// <summary>Ports agentC/scorer.py's organic_adjust() and the organic-note branch of score_candidate()
+/// (see docs/adr/0018-promotion-scoring-v2.md v3 section). v3 change: routing (organic vs not) now lives
+/// entirely in ProvenanceArchetypeClassifier — OrganicRefinement.Apply is only ever called for the
+/// organic-note channel, so the old "non-organic entries pass through unchanged" guard is gone. The
+/// floor moved 2.2 -> 2.4 and the clamp range -2.8..1.5 -> -2.2..1.6; several new pushes/pulls (foreign
+/// subject, pointer/table/contents-index shapes, metadata headers, imperative checklists, directory
+/// READMEs, finding rows, superseded) came over from the doc-channel evidence.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class OrganicRefinementTests
 {
-    [Fact]
-    public void NonOrganicEntry_IsReturnedUnchanged()
-    {
-        var result = OrganicRefinement.Apply(2.5, sourceFile: "docs/x.md", value: "Done. Merged. Fixed.");
+    private static readonly string[] AllProjects = ["proj-alpha", "proj-beta"];
 
-        result.Score.ShouldBe(2.5);
-        result.Reasons.ShouldBeEmpty();
-    }
+    private static OrganicRefinementResult Apply(double baseScore, string value, string projectId = "proj-alpha") =>
+        OrganicRefinement.Apply(baseScore, value, projectId, AllProjects);
 
     [Fact]
     public void StatusOpener_InFirst80Chars_IsPenalized()
     {
-        var statusDump = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: "Done. Everything shipped to main, the full suite passed and CI is green across the board " +
-                   "with nothing left in flight for this rollout, and the on-call handoff notes are current.");
-        var plainFact = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: "The cache invalidation queue clears entries once their TTL expires, keeping memory " +
-                   "pressure predictable across long-running sessions without any operator input at all.");
+        var statusDump = Apply(2.30,
+            "Done. Everything shipped to main, the full suite passed and CI is green across the board " +
+            "with nothing left in flight for this rollout, and the on-call handoff notes are current.");
+        var plainFact = Apply(2.30,
+            "The cache invalidation queue clears entries once their TTL expires, keeping memory " +
+            "pressure predictable across long-running sessions without any operator input at all.");
 
         statusDump.Reasons.ShouldContain("status-opener");
         statusDump.Score.ShouldBeLessThan(plainFact.Score);
     }
 
+    /// <summary>v3: the opener check strips leading markdown decoration before taking the 80-char head.</summary>
+    [Fact]
+    public void StatusOpener_BehindMarkdownDecoration_IsStillDetected()
+    {
+        var decorated = Apply(2.30,
+            "** - Done. Everything shipped to main, the full suite passed and CI is green across the " +
+            "board with nothing left in flight for this rollout, and the handoff notes are current.");
+
+        decorated.Reasons.ShouldContain("status-opener");
+    }
+
+    /// <summary>v3: a generic "<X> complete/done/closed/finished/delivered" opener is now recognized,
+    /// not just the earlier enumerated literal openers.</summary>
+    [Fact]
+    public void GenericCompleteOpener_IsRecognized()
+    {
+        var generic = Apply(2.30,
+            "Extension rollout finished: every downstream consumer now reads from the new endpoint and " +
+            "the old one is scheduled for removal once the last dependent service migrates over fully.");
+
+        generic.Reasons.ShouldContain("status-opener");
+    }
+
     [Fact]
     public void StatusVocabularyDensity_IsPenalized()
     {
-        var statusHeavy = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: "The branch was merged and pushed to origin/main; the pre-push gate chain and the full " +
-                   "suite passed, CI checks are green, and the work is handed over ready for review.");
+        var statusHeavy = Apply(2.30,
+            "The branch was merged and pushed to origin/main; the pre-push gate chain and the full " +
+            "suite passed, CI checks are green, and the work is handed over ready for review.");
 
         statusHeavy.Reasons.ShouldContain("status-vocabulary");
     }
@@ -47,9 +70,9 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void SecondPersonAddress_IsPenalized()
     {
-        var addressed = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: "As instructed, your branch is ready and you can merge it whenever the review finishes " +
-                   "since every check has already gone green on your behalf across the whole pipeline.");
+        var addressed = Apply(2.30,
+            "As instructed, your branch is ready and you can merge it whenever the review finishes " +
+            "since every check has already gone green on your behalf across the whole pipeline.");
 
         addressed.Reasons.ShouldContain("second-person");
     }
@@ -57,9 +80,9 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void TwoOrMoreCommitHashes_ArePenalized()
     {
-        var withHashes = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: "Cherry-picked a1b2c3d onto the release branch after rebasing past 9f8e7d6, then verified " +
-                   "the working tree matched the expected state before handing the branch back over.");
+        var withHashes = Apply(2.30,
+            "Cherry-picked a1b2c3d onto the release branch after rebasing past 9f8e7d6, then verified " +
+            "the working tree matched the expected state before handing the branch back over.");
 
         withHashes.Reasons.ShouldContain("commit-hashes");
     }
@@ -67,12 +90,12 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void TestCountNumbers_AreExcludedFromMeasuredEvidence()
     {
-        var testCountsOnly = OrganicRefinement.Apply(0.45, sourceFile: null,
-            value: "Ran the full suite: 174 passed, 0 failed, 0 skipped, exit 0. All checks are green and " +
-                   "the run is reproducible across machines whenever CI happens to re-trigger the job.");
-        var realMeasurement = OrganicRefinement.Apply(0.45, sourceFile: null,
-            value: "Wall time dropped from 640ms to 210ms after the change, a measured 3x improvement that " +
-                   "held steady across five separate machines when the benchmark was re-run each time.");
+        var testCountsOnly = Apply(0.45,
+            "Ran the full suite: 174 passed, 0 failed, 0 skipped, exit 0. All checks are green and " +
+            "the run is reproducible across machines whenever CI happens to re-trigger the job.");
+        var realMeasurement = Apply(0.45,
+            "Wall time dropped from 640ms to 210ms after the change, a measured 3x improvement that " +
+            "held steady across five separate machines when the benchmark was re-run each time.");
 
         testCountsOnly.Reasons.ShouldNotContain("real-measurements");
         realMeasurement.Reasons.ShouldContain("real-measurements");
@@ -81,9 +104,9 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void DurableFactLanguage_IsRewarded()
     {
-        var durable = OrganicRefinement.Apply(1.0, sourceFile: null,
-            value: "[facts] The retry queue must never process more than one message per worker at a time; " +
-                   "this is a contract the dispatcher relies on and its precedence over batching is by design.");
+        var durable = Apply(1.0,
+            "[facts] The retry queue must never process more than one message per worker at a time; " +
+            "this is a contract the dispatcher relies on and its precedence over batching is by design.");
 
         durable.Reasons.ShouldContain("durable-fact-language");
     }
@@ -91,36 +114,95 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void DatedFactFraming_NearTheStart_IsRewarded()
     {
-        var dated = OrganicRefinement.Apply(1.0, sourceFile: null,
-            value: "(2026-05-01): the retry queue caps concurrent workers at one per partition, a limit " +
-                   "that has held since the queue was first introduced and has never needed to change.");
-        var undated = OrganicRefinement.Apply(1.0, sourceFile: null,
-            value: "The retry queue caps concurrent workers at one per partition, a limit that has held " +
-                   "since the queue was first introduced and has never needed to change since then.");
+        var dated = Apply(1.0,
+            "(2026-05-01): the retry queue caps concurrent workers at one per partition, a limit " +
+            "that has held since the queue was first introduced and has never needed to change.");
+        var undated = Apply(1.0,
+            "The retry queue caps concurrent workers at one per partition, a limit that has held " +
+            "since the queue was first introduced and has never needed to change since then.");
 
         dated.Reasons.ShouldContain("dated-fact");
         dated.Score.ShouldBeGreaterThan(undated.Score);
     }
 
     [Fact]
-    public void ShortDefinitionalFact_WithDurableMarkersAndLittleStatus_FloorsAtTwoPointTwo()
+    public void ForeignProjectSubject_IsRewarded()
     {
-        var result = OrganicRefinement.Apply(0.45, sourceFile: null,
-            value: "The retry queue must never exceed one in-flight message per partition, by design.");
+        var foreign = Apply(1.0,
+            "proj-beta's retry queue caps concurrent workers at one per partition, a limit that has " +
+            "held since it was introduced and has never needed to change across any release since.",
+            projectId: "proj-alpha");
+
+        foreign.Reasons.ShouldContain("foreign-subject");
+    }
+
+    [Fact]
+    public void PointerShapedOrganicWrite_IsPenalized()
+    {
+        var pointerHeavy = Apply(2.30,
+            "See [a](docs/a.md), [b](docs/b.md) and [c](docs/c.md) for the full eviction policy " +
+            "write-up; the summary here is intentionally short and just names the three documents.");
+
+        pointerHeavy.Reasons.ShouldContain("pointer-density");
+    }
+
+    [Fact]
+    public void ContentsIndexHeading_IsPenalized()
+    {
+        var contents = Apply(2.30,
+            "## Contents\nThis chunk is a table of contents heading for a longer document, not a " +
+            "standalone fact, and it should not be promoted as if it stated something durable at all.");
+
+        contents.Reasons.ShouldContain("contents-index");
+    }
+
+    [Fact]
+    public void MetadataHeaderBlock_IsPenalized()
+    {
+        var metaHeavy = Apply(2.30,
+            "**Task:** cache sweep\nThe sweep compares five eviction policies against the same replay " +
+            "trace and records the hit rate and CPU cost of each one across the full run for review.");
+
+        metaHeavy.Reasons.ShouldContain("metadata-header");
+    }
+
+    [Fact]
+    public void DirectoryReadmeHeading_IsPenalized()
+    {
+        var dirReadme = Apply(2.30,
+            "# cache/\nThis directory holds the eviction policy implementations and their accompanying " +
+            "unit tests, organized one file per policy so each can be reviewed independently over time.");
+
+        dirReadme.Reasons.ShouldContain("directory-readme");
+    }
+
+    [Fact]
+    public void SupersededMarkers_ArePenalized()
+    {
+        var superseded = Apply(2.30,
+            "This guidance was superseded by the 2026-05 sweep; the historical note below no longer " +
+            "applies to the current cache layer and is kept only for archival context going forward.");
+
+        superseded.Reasons.ShouldContain("superseded");
+    }
+
+    [Fact]
+    public void ShortDefinitionalFact_WithDurableMarkersAndLittleStatus_FloorsAtTwoPointFour()
+    {
+        var result = Apply(0.45, "The retry queue must never exceed one in-flight message per partition, by design.");
 
         result.Reasons.ShouldContain("short-definitional-floor");
-        result.Score.ShouldBeGreaterThanOrEqualTo(2.2);
+        result.Score.ShouldBeGreaterThanOrEqualTo(2.4);
     }
 
     [Fact]
     public void Delta_IsClampedToTheDocumentedRange()
     {
-        var veryNegative = OrganicRefinement.Apply(3.45, sourceFile: null,
-            value: string.Concat(Enumerable.Repeat(
-                "Done. Merged. Pushed to origin/main. Your branch passed, exit 0, CI checks green. " +
-                "as instructed, per your request, waiting on the gate chain, in flight, worktree. ", 10)));
+        var veryNegative = Apply(2.30, string.Concat(Enumerable.Repeat(
+            "Done. Merged. Pushed to origin/main. Your branch passed, exit 0, CI checks green. " +
+            "as instructed, per your request, waiting on the gate chain, in flight, worktree. ", 10)));
 
-        // Delta is clamped to [-2.8, 1.5]; base (3.45) + -2.8 = 0.65 at worst, before the final [0,4] clamp.
+        // Delta clamps to [-2.2, 1.6]; base (2.30) + -2.2 = 0.10 at worst, before the final [0,4] clamp.
         veryNegative.Score.ShouldBeGreaterThanOrEqualTo(0.0);
     }
 }

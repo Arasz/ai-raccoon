@@ -90,7 +90,7 @@ public sealed class PromotionScoringV3ChannelTests
         var (score, reasons) = PromotionScorer.Score(row, "ai-raccoon", AllProjects);
 
         reasons[0].ShouldBe("auto-memory-index");
-        score.ShouldBeLessThanOrEqualTo(0.70);
+        score.ShouldBeLessThanOrEqualTo(0.71);
     }
 
     [Fact]

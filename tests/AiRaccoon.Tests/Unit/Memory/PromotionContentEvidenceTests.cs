@@ -4,9 +4,10 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentB/scorer.py's features()/score_candidate() content-shape adjustment
-/// (see docs/adr/0018-promotion-scoring-v2.md). The archetype passed in only matters for the
-/// doc-index/turn-mirror positive-evidence cap.</summary>
+/// <summary>Ports agentC/scorer.py's doc_adjust() (see docs/adr/0018-promotion-scoring-v2.md v3 section).
+/// v3 change: the recency/access-count bonus is gone (agentC's doc_adjust never referenced it) — content
+/// evidence is shape-only now. The doc-index/turn-mirror evidence cap is gone too: those channels are
+/// hard-noise in v3 and never reach Evaluate() at all (see PromotionScorer).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionContentEvidenceTests
@@ -14,8 +15,8 @@ public sealed class PromotionContentEvidenceTests
     private static readonly string[] AllProjects = ["proj-alpha", "proj-beta", "proj-gamma"];
 
     private static ContentEvidence Evaluate(string value, ProvenanceArchetype archetype = ProvenanceArchetype.WorkNote,
-        string projectId = "proj-alpha", int accessCount = 0) =>
-        PromotionContentEvidence.Evaluate(value, archetype, projectId, AllProjects, accessCount);
+        string projectId = "proj-alpha") =>
+        PromotionContentEvidence.Evaluate(value, archetype, projectId, AllProjects);
 
     [Fact]
     public void GeneralizableRuleLanguage_FiresPositiveAdjustment_WithReason()
@@ -27,6 +28,17 @@ public sealed class PromotionContentEvidenceTests
         withRule.Reasons.ShouldContain("rule-language");
     }
 
+    /// <summary>v3 change: "I cannot" / "we cannot" is first-person uncertainty, not a contract.</summary>
+    [Fact]
+    public void FirstPersonCannot_DoesNotCountAsRuleLanguage()
+    {
+        var firstPerson = Evaluate("I cannot promise this will hold under load, so treat it as a guess for now.");
+        var thirdPerson = Evaluate("The service cannot exceed its configured memory budget under any load.");
+
+        firstPerson.Reasons.ShouldNotContain("rule-language");
+        thirdPerson.Reasons.ShouldContain("rule-language");
+    }
+
     [Fact]
     public void MeasuredNumbersWithUnits_RequireBothTheWordAndTheUnit()
     {
@@ -35,6 +47,17 @@ public sealed class PromotionContentEvidenceTests
 
         withBoth.Reasons.ShouldContain("measured-values");
         numbersOnly.Reasons.ShouldNotContain("measured-values");
+    }
+
+    /// <summary>v3 addition: a durable rule backed by a verified measurement gets a combo bonus.</summary>
+    [Fact]
+    public void VerifiedMeasurementWithRuleLanguage_GetsAContractBonus()
+    {
+        var combo = Evaluate("Measured and verified: the queue must never exceed 640ms p95, by design.");
+        var ruleOnly = Evaluate("The queue must never exceed a reasonable latency budget, by design, always.");
+
+        combo.Reasons.ShouldContain("verified-contract");
+        ruleOnly.Reasons.ShouldNotContain("verified-contract");
     }
 
     [Fact]
@@ -72,23 +95,6 @@ public sealed class PromotionContentEvidenceTests
     }
 
     [Fact]
-    public void AccessCount_AddsLogScaledBonus_Saturating()
-    {
-        const string text = "plain content with no particular shape to it at all here.";
-        var unaccessed = Evaluate(text, accessCount: 0);
-        var accessedFew = Evaluate(text, accessCount: 2);
-        var accessedMany = Evaluate(text, accessCount: 500);
-        var accessedEvenMore = Evaluate(text, accessCount: 5000);
-
-        unaccessed.Reasons.ShouldNotContain("accessed");
-        accessedFew.Reasons.ShouldContain("accessed");
-        accessedFew.Adjustment.ShouldBeGreaterThan(unaccessed.Adjustment);
-        accessedMany.Adjustment.ShouldBeGreaterThan(accessedFew.Adjustment);
-        // saturating: two large-but-different access counts land on the same clamped bonus.
-        accessedMany.Adjustment.ShouldBe(accessedEvenMore.Adjustment);
-    }
-
-    [Fact]
     public void PointerDensity_TableAndLinkHeavyChunk_IsPenalized()
     {
         var pointerHeavy = Evaluate(
@@ -122,6 +128,40 @@ public sealed class PromotionContentEvidenceTests
     }
 
     [Fact]
+    public void FirstPersonNarrative_IsPenalized()
+    {
+        var narrative = Evaluate(
+            "I spent the afternoon reading through my notes on the eviction code before I made any changes, " +
+            "and I am still not sure my read of the shared lock is correct, so I left it for me to revisit.");
+        var thirdPerson = Evaluate(
+            "The afternoon went into reading through the eviction code before any changes were made, and the " +
+            "read of the shared lock is not yet confirmed, so it was left for a later revisit by the team.");
+
+        narrative.Reasons.ShouldContain("first-person");
+        narrative.Adjustment.ShouldBeLessThan(thirdPerson.Adjustment);
+    }
+
+    [Fact]
+    public void MetadataHeaderBlock_IsPenalized()
+    {
+        var metaHeavy = Evaluate(
+            "**Task:** cache eviction sweep\n**Project:** ai-raccoon\n**Worktree:** feat/cache-sweep\n" +
+            "**Date:** 2026-05-01\n\nThe sweep compares five eviction policies against the same replay trace.");
+
+        metaHeavy.Reasons.ShouldContain("metadata-header");
+    }
+
+    [Fact]
+    public void ImperativeChecklist_IsPenalized()
+    {
+        var checklist = Evaluate(
+            "1. Review the eviction policy change\n2. Run the full benchmark suite\n3. Update the changelog " +
+            "entry\nOnce all three are done the rollout can proceed to the next environment in the sequence.");
+
+        checklist.Reasons.ShouldContain("imperative-checklist");
+    }
+
+    [Fact]
     public void SupersededMarkers_ArePenalized()
     {
         var superseded = Evaluate(
@@ -139,28 +179,18 @@ public sealed class PromotionContentEvidenceTests
         frontmatterOnly.Reasons.ShouldContain("frontmatter-only");
     }
 
+    /// <summary>v3 addition: plan-channel rule lift is capped low — plans quote gates as "must" without
+    /// the fact being durable.</summary>
     [Fact]
-    public void DocIndexArchetype_CapsPositiveAdjustment()
+    public void PlanArchetype_CapsRuleLanguageBonus()
     {
         var ruleLanguageText = "This is by design: never bypass the invalidation queue, it is a hard invariant " +
                                 "recorded here so nobody has to relearn it, and the rule is required reading.";
 
         var asWorkNote = Evaluate(ruleLanguageText, ProvenanceArchetype.WorkNote);
-        var asDocIndex = Evaluate(ruleLanguageText, ProvenanceArchetype.DocIndex);
+        var asPlan = Evaluate(ruleLanguageText, ProvenanceArchetype.Plan);
 
-        asDocIndex.Adjustment.ShouldBeLessThan(asWorkNote.Adjustment);
-        asDocIndex.Adjustment.ShouldBeLessThanOrEqualTo(0.15);
-    }
-
-    [Fact]
-    public void TurnMirrorArchetype_CapsPositiveAdjustment()
-    {
-        var ruleLanguageText = "This is by design: never bypass the invalidation queue, it is a hard invariant " +
-                                "recorded here so nobody has to relearn it, and the rule is required reading.";
-
-        var asTurnMirror = Evaluate(ruleLanguageText, ProvenanceArchetype.TurnMirror);
-
-        asTurnMirror.Adjustment.ShouldBeLessThanOrEqualTo(0.15);
+        asPlan.Adjustment.ShouldBeLessThan(asWorkNote.Adjustment);
     }
 
     [Fact]
@@ -169,7 +199,7 @@ public sealed class PromotionContentEvidenceTests
         var veryNegative = Evaluate(
             "AC: x. Gate: x. Effort: x. Impact: x. worktree Wave 1 Wave 2 dispatched dispatched " +
             "superseded historical note no longer applies was reversed PR #123 issue #456 " +
-            "| a | b |\n| c | d |\n[link](x.md) [link](y.md) [link](z.md)", accessCount: 0);
+            "| a | b |\n| c | d |\n[link](x.md) [link](y.md) [link](z.md)");
 
         veryNegative.Adjustment.ShouldBeGreaterThanOrEqualTo(-1.60);
     }
