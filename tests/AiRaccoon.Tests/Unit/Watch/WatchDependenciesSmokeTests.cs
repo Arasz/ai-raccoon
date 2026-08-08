@@ -9,10 +9,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>
-///     S5 DI smoke (the S6-forwarded half): the composition root resolves the catch-up and the
-///     event source, and hosts the watcher re-watch service.
-/// </summary>
+/// <summary>The composition root resolves the catch-up and the event source, and hosts the watcher re-watch service.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchDependenciesSmokeTests : IDisposable
@@ -39,11 +36,7 @@ public sealed class WatchDependenciesSmokeTests : IDisposable
         provider.GetServices<IHostedService>().OfType<WatchHostedService>().ShouldHaveSingleItem();
     }
 
-    /// <summary>
-    ///     The scan guard single-flights per (project, path) and the lease is one owner identity per
-    ///     process — both only hold if every consumer shares one instance. A transient registration
-    ///     leaves the guard guarding nothing and gives each consumer its own lease owner.
-    /// </summary>
+    /// <summary>A transient registration would give each consumer its own scan guard and lease owner, defeating the per-(project, path) single-flight guarantee.</summary>
     [Fact]
     public void RegisterMemoryServices_SharesOneScanGuard_AndOneScanLease()
     {

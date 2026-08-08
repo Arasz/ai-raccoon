@@ -104,7 +104,7 @@ public sealed class ReferenceAssetGateTests
     /// <summary>
     ///     Gate: the pinned reference assets must exist and verify after bootstrap. This FAILS
     ///     (never skips) when an asset is missing or mismatched — a false-green harness would let
-    ///     the P10 extension removal slip through without a reference oracle.
+    ///     the extension removal slip through without a reference oracle.
     /// </summary>
     [Fact]
     public async Task PinnedAssets_ArePresentAndShaVerified_AfterBootstrap()

@@ -66,8 +66,8 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     [Fact]
     public async Task Local_CustomModelPath_OverridesTheBundledModel()
     {
-        // A custom path — here a copy of the bundled model in a temp location — must be used
-        // instead of the bundled copy (FR-NM-3 scenario 2; see docs/work/features-native-memory/native-memory.feature).
+        // A custom model path overrides the bundled copy — FR-NM-3 scenario 2
+        // (docs/work/features-native-memory/native-memory.feature).
         var custom = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model",
             Guid.NewGuid().ToString("N"), BundledModel.ModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(custom)!);
