@@ -1,4 +1,4 @@
-using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Core.Embedding;
 using Shouldly;
 using Xunit;
 

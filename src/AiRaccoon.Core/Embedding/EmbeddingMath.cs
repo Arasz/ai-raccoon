@@ -1,11 +1,11 @@
-namespace AiRaccoon.Infrastructure.Embedding;
+namespace AiRaccoon.Core.Embedding;
 
 /// <summary>
 ///     Mean-pooling + L2-normalization over the ONNX model's last_hidden_state — the pooling
 ///     sentence-transformers applies to all-MiniLM-L6-v2 (FR-NM-3; see
 ///     docs/work/features-native-memory/native-memory.feature).
 /// </summary>
-internal static class EmbeddingMath
+public static class EmbeddingMath
 {
     public const int Dimension = 384;
 

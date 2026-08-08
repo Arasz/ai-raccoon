@@ -7,15 +7,17 @@ namespace AiRaccoon.Benchmarks;
 
 public static class Program
 {
+    private const string BenchmarkArg = "--bnech";
+
     public static int Main(string[] args)
     {
-        if (args.Contains("--bench"))
+        if (!args.Contains(BenchmarkArg))
         {
-            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run([.. args.Where(a => a != "--bench")]);
-            return 0;
+            return RunQualityComparison();
         }
 
-        return RunQualityComparison();
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run([.. args.Where(a => a != "--bench")]);
+        return 0;
     }
 
     /// <summary>
