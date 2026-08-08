@@ -5,6 +5,7 @@ template files, and assembles agent discovery documents.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -27,6 +28,57 @@ def first_sentence(text: str) -> str:
     """The first sentence of *text*, markdown emphasis and the closing full stop removed."""
     plain = text.replace("*", "").replace("`", "").strip()
     return plain.split(". ", 1)[0].rstrip(".").strip()
+
+
+def invariant_summary(text: str, name: str) -> str:
+    """One bullet: the rule's title, the sentence that states it, and where the rest lives.
+
+    Bodies used to be inlined whole and were over half of every agent file. The binding sentence
+    stays in the context an agent always has; the rationale moves to the copy under
+    `.ai-badger/invariants/`, which is a document in its own right.
+    """
+    lines = text.strip().splitlines()
+    title = lines[0].lstrip("#").strip() if lines and lines[0].startswith("#") else name
+    body = "\n".join(lines[1:]).strip()
+    opening = body.split("\n\n", maxsplit=1)[0].strip() if body else ""
+    if _leads_into_a_list(opening):
+        # The list *is* the rule — "Every release must:" alone says nothing. Keep it whole,
+        # indented under the bullet, rather than truncating at the colon.
+        head = f"- **{title}** — " + opening.replace("\n", "\n  ")
+    else:
+        rule = _rule_sentence(opening)
+        head = f"- **{title}**" + (f" — {rule}." if rule else "")
+    return f"{head}\n  → `.ai-badger/invariants/{name}.md`"
+
+
+def _rule_sentence(block: str) -> str:
+    """*block*'s first sentence on one line, code spans intact.
+
+    Unlike `first_sentence` this keeps backticks — a rule about `x ?? throw` reads as prose
+    without them — and flattens the source's hard wrapping, which would otherwise break out of
+    the bullet's indentation.
+    """
+    flat = " ".join(block.split())
+    end = re.search(r'(?<=[.!?])\s+(?=[A-Z`"*])', flat)
+    return (flat[:end.start()] if end else flat).rstrip(".")
+
+
+def _leads_into_a_list(block: str) -> bool:
+    """Whether *block*'s opening line introduces a list that carries the rule's content."""
+    rest = block.splitlines()[1:]
+    return any(re.match(r"\s*(?:[-*+]|\d+[.)])\s", line) for line in rest)
+
+
+def instruction_row(path: Path) -> str:
+    """One bullet naming *when* to read a scoped instruction file, not just that it exists.
+
+    The `applyTo` glob is the trigger; without it the row repeated the file's own basename.
+    """
+    trigger = path.name
+    if path.is_file():
+        trigger = frontmatter_fields(path.read_text(encoding="utf-8")).get(
+            "applyTo", path.name).strip("'\" ") or path.name
+    return f"- `{trigger}` → `.ai-badger/instructions/{path.name}`"
 
 
 def prose_only(text: str) -> str:
@@ -96,9 +148,7 @@ class TemplateRendering:
             "_None configured — work is not dispatched to a persona. Add entries to "
             "`personaRouting` in `.ai-badger/config.json` to route it._"
         )
-        instr_md = "\n".join(
-            f"- `{p.name}` → `.ai-badger/instructions/{p.name}`" for p in instr_paths
-        ) or "_None._"
+        instr_md = "\n".join(instruction_row(p) for p in instr_paths) or "_None._"
         return {
             "PROJECT_NAME": project.get("name", ""),
             "PROJECT_SUMMARY": project.get("summary", ""),

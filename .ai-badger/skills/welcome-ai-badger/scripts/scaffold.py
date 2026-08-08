@@ -220,7 +220,7 @@ def demote_headings(text: str, levels: int = 2) -> str:
 from scaffold_context import ScaffoldContext  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
 from hook_wiring import HookWiring, merge_hooks  # noqa: E402
-from template_rendering import TemplateRendering  # noqa: E402
+from template_rendering import TemplateRendering, invariant_summary  # noqa: E402
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
@@ -449,10 +449,10 @@ class Scaffolder:
             for item in self.items(stack, "invariants"):
                 dest = self.copy_file("invariants", stack, item, self.aib / "invariants")
                 text = dest.read_text(encoding="utf-8").strip()
-                rendered.append(demote_headings(text))
+                rendered.append(invariant_summary(text, item["name"]))
                 delivered.add(item["name"])
         append_rendered(rendered, self.aib / "invariants" / "local",
-                        delivered, demote_headings, self.notes)
+                        delivered, invariant_summary, self.notes)
         return rendered
 
     def scaffold_agent_instructions(self) -> None:
