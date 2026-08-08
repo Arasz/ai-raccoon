@@ -85,7 +85,8 @@ public sealed class MemoryTools(
         string? workspaceId = null,
         [Description("Maximum results (default 20).")]
         int limit = 20,
-        [Description("Minimum ranking threshold 0..1 (default 0.7).")]
+        [Description(
+            "Floor on the normalized 0..1 ranking (default 0.7). Scores are normalized so the top result is always 1.0, so at default limit this rarely filters anything — see ADR-0006.")]
         double minScore = 0.7,
         [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
         int rrfK = SearchQuery.DefaultRrfK,
