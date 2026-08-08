@@ -277,7 +277,13 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             return null;
         }
 
-        return 1 + results.Count(r => r.Ranking > expected.Ranking + GoldenFile.RankingTolerance);
+        var tolerantRank = 1 + results.Count(r => r.Ranking > expected.Ranking + GoldenFile.RankingTolerance);
+        var rawRank = results.FindIndex(r => r.Hash == expected.Hash) + 1;
+
+        // Bound total near-tie absorption to one position: the tolerant rank may forgive at
+        // most one real slide, never an unlimited run of adjacent near-ties (see PR body for
+        // the worked example).
+        return Math.Max(tolerantRank, rawRank - 1);
     }
 
     private async Task<Dictionary<string, int?>> FileRanksAsync(
