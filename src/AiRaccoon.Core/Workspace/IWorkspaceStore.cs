@@ -3,7 +3,7 @@ namespace AiRaccoon.Core.Workspace;
 /// <summary>
 ///     Persists workspace lifecycle records so started work is traceable: BeginAsync records an
 ///     Active row (created_at), CloseAsync marks it finished (status + closed_at). A workspace that
-///     was begun but never closed is recoverable — the record survives a crash (review feedback).
+///     was begun but never closed is recoverable — the record survives a crash.
 /// </summary>
 public interface IWorkspaceStore
 {
