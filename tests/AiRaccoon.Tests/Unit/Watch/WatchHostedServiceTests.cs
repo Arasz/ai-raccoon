@@ -223,9 +223,9 @@ public sealed class WatchHostedServiceTests
     }
 
     /// <summary>
-    ///     Defect 1: a remove and a re-add that both land between two reconcile polls must still
-    ///     start a fresh scan — the store shows the registration present at the next poll either
-    ///     way, so <c>_active</c> alone cannot tell "still running" from "removed, then re-added".
+    ///     A remove and a re-add that both land between two reconcile polls must still start a
+    ///     fresh scan — the store shows the registration present at the next poll either way, so
+    ///     <c>_active</c> alone cannot tell "still running" from "removed, then re-added".
     /// </summary>
     [Fact]
     public async Task Reconcile_RemoveThenReAddBetweenPolls_StartsANewScan()
@@ -253,8 +253,8 @@ public sealed class WatchHostedServiceTests
     }
 
     /// <summary>
-    ///     Defect 2: host shutdown must cancel a scan that is still walking the tree, not let it
-    ///     run to completion after the poll loop has already exited.
+    ///     Host shutdown must cancel a scan that is still walking the tree, not let it run to
+    ///     completion after the poll loop has already exited.
     /// </summary>
     [Fact]
     public async Task StopAsync_CancelsAnInFlightScan()
@@ -315,8 +315,10 @@ public sealed class WatchHostedServiceTests
         }
     }
 
-    /// <summary>R4 in the fix plan: without the once-per-process `_active` gate, a directory whose
-    /// watermark never advances re-scans on every 1s poll — the runaway incident in new clothes.</summary>
+    /// <summary>
+    ///     Without the once-per-process <c>_active</c> gate, a directory whose watermark never
+    ///     advances would full-scan once per second, forever (docs/plans/2026-08-07-watch-scan-runaway-fix.md).
+    /// </summary>
     [Fact]
     public async Task Reconcile_CalledTwice_EnqueuesOnlyOneScan()
     {
