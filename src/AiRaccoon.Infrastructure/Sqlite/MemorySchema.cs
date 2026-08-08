@@ -74,16 +74,16 @@ internal static class MemorySchema
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                -- Structure modality: heading-path vectors, rowid = entry id.
-                               -- Populated for the committed corpus (backfill since removed);
-                               -- the delete trigger keeps orphan rows out when an entry goes away.
+                               -- Written by the embed transition (EntryEmbedder, ADR-0004);
+                               -- the triggers below keep it consistent with entries.
                                CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
                                    DELETE FROM vec_structure WHERE rowid = OLD.id;
                                END;
 
-                               -- Dormant until a structure writer exists (WP5): no code path sets
-                               -- structure_embedding yet, so this never fires today. Mirrors vec_entries_au.
+                               -- Mirrors vec_entries_au: fires when the embed transition writes
+                               -- structure_embedding (MarkEmbedded/MarkStructure).
                                CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
                                WHEN NEW.structure_embedding IS NOT NULL
                                BEGIN

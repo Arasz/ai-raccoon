@@ -110,10 +110,12 @@ first). Capacity is enforced by `PromotionQueueService` against the
   with AND semantics, so the exact chunk ranks first.
 - `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
   for semantic search. Triggers sync it with `embed_state` changes.
-- `vec_structure` — vec0 virtual table over the Wave 6 heading-path embeddings
-  (rowid = entry id). Populated for the committed corpus (the Wave 6 backfill tool
-  was removed after the corpus regen); a delete trigger keeps orphans out. Banks
-  without structure vectors degrade to content-only fusion (docs/adr/0004).
+- `vec_structure` — vec0 virtual table over heading-path embeddings (rowid = entry
+  id). Populated by `EntryEmbedder` at the embed transition — it derives the
+  heading path per chunk and embeds distinct non-empty paths once per batch —
+  with a healing pass that backfills banks embedded before the writer existed;
+  insert, delete, and pending-clear triggers keep it in sync. Banks without
+  structure vectors degrade to content-only fusion (docs/adr/0004).
 - `idx_entries_scope_project` — the primary lookup path for context-filtered queries.
 - `idx_entries_hash` — content dedup and per-hash lookups.
 - `idx_entries_workspace` — workspace-scoped queries.
@@ -268,9 +270,11 @@ uniform weight, and `minScore` + `limit` are applied.
 
 Every result carries `SourceFile` (the original relative path, e.g.
 `docs/adr/0011-frontend-chassis-stack.md`), `ChunkIndex` (0-based position within the
-source), and `TotalChunks` — computed per source partition at query time, so per-chunk
-writes need no write-side bookkeeping. Rows without a source report `0`/`0` (ADR 0003,
-plan C §3 Wave 2b).
+source), and `TotalChunks` — persisted columns on `entries`, recomputed at the write
+paths that can change a source-file group's membership (ingest, write, share/promote,
+delete, sync merge) rather than per query
+(docs/plans/2026-08-08-search-knn-perf.md §3.3). Rows without a source report `0`/`0`
+(ADR 0003, plan C §3 Wave 2b).
 
 `memory_search` also accepts `contextLabel`: when set, the project scope additionally
 searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2e).

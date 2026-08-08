@@ -6,6 +6,15 @@ dead-schema fix folded in. Branch `task/perf-impr-part2-search-knn`. Target: 1-2
 Blueprint only — no production code is written by this document. Implementation goes to
 `dotnet-engineer`, test design to `test-engineer`.
 
+**Status: executed.** WP1-WP3 shipped in #180; WP4 (benchmark) and WP5 (structure
+writer) shipped in #197 (both merged into `main`). Measured end-to-end: hybrid search
+p50 57 ms → ~8-9 ms (issue #178 baseline vs `SearchLatencyBenchmark`, PR #197). WP6's
+deliberate re-pin proved unnecessary — the golden files (`reference-topk.json`,
+`manifest.json`) stayed byte-identical, so the structure modality coming alive stayed
+within ADR-0015's tolerance on the fixture corpus. WP7 (deferred FTS `snippet()`) was
+not needed to hit the target and is filed as
+[#198](https://github.com/Arasz/ai-raccoon/issues/198).
+
 ---
 
 ## 1. Evidence
