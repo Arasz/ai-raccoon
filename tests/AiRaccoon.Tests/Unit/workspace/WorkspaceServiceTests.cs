@@ -207,7 +207,7 @@ public class WorkspaceServiceTests
             service.DiscardAsync("acme", "ghost", TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Rescued from the deleted extension-host test suite (WI-9/ADR-0016): ConsolidateAsync
+    /// <summary>Rescued from the deleted extension-host test suite (ADR-0016): ConsolidateAsync
     /// deletes the workspace context through IMemoryStore, not around it.</summary>
     [Fact]
     public async Task ConsolidateAsync_DeletesTheWorkspaceContext_ThroughTheStore_NotAroundIt()
@@ -349,7 +349,7 @@ public class WorkspaceServiceTests
     }
 
     /// <summary>Minimal recording IMemoryStore backing one workspace entry, moved from the deleted
-    /// extension-host test suite (WI-9/ADR-0016).</summary>
+    /// extension-host test suite (ADR-0016).</summary>
     private sealed class WorkspaceableStore : IMemoryStore
     {
         public List<string> DeletedContexts { get; } = [];

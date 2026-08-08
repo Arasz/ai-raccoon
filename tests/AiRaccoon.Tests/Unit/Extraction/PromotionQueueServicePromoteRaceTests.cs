@@ -8,10 +8,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Extraction;
 
 /// <summary>
-///     PromoteAsync snapshots the queue, then drains and shares each row — a background loop and
-///     an agent's memory_promotion_discard both touch IPromotionQueueStore concurrently, so a row
-///     gone by drain time must never be shared. Fakes make the race deterministic instead of
-///     depending on real thread timing.
+///     PromoteAsync snapshots the queue, then drains and shares each row; a row gone by drain
+///     time — raced by a concurrent discard — must never be shared. Fakes make the race
+///     deterministic instead of depending on real thread timing.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

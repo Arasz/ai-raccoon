@@ -13,13 +13,13 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 /// <summary>
 ///     EncryptionKeyResolver: picks the key provider from the memory.db.source sidecar, read
 ///     fresh on every call — absent sidecar or "env" → env provider; "bitwarden" → bws fetch +
-///     derivation; corrupt sidecar → loud error (plan §5.2).
+///     derivation; corrupt sidecar → loud error.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class EncryptionKeyResolverTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…'
+    // pinned vector: seed 00 01 … 1e 1f → x'72d2…'
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
     private readonly string _dataRoot = TestData.CreateTempRoot();

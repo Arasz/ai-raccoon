@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Real-SQLite coverage for WatchStore.RemoveWatchAsync's fingerprint cascade (WP5): removing
+///     Real-SQLite coverage for WatchStore.RemoveWatchAsync's fingerprint cascade: removing
 ///     a watch must also delete its watch_files rows, scoped by project and by path prefix.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -108,9 +108,9 @@ public sealed class WatchStoreCascadeTests
     }
 
     /// <summary>
-    ///     R6 in the fix plan: the removal's cascade takes a write lock while the digest path is
-    ///     still writing. Pinned against a real held write transaction, because `busy_timeout` is
-    ///     only observable when the lock is genuinely held when the remove asks for it.
+    ///     The removal's cascade takes a write lock while the digest path is still writing.
+    ///     Pinned against a real held write transaction, because `busy_timeout` is only
+    ///     observable when the lock is genuinely held when the remove asks for it.
     /// </summary>
     [Fact]
     public async Task RemoveWatchAsync_WhileFingerprintsAreBeingWritten_Succeeds()

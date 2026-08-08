@@ -14,10 +14,7 @@ namespace AiRaccoon.Tests.Unit.storage;
 /// <summary>
 ///     docs/plans/2026-08-08-search-knn-perf.md §3.4/§3.5: the vector queries switched from
 ///     `WHERE {filter}` to a native vec0 KNN over the `ctx` partition key. These pin the
-///     properties that substitution relied on — each context shape still finds only its own
-///     rows, the shared partition never leaks project rows, and a k larger than the partition
-///     returns the whole partition rather than erroring — so the identity is provable
-///     independent of the golden-file suite.
+///     invariants that switch relied on: per-context isolation, no cross-scope leakage, and k larger than the partition returns the whole partition.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

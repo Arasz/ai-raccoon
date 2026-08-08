@@ -16,16 +16,15 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     encryption bitwarden/show/unset: bws presence with install guidance, interactive id
-///     collection (owner defaults), per-run-only token, reachability validation, rotation
-///     warning, rekey→sidecar→settings persist order, the amendment-1 env-key retry leg,
-///     and the unset rekey-back/recovery paths (plan §S3).
+///     encryption bitwarden/show/unset (docs/plans/encryption-bitwarden-implementation.md §S3): bws
+///     presence with install guidance, interactive id collection, per-run-only token, reachability
+///     validation, rotation warning, rekey→sidecar→settings persist order, and unset rekey-back/recovery.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigCommandsEncryptionTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…' (TestOpenSshKeyBuilder builds that seed).
+    // pinned vector: seed 00 01 … 1e 1f → x'72d2…' (TestOpenSshKeyBuilder builds that seed).
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
     // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what the migrate
@@ -127,7 +126,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    // ── encryption bitwarden: presence, collection, token, validation ──
 
     /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
     [Fact]
@@ -269,7 +267,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         File.Exists(SidecarPath()).ShouldBeFalse();
     }
 
-    // ── encryption bitwarden: bank rekey / self-heal / env-key retry leg ──
 
     [Fact]
     public async Task Bitwarden_EnvKeyedBank_RekeysToDerivedKey()
@@ -331,7 +328,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     [Fact]
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_ReportsEnvKeyedAndDeletesSidecar()
     {
-        // Amendment 1 (unset crash window): bank rekeyed back to env, sidecar never deleted.
+        // Unset crash-window fix (docs/plans/encryption-bitwarden-implementation.md, review
+        // amendments): bank rekeyed back to env; sidecar is deleted to stay consistent.
         var store = new FakeConfigStore();
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
@@ -380,7 +378,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    // ── encryption show ──
 
     [Fact]
     public async Task Show_NoRowsNoSidecar_PrintsEnvSource()
@@ -431,7 +428,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         stdout.ShouldContain("secretId: s-9");
     }
 
-    // ── encryption unset ──
 
     [Fact]
     public async Task Unset_NoBank_RemovesRowsAndSidecar()
@@ -569,7 +565,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    // ── constructor null-guards ──
 
     [Fact]
     public void Constructor_NullBank_ThrowsArgumentNullException()
@@ -635,7 +630,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         ex.ParamName.ShouldBe("logger");
     }
 
-    // ── encryption migrate: the ADR-0012 rekey verb ──
 
     /// <summary>The verb's gate: a legacy-keyed bank is rekeyed and its rows survive.</summary>
     [Fact]

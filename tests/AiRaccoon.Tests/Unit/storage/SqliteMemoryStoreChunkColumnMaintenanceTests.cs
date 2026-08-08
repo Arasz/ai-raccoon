@@ -16,9 +16,8 @@ namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
 ///     docs/plans/2026-08-08-search-knn-perf.md §3.3: chunk_index/total_chunks are recomputed at
-///     the mutation boundary (write/share/delete/sync-merge), not per query. The write paths that
-///     can change a (ctx, source_file) group must each carry the recompute; the ones that remove
-///     whole groups or whole contexts must not (there is nothing left to renumber).
+///     the mutation boundary (write/share/delete/sync-merge), not per query — paths that change a
+///     (ctx, source_file) group carry the recompute; paths that remove a whole group or context don't.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -53,10 +52,9 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     }
 
     /// <summary>
-    ///     The scoping trap (§3.3): a chunk shared into the shared context carries the same
-    ///     source_file as its project-scoped siblings. A recompute keyed off source_file alone —
-    ///     rather than (ctx, source_file) — would renumber the project group using the shared row
-    ///     too. This is the check that must be seen red before the fix.
+    ///     A chunk shared into the shared context carries the same source_file as its project-scoped
+    ///     siblings; a recompute keyed off source_file alone — rather than (ctx, source_file) — would
+    ///     incorrectly renumber the project group using the shared row too.
     /// </summary>
     [Fact]
     public async Task ShareAsync_OfOneChunk_NumbersItAloneInItsOwnContext_AndLeavesTheProjectGroupUntouched()
@@ -194,7 +192,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         }
     }
 
-    /// <summary>Property check (§3.3 acceptance): over a seeded multi-context bank, the persisted columns equal contiguous 0..n-1/n numbering per (ctx, source_file) group, for every context shape at once.</summary>
+    /// <summary>Property check: over a seeded multi-context bank, the persisted columns equal contiguous 0..n-1/n numbering per (ctx, source_file) group, for every context shape at once.</summary>
     [Fact]
     public async Task PersistedChunkColumns_MatchContiguousNumbering_AcrossEveryContextShapeAtOnce()
     {

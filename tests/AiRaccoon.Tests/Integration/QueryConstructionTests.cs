@@ -199,11 +199,8 @@ public sealed class QueryConstructionTests : IDisposable
         var hashMap = LoadHashMap();
 
         // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
-        // docs/work/2026-08-06-baseline-repin-new-corpus.md): A6 (file rank 6 at limit 10 —
-        // new erasure ADRs 0068/0069 outrank 0067) and C2 (hybrid collapse, no structure
-        // signal) no longer appear in the limit-5 hybrid set and are gated elsewhere
-        // (SourceAffinitySweepTests for A6 at limit 10; FTS-only rank 1 for C2 below).
-        // C5 measured 5 (secrets/config ADRs 0039/0012 outrank the invariant).
+        // docs/work/archive/2026-08-06-baseline-repin-new-corpus.md): A6 and C2 are dropped
+        // from this comparison; C5's baseline is re-pinned to 5.
         var wave0 = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["A1"] = 2, ["A2"] = 1, ["A3"] = 1, ["A4"] = 2, ["A5"] = 1,
@@ -221,21 +218,11 @@ public sealed class QueryConstructionTests : IDisposable
                 $"{id} must not regress vs Wave 0 rank {wave0Rank} (plan C gate a), now {rank}");
         }
 
-        // A1/A4 deviations (Wave 6 integration analysis; see docs/adr/0004-dual-vector-structure-signal.md):
-        // the dual-vector structure signal ranks equally-valid same-knowledge answers above the
-        // canonical ADR chunks —
-        // A1: frontend-architecture.md#3 is the evidence section ADR-0011 links to ("Full
-        // evidence: docs/frontend-architecture.md §3"); A4: behaviour-specification.md#3 states
-        // "The MCP server was deleted; see ADR-0060". Both expected files stay in the top-2
-        // and the section-targeting payoff (S2/S4 ≤ 3) plus C2/A6/A7 restorations hold.
-        // Bounded trade, documented in the Wave 6 gate amendment (see docs/plans/retrieval-improvement-c.md §3 Wave 6).
+        // A1/A4 rank flips are same-knowledge alternatives from the dual-vector structure
+        // signal, not regressions (docs/adr/0004-dual-vector-structure-signal.md).
 
-        // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
-        // docs/work/2026-08-06-baseline-repin-new-corpus.md): A6 measured file rank 6 (new
-        // erasure ADRs 0068/0069 outrank 0067) and C5 measured 5 (secrets/config ADRs 0039/0012
-        // outrank the invariant). C2 is dropped from the hybrid dict — its hybrid rank
-        // collapsed again (vector >100, RRF sinks FTS rank 1) because the re-pinned corpus has
-        // no structure signal; the FTS-only rank-1 check below is its honest gate.
+        // C2 is dropped from the hybrid dict after the corpus repin; the FTS-only rank-1 check
+        // below is its gate (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md).
         var c2 = queries.First(q => q.Id == "C2");
         var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);
         var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(hashMap, c2.ExpectedSource!));
