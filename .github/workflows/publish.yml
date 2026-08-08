@@ -43,8 +43,8 @@ jobs:
         # Pack step comment about why --no-build is wrong here).
         rid: [win-x64, win-arm64, osx-arm64, linux-x64, linux-arm64, linux-musl-x64]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
       - name: Verify the bundled embedding model
@@ -71,7 +71,7 @@ jobs:
         run: |
           VER=$(python3 -c 'import re;m=re.search(r"<PackageVersion>([^<]+)</PackageVersion>",open("src/AiRaccoon/AiRaccoon.csproj").read());print(m.group(1))')
           python3 scripts/patch-tool-shell.py artifacts/ai-raccoon.$VER.nupkg win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nupkg-${{ matrix.rid }}
           path: artifacts/*.nupkg
@@ -84,17 +84,17 @@ jobs:
       contents: read
       id-token: write # enable GitHub OIDC token issuance for this job
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
       # The publish job runs dotnet nuget push, so the SDK must be installed
       # explicitly: ubuntu-slim (unlike ubuntu-latest) has no preinstalled dotnet
       # on PATH. Mirrors the pack job's setup-dotnet step.
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
       - name: NuGet login (OIDC -> temp API key)
-        uses: NuGet/login@v1
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         id: login
         with:
           user: Arasz
