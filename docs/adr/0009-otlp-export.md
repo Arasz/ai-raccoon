@@ -259,7 +259,9 @@ Reasoning, in order of weight:
    real values from this bank) is reversible by dictionary in milliseconds.
    It would have defeated casual shoulder-reading and nothing else.
 3. **It would destroy the tag's purpose.** `project_id` exists on the span
-   so an operator can filter and group by project in the collector. An
+   and on the invocation counter so an operator can filter and group by
+   project in the collector — it is what makes "how many writes did project
+   X do" answerable at all. An
    opaque digest is unusable without an out-of-band mapping back to the
    real project — and keeping that mapping anywhere reintroduces the
    exposure it was meant to remove.
