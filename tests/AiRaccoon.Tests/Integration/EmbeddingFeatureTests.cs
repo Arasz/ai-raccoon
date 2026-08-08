@@ -233,7 +233,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Embedding_ChunkWithNoHeading_WritesNullStructureAndNoVecStructureRow()
+    public async Task Embedding_ChunkWithNoHeading_WritesTheEmptySentinelAndNoVecStructureRow()
     {
         await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
 
@@ -241,8 +241,10 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             new MemoryWriteRequest("acme", "Just a plain paragraph, no headings anywhere."),
             TestContext.Current.CancellationToken);
 
+        // '' (not NULL) marks "processed, no heading" — NULL is reserved for "not yet processed",
+        // which is what keeps a headingless row from pinning the heal candidate window forever.
         var row = await ReadRowAsync(entry.Hash);
-        row.HeadingPath.ShouldBeNull();
+        row.HeadingPath.ShouldBe("");
         row.StructureEmbedding.ShouldBeNull();
         (await CountVecStructureRowsAsync()).ShouldBe(0);
     }
@@ -265,6 +267,54 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         row.HeadingPath.ShouldBe("Deployment guide > Rollback");
         row.StructureEmbedding.ShouldNotBeNull();
         (await CountVecStructureRowsAsync()).ShouldBe(1);
+        (await CountVecStructureRowsAsync()).ShouldBe(await CountStructuredEntriesAsync("acme"),
+            "every structure_embedding row must have a matching vec_structure row after a heal");
+    }
+
+    [Fact]
+    public async Task Embedding_WriteWithHeading_IssuesExactlyOneGeneratorCall()
+    {
+        // A per-chunk ingest loop (FileIngestor) calls this same synchronous-write path once per
+        // chunk; two generator calls per row here means a 100-chunk document makes 200 inferences.
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
+            TestContext.Current.CancellationToken);
+
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "# Deployment guide\n\n## Rollback\n\nRestore the previous snapshot."),
+            TestContext.Current.CancellationToken);
+
+        _openAi.Requests.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Embedding_HealingPass_HeadinglessRowsLeaveTheCandidateWindowSoLaterRowsHeal()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
+            TestContext.Current.CancellationToken);
+
+        // The heal batch size is 32; the first 32 rows by id are headingless so they pin the
+        // window unless a processed headingless row leaves heading_path IS NULL behind.
+        for (var i = 0; i < 32; i++)
+        {
+            await _store.WriteAsync(new MemoryWriteRequest("acme", $"Plain fact number {i}, no headings anywhere."),
+                TestContext.Current.CancellationToken);
+        }
+
+        var headed = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "# Deployment guide\n\n## Rollback\n\nRestore the previous snapshot."),
+            TestContext.Current.CancellationToken);
+        await SimulatePreWp5ShapeForProjectAsync("acme");
+
+        // Bounded: two calls cover 33 candidates at a batch size of 32.
+        await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
+        await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
+
+        var row = await ReadRowAsync(headed.Hash);
+        row.HeadingPath.ShouldBe("Deployment guide > Rollback",
+            "a headed row past the first heal batch must still heal once the headingless rows ahead of it stop pinning the window");
+        row.StructureEmbedding.ShouldNotBeNull();
     }
 
     [Fact]
@@ -326,6 +376,15 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    private async Task<int> CountStructuredEntriesAsync(string projectId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE project_id = @projectId AND structure_embedding IS NOT NULL",
+                new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     /// <summary>Resets one entry to the pre-WP5 shape (content embedded, no structure) to test the healing pass.</summary>
     private async Task SimulatePreWp5ShapeAsync(string hash)
     {
@@ -340,6 +399,20 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await connection.ExecuteAsync(
             new CommandDefinition("DELETE FROM vec_structure WHERE rowid = @id", new { id },
                 cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Resets every row in a project to the pre-WP5 shape, for a multi-row healing test.</summary>
+    private async Task SimulatePreWp5ShapeForProjectAsync(string projectId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE entries SET heading_path = NULL, structure_embedding = NULL WHERE project_id = @projectId",
+                new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "DELETE FROM vec_structure WHERE rowid IN (SELECT id FROM entries WHERE project_id = @projectId)",
+                new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();

@@ -61,20 +61,22 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
 
         var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         var generator = embeddings.CreateGenerator(settings);
-        var result = await generator.GenerateAsync([value], cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
         var headingPath = HeadingPathParser.Parse(value);
-        var structure = await EmbedDistinctHeadingsAsync(generator, [headingPath], cancellationToken)
-            .ConfigureAwait(false);
-        structure.TryGetValue(headingPath, out var structureEmbedding);
+
+        // One generator call carrying both inputs when a heading exists (was two): a per-chunk
+        // ingest loop turns a second call per row into a doubled inference count per document.
+        var result = headingPath.Length > 0
+            ? await generator.GenerateAsync([value, headingPath], cancellationToken: cancellationToken)
+                .ConfigureAwait(false)
+            : await generator.GenerateAsync([value], cancellationToken: cancellationToken).ConfigureAwait(false);
+        var structureEmbedding = headingPath.Length > 0 ? EmbeddingBlob.ToBytes(result[1].Vector) : null;
 
         await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
                 new
                 {
                     id,
                     embedding = EmbeddingBlob.ToBytes(result[0].Vector),
-                    headingPath = headingPath.Length > 0 ? headingPath : null,
+                    headingPath,
                     structureEmbedding
                 }, cancellationToken))
             .ConfigureAwait(false);
@@ -104,9 +106,7 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
             processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
         }
 
-        // One-shot structure backfill (docs/plans/2026-08-08-search-knn-perf.md §3.6.3): heals
-        // rows embedded before the structure writer existed. Not part of the pending loop above —
-        // a row with no heading never leaves the candidate set, so looping over it would never end.
+        // Structure backfill (§3.6.3), one batch per call — see HealStructureAsync for why.
         await HealStructureAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
 
         return processed;
@@ -144,7 +144,7 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
                         {
                             id = batch[i].Id,
                             embedding = EmbeddingBlob.ToBytes(result[i].Vector),
-                            headingPath = headingPath.Length > 0 ? headingPath : null,
+                            headingPath,
                             structureEmbedding
                         },
                         cancellationToken))
@@ -156,12 +156,9 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
     }
 
     /// <summary>
-    ///     Backfills heading-path structure vectors for rows already embedded without one — a bank
-    ///     embedded before the structure writer existed, or a chunk whose heading only appears
-    ///     after a later re-chunk. Bounded to one batch and run once per call (§3.6.3): a chunk
-    ///     with no heading writes nothing and so never leaves <see cref="MemorySql.SelectStructureHealCandidates" />'s
-    ///     result set, so looping here would never terminate. The unhealed remainder is simply
-    ///     picked up again next call — cheap (a parse, no embed) since no heading means no generator call.
+    ///     Backfills structure vectors for rows embedded before the structure writer existed, one
+    ///     batch per call (§3.6.3); every candidate touched gets a real heading path or the ''
+    ///     sentinel, so it leaves the candidate set and the window advances across calls.
     /// </summary>
     private async Task HealStructureAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken)
@@ -179,19 +176,11 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
         var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
         var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
             .ConfigureAwait(false);
-        if (structure.Count == 0)
-        {
-            return;
-        }
 
         for (var i = 0; i < candidates.Count; i++)
         {
             var headingPath = headingPaths[i];
-            if (headingPath.Length == 0 || !structure.TryGetValue(headingPath, out var structureEmbedding))
-            {
-                continue;
-            }
-
+            structure.TryGetValue(headingPath, out var structureEmbedding);
             await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
                     new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
                 .ConfigureAwait(false);

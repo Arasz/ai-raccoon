@@ -74,10 +74,18 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         (await Scalar(connection, "SELECT count(*) FROM vec_entries")).ShouldBeGreaterThan(0,
             "content embedding pipeline must have run for the structure claim to mean anything");
-        (await Scalar(connection, "SELECT count(*) FROM entries WHERE structure_embedding IS NOT NULL"))
-            .ShouldBeGreaterThan(0, "ingested markdown chunks under headings must carry a structure embedding");
-        (await Scalar(connection, "SELECT count(*) FROM vec_structure")).ShouldBeGreaterThan(0,
+        var structuredEntries = await Scalar(connection,
+            "SELECT count(*) FROM entries WHERE structure_embedding IS NOT NULL");
+        var structureVectorRows = await Scalar(connection, "SELECT count(*) FROM vec_structure");
+        structuredEntries.ShouldBeGreaterThan(0, "ingested markdown chunks under headings must carry a structure embedding");
+        structureVectorRows.ShouldBeGreaterThan(0,
             "the structure modality searches vec_structure; empty means fusion has no structure signal");
+        structureVectorRows.ShouldBe(structuredEntries,
+            "every structure_embedding row must have a matching vec_structure row, or the trigger silently dropped one");
+
+        var totalEntries = await Scalar(connection, "SELECT count(*) FROM entries");
+        Console.WriteLine(
+            $"[StructurePopulationTests] structure-populated fraction: {structuredEntries}/{totalEntries} ({(double)structuredEntries / totalEntries:P1})");
     }
 
     private static Task<int> Scalar(Microsoft.Data.Sqlite.SqliteConnection connection, string sql) =>

@@ -102,21 +102,39 @@ public sealed class SearchFixtureBank : IAsyncDisposable
     }
 
     /// <summary>
-    ///     The check a broken fixture must fail: a benchmark over an empty or unsearchable bank
-    ///     silently measures nothing (WP4 TDD interpretation). Both assertions were proven to fail
-    ///     by temporarily skipping the EmbedPendingAsync call above during development.
+    ///     The checks a broken fixture must fail: a benchmark over an empty, unsearchable, or
+    ///     structure-blind bank silently measures nothing (WP4 TDD interpretation). The
+    ///     vec_entries and probe-query assertions were proven to fail by temporarily skipping the
+    ///     EmbedPendingAsync call above; the vec_structure assertion was proven to fail by
+    ///     temporarily forcing every fixture chunk headingless (both proofs done during development).
     /// </summary>
     private async Task VerifyAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var vectorRows = await connection.ExecuteScalarAsync<long>(
-                new CommandDefinition("SELECT COUNT(*) FROM vec_entries", cancellationToken: cancellationToken))
+        var vectorRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_entries", cancellationToken)
             .ConfigureAwait(false);
         if (vectorRows <= 0)
         {
             throw new InvalidOperationException(
                 "Search fixture bank has 0 vec_entries rows after embedding — the benchmark would measure nothing.");
         }
+
+        var structureRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_structure", cancellationToken)
+            .ConfigureAwait(false);
+        if (structureRows <= 0)
+        {
+            throw new InvalidOperationException(
+                "Search fixture bank has 0 vec_structure rows after embedding — the structure modality would measure nothing.");
+        }
+
+        var structuredEntries = await Scalar(connection,
+                "SELECT COUNT(*) FROM entries WHERE structure_embedding IS NOT NULL", cancellationToken)
+            .ConfigureAwait(false);
+        var totalEntries = await Scalar(connection, "SELECT COUNT(*) FROM entries", cancellationToken)
+            .ConfigureAwait(false);
+        Console.WriteLine(
+            $"[SearchFixtureBank] structure-populated fraction: {structuredEntries}/{totalEntries} " +
+            $"({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
                 new SearchQuery(ProjectId, Queries[0], SearchScope.All, Limit: 10, MinScore: 0.0),
@@ -128,6 +146,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
                 $"Search fixture bank returned 0 results for probe query '{Queries[0]}' — the benchmark would measure nothing.");
         }
     }
+
+    private static Task<long> Scalar(SqliteConnection connection, string sql, CancellationToken cancellationToken) =>
+        connection.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: cancellationToken));
 
     private static async Task WriteFixtureAsync(SqliteMemoryStore store, Random random, CancellationToken cancellationToken)
     {
@@ -152,17 +173,28 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             var sourceFile = grouped ? $"docs/{scopeTag}/topic-{topicIndex}-block-{blockIndex}.md" : null;
 
             var path = $"bench/{scopeTag}/topic-{topicIndex}/doc-{i:D5}.md";
-            var content = ContentFor(topic, random);
+            var content = ContentFor(topic, random, grouped, positionInBlock);
             await store.AddContentAsync(ProjectId, path, content, context, sourceFile,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
     }
 
-    /// <summary>A few-hundred-char paragraph: the topic phrase followed by 3-5 filler sentences.</summary>
-    private static string ContentFor(string topic, Random random)
+    /// <summary>
+    ///     A few-hundred-char paragraph: the topic phrase followed by 3-5 filler sentences. A
+    ///     grouped chunk (part of a 5-chunk source_file block) also carries an H1/H2 heading pair,
+    ///     mirroring a real ingested markdown doc's structure; a standalone note stays plain — a
+    ///     realistic mix rather than an all-headed or all-headingless corpus.
+    /// </summary>
+    private static string ContentFor(string topic, Random random, bool grouped, int sectionIndex)
     {
         var builder = new StringBuilder();
+        if (grouped)
+        {
+            builder.Append("# ").Append(char.ToUpperInvariant(topic[0])).Append(topic.AsSpan(1)).Append('\n')
+                .Append("## Section ").Append(sectionIndex + 1).Append("\n\n");
+        }
+
         builder.Append(char.ToUpperInvariant(topic[0])).Append(topic.AsSpan(1)).Append(". ");
 
         var sentenceCount = random.Next(3, 6);
