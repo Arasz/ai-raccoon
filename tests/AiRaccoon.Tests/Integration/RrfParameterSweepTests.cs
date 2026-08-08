@@ -179,8 +179,11 @@ public sealed class RrfParameterSweepTests : IDisposable
         // Wave-2 corpus) and no grid point beats it while holding the gates (measured
         // negative result on the old corpus; see docs/adr/0006-rrf-parameter-optimization.md
         // and docs/work/2026-08-06-baseline-repin-new-corpus.md).
-        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.673,
-            $"ADR nDCG@5 must hold at the re-pinned baseline 0.674 (0.001 tolerance); got {chosen.AdrNdcg5:F3}");
+        // Rank shifts of 1e-4..3e-3 among near-ties move nDCG@5 by ~1e-3 per platform
+        // (linux-x64 measured 0.6717 vs the osx-arm64 baseline 0.674), so the floor carries
+        // the shared cross-platform band instead of the old same-machine 0.001 (ADR-0015).
+        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.674 - GoldenFile.RankingTolerance,
+            $"ADR nDCG@5 must hold at the re-pinned baseline 0.674 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
 
         var holders = rows.Where(HoldsAllGates).ToList();
         holders.Count.ShouldBeGreaterThanOrEqualTo(1, "the chosen point itself must hold every gate");
