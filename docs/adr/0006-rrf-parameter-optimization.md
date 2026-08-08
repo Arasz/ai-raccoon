@@ -2,7 +2,8 @@
 
 Date: 2026-08-04
 
-Status: Accepted
+Status: Accepted. Amended 2026-08-09 — the parameters below stand unchanged; the second,
+cross-context RRF pass they were measured through is removed (see the amendment at the end).
 
 ## Context
 
@@ -87,3 +88,127 @@ eleven queries.
 - **Recall@5-based fusion gate**: rejected as the hard gate — it flags the hybrid's
   top-5 diversity (fewer same-file chunks) rather than answer-chunk quality, and no
   grid point satisfies it for A6; kept as a documented observation only.
+
+---
+
+## Amendment — 2026-08-09: cross-context RRF removed; the chosen point is unchanged
+
+### What was wrong
+
+The pipeline applied RRF **twice**: once over the two modalities inside each search
+context, and again over the per-context batches in `SearchResultMerger.Merge`. The second
+pass scored by rank position only, so a context's rank-1 contributed `weight / (k + 1)`
+regardless of how many candidates that context actually ranked. At k = 60, with the 1:1
+context weights the merger hardcoded:
+
+| list | its rank-1 score | after max-normalization |
+|---|---|---|
+| shared tier holding **1** entry | 1/61 = 0.016393 | **1.0000** |
+| project tier holding **2,400** entries | 1/61 = 0.016393 | **1.0000** |
+| project tier, rank 2 | 1/62 = 0.016129 | 0.9839 |
+
+A tier's best entry and the corpus's best entry were arithmetically indistinguishable, and
+the tie fell through to the ordinal `Path` comparison. Measured against the live 2,400-entry
+bank, a single promoted entry returned ranking 1.0000 for queries as unrelated as
+"banana pancake recipe", and surfaced at 0.83–1.0 in roughly 20 of 44 unrelated queries.
+`scope=project` was unaffected, which localises the defect to cross-context fusion.
+
+Removing max-normalization does **not** fix this: dividing every score by a positive
+constant preserves order, so the two rank-1 entries still tie. The defect is the
+rank-only scoring, not the normalization.
+
+The root cause is a layering leak. Contexts partition **storage** — the loop exists because
+the vec0 index is partitioned by context key (docs/plans/2026-08-08-search-knn-perf.md §3.4)
+— not relevance. Both modalities already produce absolutely comparable scores across
+contexts: `bm25` comes from one shared `entries_fts` index with global corpus statistics,
+and cosine similarity comes from one embedding space. Fusion discarded both and rebuilt a
+score from rank position.
+
+### Decision
+
+**Modality fusion becomes global across contexts.** The per-context loop now only collects
+candidates; `ModalityCandidates.ByBm25` / `ByCosine` concatenate them, dedupe by hash keeping
+the better score, and order by that absolute score. `ReciprocalRankFusion.Fuse` then runs
+**once** over the two globally-ranked modality lists, and `SearchResultMerger.Merge` receives
+that single fused batch. `k`, the 1:1 FTS:vector weights, the candidate window and minScore
+are untouched; `ReciprocalRankFusion`, `SearchResultMerger` and `SourceAffinityRanker` are
+unmodified.
+
+### Why the chosen point is untouched
+
+Every measurement in this ADR — and in `RetrievalBaselineTests`, `BaselineMetricsTests`,
+`ParityGateTests`, `RrfParameterSweepTests`, `SourceAffinitySweepTests` — searches with
+`SearchScope.Project` against a single-project corpus, which resolves to exactly **one**
+context. For one context the new path is a no-op by construction: the per-modality list is
+the only list, and the ordering key (`bm25` ascending, fused cosine descending) is the one
+the SQL and `StructureFusion.Rank` already emitted, applied with a **stable** LINQ sort. Same
+list in, same list out, then the same `Merge`. The parity is algebraic, not merely observed.
+
+This also preserves the two-stage score shape that the Wave 3 ranker depends on: `Merge`
+still re-scores its single batch by position, so `SourceAffinityRanker` continues to receive
+`(k+1)/(k+r)`-shaped values against which λ = 0.1 and threshold = 0.1 were tuned. Collapsing
+the two RRF passes into one would have changed that scale and moved the baselines; it was
+deliberately not done.
+
+### minScore semantics — unchanged
+
+minScore still filters a single max-normalized fused list, exactly as swept above. The
+"measured inert at the chosen point" observation stands, and the shipped tool default of
+0.7 (`SearchQuery.MinScore`, `MemoryTools`) keeps the meaning it was audited under — no
+tool-description change was required. This is why the normalization-changing remedies were
+rejected: returning raw fused scores (~0.016) or normalizing against a fixed reference
+would have pushed results under an 0.7 default that this ADR measured as inert, silently
+filtering results the sweep decided should not be filtered.
+
+### Measurements
+
+Gate suite `Rrf|Retrieval|Baseline|Parity|HybridSearch|SourceAffinity|Snippet`:
+**144 passed / 0 failed before, 146 passed / 0 failed after** — the two extra tests
+were added by concurrent work on other test files during the same session, not by this change. Chosen-point metrics
+(k = 60, 1:1, minScore 0.0, Max3X100), before → after:
+
+| metric | before | after |
+|---|---|---|
+| ADR nDCG@5 | 0.674 | 0.674 |
+| MRR | 0.881 | 0.881 |
+| recall@5 | 0.564 | 0.564 |
+| exact-chunk @3 | 4/11 | 4/11 |
+
+Regenerating `docs/work/2026-08-04-wave4-rrf-sweep.md` and
+`docs/work/2026-08-04-wave3-source-affinity-sweep.md` after the change produces files
+identical to the committed ones — the whole 96-point grid is unmoved.
+
+Note for future readers: the header text of the sweep report and the "0.722 / 0.929 / 0.617
+/ 11-11" figures in the original Decision section above predate the 2026-08-06 corpus
+re-pin (docs/work/2026-08-06-baseline-repin-new-corpus.md). The live pinned floor asserted
+by `RrfParameterSweepTests` is nDCG@5 **0.674**; the numbers in the table above are the
+current ones.
+
+### Regression gate
+
+`SqliteMemoryStoreTests.Search_ScopeAll_SmallSharedTier_DoesNotCaptureAnUnrelatedQuery`
+promotes one off-topic entry into the shared tier alongside a larger project tier and
+asserts it neither ranks first nor ties the genuine top match. Verified red against the
+pre-fix code:
+
+```
+Shouldly.ShouldAssertException : results[0].Path
+    should be
+"zz-deploy-pipeline-decision.md"
+    but was
+"shared/0c1f8e16bf7be0d5fe4048a56ccd21594cf39d6469b79348e21076928466ed5b.md"
+```
+
+`ModalityCandidatesTests` pins the ordering contract and the single-context stable-sort
+parity that the argument above rests on.
+
+### Open — needs a corpus decision
+
+No retrieval-quality measurement in the repository exercises `scope=all` against a bank with
+both a shared and a project context populated; every graded query in
+`scripts/baseline-queries.json` and every harness fixture is single-context. So cross-context
+**ranking quality** has no ground truth here, and this amendment does not claim a measured
+improvement to it — it claims a defect removed, single-context parity preserved, and the
+now-well-defined semantics "`scope=all` ranks the union as if it were one bank". Deciding
+whether to add a cross-context stratum to the graded catalogue (and a shared-tier fixture to
+the harness) is a corpus-scope call for the owner, not something this change settles.

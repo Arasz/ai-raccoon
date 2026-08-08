@@ -159,7 +159,8 @@ public sealed partial class SqliteMemoryStore(
             alpha = await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false);
         }
 
-        var batches = new List<IReadOnlyList<MemorySearchResult>>();
+        var ftsBatches = new List<IReadOnlyList<MemorySearchResult>>();
+        var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7, issue #198): records,
@@ -207,10 +208,11 @@ public sealed partial class SqliteMemoryStore(
                 : await QueryDualVectorBatchAsync(connection,
                     VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
-            // Per-context modality fusion; minScore/limit belong to the final merger pass.
-            batches.Add(ReciprocalRankFusion.Fuse(
-                [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
-                query.RrfK, 0, int.MaxValue));
+            // Per-context modality candidates accumulate here; fused globally after the loop
+            // (see docs/adr/0006-rrf-parameter-optimization.md) so RRF compares each modality's
+            // absolute score instead of per-context rank position.
+            ftsBatches.Add(ftsResults);
+            vectorBatches.Add(vectorResults);
 
             DynamicParameters SearchParameters(string ftsExpression)
             {
@@ -249,7 +251,11 @@ public sealed partial class SqliteMemoryStore(
             }
         }
 
-        var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK,
+        var fused = ReciprocalRankFusion.Fuse(
+            [(ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
+             (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)],
+            query.RrfK, 0, int.MaxValue);
+        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             cancellationToken).ConfigureAwait(false);
@@ -802,21 +808,25 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        var rows = fused.Select(rank => byHash[rank.Hash]).ToList();
-        foreach (var row in rows)
+        var ranked = fused.Select(rank => (Row: byHash[rank.Hash], rank.Score)).ToList();
+        foreach (var (row, _) in ranked)
         {
             valueByHash[row.Hash] = row.Value;
         }
 
-        return BuildDualVectorResults(rows);
+        return BuildDualVectorResults(ranked);
     }
 
-    /// <summary>Maps ranked vector rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
-    internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(IReadOnlyList<VectorRow> rows) =>
+    /// <summary>
+    ///     Maps ranked vector rows to results carrying the fused cosine score as <see cref="MemorySearchResult.Ranking" />
+    ///     (see docs/adr/0006-rrf-parameter-optimization.md); <see cref="MemorySearchResult.Snippet" /> stays unresolved.
+    /// </summary>
+    internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
+        IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
         [
-            .. rows.Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, string.Empty,
-                row.SourceFile, row.ChunkIndex, row.TotalChunks))
+            .. ranked.Select(item => new MemorySearchResult(
+                item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+                item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
         ];
 
     /// <summary>
