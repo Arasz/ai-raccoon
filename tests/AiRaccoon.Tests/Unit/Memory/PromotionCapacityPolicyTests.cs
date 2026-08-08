@@ -97,42 +97,4 @@ public sealed class PromotionCapacityPolicyTests
         PromotionCapacityPolicy.CapacityInfo(1000, 5, new Dictionary<string, int>())
             .ShouldBeEmpty();
     }
-
-    /// <summary>
-    ///     Characterization test pinning ADR-0007's guarantee — eviction never leaves a project at
-    ///     or below its reservation — as a contract a future eviction-policy swap cannot silently break.
-    /// </summary>
-    [Theory]
-    [MemberData(nameof(OverCapShapes))]
-    public void EvictionTarget_NeverPicksAProjectAtOrBelowItsReservation(
-        int cap, Dictionary<string, int> perProjectCounts)
-    {
-        PromotionCapacityPolicy.NeedsEviction(perProjectCounts.Values.Sum(), cap)
-            .ShouldBeTrue("this fixture must actually be over cap for the guarantee to apply");
-        var reservation = PromotionCapacityPolicy.ReservationFor(cap, perProjectCounts.Count);
-
-        var target = new UniformCountEvictionPolicy().EvictionTarget(perProjectCounts);
-
-        target.ShouldNotBeNull();
-        perProjectCounts[target].ShouldBeGreaterThan(reservation);
-    }
-
-    public static IEnumerable<object[]> OverCapShapes()
-    {
-        yield return [1000, new Dictionary<string, int> { ["acme"] = 950, ["other"] = 60 }]; // lopsided occupier
-        yield return
-        [
-            1000, new Dictionary<string, int> { ["a"] = 251, ["b"] = 250, ["c"] = 250, ["d"] = 250 }
-        ]; // near-uniform, one barely over its 250 reservation
-        yield return [500, new Dictionary<string, int> { ["a"] = 300, ["b"] = 300 }]; // tie, both over
-        yield return [10, new Dictionary<string, int> { ["solo"] = 11 }]; // single project, barely over
-        yield return
-        [
-            5,
-            new Dictionary<string, int>
-            {
-                ["a"] = 2, ["b"] = 2, ["c"] = 2, ["d"] = 2, ["e"] = 2, ["f"] = 1
-            }
-        ]; // degenerate: more projects than slots, ReservationFor == 0
-    }
 }

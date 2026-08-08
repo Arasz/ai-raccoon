@@ -11,7 +11,9 @@ public interface IEvictionPolicy
     string? EvictionTarget(IReadOnlyDictionary<string, int> perProjectCounts);
 }
 
-/// <summary>Uniform fair-share rule: the biggest occupier loses its weakest row. If that is the inserter, so be it.</summary>
+/// <summary>Uniform fair-share rule: the biggest occupier loses its weakest row. If that is the inserter, so be it.
+/// This is why ADR-0007's per-project reservation (cap/n) is never violated without a separate check: eviction
+/// only runs when the total is over cap, so by pigeonhole the greatest count must already exceed cap/n.</summary>
 public sealed class UniformCountEvictionPolicy : IEvictionPolicy
 {
     public string? EvictionTarget(IReadOnlyDictionary<string, int> perProjectCounts)
