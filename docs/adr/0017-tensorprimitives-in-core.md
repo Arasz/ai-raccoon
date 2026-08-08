@@ -2,9 +2,9 @@
 
 Date: 2026-08-08
 
-Status: Accepted (dependency and kernel land together; Evidence below is a placeholder
-filled by WP-5 once the benchmark runs — per plan WP-4 criterion 5, the kernel ships only if
-it measures faster, and this ADR is withdrawn with it if it does not)
+Status: Accepted (dependency and kernel land together; the Evidence section holds the
+measured result — the kernel is 4.5× faster at the decisive case, so the ship condition
+of plan WP-4 criterion 5 is met)
 
 ## Context
 
@@ -66,11 +66,9 @@ performance plan, not worked here).
   two third-party packages instead of one. This is a real, ongoing cost: every future
   reviewer of Core's dependency list has one more entry to justify, and the layer is
   measurably less "framework-free" than it was.
-- **Negative:** the win this ADR exists to justify is **unmeasured as written**. The
-  benchmark that settles it (WP-4/WP-2's `EmbeddingMathBenchmark`) has not run yet at the
-  time this ADR is filed; see Evidence below. If the measured ratio at the realistic
-  worst case is not a clear improvement, the kernel is reverted and this ADR is withdrawn
-  with it — a dependency that does not measure faster has no buyer.
+- **Positive:** the win is measured, not assumed — 4.5× at the decisive case
+  (`SeqLen = 256, MaskDensity = 1.0`; see Evidence), with an unchanged allocation profile
+  (1.52 KB per call, the returned `float[]`, in both arms).
 - **Neutral:** the clean-layering rule's ArchUnitNET enforcement remains unwired (see
   Decision); this ADR is the only thing on record stopping a silent third dependency from
   landing next.
@@ -107,10 +105,42 @@ performance plan, not worked here).
 
 ## Evidence
 
-Placeholder — filled by WP-5 with the `EmbeddingMathBenchmark` summary table (candidate vs.
-scalar baseline, `Ratio` column, every `SeqLen`/`MaskDensity` combination) **including
-BenchmarkDotNet's host/runtime header**, per plan WP-2 criterion 5 and WP-4 criterion 4. The
-decisive number is `SeqLen = 256, MaskDensity = 1.0` — the realistic hot case, since
-`RunBatch` pads every row in a batch to `maxLen` and 256 is `MaxSequenceLength`. Per WP-4
-criterion 5: if that ratio is not a clear improvement, the kernel is reverted and this ADR's
-Status above changes from Accepted to Withdrawn.
+`EmbeddingMathBenchmark`, 2026-08-08, on an otherwise idle machine (an earlier run under
+IDE load produced StdDev up to ~38% of mean and was discarded):
+
+```
+BenchmarkDotNet v0.15.8, macOS Tahoe 26.6.1 (25G76) [Darwin 25.6.0]
+Apple M4, 1 CPU, 10 logical and 10 physical cores
+.NET SDK 10.0.302
+  [Host]     : .NET 10.0.10 (10.0.10, 10.0.1026.32716), Arm64 RyuJIT armv8.0-a
+  DefaultJob : .NET 10.0.10 (10.0.10, 10.0.1026.32716), Arm64 RyuJIT armv8.0-a
+
+| Method     | SeqLen | MaskDensity | Mean         | StdDev     | Ratio | Allocated |
+|----------- |------- |------------ |-------------:|-----------:|------:|----------:|
+| Scalar     | 16     | 0           |     45.90 ns |   1.683 ns |  1.00 |   1.52 KB |
+| Vectorized | 16     | 0           |     45.60 ns |   3.247 ns |  0.99 |   1.52 KB |
+| Scalar     | 16     | 0.5         |  1,450.24 ns |   6.667 ns |  1.00 |   1.52 KB |
+| Vectorized | 16     | 0.5         |    286.22 ns |   0.623 ns |  0.20 |   1.52 KB |
+| Scalar     | 16     | 1           |  2,402.55 ns |  14.863 ns |  1.00 |   1.52 KB |
+| Vectorized | 16     | 1           |    445.28 ns |   4.135 ns |  0.19 |   1.52 KB |
+| Scalar     | 64     | 0           |     50.52 ns |   0.354 ns |  1.00 |   1.52 KB |
+| Vectorized | 64     | 0           |     50.89 ns |   0.342 ns |  1.01 |   1.52 KB |
+| Scalar     | 64     | 0.5         |  4,266.52 ns |   9.478 ns |  1.00 |   1.52 KB |
+| Vectorized | 64     | 0.5         |    765.15 ns |   9.174 ns |  0.18 |   1.52 KB |
+| Scalar     | 64     | 1           |  8,216.93 ns | 126.153 ns |  1.00 |   1.52 KB |
+| Vectorized | 64     | 1           |  1,438.63 ns |  41.834 ns |  0.18 |   1.52 KB |
+| Scalar     | 256    | 0           |    108.70 ns |   0.291 ns |  1.00 |   1.52 KB |
+| Vectorized | 256    | 0           |    112.04 ns |   2.337 ns |  1.03 |   1.52 KB |
+| Scalar     | 256    | 0.5         | 15,692.15 ns |  94.115 ns |  1.00 |   1.52 KB |
+| Vectorized | 256    | 0.5         |  3,612.32 ns |  39.573 ns |  0.23 |   1.52 KB |
+| Scalar     | 256    | 1           | 31,701.36 ns | 592.827 ns |  1.00 |   1.52 KB |
+| Vectorized | 256    | 1           |  6,989.85 ns |  51.998 ns |  0.22 |   1.52 KB |
+```
+
+The decisive case — `SeqLen = 256, MaskDensity = 1.0`, the realistic hot case since
+`RunBatch` pads every row in a batch to `maxLen` and 256 is `MaxSequenceLength` — measures
+31,701 ± 593 ns scalar vs 6,990 ± 52 ns vectorized: ratio 0.22 (4.5× faster), a margin far
+outside the run's noise (RatioSD ≤ 0.03 on every loaded row). Every masked/loaded
+combination lands at ratio 0.18–0.23; the `MaskDensity = 0` rows are the early-return path,
+where both arms do no pooling work and measure equal, as expected. Allocation is identical
+in both arms (the returned `float[]` only), so the win is pure compute.

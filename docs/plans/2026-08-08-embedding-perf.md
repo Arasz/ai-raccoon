@@ -2,7 +2,8 @@
 
 Date: 2026-08-08
 
-Status: Planned — not yet executed
+Status: Executed — WP-0 landed separately on main and was then superseded by the owner's
+revert of the generator pooling (`0e81852`); WP-1–WP-5 measured and shipped (see Results)
 
 Worktree: `.ai-badger/worktrees/perf-optimization`
 
@@ -557,6 +558,41 @@ No two packages marked parallel touch the same file.
   failure there is a stop, not a tolerance negotiation.
 - **Concurrent sessions on this repo.** `main` moves under long tasks. Both PRs are built in
   this worktree and rebased before push.
+
+---
+
+## Results
+
+`EmbeddingMathBenchmark`, 2026-08-08, quiet machine. Full table with host header lives in
+ADR 0017's Evidence section (`docs/adr/0017-tensorprimitives-in-core.md`); the decisive
+case (`SeqLen = 256, MaskDensity = 1.0`, per WP-4 criterion 5):
+
+| Arm        | Mean          | StdDev   | Ratio |
+|----------- |--------------:|---------:|------:|
+| Scalar     | 31,701.36 ns  | 593 ns   | 1.00  |
+| Vectorized |  6,989.85 ns  |  52 ns   | 0.22  |
+
+4.5× faster; every masked combination lands at ratio 0.18–0.23; unmasked rows take the
+early return and measure equal. Allocation identical in both arms (the returned `float[]`).
+The kernel ships; ADR 0017 stays Accepted.
+
+WP-2 contrast: the first baseline run (15:08, machine under IDE load) measured the scalar
+decisive case at 60,524 ns with StdDev up to ~38% of mean — discarded as noise-dominated
+and re-run on a quiet machine, where the same scalar case measures 31,701 ns. Both arms were
+measured in the single quiet run above, so the comparison is load-free.
+
+Deliberate-break verification (WP-4 criterion: a check you have not seen fail is not a
+check), re-proven post-vectorization on 2026-08-08: truncating the accumulate to
+`dim - 1` lanes turned `MeanPoolAndNormalize_AtProductionDimension_MatchesNaiveReference`
+red (3/5 failed); dropping the mask check turned `WithSingleActiveToken` and
+`WithNoActiveTokens` red (3/5 failed); reverting restored 5/5 green with an empty diff
+against the committed kernel.
+
+Negative finding (WP-5 criterion 2): corpus-scale distance math is native
+(`MemorySql.cs:138,157` — sqlite-vec does the distance work in C), so
+`MeanPoolAndNormalize` was the only managed float kernel worth vectorizing. The SIMD/pooling
+exploration across `src/` found no second candidate; the out-of-scope findings below are the
+complete residue of that hunt.
 
 ---
 
