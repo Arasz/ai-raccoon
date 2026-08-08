@@ -11,10 +11,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Extraction;
 
 /// <summary>
-///     Per-candidate/per-project extraction detail moved from logs to Debug (owner: "it should
-///     be just counted by metrics") — this proves the replacement: a real extraction pass, wired
-///     through the same <see cref="PromotionQueueMetrics" /> port the propose tier already uses
-///     (no parallel metrics class), increments the queued/promoted counters tagged by project_id.
+///     Extraction detail moved from logs to metrics-only: a real extraction pass, wired through the same
+///     <see cref="PromotionQueueMetrics" /> port the propose tier already uses (no parallel metrics class),
+///     increments the queued/promoted counters tagged by project_id.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

@@ -12,8 +12,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Encryption;
 
 /// <summary>
-///     Composition-root smoke: the provider family (none/env/bitwarden) is registered behind
-///     the resolver, and the resolver reads the env passphrase when no sidecar exists (plan §S2b wiring).
+///     Composition-root smoke: the provider family (none/env/bitwarden) is registered behind the resolver,
+///     and the resolver reads the env passphrase when no sidecar exists (docs/plans/encryption-bitwarden-implementation.md S2b).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

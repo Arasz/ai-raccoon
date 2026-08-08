@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     #190: SyncService merge-reindex invalidates the content vector (embed_state -&gt;
+///     SyncService merge-reindex invalidates the content vector (embed_state -&gt;
 ///     'pending', embedding -&gt; NULL) but must also clear the structure vector, or structure
 ///     search returns entries whose content vector was deliberately invalidated.
 /// </summary>

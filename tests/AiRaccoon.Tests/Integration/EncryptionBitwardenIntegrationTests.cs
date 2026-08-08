@@ -14,16 +14,16 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     End-to-end through the real stack: a fake `bws` shell script at an absolute path (no PATH
-///     mutation) → BitwardenCliSecretManager → BitwardenEncryptionKeyProvider → EncryptionKeyResolver →
-///     SqliteConnectionFactory against real temp SQLCipher banks (plan §S4).
+///     End-to-end through the real stack: a fake `bws` script → BitwardenCliSecretManager →
+///     BitwardenEncryptionKeyProvider → EncryptionKeyResolver → SqliteConnectionFactory against real
+///     temp SQLCipher banks (docs/plans/encryption-bitwarden-implementation.md S4).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(Unit.Encryption.BwsAccessTokenCollection.Name)]
 public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 {
-    // §5.1 pinned vector — seed 00 01 … 1e 1f derives to exactly this x'…' (hard-coded, never recomputed).
+    // Pinned vector (docs/plans/encryption-bitwarden-implementation.md §5.1): seed 00 01 … 1e 1f derives to this key; hard-coded, never recomputed.
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
     // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what an installed
@@ -42,9 +42,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     // Obviously fake; the fake bws accepts exactly this token, from BWS_ACCESS_TOKEN or argv -t.
     private const string KnownToken = "test-bws-token-0123";
 
-    // fake bws: emulates `bws secret get <id>` (plan §5.3). A token may arrive via argv `-t <token>`
-    // or the inherited BWS_ACCESS_TOKEN; when one is present it must equal the known test token,
-    // else bws-style stderr + exit 1. No token → serve the key (the plan's fixture recipe).
+    // Emulates `bws secret get <id>` (docs/plans/encryption-bitwarden-implementation.md §5.3): a token via
+    // argv `-t` or BWS_ACCESS_TOKEN must match the test token or exit 1; no token serves the key.
     private const string FakeBwsScript = """
                                          #!/bin/sh
                                          DIR="$(dirname "$0")"
@@ -153,7 +152,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             var rekeyFactory = new SqliteConnectionFactory(Options(), Resolver());
             await rekeyFactory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
-            // 3. The config command then persists the sidecar.
+            // Simulates the config command persisting the sidecar.
             WriteSidecar();
 
             // 4. Every later open resolves through the fake bws: real child process → provider → derived key.
@@ -166,7 +165,6 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                 (await check.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe(0L);
             }
 
-            // 5. Reopen again — the derived key keeps opening the bank.
             await using var again = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
             again.State.ShouldBe(ConnectionState.Open);
         });
@@ -216,9 +214,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
-    ///     Decision 2, the half no existing fixture exercised: a bank the legacy key opens, but
-    ///     whose interior pages are damaged, must never be rekeyed — quick_check is the gate that
-    ///     catches it. Deleting the quick_check call would leave every other test green.
+    ///     Decision 2 (docs/plans/2026-08-07-hkdf-rekey-migration.md): a bank the legacy key opens but whose
+    ///     interior pages are damaged must never be rekeyed — quick_check is the gate that catches it.
     /// </summary>
     [Fact]
     public async Task LegacyKeyedBankFailingQuickCheck_Migrate_Refuses()
@@ -250,9 +247,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             var clearPoolCsb = new SqliteConnectionStringBuilder { DataSource = BankPath(), Password = LegacyDerivedRawKey };
             SqliteConnection.ClearPool(new SqliteConnection(clearPoolCsb.ToString()));
 
-            // Flip bytes deep in the file — well past page 1 (header + sqlite_master), which is
-            // all a plain Open() decrypts. This lands inside the table's own pages: the legacy key
-            // still opens the bank (measured), but PRAGMA quick_check reports the damaged pages.
+            // Flips bytes well past page 1 (header + sqlite_master, all a plain Open() decrypts), landing
+            // inside the table's own pages: the legacy key still opens the bank, but quick_check catches the damage.
             var bankPath = BankPath();
             var bytes = await File.ReadAllBytesAsync(bankPath, TestContext.Current.CancellationToken);
             for (var offset = bytes.Length - 200; offset < bytes.Length - 100; offset++)
@@ -277,9 +273,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
-    ///     Decision 2 in code: a file that opens under neither derivation is refused, not rekeyed
-    ///     over. The byte comparison is the real assertion — the exception type alone would not
-    ///     prove that nothing was written.
+    ///     Decision 2 (docs/plans/2026-08-07-hkdf-rekey-migration.md): a file that opens under neither
+    ///     derivation is refused, not rekeyed over — asserted via byte-identical file comparison, since the
+    ///     exception type alone would not prove that nothing was written.
     /// </summary>
     [Fact]
     public async Task CorruptBank_Migrate_RefusesAndLeavesTheFileByteIdentical()
@@ -305,8 +301,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
-    ///     Decision 3 pinned: the automatic open path detects and refuses, naming the verb. If
-    ///     someone later makes the open path rekey by itself, this test is what fails.
+    ///     Decision 3 (docs/plans/2026-08-07-hkdf-rekey-migration.md): the automatic open path detects
+    ///     and refuses a legacy-keyed bank, naming the migrate verb, without rekeying it itself.
     /// </summary>
     [Fact]
     public async Task OpenBankAsync_LegacyKeyedBank_RefusesWithMigrateGuidanceAndDoesNotRekey()
@@ -362,7 +358,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
         {
-            // Bank keyed with the synthetic key (the §5.1 vector).
+            // Bank keyed with the synthetic key (docs/plans/encryption-bitwarden-implementation.md §5.1 vector).
             var createFactory = new SqliteConnectionFactory(Options(), DerivedKeyResolver());
             await using (var connection = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
@@ -371,9 +367,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
                 await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
-            // The fake bws now serves key2.pem — a valid key that derives to something else. Neither
-            // that key nor its legacy form opens the bank, so this is the same refusal a corrupt
-            // bank gets: we cannot tell the two apart, and refusing is safe for both.
+            // The fake bws now serves key2.pem, a valid key that derives to something else; neither it nor its
+            // legacy form opens the bank, so this gets the same refusal a corrupt bank would (can't tell them apart).
             WriteSidecar(WrongKeySecretId);
             var resolverFactory = new SqliteConnectionFactory(Options(), Resolver());
 
@@ -497,9 +492,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
             ex.Message.ShouldStartWith("malformed OpenSSH private key: ");
 
-            // The bank is untouched: it still opens with the derived key (the create factory's
-            // env stub resolves it — the sidecar now points at bws, so the shared resolver
-            // would go through the fake).
+            // The bank is untouched: it still opens with the derived key (the create factory's env stub
+            // resolves it directly, bypassing the sidecar that now points the shared resolver at bws).
             await using var untouched = await createFactory.OpenBankAsync(TestContext.Current.CancellationToken);
             untouched.State.ShouldBe(ConnectionState.Open);
         });
@@ -539,8 +533,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
 
         exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
-        // Diagnostics fire before key resolution, so the engine identity is visible even
-        // when startup fails (engine train was the 2.1.11 → 2.4.0 incident class).
+        // Diagnostics fire before key resolution, so the engine identity is visible even when startup fails
+        // (the 2.1.11 → 2.4.0 incident class, docs/work/archive/2026-08-06-sqlite3mc-2.4.0-upgrade.md).
         stderr.Contains("SQLite engine 3.53", StringComparison.Ordinal)
             .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
         stderr.Contains("SQLite3 Multiple Ciphers 2.4", StringComparison.Ordinal)
@@ -556,9 +550,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         }
 
         InstallFakeBws();
-        // Bank keyed with a passphrase that is NOT in the child's environment; the sidecar then
-        // routes the child's resolve through the fake bws, which serves a key that derives to
-        // something else → the probe open fails with SQLCipher code 26 → exit 2.
+        // Bank keyed with a passphrase absent from the child's environment; the sidecar routes the child's
+        // resolve through the fake bws (a different derived key) → probe open fails SQLCipher code 26 → exit 2.
         var envFactory = new SqliteConnectionFactory(Options(), new EncryptionKeyResolver(
             new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider("env-passphrase")]));
         await using (await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -573,10 +566,11 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
     }
 
-    /// <summary>Runs the real server binary with a hermetic PATH rooted at bwsDir (an empty
-    /// dir = bws missing, the fake-bws dir = fake resolves) plus the system dirs the fake
-    /// script needs; returns the exit code and both streams. Program.cs's error mapping and
-    /// exit codes 1/2 are only exercised by this process-level path.</summary>
+    /// <summary>
+    ///     Runs the server binary with a hermetic PATH rooted at bwsDir (empty = bws missing, fake-bws dir =
+    ///     resolves) plus the system dirs the fake script needs. Only this process-level path exercises
+    ///     Program.cs's error mapping and exit codes 1/2.
+    /// </summary>
     private async Task<(int Exit, string Stderr, string Stdout)> RunServerProcessAsync(string bwsDir)
     {
         var dll = Path.Combine(AppContext.BaseDirectory, "AiRaccoon.dll");

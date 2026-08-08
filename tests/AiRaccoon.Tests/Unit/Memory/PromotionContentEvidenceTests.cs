@@ -4,10 +4,9 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's doc_adjust() (see docs/adr/0018-promotion-scoring-v2.md v3 section).
-/// v3 change: the recency/access-count bonus is gone (agentC's doc_adjust never referenced it) — content
-/// evidence is shape-only now. The doc-index/turn-mirror evidence cap is gone too: those channels are
-/// hard-noise in v3 and never reach Evaluate() at all (see PromotionScorer).</summary>
+/// <summary>Ports agentC/scorer.py's doc_adjust() (docs/adr/0018-promotion-scoring-v2.md, v3): content
+/// evidence is shape-only now (no recency/access-count bonus) and the doc-index/turn-mirror evidence cap
+/// is gone — those channels are hard-noise in v3 and never reach Evaluate() (see PromotionScorer).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionContentEvidenceTests
