@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.Unit.Retrieval;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -264,18 +265,19 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     // ------------------------------------------------------------------ helpers
 
+    /// <summary>Tolerance-aware rank per ADR-0015: near-ties within <see cref="GoldenFile.RankingTolerance"/> don't count as ahead.</summary>
     private async Task<int?> SectionRankAsync(string text, string expectedSource, CancellationToken cancellationToken)
     {
         var expectedHash = _hashMap[expectedSource];
         var results = await TopResultsAsync(text, cancellationToken);
-        var index = results.FindIndex(r => r.Hash == expectedHash);
-        if (index < 0)
+        var expected = results.FirstOrDefault(r => r.Hash == expectedHash);
+        if (expected is null)
         {
             _output.WriteLine($"[{text}] expected '{expectedSource}' not in top {results.Count}: {string.Join(", ", results.Take(RankCutoff).Select(r => r.Hash[..8]))}");
             return null;
         }
 
-        return index + 1;
+        return 1 + results.Count(r => r.Ranking > expected.Ranking + GoldenFile.RankingTolerance);
     }
 
     private async Task<Dictionary<string, int?>> FileRanksAsync(
