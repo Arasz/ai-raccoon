@@ -24,6 +24,7 @@ of the workspace feature.
 | D3 | Low | `memory_share` / `memory_delete` | Unknown hash handled two different ways |
 | D4 | Low | `memory_stats` | Returns every project's context list to a project-scoped caller |
 | D5 | High | `memory_search` (`scope=all`) | A one-entry scope tier ranks 1.0 for every query, whatever the topic |
+| D6 | Low | `memory_workspace_consolidate` | Reports every promoted entry as also discarded |
 
 ## D1 — `memory_workspace_consolidate` rejects the value it documents
 
@@ -131,6 +132,28 @@ memory first and treat a hit as citable evidence. A live example from this sweep
 `"minScore inert measured threshold"` returned an unrelated probe entry about schema write guards
 at `ranking: 1.0`, tied with the genuinely relevant ADR-0006 chunk. An agent trusting the number
 would cite the wrong one.
+
+## D6 — `consolidate` reports every promoted entry as also discarded
+
+Low severity, but it reads as data loss. `memory_workspace_consolidate` returns a `discarded`
+count that includes the entries it just promoted:
+
+| entries written | `keep` | response |
+|---|---|---|
+| 1 | `["all"]` | `{"promoted": 1, "discarded": 1}` |
+| 2 | `["all"]` | `{"promoted": 2, "discarded": 2}` |
+| 3 | `["all"]` | `{"promoted": 3, "discarded": 3}` |
+| 3 | one hash | `{"promoted": 1, "discarded": 3}` |
+
+`discarded` is counting *outbox rows removed*, which is all of them, since consolidating clears the
+workspace either way. The plain reading of `{"promoted": 3, "discarded": 3}` is that three entries
+were promoted and three were thrown away — on a workspace where nothing was dropped. An agent
+checking whether its notes survived gets an answer that says they did not.
+
+The useful number is how many were *not* kept: 0 in the `["all"]` case, 2 in the selective case.
+
+Selective keep itself is correct: promoting one hash of three leaves that hash findable in project
+scope and the other two absent, confirmed by search.
 
 ## A small scope tier captures every `scope=all` search — D5, High
 
