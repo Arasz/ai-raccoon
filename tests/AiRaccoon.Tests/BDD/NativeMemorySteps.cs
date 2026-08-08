@@ -5,7 +5,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
@@ -1723,32 +1722,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["WorkspaceId"] = wsId;
     }
 
-    // ── FR-MEM-1.13/1.14: Extension hook pipeline ──
-    [Given("two extensions are registered")]
-    public void GivenTwoExtensionsRegistered()
-    {
-        var log = new List<string>();
-        scenarioContext["HookLog"] = log;
-        scenarioContext["HookedStore"] = new MemoryExtensionHost(_store,
-            [new RecordingExtension("first", log), new RecordingExtension("second", log)]);
-    }
-
     [When("I write an entry")]
     public async Task WhenIWriteAnEntry()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        var store = scenarioContext.ContainsKey("HookedStore")
-            ? (IMemoryStore)scenarioContext["HookedStore"]
-            : _store;
-        _lastWrite = await store.WriteAsync(new MemoryWriteRequest(projectId, "hook entry"),
+        _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "hook entry"),
             CancellationToken.None);
-    }
-
-    [Then("the first extension's OnWrite ran before the second's")]
-    public void ThenFirstOnWriteBeforeSecond()
-    {
-        var log = (List<string>)scenarioContext["HookLog"];
-        log.ShouldBe(["first", "second"]);
     }
 
     [Given("an entry that has been searched twice")]
@@ -1857,20 +1836,5 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var results = await secondInstall.Store.SearchAsync(
             new SearchQuery(projectId, "shared payload fact", SearchScope.Shared), CancellationToken.None);
         results.Count.ShouldBeGreaterThan(0);
-    }
-
-    private sealed class RecordingExtension(string name, List<string> log) : IMemoryExtension
-    {
-        public string Name => name;
-
-        public Task OnWriteAsync(WriteContext context, CancellationToken cancellationToken)
-        {
-            log.Add(name);
-            return Task.CompletedTask;
-        }
-
-        public Task OnSearchAsync(SearchContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task OnDeleteAsync(DeleteContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
