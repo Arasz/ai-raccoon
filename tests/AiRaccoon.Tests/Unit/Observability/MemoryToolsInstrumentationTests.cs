@@ -11,7 +11,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -142,10 +141,10 @@ public class MemoryToolsInstrumentationTests
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
             new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             tools.Sync("acme", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("sync-not-configured");
+        ex.Message.ShouldContain("not configured");
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);

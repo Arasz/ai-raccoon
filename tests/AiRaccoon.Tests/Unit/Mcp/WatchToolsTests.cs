@@ -58,37 +58,39 @@ public sealed class WatchToolsTests
         second.ShouldNotBeNull();
     }
 
+    // The tool no longer maps these to McpException itself — the CallToolFilter does that
+    // (see ToolRefusalsTests), so the raw domain exception is what a direct caller sees.
     [Fact]
-    public async Task Add_WatchingDisabled_MapsToWatchingDisabled()
+    public async Task Add_WatchingDisabled_PropagatesTheDomainException()
     {
         _watch.AddError = new WatchDisabledException("proj-a");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<WatchDisabledException>(() =>
             _tools.Add("proj-a", "/repo", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("watching-disabled");
+        ex.Message.ShouldContain("proj-a");
     }
 
     [Fact]
-    public async Task Add_PathOutsideScope_MapsToPathOutsideScope()
+    public async Task Add_PathOutsideScope_PropagatesTheDomainException()
     {
         _watch.AddError = new PathOutsideScopeException("/other");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<PathOutsideScopeException>(() =>
             _tools.Add("proj-a", "/other", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("path-outside-scope");
+        ex.Message.ShouldContain("/other");
     }
 
     [Fact]
-    public async Task Add_PathNotFound_MapsToPathNotFound()
+    public async Task Add_PathNotFound_PropagatesTheDomainException()
     {
         _watch.AddError = new PathNotFound("/missing");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<PathNotFound>(() =>
             _tools.Add("proj-a", "/missing", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("path-not-found");
+        ex.Message.ShouldContain("/missing");
     }
 
     [Fact]

@@ -73,9 +73,9 @@ public sealed class MemoryToolsAccessModeTests
 
         written.Data!.Hash.ShouldBe("h1");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Delete("acme-web", "h1", TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("access-denied: memory_delete requires mode full (current rw)");
+        ex.Message.ShouldContain("memory_delete requires mode full (current rw)");
     }
 
     // Scenario 2: ro allows reading only.
@@ -85,9 +85,9 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "ro");
         _store.SearchResults = [new MemorySearchResult("h1", 1, 0.9, "p.md", "content")];
 
-        var writeEx = await Should.ThrowAsync<McpException>(() =>
+        var writeEx = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));
-        writeEx.Message.ShouldContain("access-denied: memory_write requires mode rw (current ro)");
+        writeEx.Message.ShouldContain("memory_write requires mode rw (current ro)");
 
         var results = await _tools.Search("acme-web", "query", cancellationToken: TestContext.Current.CancellationToken);
         results.Data!.Results.Count.ShouldBe(1);
@@ -104,14 +104,12 @@ public sealed class MemoryToolsAccessModeTests
 
         result.Data!.Candidates.ShouldBeEmpty();
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        await Should.ThrowAsync<AccessDeniedException>(() =>
             _share.ShareExtract(["acme-web"], "promote", cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("access-denied");
 
-        var autoEx = await Should.ThrowAsync<McpException>(() =>
+        await Should.ThrowAsync<AccessDeniedException>(() =>
             _share.ShareExtract(["acme-web"], autoPromote: true, confirm: true,
                 cancellationToken: TestContext.Current.CancellationToken));
-        autoEx.Message.ShouldContain("access-denied");
     }
 
     // Scenario 3: full allows removal.
@@ -155,10 +153,10 @@ public sealed class MemoryToolsAccessModeTests
     {
         SetMode(global: "ro");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("other-app", "content", cancellationToken: TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("access-denied: memory_write requires mode rw (current ro)");
+        ex.Message.ShouldContain("memory_write requires mode rw (current ro)");
     }
 
     [Fact]
@@ -180,10 +178,10 @@ public sealed class MemoryToolsAccessModeTests
     [Fact]
     public async Task RwMode_SweepWithoutDryRun_IsDenied()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _sweep.Sweep("acme-web", false, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("access-denied: memory_sweep requires mode full (current rw)");
+        ex.Message.ShouldContain("memory_sweep requires mode full (current rw)");
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -334,9 +332,9 @@ public sealed class MemoryToolsAccessModeTests
         var list = await _promotion.List("acme-web", cancellationToken: TestContext.Current.CancellationToken);
         list.Data!.Rows.ShouldBeEmpty();
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("access-denied: memory_promotion_discard requires mode rw (current ro)");
+        ex.Message.ShouldContain("memory_promotion_discard requires mode rw (current ro)");
     }
 
     // Scenario: a bad limit is an invalid-params answer to the agent, not an internal error.

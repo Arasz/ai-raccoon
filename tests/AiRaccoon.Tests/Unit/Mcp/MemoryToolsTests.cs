@@ -72,15 +72,17 @@ public class MemoryToolsTests
         ex.Message.ShouldContain("project_id");
     }
 
+    // The CallToolFilter maps this to "unknown-workspace:" (see ToolRefusalsTests) — a direct
+    // call to the tool method sees the raw domain exception instead.
     [Fact]
-    public async Task Write_WithUnknownWorkspace_IsAProtocolError()
+    public async Task Write_WithUnknownWorkspace_PropagatesTheDomainException()
     {
         _store.WriteError = new UnknownWorkspaceException("ws-x", "acme");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<UnknownWorkspaceException>(() =>
             _tools.Write("acme", "content", workspaceId: "ws-x", cancellationToken: TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldStartWith("unknown-workspace:");
+        ex.Message.ShouldContain("ws-x");
     }
 
     [Fact]
@@ -283,13 +285,15 @@ public class MemoryToolsTests
         _store.Shared.ShouldBe(("acme", "h1"));
     }
 
+    // The CallToolFilter maps this to "sync-not-configured:" (see ToolRefusalsTests) — a direct
+    // call sees the domain exception itself.
     [Fact]
-    public async Task Sync_WithoutCredentials_ThrowsMcpExceptionWithSyncNotConfigured()
+    public async Task Sync_WithoutCredentials_ThrowsSyncNotConfigured()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             _syncTools.Sync("acme", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("sync-not-configured");
+        ex.Message.ShouldContain("not configured");
     }
 
     [Fact]
@@ -402,27 +406,29 @@ public class MemoryToolsTests
     }
 
 
-    // A refused path is an answer the agent must be able to read, not an internal error.
+    // A refused path is an answer the agent must be able to read, not an internal error — the
+    // CallToolFilter turns this into "path-outside-scope:" (see ToolRefusalsTests); a direct call
+    // sees the domain exception.
     [Fact]
-    public async Task IngestFile_OutsideTheScope_IsAProtocolError()
+    public async Task IngestFile_OutsideTheScope_PropagatesTheDomainException()
     {
         _store.IngestError = new PathOutsideScopeException("/etc/passwd");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<PathOutsideScopeException>(() =>
             _tools.IngestFile("acme", "/etc/passwd", null, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldStartWith("path-outside-scope:");
+        ex.Message.ShouldContain("/etc/passwd");
     }
 
     [Fact]
-    public async Task IngestDirectory_OutsideTheScope_IsAProtocolError()
+    public async Task IngestDirectory_OutsideTheScope_PropagatesTheDomainException()
     {
         _store.IngestError = new PathOutsideScopeException("/etc");
 
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<PathOutsideScopeException>(() =>
             _tools.IngestDirectory("acme", "/etc", null, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldStartWith("path-outside-scope:");
+        ex.Message.ShouldContain("/etc");
     }
 
     private sealed class FakeStore : IMemoryStore

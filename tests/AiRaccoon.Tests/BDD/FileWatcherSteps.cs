@@ -957,8 +957,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public void ThenToolErrors(string code)
     {
         _lastError.ShouldNotBeNull("expected a tool error");
-        _lastError!.ShouldBeOfType<McpException>();
-        _lastError.Message.ShouldStartWith($"{code}:");
+        // A direct call sees the raw domain exception; the CallToolFilter is what maps it to this
+        // wire prefix (see ToolRefusalsTests) — read that same mapping table here.
+        ToolRefusals.PrefixFor(_lastError!).ShouldBe(code);
     }
 
     // "the tool errors with access-denied" is intentionally NOT bound here: NativeMemorySteps
