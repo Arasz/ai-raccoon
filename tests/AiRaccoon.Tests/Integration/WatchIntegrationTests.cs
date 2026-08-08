@@ -296,6 +296,14 @@ public sealed class WatchIntegrationTests
         stack.Write("sub/a.md", "zephyrnest one");
         stack.Write("sub/b.md", "zephyrnest two");
         stack.Write("top.md", "zephyrtop root");
+        // The watcher can miss writes into a just-created directory (#147); seed through the
+        // catch-up scan — production's recovery for lost events — instead of event delivery.
+        stack.CatchUp.EnqueueInitialScan(Project, stack.WatchDir, TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } seeded)
+        {
+            await seeded;
+        }
+
         (await stack.StepUntilAsync(async () =>
         {
             var nested = await stack.SearchAsync("zephyrnest", TestContext.Current.CancellationToken);
