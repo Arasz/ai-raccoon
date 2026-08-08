@@ -117,25 +117,33 @@ public sealed class ToolRefusalsTests : IDisposable
     }
 
     /// <summary>
-    ///     Doc/code drift guard: every prefix the reference doc's error-shapes table promises must
-    ///     resolve to exactly one type in the mapping table itself — no hand-duplicated expectation list.
+    ///     Doc/code drift guard, both directions: every prefix the reference doc's error-shapes
+    ///     table row promises must exist in code, and every code-known prefix (mapped exception
+    ///     types plus the prefixes thrown directly as a bare <see cref="McpException" />) must be
+    ///     documented — no hand-duplicated expectation list on either side.
     /// </summary>
     [Fact]
-    public void DocumentedPrefixes_EachResolveToExactlyOneMappedType()
+    public void DocumentedPrefixes_MatchCodeExactlyInBothDirections()
     {
         var doc = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
         var section = ErrorShapesSection(doc);
-        var documentedPrefixes = Regex.Matches(section, "`([a-z][a-z-]*):")
+        var documentedPrefixes = Regex.Matches(section, @"^\| `([a-z][a-z-]*)` \|", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
             .ToHashSet(StringComparer.Ordinal);
 
         documentedPrefixes.ShouldNotBeEmpty("the error-shapes table regex matched nothing — has the doc's format changed?");
 
-        foreach (var prefix in documentedPrefixes)
-        {
-            ToolRefusals.RefusalPrefixes.Values.Count(p => p == prefix)
-                .ShouldBe(1, $"prefix '{prefix}' documented in agent-memory-server.md should map from exactly one exception type");
-        }
+        var codePrefixes = ToolRefusals.RefusalPrefixes.Values
+            .Concat(ToolRefusals.DirectThrowPrefixes)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var documentedButNotInCode = documentedPrefixes.Except(codePrefixes).ToList();
+        var inCodeButNotDocumented = codePrefixes.Except(documentedPrefixes).ToList();
+
+        documentedButNotInCode.ShouldBeEmpty(
+            $"documented in agent-memory-server.md but not in ToolRefusals: {string.Join(", ", documentedButNotInCode)}");
+        inCodeButNotDocumented.ShouldBeEmpty(
+            $"known to ToolRefusals but missing from agent-memory-server.md's error-shapes table: {string.Join(", ", inCodeButNotDocumented)}");
     }
 
     private static string ErrorShapesSection(string doc)

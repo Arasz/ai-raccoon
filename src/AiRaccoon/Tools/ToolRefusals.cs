@@ -34,6 +34,15 @@ internal static partial class ToolRefusals
         [typeof(ValidationException)] = "invalid-params"
     };
 
+    /// <summary>
+    ///     Wire prefixes thrown directly as a bare <see cref="McpException" /> message rather than
+    ///     mapped from an exception type here — throw sites: ToolGate.cs ("invalid-params"),
+    ///     MemoryTools.cs ("invalid-params"), ShareTools.cs ("invalid-params", "confirm-required"),
+    ///     PromotionTools.cs ("invalid-params"). Kept next to <see cref="RefusalPrefixes" /> so the
+    ///     doc-drift test's expected set stays code-derived rather than hand-duplicated.
+    /// </summary>
+    internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params", "confirm-required"];
+
     /// <summary>The wire prefix for a known refusal, or null when the exception is a genuine failure.</summary>
     internal static string? PrefixFor(Exception exception) => RefusalPrefixes.GetValueOrDefault(exception.GetType());
 
