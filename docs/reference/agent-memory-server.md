@@ -538,6 +538,7 @@ source of truth; a test cross-checks this table against it.
 | `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
 | `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
 | `unknown-hash` | `hash` (e.g. passed to `memory_share`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
+| `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
 | `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'.` |
 | `sync-not-configured` | No sync credentials configured | `sync-not-configured: Memory sync is not configured or its connection string is invalid. Run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted.` |
 | `sync-auth-failed` | Sync credentials missing/invalid, or a 401/403 from the cloud provider | `sync-auth-failed: Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).` (Azure) / `sync-auth-failed: AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.` (S3) |

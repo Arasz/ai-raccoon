@@ -27,6 +27,7 @@ internal static partial class ToolRefusals
         [typeof(PathNotFoundException)] = "path-not-found",
         [typeof(UnknownWorkspaceException)] = "unknown-workspace",
         [typeof(UnknownHashException)] = "unknown-hash",
+        [typeof(UnsupportedSchemaVersionException)] = "schema-version-unsupported",
         [typeof(WatchDisabledException)] = "watching-disabled",
         [typeof(SyncNotConfiguredException)] = "sync-not-configured",
         [typeof(SyncAuthFailedException)] = "sync-auth-failed",
