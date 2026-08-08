@@ -3,11 +3,9 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
-///     Path identity for every disk-reading surface (D3): absolute via <see cref="Path.GetFullPath"/>, separators and
-///     ".." resolved, trailing separator stripped except root; case comparison follows the
-///     host OS (Windows ignores case, Unix is ordinal). <see cref="Normalize"/> is textual only —
-///     <see cref="IsWithinScope"/> resolves symlinks (see <see cref="ResolveReal"/>) so containment
-///     cannot be defeated by a link whose literal path reads as in-scope.
+///     Path identity for every disk-reading surface (docs/plans/file-watcher-implementation.md D3):
+///     normalizes to absolute, resolved, host-OS-case form; <see cref="IsWithinScope"/> resolves
+///     symlinks so containment can't be defeated by a link whose literal path reads as in-scope.
 /// </summary>
 public static class IngestPath
 {
@@ -26,10 +24,9 @@ public static class IngestPath
     }
 
     /// <summary>
-    ///     <see cref="Normalize"/> plus every symlink along the path resolved to its real target —
-    ///     a symlinked ancestor directory or a symlinked leaf both count. Falls back to the
-    ///     normalized path segment-by-segment when a segment does not exist or cannot be inspected,
-    ///     so a not-yet-created path still normalizes instead of throwing.
+    ///     <see cref="Normalize"/> plus every symlink along the path resolved to its real target — a
+    ///     symlinked ancestor or leaf both count. Falls back to the normalized segment when it does
+    ///     not exist or cannot be inspected, so a not-yet-created path still normalizes instead of throwing.
     /// </summary>
     public static string ResolveReal(string path)
     {

@@ -4,10 +4,8 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
-///     Settings keys for the ingest scope allowlist — the paths a project may read from disk.
-///     Global + per-project, more specific wins. Values are JSON arrays of absolute, normalized
-///     paths. Every path-reading surface is bound by it: memory_ingest_file,
-///     memory_ingest_directory, memory_watch_add and the file watcher.
+///     Ingest scope allowlist keys: global + per-project, more specific wins; values are JSON arrays
+///     of absolute, normalized paths. Binds every path-reading surface (ingest, watch).
 /// </summary>
 public static class IngestScopeKeys
 {

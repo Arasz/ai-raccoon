@@ -1,8 +1,8 @@
 namespace AiRaccoon.Core.Encryption;
 
 /// <summary>
-///     Settings-table keys and source values for the encryption provider family (plan §5.2).
-///     Contract with S2b/S3/S5 — changing these breaks' integration.
+///     Settings-table keys and source values for the encryption provider family
+///     (docs/plans/encryption-bitwarden-implementation.md §5.2). Changing them breaks integration.
 /// </summary>
 public static class EncryptionSettingsKeys
 {

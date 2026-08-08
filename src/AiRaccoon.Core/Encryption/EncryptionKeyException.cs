@@ -1,6 +1,6 @@
 namespace AiRaccoon.Core.Encryption;
 
-/// <summary>Base for errors rejecting an encryption key source value (plan §5.1).</summary>
+/// <summary>Base for errors rejecting an encryption key source value (docs/plans/encryption-bitwarden-implementation.md §5.1).</summary>
 public abstract class EncryptionKeyException(string message) : InvalidOperationException(message);
 
 /// <summary>Raised when the key source is an OpenSSH key encrypted with a passphrase (ciphername ≠ "none").</summary>

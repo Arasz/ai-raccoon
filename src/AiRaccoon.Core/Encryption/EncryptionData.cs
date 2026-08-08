@@ -1,6 +1,6 @@
 namespace AiRaccoon.Core.Encryption;
 
-/// <summary>Non-secret encryption source selection, mirrored in the sidecar and the settings table (plan §5.2).</summary>
+/// <summary>Non-secret encryption source selection, mirrored in the sidecar and the settings table (docs/plans/encryption-bitwarden-implementation.md §5.2).</summary>
 /// <param name="Source">"env" or "bitwarden" (see <see cref="EncryptionSettingsKeys"/>).</param>
 /// <param name="ProjectId">Bitwarden project id; null when the source is env.</param>
 /// <param name="SecretId">Bitwarden secret id; null when the source is env.</param>
