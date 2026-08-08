@@ -264,6 +264,17 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ShareAsync_WithUnknownHash_ThrowsUnknownHashException()
+    {
+        var ex = await Should.ThrowAsync<UnknownHashException>(() =>
+            _store.ShareAsync("acme", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
+                TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd");
+        ex.Message.ShouldContain("acme");
+    }
+
+    [Fact]
     public async Task Delete_RemovesTheRows_AndTheFtsIndexEntry()
     {
         var entry = await _store.WriteAsync(

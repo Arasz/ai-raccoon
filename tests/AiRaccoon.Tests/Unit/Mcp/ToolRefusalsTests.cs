@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
@@ -76,6 +77,15 @@ public sealed class ToolRefusalsTests : IDisposable
             "memory_workspace_consolidate",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
             "invalid-argument",
+            null
+        },
+        {
+            "memory_share",
+            new Dictionary<string, object?>
+            {
+                ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+            },
+            "unknown-hash",
             null
         }
     };
@@ -180,7 +190,8 @@ public sealed class ToolRefusalsTests : IDisposable
         { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
         { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
         { new ValidationException("projectId is required"), "invalid-params" },
-        { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" }
+        { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
+        { new UnknownHashException("deadbeef", "acme"), "unknown-hash" }
     };
 
     [Theory]

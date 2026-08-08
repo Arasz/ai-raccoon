@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
@@ -25,6 +26,7 @@ internal static partial class ToolRefusals
         [typeof(PathOutsideScopeException)] = "path-outside-scope",
         [typeof(PathNotFoundException)] = "path-not-found",
         [typeof(UnknownWorkspaceException)] = "unknown-workspace",
+        [typeof(UnknownHashException)] = "unknown-hash",
         [typeof(WatchDisabledException)] = "watching-disabled",
         [typeof(SyncNotConfiguredException)] = "sync-not-configured",
         [typeof(SyncAuthFailedException)] = "sync-auth-failed",

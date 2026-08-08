@@ -270,8 +270,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         if (source is null)
         {
-            throw new InvalidOperationException(
-                $"No entry with hash '{hash}' in context '{ContextNaming.ProjectContext(projectId)}'.");
+            throw new UnknownHashException(hash, projectId);
         }
 
         // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
