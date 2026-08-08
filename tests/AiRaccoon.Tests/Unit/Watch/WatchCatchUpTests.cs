@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,9 @@ public sealed class WatchCatchUpTests
 
     private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
+    private static IReadOnlySet<string> Fingerprints(params string[] paths) =>
+        paths.Select(IngestPath.Normalize).ToHashSet(IngestPath.PathComparer);
+
     [Fact]
     public void EnumerateFiles_NoWatermark_ReturnsEveryFile()
     {
@@ -35,7 +39,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(a, "zephyrone");
         WriteAllText(b, "zephyrtwo");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, null).ToList();
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, null, Fingerprints()).ToList();
 
         files.ShouldContain(a);
         files.ShouldContain(b);
@@ -53,10 +57,24 @@ public sealed class WatchCatchUpTests
         Stamp(older, watermark.AddHours(-1));
         Stamp(newer, watermark.AddHours(1));
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds()).ToList();
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds(),
+            Fingerprints(older, newer)).ToList();
 
         files.ShouldContain(newer);
         files.ShouldNotContain(older);
+    }
+
+    [Fact]
+    public void EnumerateFiles_WithWatermark_ReturnsAnUnfingerprintedFileWithOldMtime()
+    {
+        using var dir = TempDir.New("catchup-unfingerprinted");
+        var watermark = new DateTimeOffset(2026, 1, 15, 11, 59, 0, TimeSpan.Zero);
+        var missed = dir.File("missed.md");
+        WriteAllText(missed, "zephyrone");
+        Stamp(missed, watermark.AddHours(-1));
+
+        WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds(), Fingerprints())
+            .ShouldContain(missed);
     }
 
     [Fact]
@@ -68,7 +86,8 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrone");
         Stamp(file, watermark);
 
-        WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds()).ShouldBeEmpty();
+        WatchCatchUp.EnumerateFiles(dir.Path, watermark.ToUnixTimeSeconds(), Fingerprints(file))
+            .ShouldBeEmpty();
     }
 
     [Fact]
@@ -79,12 +98,14 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrone");
         Stamp(file, new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero));
 
-        WatchCatchUp.EnumerateFiles(file, null).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(file, null, Fingerprints(file)).ShouldContain(file);
         WatchCatchUp.EnumerateFiles(file,
-                new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds())
+                new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds(),
+                Fingerprints(file))
             .ShouldContain(file);
         WatchCatchUp.EnumerateFiles(file,
-                new DateTimeOffset(2026, 1, 15, 13, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds())
+                new DateTimeOffset(2026, 1, 15, 13, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds(),
+                Fingerprints(file))
             .ShouldBeEmpty();
     }
 
@@ -152,6 +173,8 @@ public sealed class WatchCatchUpTests
         await WriteAllTextAsync(newer, "zephyrtwo", TestContext.Current.CancellationToken);
         Stamp(older, DateTimeOffset.FromUnixTimeSeconds(watermark - 3600));
         Stamp(newer, DateTimeOffset.FromUnixTimeSeconds(watermark + 3600));
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(older), "zephyrhash",
+            watermark - 3600, TestContext.Current.CancellationToken);
         var catchUp = NewCatchUp(stack);
 
         catchUp.EnqueueChangedSince(Project, dir.Path, watermark, TestContext.Current.CancellationToken);
@@ -160,6 +183,27 @@ public sealed class WatchCatchUpTests
 
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(newer);
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(older);
+    }
+
+    [Fact]
+    public async Task EnqueueChangedSince_IngestsAFileNeverFingerprinted_EvenWithMtimeBeforeTheWatermark()
+    {
+        using var dir = TempDir.New("catchup-backfill");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var watermark = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        var missed = dir.File("missed.md");
+        await WriteAllTextAsync(missed, "zephyrone", TestContext.Current.CancellationToken);
+        Stamp(missed, DateTimeOffset.FromUnixTimeSeconds(watermark - 3600));
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedSince(Project, dir.Path, watermark, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.Select(i => i.Path).ShouldContain(missed);
     }
 
     [Fact]

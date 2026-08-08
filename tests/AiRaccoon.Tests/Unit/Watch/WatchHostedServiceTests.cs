@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -83,6 +84,8 @@ public sealed class WatchHostedServiceTests
         stack.Enable();
         await stack.Store.AddWatchAsync(Project, dir.Path, 0, watermark,
             TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(older), "zephyrhash",
+            watermark - 3600, TestContext.Current.CancellationToken);
 
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
