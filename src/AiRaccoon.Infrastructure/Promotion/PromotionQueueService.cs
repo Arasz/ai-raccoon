@@ -5,11 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Promotion;
 
 /// <summary>
-///     The propose tier's orchestrator: persists candidates (propose), shares from the queue
-///     (promote — never a fresh re-extraction), evicts while the queue is over capacity, and
-///     reports what is waiting. The eviction rule is the injected IEvictionPolicy; the store
-///     executes the victim-row query; a crash between upsert and eviction may leave the queue
-///     one over cap — the next propose loop self-heals (documented in the plan).
+///     The propose tier's orchestrator: persists candidates, shares from the queue (never a
+///     fresh re-extraction), and evicts while over capacity via the injected IEvictionPolicy
+///     (ADR-0007). A crash between upsert and eviction self-heals on the next propose loop.
 /// </summary>
 public sealed partial class PromotionQueueService(
     IPromotionQueueStore queue,
@@ -141,10 +139,8 @@ public sealed partial class PromotionQueueService(
         IReadOnlyDictionary<string, PromotionCapacityInfo>? capacityByProject = null;
         if (stats.PerProject.Count > 0)
         {
-            // projectCount = occupying projects (stats.PerProject.Count), not the full project
-            // roster: that is the population UniformCountEvictionPolicy actually competes over,
-            // and it avoids an extra store round-trip on every meta read for projects that have
-            // never proposed anything.
+            // projectCount = occupying projects, not the full roster: that's what
+            // UniformCountEvictionPolicy competes over.
             var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
             capacityByProject = PromotionCapacityPolicy.CapacityInfo(cap, stats.PerProject.Count, stats.PerProject);
         }
