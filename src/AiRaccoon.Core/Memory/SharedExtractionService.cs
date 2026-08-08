@@ -3,8 +3,7 @@ namespace AiRaccoon.Core.Memory;
 /// <summary>
 ///     Mechanical shared-extraction scoring (no LLM): a provenance-archetype prior plus bounded
 ///     content-shape evidence produce a ranked candidate list (docs/adr/0018-promotion-scoring-v2.md).
-///     Dedup is exact against the shared tier; pure — the store feeds rows, the caller promotes;
-///     recency is a sort tie-break only, never part of the score.
+///     Dedup is exact against the shared tier; recency is a sort tie-break only, never part of the score.
 /// </summary>
 public sealed class SharedExtractionService
 {
