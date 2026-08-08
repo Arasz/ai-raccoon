@@ -6,7 +6,7 @@ namespace AiRaccoon.Observability;
 /// <summary>
 ///     OpenTelemetry-compatible metrics and traces for AiRaccoon MCP tool invocations.
 ///     Meter name is "AiRaccoon.MemoryTools" for discoverability by dotnet-counters.
-///     project_id Activity tag: fine while local-only; may need hashing when OTLP export is added.
+///     project_id tags the counter but not the histogram, on cardinality grounds — see ADR 0002.
 /// </summary>
 public sealed class ToolCallMetrics : IDisposable
 {
@@ -41,14 +41,15 @@ public sealed class ToolCallMetrics : IDisposable
     public ActivitySource ActivitySource { get; }
 
     /// <summary>Records a tool invocation: increments the counter and records the duration histogram.</summary>
-    public void RecordInvocation(string tool, TimeSpan duration, bool isError, string? errorType = null)
+    public void RecordInvocation(string tool, string projectId, TimeSpan duration, bool isError, string? errorType = null)
     {
         var result = isError ? "error" : "success";
 
         var counterTags = new TagList
         {
             { "tool", tool },
-            { "result", result }
+            { "result", result },
+            { "project_id", projectId }
         };
         if (errorType is not null)
         {

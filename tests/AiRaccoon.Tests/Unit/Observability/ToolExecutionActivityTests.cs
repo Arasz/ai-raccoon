@@ -33,6 +33,20 @@ public class ToolExecutionActivityTests
     }
 
     [Fact]
+    public void RecordInvocation_ForwardsProjectIdToTheCounter()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "jsaa");
+        activity.RecordInvocation();
+
+        var measurements = collector.GetMeasurementSnapshot();
+        measurements.Count.ShouldBe(1);
+        measurements[0].Tags["project_id"].ShouldBe("jsaa");
+    }
+
+    [Fact]
     public void RecordInvocation_EmitsSuccessMetric()
     {
         var metrics = new ToolCallMetrics();
