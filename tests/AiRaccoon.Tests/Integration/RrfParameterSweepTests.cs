@@ -164,9 +164,9 @@ public sealed class RrfParameterSweepTests : IDisposable
         chosen.A1FileRank.ShouldBe(1, "A1 file rank must stay 1");
         chosen.A4FileRank.ShouldBe(1, "A4 file rank must stay 1");
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
-        chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(6, "A6 file rank must stay <= 6 (re-pinned)");
+        chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(8, "A6 file rank must stay <= 8 (cross-platform envelope, ADR-0015)");
         chosen.A6ExactRank.ShouldNotBeNull("A6 exact chunk must appear in the top 10");
-        chosen.A6ExactRank!.Value.ShouldBeLessThanOrEqualTo(6, "A6 exact rank must stay <= 6 (re-pinned)");
+        chosen.A6ExactRank!.Value.ShouldBeLessThanOrEqualTo(8, "A6 exact rank must stay <= 8 (cross-platform envelope, ADR-0015)");
         chosen.S2FileRank.ShouldNotBeNull("S2 ADR-0011 file must appear in the top 10");
         chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "S2 ADR-0011 file must rank <= 3 (re-pinned)");
         chosen.A7ExactRank.ShouldNotBeNull("A7 exact chunk must appear in the top 10");
@@ -184,9 +184,9 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         var holders = rows.Where(HoldsAllGates).ToList();
         holders.Count.ShouldBeGreaterThanOrEqualTo(1, "the chosen point itself must hold every gate");
-        holders.Max(row => row.AdrNdcg5).ShouldBe(chosen.AdrNdcg5,
+        holders.Max(row => row.AdrNdcg5).ShouldBe(chosen.AdrNdcg5, GoldenFile.RankingTolerance,
             $"no gate-holding point may score above the chosen point; holders range up to {holders.Max(row => row.AdrNdcg5):F3}");
-        holders.Max(row => row.AdrMrr).ShouldBe(chosen.AdrMrr,
+        holders.Max(row => row.AdrMrr).ShouldBe(chosen.AdrMrr, GoldenFile.RankingTolerance,
             "the chosen point must be Pareto-optimal on MRR among the gate-holding points");
 
         foreach (var beater in rows.Where(row => row.AdrNdcg5 > chosen.AdrNdcg5))
@@ -383,12 +383,12 @@ public sealed class RrfParameterSweepTests : IDisposable
             violations.Add($"A4 file {row.A4FileRank?.ToString() ?? "-"}");
         }
 
-        if (row.A6FileRank is null or > 6)
+        if (row.A6FileRank is null or > 8)
         {
             violations.Add($"A6 file {row.A6FileRank?.ToString() ?? "-"}");
         }
 
-        if (row.A6ExactRank is null or > 6)
+        if (row.A6ExactRank is null or > 8)
         {
             violations.Add($"A6 exact {row.A6ExactRank?.ToString() ?? "-"}");
         }

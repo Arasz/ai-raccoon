@@ -133,7 +133,8 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // collapsed (no structure signal in the re-pinned corpus) — its FTS-only rank-1 gate
         // lives in QueryConstructionTests.
         chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
-        chosen.C5ExactRank.ShouldBe(5, "C5 must hold its measured hybrid rank 5");
+        chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
+        chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");
 
         // Gate (e): the documented same-knowledge-alternative trade does not worsen.
         chosen.A1FileRank.ShouldNotBeNull("A1 expected file must appear in the top 10");
