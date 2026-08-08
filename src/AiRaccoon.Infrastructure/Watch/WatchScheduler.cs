@@ -3,7 +3,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     Runs digest jobs with per-project concurrency gates (resolved from watch.concurrency.*,
 ///     default 4, clamped 1-16) and round-robin admission across watches so one watch's flood
-///     cannot starve others (feature rule 12).
+///     cannot starve others (docs/features/file-watcher/file-watcher.feature rule 12).
 /// </summary>
 public sealed class WatchScheduler
 {

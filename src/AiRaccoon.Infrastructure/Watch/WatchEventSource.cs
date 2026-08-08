@@ -9,17 +9,16 @@ public sealed record WatchEventError(string ProjectId, string WatchPath, string 
 
 /// <summary>
 ///     FileSystemWatcher adapter: one watcher per registered (projectId, path), all four event
-///     types translated to WatchEvent with D3-normalized paths. Never throws on its own —
-///     adapter-level failures surface as synthetic WatchEventError events (feature rule 13).
+///     types translated to WatchEvent with D3-normalized paths (docs/plans/file-watcher-implementation.md);
+///     never throws on its own — failures surface as WatchEventError (docs/features/file-watcher/file-watcher.feature rule 13).
 /// </summary>
 public sealed partial class WatchEventSource(
     Action<WatchEvent> onEvent,
     Action<WatchEventError> onError,
     ILogger<WatchEventSource> logger) : IDisposable
 {
-    // File-mode registrations: (projectId, registeredPath) → the watched file. The
-    // underlying watcher watches the PARENT directory (FileSystemWatcher requires a
-    // directory); Translate filters events to this target file.
+    // File-mode registrations: (projectId, registeredPath) → the watched file. FileSystemWatcher
+    // requires a directory, so the watcher sits on the parent; Translate filters to this file.
     private readonly Dictionary<(string ProjectId, string Path), string> _fileTargets =
         new(WatchKeyComparer.Instance);
 
@@ -46,10 +45,8 @@ public sealed partial class WatchEventSource(
                 return;
             }
 
-            // A registered FILE path (or a missing path whose parent exists) cannot be
-            // watched directly — FileSystemWatcher requires a directory. Watch the parent
-            // filtered to the file name and translate only events for that file
-            // (audit F7 / issue #44). A missing path with no existing parent still errors.
+            // FileSystemWatcher requires a directory: a registered FILE path (or a missing path
+            // whose parent exists) watches the parent, filtered to translate only that file's events.
             var watchDirectory = normalized;
             string? filter = null;
             var includeSubdirectories = true;
@@ -178,9 +175,8 @@ public sealed partial class WatchEventSource(
                     if (IngestPath.PathComparer.Equals(normalizedOld, fileTarget) &&
                         !IngestPath.PathComparer.Equals(normalizedFull, fileTarget))
                     {
-                        // Rename-away: the watched file left its registered name — the
-                        // registration is now gone, so surface a Deleted for the target
-                        // (a Renamed would make DigestAsync ingest the new name).
+                        // Rename-away: the watched file left its registered name, so surface a
+                        // Deleted for the target (a Renamed would re-ingest under the new name).
                         onEvent(new WatchEvent(projectId, fileTarget, WatchEventKind.Deleted));
                     }
                     else if (IngestPath.PathComparer.Equals(normalizedFull, fileTarget))

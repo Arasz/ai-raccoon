@@ -12,7 +12,7 @@ internal sealed record WatchRuntimeState(WatchState State, string? LastError, Da
 /// <summary>
 ///     Mirror pipeline core: one channel of filesystem events, per-path pending aggregation,
 ///     a 1s tick (injected TimeProvider), drain to the scheduler. Every iteration is contained —
-///     errors land in status, nothing escapes to the MCP server (feature rule 13).
+///     errors land in status, nothing escapes the MCP server (docs/features/file-watcher/file-watcher.feature rule 13).
 /// </summary>
 public sealed partial class WatchPipeline(
     WatchScheduler scheduler,
@@ -30,13 +30,12 @@ public sealed partial class WatchPipeline(
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>Raised synchronously from <see cref="UnregisterWatch"/> — the one choke point (D-1)
-    /// every removal inherits, so callers with their own "is this watch live" bookkeeping (the
-    /// re-watch loop's started-watchers set) can invalidate it at the same instant instead of
-    /// waiting for a poll to notice the registration went away and came back.</summary>
+    /// <summary>Raised synchronously from <see cref="UnregisterWatch"/> — the one removal choke point
+    /// (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1) every removal inherits, so callers with
+    /// their own liveness bookkeeping can invalidate it at the same instant instead of waiting for a poll.</summary>
     public event Action<string, string>? Unregistered;
 
-    /// <summary>Thread-safe entry point for the event source (S5): writes into the single channel.</summary>
+    /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
     public void Enqueue(WatchEvent evt)
     {
         var normalized = evt with
@@ -67,7 +66,7 @@ public sealed partial class WatchPipeline(
     }
 
     /// <summary>Drops a watch's runtime state and any pending digests under it (remove must not resurrect),
-    /// and cancels its in-flight catch-up scan (D-1: this is the one choke point every removal inherits).</summary>
+    /// and cancels its in-flight catch-up scan (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1).</summary>
     public void UnregisterWatch(string projectId, string path)
     {
         var normalized = IngestPath.Normalize(path);
@@ -92,7 +91,7 @@ public sealed partial class WatchPipeline(
         Unregistered?.Invoke(projectId, normalized);
     }
 
-    /// <summary>Marks a watch scanning (S5's initial scan) — clears the last error.</summary>
+    /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
     public void MarkScanning(string projectId, string path)
     {
         var normalized = IngestPath.Normalize(path);
