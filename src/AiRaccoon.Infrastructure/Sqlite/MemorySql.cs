@@ -316,6 +316,11 @@ internal static class MemorySql
         SELECT value FROM settings WHERE key = @key LIMIT 1
         """;
 
+    public const string SelectWorkspaceStatus =
+        """
+        SELECT status FROM workspaces WHERE id = @workspaceId AND project_id = @projectId LIMIT 1
+        """;
+
     public const string SelectSettingsByPrefix =
         """
         SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key

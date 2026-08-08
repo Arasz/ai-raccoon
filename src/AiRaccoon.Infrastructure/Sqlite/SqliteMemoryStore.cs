@@ -7,6 +7,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -54,6 +55,12 @@ public sealed partial class SqliteMemoryStore(
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        if (bucket.WorkspaceId is not null)
+        {
+            await RequireActiveWorkspaceAsync(connection, bucket.WorkspaceId, request.ProjectId, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         // Global content dedup within the project's committed set: identical content anywhere in
         // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
@@ -728,6 +735,22 @@ public sealed partial class SqliteMemoryStore(
         if (!scope.Any(entry => IngestPath.IsWithinScope(normalized, entry)))
         {
             throw new PathOutsideScopeException(normalized);
+        }
+    }
+
+    /// <summary>
+    ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
+    ///     Active is a valid write target, so a missing row and a closed one are the same failure to a caller.
+    /// </summary>
+    private static async Task RequireActiveWorkspaceAsync(SqliteConnection connection, string workspaceId,
+        string projectId, CancellationToken cancellationToken)
+    {
+        var status = await connection.QueryFirstOrDefaultAsync<string?>(
+                Def(MemorySql.SelectWorkspaceStatus, new { workspaceId, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+        if (status != WorkspaceStatus.Active.ToString())
+        {
+            throw new UnknownWorkspaceException(workspaceId, projectId);
         }
     }
 
