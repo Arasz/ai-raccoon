@@ -239,8 +239,9 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             new MemoryWriteRequest("acme", "Just a plain paragraph, no headings anywhere."),
             TestContext.Current.CancellationToken);
 
-        // '' (not NULL) marks "processed, no heading" — NULL is reserved for "not yet processed",
-        // which is what keeps a headingless row from pinning the heal candidate window forever.
+        // '' marks "processed, no heading"; NULL means "not yet processed" and is the heal
+        // candidate predicate. Writing the sentinel is what releases a headingless row from the
+        // window — leaving it NULL would pin the window on that row forever.
         var row = await ReadRowAsync(entry.Hash);
         row.HeadingPath.ShouldBe("");
         row.StructureEmbedding.ShouldBeNull();
@@ -292,8 +293,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
             TestContext.Current.CancellationToken);
 
-        // The heal batch size is 32; the first 32 rows by id are headingless so they pin the
-        // window unless a processed headingless row leaves heading_path IS NULL behind.
+        // The heal batch size is 32 and the first 32 rows by id are headingless, so they would pin
+        // the window if processing left heading_path NULL. The '' sentinel is what advances it.
         for (var i = 0; i < 32; i++)
         {
             await _store.WriteAsync(new MemoryWriteRequest("acme", $"Plain fact number {i}, no headings anywhere."),
