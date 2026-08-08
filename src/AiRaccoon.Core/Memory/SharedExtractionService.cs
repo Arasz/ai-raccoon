@@ -15,7 +15,7 @@ public sealed class SharedExtractionService
     /// <summary>Kept at 0.4 after re-examination for v3 (docs/adr/0018-promotion-scoring-v2.md).</summary>
     private const double CandidateFloor = 0.4;
 
-    /// <summary>Scoring and (in promote mode) selection of rows to share. Never mutates anything.</summary>
+    /// <summary>Scoring and (in promote mode) selection of rows to share, capped at `limit`. Never mutates anything.</summary>
     public ShareExtractResult Run(
         ExtractMode mode,
         string projectId,
@@ -25,6 +25,38 @@ public sealed class SharedExtractionService
         IReadOnlyCollection<string> sharedPaths,
         bool includeTtlRows,
         int limit,
+        DateTimeOffset now)
+    {
+        var ranked = RankAll(projectId, allProjectIds, rows, sharedValues, sharedPaths, includeTtlRows, now);
+        var candidates = new List<ShareCandidate>();
+        var promoted = new List<string>();
+        foreach (var candidate in ranked)
+        {
+            if (candidates.Count >= limit)
+            {
+                break;
+            }
+
+            candidates.Add(candidate);
+            if (mode == ExtractMode.Promote)
+            {
+                promoted.Add(candidate.Hash);
+            }
+        }
+
+        return new ShareExtractResult(candidates, promoted);
+    }
+
+    /// <summary>Every eligible candidate (above the floor, deduped against the shared tier), ranked
+    /// by score then recency — unbounded, so a caller can refresh a row's score without that row
+    /// having to re-enter the top of any display limit first.</summary>
+    public IReadOnlyList<ShareCandidate> RankAll(
+        string projectId,
+        IReadOnlyList<string> allProjectIds,
+        IReadOnlyList<ExtractionCandidateRow> rows,
+        IReadOnlyCollection<string> sharedValues,
+        IReadOnlyCollection<string> sharedPaths,
+        bool includeTtlRows,
         DateTimeOffset now)
     {
         var sharedValueSet = sharedValues.ToHashSet(StringComparer.Ordinal);
@@ -58,8 +90,7 @@ public sealed class SharedExtractionService
             return byScore != 0 ? byScore : b.Row.CreatedAt.CompareTo(a.Row.CreatedAt);
         });
 
-        var candidates = new List<ShareCandidate>();
-        var promoted = new List<string>();
+        var ranked = new List<ShareCandidate>();
         foreach (var (row, score, reasons) in scored)
         {
             if (IsDuplicate(row, sharedValueSet, sharedPathSet))
@@ -67,21 +98,12 @@ public sealed class SharedExtractionService
                 continue;
             }
 
-            if (candidates.Count >= limit)
-            {
-                break;
-            }
-
-            candidates.Add(new ShareCandidate(
+            ranked.Add(new ShareCandidate(
                 row.Hash, row.Path, Truncate(row.Value), score, row.Rating, row.AccessCount,
                 row.CreatedAt, reasons, row.SourceFile));
-            if (mode == ExtractMode.Promote)
-            {
-                promoted.Add(row.Hash);
-            }
         }
 
-        return new ShareExtractResult(candidates, promoted);
+        return ranked;
     }
 
     private static bool IsDuplicate(

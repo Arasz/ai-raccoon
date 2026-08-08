@@ -91,9 +91,9 @@ public sealed class SharedExtractionRunnerTests
     }
 
     [Fact]
-    public async Task ProposeAsync_HonoursTheLimit()
+    public async Task ProposeAsync_HonoursTheLimit_ForTheReturnedCandidates()
     {
-        var (store, queue, _, runner) = NewStack();
+        var (store, _, _, runner) = NewStack();
         store.Candidates["acme"] = Enumerable.Range(0, 10)
             .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
             .ToList();
@@ -102,7 +102,24 @@ public sealed class SharedExtractionRunnerTests
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
 
         candidates.Count.ShouldBe(3);
-        queue.LastCandidates!.Count.ShouldBe(3);
+    }
+
+    /// <summary>The display limit and the re-score set are not the same thing — every eligible
+    /// row is upserted so a row ranked outside the top `limit` still gets its score refreshed on
+    /// every pass, not just the ones a caller happens to ask to see.</summary>
+    [Fact]
+    public async Task ProposeAsync_QueuesEveryEligibleCandidate_NotJustTheDisplayLimit()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = Enumerable.Range(0, 10)
+            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
+            .ToList();
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Count.ShouldBe(10,
+            "rows ranked below the display limit still need their score refreshed every pass");
     }
 
     [Fact]

@@ -28,15 +28,17 @@ public sealed class SharedExtractionRunner(
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
-        var result = extraction.Run(ExtractMode.Propose, projectId, allProjectIds, rows,
-            sharedIndex.Values, sharedIndex.Paths, includeTtlRows, limit, timeProvider.GetUtcNow());
-        if (result.Candidates.Count > 0)
+        // Every eligible row is queued (refreshing its score), not just the top `limit` returned
+        // to the caller — otherwise a row ranked outside the display window is never re-scored.
+        var ranked = extraction.RankAll(projectId, allProjectIds, rows,
+            sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
+        if (ranked.Count > 0)
         {
-            await queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates), cancellationToken)
+            await queue.ProposeAsync(projectId, ToQueueCandidates(rows, ranked), cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        return result.Candidates;
+        return ranked.Take(limit).ToList();
     }
 
     /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
