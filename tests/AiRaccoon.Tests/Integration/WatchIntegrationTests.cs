@@ -485,7 +485,7 @@ public sealed class WatchIntegrationTests
             var results = await stack.SearchAsync("zephyrword299", TestContext.Current.CancellationToken);
             var current = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
             return results.Any() && current.Count == 1 && current[0].State == WatchState.Healthy;
-        }, TestContext.Current.CancellationToken, 30)).ShouldBeTrue("large-dir scan did not finish");
+        }, TestContext.Current.CancellationToken, maxRealSeconds: 60)).ShouldBeTrue("large-dir scan did not finish");
         (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBeGreaterThanOrEqualTo(300);
     }
@@ -686,19 +686,33 @@ public sealed class WatchIntegrationTests
 
         /// <summary>
         ///     Bounded poll: advance the fake clock 100ms, drain the pipeline once, sleep briefly
-        ///     for OS event delivery — until the condition holds or the real-time deadline passes.
+        ///     for OS event delivery — until the condition holds or either budget expires.
+        ///     maxFakeSeconds bounds step count; maxRealSeconds is only a hang-stop for the real
+        ///     OS-event/embedding work these arrange-phase polls wait on, so it stays generous.
         /// </summary>
         public async Task<bool> StepUntilAsync(Func<Task<bool>> condition, CancellationToken cancellationToken,
-            int maxSeconds = 15)
+            int maxFakeSeconds = 60, int maxRealSeconds = 30)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(maxSeconds);
+            var startedAt = DateTime.UtcNow;
+            var realDeadline = startedAt.AddSeconds(maxRealSeconds);
+            var fakeStart = Time.GetUtcNow();
+            var steps = 0;
             while (!await condition())
             {
-                if (DateTime.UtcNow >= deadline)
+                var fakeSpent = Time.GetUtcNow() - fakeStart;
+                var fakeExpired = fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds);
+                var realExpired = DateTime.UtcNow >= realDeadline;
+                if (fakeExpired || realExpired)
                 {
+                    TestContext.Current.TestOutputHelper?.WriteLine(
+                        $"StepUntilAsync gave up after {steps} steps: " +
+                        $"{(fakeExpired ? "fake-time budget" : "real-time hang-stop")} expired " +
+                        $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s, " +
+                        $"real {(DateTime.UtcNow - startedAt).TotalSeconds:F1}s/{maxRealSeconds}s)");
                     return false;
                 }
 
+                steps++;
                 Time.Advance(TimeSpan.FromMilliseconds(100));
                 await Pipeline.TickOnceAsync(cancellationToken);
                 await Task.Delay(20, cancellationToken);
