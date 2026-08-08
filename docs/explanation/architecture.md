@@ -30,6 +30,8 @@ erDiagram
         TEXT hash
         TEXT path
         TEXT value
+        TEXT source_file
+        TEXT section
         TEXT scope
         TEXT project_id
         TEXT context_label
@@ -43,6 +45,8 @@ erDiagram
         INTEGER ttl_days
         TEXT embed_state
         BLOB embedding
+        TEXT heading_path
+        BLOB structure_embedding
     }
 
     settings {
@@ -143,7 +147,9 @@ sequenceDiagram
         S-->>M: return existing entry
     else new row
         S->>D: INSERT entry (embed_state='pending')
-        D-->>S: last_insert_rowid
+        S->>D: SELECT entry by bucket key (path+hash)
+        Note right of S: not last_insert_rowid — a concurrent same-bucket<br/>insert may have won (ON CONFLICT DO NOTHING)
+        D-->>S: inserted row
         S->>D: SELECT embedding settings
         alt engine configured
             S->>E: Generate embedding
@@ -156,23 +162,32 @@ sequenceDiagram
     end
 ```
 
-For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), the path is first
-checked against the project's declared ingest scope (`ingest.scope.<project>`, falling back
-to `ingest.scope.global`) and refused with `PathOutsideScopeException` when it falls outside —
-the same rule and primitive `memory_watch_add` uses, enforced in the store so every client
-is bound. An unscoped project refuses every ingest. From there the path
-diverges: the file content is split into **token-aware chunks** before hashing
-and insertion. The chunker uses the o200k_base tokenizer with code-fence-aware
-splitting and an overlay window for context continuity between chunks.
+For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), `SqliteMemoryStore`
+opens the bank once for the whole call and hands the open connection to `FileIngestor`
+(`src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs`, extracted from the store in WI-8/PR
+#161) — the compiler enforces one bank-open per ingest. `FileIngestor` first checks the path
+against the project's declared ingest scope (`ingest.scope.<project>`, falling back to
+`ingest.scope.global`) and refuses with `PathOutsideScopeException` when it falls outside — the
+same rule and primitive `memory_watch_add` uses. An unscoped project refuses every ingest. Past
+the scope check, a non-indexable file (not `.md`/`.markdown`/`.txt`, or hidden) is silently
+skipped; an indexable file's content is split into **token-aware chunks** before hashing and
+insertion. Each new chunk is embedded immediately through `EntryEmbedder` when an engine is
+configured — no extension-host hook sits on this path (that pipeline was removed entirely,
+ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to pick up
+later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an overlay
+window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
 tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.
 When no engine is configured, the default is 256 tokens per chunk with a 48-token
 overlay.
 
-> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:41-93`
-> (write), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:652-716`
-> (chunk insertion), `src/AiRaccoon.Core/Memory/ContentHash.cs:12-23`
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:36-113`
+> (`memory_write`), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:27-61`
+> (ingest entry points, single open), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:175-191`
+> (scope check), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:64-144`
+> (chunk insertion), `src/AiRaccoon.Infrastructure/Embedding/EntryEmbedder.cs:53-69`
+> (per-chunk embed), `src/AiRaccoon.Core/Memory/ContentHash.cs:12-23`
 > (hashing), `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:11-46`
 > (splitting), `src/AiRaccoon.Infrastructure/Chunking/TokenizerChunker.cs:7-14`
 > (tokenizer)
@@ -260,8 +275,8 @@ plan C §3 Wave 2b).
 `memory_search` also accepts `contextLabel`: when set, the project scope additionally
 searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2e).
 
-> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:95-152`
-> (search), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:215-259`
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:115-217`
+> (search), `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:695-730`
 > (dual-vector fusion), `src/AiRaccoon.Infrastructure/Embedding/StructureFusion.cs:1-50`
 > (fusion math), `src/AiRaccoon.Infrastructure/Sqlite/ReciprocalRankFusion.cs:14-59`
 > (RRF), `src/AiRaccoon.Infrastructure/Sqlite/SearchResultMerger.cs:12-24`
@@ -353,7 +368,12 @@ stateDiagram-v2
     }
     Active --> Closed: memory_workspace_consolidate
     Active --> Closed: memory_workspace_discard
+    Closed --> Closed: memory_write(workspaceId) → refused (unknown-workspace:)
     Closed --> [*]
+    note right of Closed
+        A write against a Closed or never-registered workspaceId
+        is refused, not silently accepted (#152).
+    end note
 ```
 
 `memory_workspace_begin` inserts an `Active` row into the `workspaces` table and
@@ -370,8 +390,14 @@ crash.
 **Discard:** `memory_workspace_discard` deletes the entire workspace context
 and marks the workspace `Closed` — nothing promoted, nothing kept.
 
+**Guard:** a write naming a `workspaceId` that is `Closed` or was never registered is refused
+with `unknown-workspace:` rather than landing silently — `RequireActiveWorkspaceAsync` checks
+the row's status is `Active` before the insert proceeds (#152).
+
 > **Evidence:** `src/AiRaccoon.Infrastructure/Workspace/WorkspaceService.cs:14-83`
-> (lifecycle), `src/AiRaccoon/Tools/MemoryTools.cs:279-344` (tool boundary)
+> (lifecycle), `src/AiRaccoon/Tools/MemoryTools.cs:279-344` (tool boundary),
+> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:671-681`
+> (`RequireActiveWorkspaceAsync` guard)
 
 ## Access mode resolution
 
@@ -385,16 +411,26 @@ flowchart TD
     B -->|Write| D{"Mode is rw or full?"}
     B -->|Destructive| E{"Mode is full?"}
     D -->|yes| C
-    D -->|no| F["throw McpException"]
+    D -->|no| F["MemoryAccessGuard throws AccessDeniedException"]
     E -->|yes| C
     E -->|no| F
+    F --> G{"ToolRefusals CallToolFilter"}
+    G -->|"mapped refusal (AccessDeniedException, etc.)"| H["isError result: 'access-denied: ...'<br/>logged Information (EventId 910)"]
+    G -->|unmapped exception| I["rethrows — SDK logs Error"]
 
-    G["Mode Resolution"] --> H{"per-project setting?"}
-    H -->|yes| I["use per-project"]
-    H -->|no| J{"global setting?"}
-    J -->|yes| K["use global"]
-    J -->|no| L["default: rw"]
+    J["Mode Resolution"] --> K{"per-project setting?"}
+    K -->|yes| L["use per-project"]
+    K -->|no| M{"global setting?"}
+    M -->|yes| N["use global"]
+    M -->|no| O["default: rw"]
 ```
+
+`MemoryAccessGuard.EnsureAsync` is the only source of the deny branch (`AccessDeniedException`);
+every tool call — deny or not — additionally passes through the `ToolRefusals` CallToolFilter
+(#151, PR #163), which turns a mapped refusal into a normal `isError` result logged at
+`Information` instead of an escaping exception logged at `Error`. See
+[`docs/reference/agent-memory-server.md#error-shapes`](../reference/agent-memory-server.md#error-shapes)
+for the full refusal-prefix table.
 
 The global default is `rw`. It is set with `ai-raccoon access default set {ro|rw|full}`
 (`access.mode.global` in the settings table); unset rows resolve to `rw`. A per-project
@@ -408,7 +444,9 @@ override (`access.mode.project:<id>`) takes precedence over the global setting.
 
 > **Evidence:** `src/AiRaccoon.Core/Access/AccessMode.cs:6-8` (enum),
 > `src/AiRaccoon.Core/Access/AccessModePolicy.cs:14-22` (resolution),
-> `src/AiRaccoon/Access/MemoryAccessGuard.cs` (enforcement)
+> `src/AiRaccoon/Access/MemoryAccessGuard.cs:26-44` (enforcement, throws
+> `AccessDeniedException`), `src/AiRaccoon/Tools/ToolRefusals.cs` (the CallToolFilter
+> that turns the exception into an `isError` result)
 
 ## Algorithms
 
@@ -461,7 +499,7 @@ are never swept.
 
 > **Evidence:** `src/AiRaccoon.Core/Rating/RatingPolicy.cs:12-24` (rating),
 > `src/AiRaccoon.Core/Degradation/DegradationPolicy.cs:6-7` (degradation),
-> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:718-740` (bump)
+> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:745-766` (bump)
 
 ### Token-aware chunking
 
@@ -489,32 +527,35 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
-  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery
+  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
   Chunking/                 IChunker port, MarkdownChunker (pure splitter)
-  Access/                   AccessMode enum, AccessModePolicy, AccessRequirement
-  Rating/                   RatingPolicy, IMemoryExtension pipeline
+  Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
+  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFound
+  Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
   Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
+  Validation/               ValidatorConfiguration (FluentValidation wiring)
   Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
-  Common/                   ContextNaming
 
 src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
-                            SearchContexts, SearchResultMerger
+                            SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
-  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
+  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
   Sync/                     SyncService, S3CloudStore, FakeCloudStore
   Chunking/                 TokenizerChunker (o200k_base)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
+  Extraction/               ExtractionHostedService (background shared-extraction loop, #55)
+  Maintenance/              BankMaintenanceHostedService (WAL checkpoint + VACUUM/ANALYZE, #79)
   Encryption/               BitwardenCliSecretManager (Bitwarden key source)
   Degradation/              SweepService
-  Rating/                   RetrievalRatingExtension (no-op, kept for extension host)
   Options/                  SyncOptions, InfrastructureOptions
 ```
 
 > **Evidence:** `src/AiRaccoon/Tools/MemoryTools.cs:17` (thin MCP layer),
-> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:20-25` (store
+> `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:22-31` (store
 > constructor), `src/AiRaccoon.Core/Memory/IMemoryStore.cs` (port)

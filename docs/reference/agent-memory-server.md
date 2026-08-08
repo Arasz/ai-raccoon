@@ -71,7 +71,9 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
   in `meta`; while the queue holds rows, `meta.capacityByProject` also carries each
   occupying project's `reserved`/`used`/`borrowing` share of the cap (ADR-0007's
-  fair-share promise, made observable).
+  fair-share promise, made observable) — see [`capacityByProject`
+  semantics](#capacitybyproject-semantics) below for what `reserved` and `borrowing`
+  actually mean.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
@@ -129,6 +131,38 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   watch failures never fail the server.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+
+### `capacityByProject` semantics
+
+`reserved` is not a fixed entitlement — it's `cap ÷ (number of projects currently
+holding at least one queued row)`, recomputed fresh on every meta read
+(`PromotionQueueService.GetMetaAsync`, `PromotionCapacityPolicy.CapacityInfo`). The
+denominator moves: it shrinks as unrelated projects' rows drain out of the queue and
+grows the moment another project proposes its first row, so `reserved` for a project
+that hasn't changed its own usage can still go up or down between two calls.
+
+`borrowing: true` means "using more than the current fair share," not "at risk of
+eviction." Eviction is a wholly separate rule — `PromotionCapacityPolicy.NeedsEviction`
+fires only when the queue's total row count exceeds the total cap, regardless of which
+projects are borrowing. A project can sit at `borrowing: true` indefinitely as long as
+nobody pushes the total over cap.
+
+**Worked example** (cap = 1000):
+
+1. One project (`p1`) has proposed 400 rows. It is the only occupant, so
+   `projectCount = 1`, `reserved = 1000 / 1 = 1000`. `p1` shows `reserved: 1000, used:
+   400, borrowing: false` (400 ≤ 1000).
+2. Four unrelated projects each propose one row. The queue now has 5 occupying
+   projects and 404 total rows (well under the 1000 cap, so no eviction fires).
+   `projectCount = 5`, `reserved = 1000 / 5 = 200`. Without `p1` proposing or
+   discarding anything, its next meta read shows `reserved: 200, used: 400,
+   borrowing: true` (400 > 200) — the same 400 rows, a smaller fair share, because
+   four other projects showed up.
+
+> **Evidence:** `src/AiRaccoon.Core/Memory/PromotionCapacityPolicy.cs:12-35`
+> (`ReservationFor`, `NeedsEviction`, `CapacityInfo`),
+> `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs:138-150`
+> (`GetMetaAsync`, `projectCount` = occupying projects)
 
 ## Prompts (2)
 
@@ -487,15 +521,32 @@ engine.
 
 ## Error shapes
 
-Tool errors are returned as MCP tool errors (`CallToolResult.IsError`):
+A known, expected refusal — an invalid argument, a disabled feature, a path outside
+scope — comes back as a normal MCP tool error (`CallToolResult.IsError = true`) rather
+than an escaping exception, and is logged at `Information`, not `Error` (issue #151,
+fixed by the `ToolRefusals` CallToolFilter in PR #163). Its message always starts with
+one of the wire prefixes below — that mapping lives in
+`ToolRefusals.RefusalPrefixes` (`src/AiRaccoon/Tools/ToolRefusals.cs`), which is the
+source of truth; a test cross-checks this table against it.
 
-| Condition | Message prefix |
-|---|---|
-| Missing/blank `projectId` | `invalid-params: project_id is required` |
-| Invalid `scope` | `invalid-params: Invalid scope '<x>'` |
-| Remote embedding provider without a key | `OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'` |
-| Watch registration failures | `watching-disabled:` / `path-outside-scope:` / `path-not-found:` |
-| Sync without credentials | `sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted` |
+| Prefix | Condition | Example message |
+|---|---|---|
+| `path-outside-scope` | Ingest/watch path falls outside the project's declared ingest scope | `path-outside-scope: Path '<path>' is outside the ingest scope.` |
+| `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
+| `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
+| `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'.` |
+| `sync-not-configured` | No sync credentials configured | `sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted` |
+| `sync-auth-failed` | Sync credentials missing/invalid, or a 401/403 from the cloud provider | `sync-auth-failed: run 'az login'` (Azure) / `run 'aws configure' \| 'aws sso login'` (S3) |
+| `sync-conflict` | Remote snapshot kept changing mid-merge, past the 3 re-pull/re-merge/re-push retries | `sync-conflict: <detail>` |
+| `sync-network` | Network-level failure during sync push/pull, or a missing bucket/container (404) | `sync-network: <detail>` |
+| `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
+| `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
+| `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
+
+Anything `ToolRefusals` does not recognize — a remote embedding provider called without
+a key, or any other unmapped exception — is a genuine failure, not a refusal: it escapes
+as a normal tool-call error, logged at `Error`, e.g. `OpenAI-compatible embeddings
+require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'.`
 
 ## Managed store
 
