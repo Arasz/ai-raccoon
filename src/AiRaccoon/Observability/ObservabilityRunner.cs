@@ -76,10 +76,9 @@ internal static partial class ObservabilityRunner
         };
     }
 
-    /// <summary>observability's own --port and kind are read instance-based (R12): --port off
-    /// the shared static Option object, kind off the Argument instance actually parsed onto
-    /// the leaf command — it has no static field, so name-based lookup is avoided by fetching
-    /// it from that command's own Arguments instead of searching the whole parse tree by name.</summary>
+    /// <summary>observability's own --port and kind are read instance-based, never by name
+    /// (docs/plans/2026-08-06-http-serve-mode-plan.md R12): --port off the shared static Option
+    /// object, kind off the leaf command's own Argument instance.</summary>
     private static string ResolveKind(CliParseResult parsed)
     {
         var kindArgument = parsed.ParseResult.CommandResult.Command.Arguments.OfType<Argument<string>>().Single();
