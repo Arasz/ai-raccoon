@@ -18,16 +18,12 @@ namespace AiRaccoon.Tests.BDD;
 
 /// <summary>
 ///     Shared state for the encryption-bitwarden feature scenarios — one instance per scenario.
-///     Real temp DataRoot, real SqliteConnectionFactory + SqliteMemoryStore over an
-///     EncryptionKeyResolver whose env leg is a fixed stub passphrase and whose bws leg is a
-///     fake `bws` shell script at an absolute path (no PATH mutation, no ambient-env reads —
-///     the suite must not depend on the developer's AIRACCOON_DB_PASSPHRASE / BWS_ACCESS_TOKEN).
-///     The fake serves synthetic key fixtures per secret id, validates the known test token,
-///     and appends every invocation to bws-calls.log so steps can assert what the CLI ran.
+///     Real SqliteConnectionFactory + SqliteMemoryStore over an EncryptionKeyResolver whose bws
+///     leg is a fake `bws` script at an absolute path (no PATH mutation, no ambient-env reads).
 /// </summary>
 public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 {
-    // §5.1 pinned vector — seed 00 01 … 1e 1f derives to exactly this x'…' (hard-coded, never recomputed).
+    // Derived from seed 00..1f (hard-coded, never recomputed).
     public const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
 
     // Matches EncryptionCommands' fallback placeholder ids (no env override configured), so
@@ -45,11 +41,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>The env leg of the resolver: a fixed stub passphrase (never the ambient environment).</summary>
     public const string EnvPassphrase = "env-passphrase";
 
-    // fake bws: `--version` succeeds (presence check); `secret get <id>` serves the matching
-    // fixture; a token is accepted only via argv -t and must equal the known test token. The
-    // inherited BWS_ACCESS_TOKEN is deliberately ignored — the env-token channel is S4's
-    // concern, and the BDD suite must not depend on the ambient shell. Every invocation is
-    // appended to bws-calls.log so steps can assert what the CLI actually ran.
+    // fake bws: serves the matching key fixture per secret id, accepts only the known token via
+    // argv -t, and logs every invocation to bws-calls.log for steps to assert against.
     private const string FakeBwsScript = """
                                          #!/bin/sh
                                          DIR="$(dirname "$0")"
@@ -120,8 +113,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     public string CallsLogPath => Path.Combine(FakeBwsDir, "bws-calls.log");
 
     /// <summary>
-    ///     Writes the fake bws script + the synthetic ed25519 fixtures (key.pem = §5.1 vector seed,
-    ///     key2.pem = a different seed) and makes the script executable. Absolute path; no PATH mutation.
+    ///     Writes the fake bws script + the synthetic ed25519 fixtures and makes the script
+    ///     executable. Absolute path; no PATH mutation.
     /// </summary>
     public void InstallFakeBws()
     {
@@ -141,7 +134,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>Writes a fixture file next to the fake bws script.</summary>
     public void WriteKeyFixture(string fileName, string pem) => File.WriteAllText(Path.Combine(FakeBwsDir, fileName), pem);
 
-    /// <summary>Unencrypted ed25519 pem carrying the §5.1 vector seed (00..1f).</summary>
+    /// <summary>Unencrypted ed25519 pem carrying the vector seed (00..1f).</summary>
     public string BuildVectorPem() => BuildEd25519Pem(Seed00To1F, PublicKey01To20);
 
     /// <summary>Passphrase-protected (aes256-ctr + bcrypt) ed25519 pem — must be rejected by the parser.</summary>
@@ -179,10 +172,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     }
 
     /// <summary>
-    ///     One real CLI config command in-process (CliArgs.Parse + ConfigCommands.RunAsync — the
-    ///     same dispatch as Program.cs) against the scenario's resolver-backed bank/store, with
-    ///     the fake bws runner and the given stdin (the interactive prompts). Returns exit code
-    ///     plus stdout/stderr. A command that does not parse is a broken contract — fail loudly.
+    ///     Runs one CLI config command in-process (CliArgs.Parse + ConfigCommands.RunAsync, the
+    ///     same dispatch as Program.cs) and returns its exit code plus stdout/stderr. Throws if
+    ///     the command does not parse.
     /// </summary>
     public async Task<CliRun> RunCliAsync(string stdin, params string[] args)
     {
@@ -203,12 +195,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     }
 
     /// <summary>
-    ///     "The server opens the bank": the Program.cs eager-startup open (resolve the key, open
-    ///     with it) with the same loud failure mapping — returns null on success, else the error
-    ///     text the process would print. Resolve failures map to the generic resolve message
-    ///     (Program.cs catches broadly there); an open failure only maps to the mismatch message
-    ///     when the cause really is a key mismatch (SQLCipher code 26), so a scenario cannot pass
-    ///     on an unrelated open error.
+    ///     Mirrors the Program.cs eager-startup open: resolves the key then opens the bank.
+    ///     Returns null on success, else the error text the process would print (mismatch text
+    ///     only for an actual key mismatch, SQLCipher code 26; other errors map generically).
     /// </summary>
     public async Task<string?> StartServerErrorAsync(CancellationToken cancellationToken = default)
     {

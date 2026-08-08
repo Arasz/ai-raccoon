@@ -27,7 +27,6 @@ public class ConfigCommandsAccessModelTests
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    // ── access default ──
 
     [Fact]
     public async Task AccessDefaultSet_WritesGlobalRow()
@@ -88,7 +87,6 @@ public class ConfigCommandsAccessModelTests
         stdout.Trim().ShouldBe("ro");
     }
 
-    // ── access set / unset / list ──
 
     [Fact]
     public async Task AccessSet_WritesPerProjectRow()
@@ -177,7 +175,6 @@ public class ConfigCommandsAccessModelTests
         stdout.Trim().ShouldBe("default: rw");
     }
 
-    // ── model set local ──
 
     [Fact]
     public async Task ModelSetLocal_WithoutPath_UsesBundledModel()
@@ -227,7 +224,6 @@ public class ConfigCommandsAccessModelTests
         store.Settings.ShouldNotContainKey("embedding.apiKey");
     }
 
-    // ── model set openai ──
 
     [Fact]
     public async Task ModelSetOpenAi_WithApiKey_PersistsProviderModelBaseUrlAndKey()
@@ -275,7 +271,6 @@ public class ConfigCommandsAccessModelTests
         err.ShouldContain("api key");
     }
 
-    // ── model reset / show ──
 
     [Fact]
     public async Task ModelReset_DeletesAllEmbeddingRows()

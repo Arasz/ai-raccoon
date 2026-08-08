@@ -135,10 +135,9 @@ public class ToolCallMetricsTests
     public void Histogram_MeterNameAndMetricCollectorWork()
     {
         var metrics = new ToolCallMetrics();
-        // MS2, MS5: Meter name discoverable by dotnet-counters
+        // Meter name discoverable by dotnet-counters
         metrics.Meter.Name.ShouldBe("AiRaccoon.MemoryTools");
 
-        // MS5: MetricCollector<long> smoke test
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
         metrics.RecordInvocation("memory_stats", "acme", TimeSpan.FromMilliseconds(10), false);
         collector.GetMeasurementSnapshot().Count.ShouldBe(1);

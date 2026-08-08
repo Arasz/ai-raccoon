@@ -21,10 +21,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Host-shape contract after the MCP setup refactor: stdio-only launches run on a
-///     plain app host with no web server, HTTP/S launches run on a web host bound to the
-///     configured port (never the ASP.NET default 5000), and a combined stdio+http set
-///     keeps the web host with stdio attached.
+///     Host-shape contract: stdio-only launches run with no web server; HTTP/S launches bind
+///     the configured port (never the ASP.NET default 5000); a combined stdio+http set keeps
+///     the web host with stdio attached.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -186,9 +185,8 @@ public class McpServerSetupHostTests : IDisposable
     }
 
     /// <summary>
-    ///     The registered MCP surface is the full 20 tools: 17 memory + 3 watch. Regression
-    ///     gate for PR #30 dropping .WithTools&lt;WatchTools&gt;() — host tests previously
-    ///     pinned transport shape only, so the watch trio silently vanished from tools/list.
+    ///     Pins the registered MCP tool count, including the watch trio (previously dropped by
+    ///     a missing .WithTools&lt;WatchTools&gt;() that host tests didn't catch).
     /// </summary>
     [Fact]
     public void StdioHost_RegistersWatchTools_OnTheMcpSurface()
@@ -231,8 +229,8 @@ public class McpServerSetupHostTests : IDisposable
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort(), TimeSpan.FromHours(4)));
 
-        // R1: three registrations, one instance — the middleware's signaler must be the
-        // very instance the hosted service runs, or production signals the wrong object.
+        // Three registrations, one instance — the middleware's signaler must be the very
+        // instance the hosted service runs, or production signals the wrong object.
         var watchdogs = host.Services.GetServices<IHostedService>().OfType<IdleWatchdog>().ToList();
         watchdogs.Count.ShouldBe(1);
         var signaler = host.Services.GetRequiredService<IActivitySignaler>();

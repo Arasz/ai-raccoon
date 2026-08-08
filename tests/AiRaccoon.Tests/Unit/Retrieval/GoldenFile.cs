@@ -9,9 +9,9 @@ public sealed record GoldenHit(string Hash, double Ranking, string Path, string 
 public sealed record GoldenQuery(string Id, string Text, IReadOnlyList<GoldenHit> Hits);
 
 /// <summary>
-///     The committed golden reference output (assets/reference-topk.json): deterministic top-k
-///     from the pinned extension over the shared corpus. The P6 parity gate compares the fused
-///     retriever's rankings against this file.
+///     Committed golden reference output (assets/reference-topk.json): deterministic top-k
+///     from the pinned extension over the shared corpus, checked against fused-retriever
+///     rankings by the parity gate.
 /// </summary>
 public sealed record GoldenFile(
     int SchemaVersion,
@@ -28,8 +28,7 @@ public sealed record GoldenFile(
     public const int CurrentSchemaVersion = 1;
     public const int RankingPrecision = 6;
 
-    /// <summary>Cross-platform ranking spread measured 1e-4..3e-3 (GGUF SIMD paths differ by
-    /// host); see ADR-0015.</summary>
+    /// <summary>Ranking tolerance for cross-platform comparisons; see ADR-0015.</summary>
     public const double RankingTolerance = 5e-3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -69,10 +68,9 @@ public sealed record GoldenFile(
     }
 
     /// <summary>
-    ///     Portable comparison against a fresh reference run (ADR-0015): hashes are compared as
-    ///     sets, not positions, and matched rankings must agree within <see cref="RankingTolerance"/>.
-    ///     Order is not asserted separately — rankings are the sort key, so set equality plus the
-    ///     ranking tolerance already constrain order except among genuine near-ties.
+    ///     Portable comparison against a fresh reference run (ADR-0015): hashes compared as sets,
+    ///     not positions, with matched rankings required to agree within <see cref="RankingTolerance"/>.
+    ///     Order isn't asserted separately since set equality plus the tolerance already constrain it.
     /// </summary>
     public IReadOnlyList<string> Differences(ReferenceRun run)
     {
@@ -113,9 +111,8 @@ public sealed record GoldenFile(
     private static IEnumerable<string> QueryDifferences(
         string queryId, IReadOnlyList<GoldenHit> expectedHits, IReadOnlyList<ReferenceHit> actualHits)
     {
-        // The k-th (last) golden ranking is the top-k cut point: a hash that only appears on
-        // one side but sits within tolerance of that cut is a boundary substitution, not a
-        // regression — absorb it rather than report it.
+        // The k-th (last) golden ranking is the cut point: a hash within tolerance of it that
+        // only appears on one side is a boundary substitution, not a regression — absorb it.
         var boundaryRanking = expectedHits[^1].Ranking;
         var expectedByHash = expectedHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);
         var actualByHash = actualHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);

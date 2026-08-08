@@ -7,8 +7,7 @@ namespace AiRaccoon.Tests.Unit;
 /// <summary>
 ///     The CI jobs select on --filter "Speed=Fast", "Speed=Slow" and "Category=bdd". A test
 ///     class with no Speed trait matches none of them: it compiles, runs locally, and never
-///     gates a merge. On 2026-08-08 that was 34 tests. This guard is the Speed-trait twin of
-///     <see cref="BddGateCoverageTests" />.
+///     gates a merge. Speed-trait twin of <see cref="BddGateCoverageTests" />.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

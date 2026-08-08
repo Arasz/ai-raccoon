@@ -4,9 +4,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's channel() ordering (see docs/adr/0018-promotion-scoring-v2.md v3
-/// section). v3 grew from 14 archetypes to 19 channels: `.remember/` journals, the Claude auto-memory
-/// tree (index/session/note), and an other-doc/work-note split; a dated charter now routes to review.</summary>
+/// <summary>Ports agentC/scorer.py's channel() ordering; see docs/adr/0018-promotion-scoring-v2.md.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProvenanceArchetypeClassifierTests
@@ -90,8 +88,7 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.Adr);
     }
 
-    /// <summary>The defect the eval harness caught: a dated work note (`YYYY-MM-DD-...`) must
-    /// NOT match the ADR's `^\d{4}-` pattern.</summary>
+    /// <summary>A dated work note (`YYYY-MM-DD-...`) must not match the ADR's `^\d{4}-` pattern.</summary>
     [Fact]
     public void DatedWorkNote_IsNotAdr()
     {
@@ -121,7 +118,7 @@ public sealed class ProvenanceArchetypeClassifierTests
     }
 
     /// <summary>v3 change: a dated `YYYY-MM-DD-*-charter.md` under docs/work is in-flight review
-    /// coordination, not a durable project charter (docs/adr/0018-promotion-scoring-v2.md v3 section).</summary>
+    /// coordination, not a durable project charter (docs/adr/0018-promotion-scoring-v2.md).</summary>
     [Fact]
     public void DatedCharterInFilename_IsReview_NotCharter()
     {
@@ -208,11 +205,9 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.ChangelogEntry);
     }
 
-    /// <summary>v3 change: `/docs/work/` stays work-note, but a bare `/docs/` path that isn't any more
-    /// specific channel now routes to the new other-doc channel instead of sharing work-note's prior.
-    /// Ported bug-for-bug from the prototype: the check is a literal `/docs/` substring, so it only
-    /// fires when something precedes "docs" in the path (matching real ingest source_file paths, which
-    /// are absolute) — a bare repo-relative "docs/..." path falls through to the work-note fallback.</summary>
+    /// <summary>`/docs/work/` stays work-note; other `/docs/` paths route to other-doc instead of
+    /// work-note. Ported bug-for-bug from the prototype: the check is a literal `/docs/`
+    /// substring, so only an absolute path (real ingest source_file shape) matches.</summary>
     [Fact]
     public void UnrecognisedDocsPath_NotUnderWork_IsOtherDoc()
     {

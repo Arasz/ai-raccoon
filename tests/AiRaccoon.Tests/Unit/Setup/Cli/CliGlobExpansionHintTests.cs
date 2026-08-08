@@ -6,9 +6,8 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 
 /// <summary>
 ///     Shell-glob expansion diagnostic: an unquoted '*' target (e.g. `watch enable * true`)
-///     is expanded by the shell into the entries of the current directory before the CLI sees
-///     it, producing a wall of "Unrecognized command or argument" errors. The hint must fire
-///     on that signature and teach the quoted form.
+///     is expanded by the shell into cwd entries before the CLI sees it, producing a wall of
+///     parse errors. The hint must fire on that signature and teach the quoted form.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
