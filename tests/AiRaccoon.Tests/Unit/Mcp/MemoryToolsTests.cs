@@ -221,6 +221,7 @@ public class MemoryToolsTests
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.Search("acme", "q", "bogus", cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldStartWith("invalid-params: ");
         ex.Message.ShouldContain("scope");
     }
 
