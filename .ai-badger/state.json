@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-08T11:55:00Z",
+  "lastUpdated": "2026-08-08T12:19:30Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "hermes-envelope",
+      "title": "Unwrap the ApiEnvelope in the Hermes provider client",
+      "finished": "2026-08-08T12:19:30Z",
+      "pr": "171 (squash-merged as a913c93; #170 closed - it was branched off unpushed local commits and inherited an unrelated red build)",
+      "summary": "Every MCP tool answers ApiEnvelope<T> = {data, meta} but the Hermes provider client returned it verbatim, so __init__.py:262 read payload.get('results') off the wrapper: Hermes prefetch had been silently returning zero memories against any current server - no exception, no log line, just an empty '## AiRaccoon Memory' block every turn. Fix is one seam: client.py _call now returns _unwrap(_text(result)); _unwrap requires BOTH envelope keys so a payload carrying its own 'data' field survives, and the isError path keeps raw text because errors travel the McpException channel. Ruled out as a rename regression by running the same 5 integration tests at pre-rename 74bb2e1 and seeing them fail identically. TDD: 4 _unwrap unit tests watched red (AttributeError) then green; suite went 5 failed/52 passed -> 61 passed with the hermes venv python including --run-slow against a real spawned server, and was re-run green after the rebase. meta.waitingPromotionsCount is now discarded - no regression (nothing ever read it), but surfacing pending promotions to the agent is an open option. Note: CI cannot catch this class of bug at all - no workflow runs pytest (MoE-G finding G1 still open)."
+    },
     {
       "id": "erdb",
       "title": "Verify the hermes-provider/ -> integrations/hermes/ rename and fix the docs it broke",
