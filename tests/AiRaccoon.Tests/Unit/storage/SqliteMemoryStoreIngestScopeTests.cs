@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Memory;
 using Dapper;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
@@ -25,6 +26,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-ingest-scope");
     private readonly string _contentRoot = TestData.CreateTempRoot("airaccoon-ingest-content");
+    private readonly string _outsideRoot = TestData.CreateTempRoot("airaccoon-ingest-outside");
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
 
@@ -41,7 +43,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var root in new[] { _dataRoot, _contentRoot })
+        foreach (var root in new[] { _dataRoot, _contentRoot, _outsideRoot })
         {
             if (Directory.Exists(root))
             {
@@ -161,6 +163,70 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         (await _store.GetSettingAsync(IngestScopeKeys.ScopeProject("acme"),
             TestContext.Current.CancellationToken)).ShouldNotBeNull();
         (await _store.GetSettingAsync("watch.scope.acme", TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
+    /// <summary>Enumeration descends into directory symlinks; a link inside scope must not smuggle out-of-scope content in.</summary>
+    [Fact]
+    public async Task IngestDirectory_DirectorySymlinkPointingOutsideScope_DoesNotIngestTargetContent()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_outsideRoot, "secret.md"), "the confidential badger stash",
+            TestContext.Current.CancellationToken);
+        var linkPath = Path.Combine(_contentRoot, "linked");
+        CreateSymlinkOrSkip(() => Directory.CreateSymbolicLink(linkPath, _outsideRoot));
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), _contentRoot);
+
+        var indexed = await _store.IngestDirectoryAsync("acme", _contentRoot, null,
+            TestContext.Current.CancellationToken);
+
+        indexed.ShouldBe(0);
+        var results = await _store.SearchAsync(new SearchQuery("acme", "confidential badger stash", MinScore: 0),
+            TestContext.Current.CancellationToken);
+        results.ShouldBeEmpty();
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
+    }
+
+    /// <summary>A file symlink's own path is textually in scope, but its target is not — the target must govern.</summary>
+    [Fact]
+    public async Task IngestFile_FileSymlinkPointingOutsideScope_IsRefused()
+    {
+        var target = Path.Combine(_outsideRoot, "secret.md");
+        await File.WriteAllTextAsync(target, "the confidential badger stash", TestContext.Current.CancellationToken);
+        var linkPath = Path.Combine(_contentRoot, "notes.md");
+        CreateSymlinkOrSkip(() => File.CreateSymbolicLink(linkPath, target));
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), _contentRoot);
+
+        await Should.ThrowAsync<PathOutsideScopeException>(() =>
+            _store.IngestFileAsync("acme", linkPath, null, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A symlink is not rejected outright — only when it resolves outside the scope.</summary>
+    [Fact]
+    public async Task IngestDirectory_SymlinkInsideScope_StillIngests()
+    {
+        var realDir = Path.Combine(_contentRoot, "real");
+        Directory.CreateDirectory(realDir);
+        await File.WriteAllTextAsync(Path.Combine(realDir, "notes.md"), "the quick brown fox",
+            TestContext.Current.CancellationToken);
+        var linkPath = Path.Combine(_contentRoot, "linked");
+        CreateSymlinkOrSkip(() => Directory.CreateSymbolicLink(linkPath, realDir));
+        await SetScopeAsync(IngestScopeKeys.ScopeProject("acme"), _contentRoot);
+
+        var indexed = await _store.IngestDirectoryAsync("acme", _contentRoot, null,
+            TestContext.Current.CancellationToken);
+
+        indexed.ShouldBeGreaterThan(0);
+    }
+
+    private static void CreateSymlinkOrSkip(Action createLink)
+    {
+        try
+        {
+            createLink();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip($"platform/user does not permit symlink creation: {ex.Message}");
+        }
     }
 
     private async Task<string> WriteFileAsync(string name)
