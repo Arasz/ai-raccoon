@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python
-> Scaffolded by ai-badger 0.107.0. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.110.0. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Non-negotiable invariants
 
@@ -73,6 +73,10 @@ Organize folders and modules by domain/business concept, not by generic technica
 
 Commit one coherent work package at a time and push often. Open a draft PR from the first commit of a unit of work so progress is visible in-flight, rather than surfacing a single large diff at the end.
 
+### Route state transitions through a state machine
+
+Where a domain object has explicit states, make the declared transitions the only way it moves between them, and record what triggered each move. A status field assigned in one place and read in five is a state machine nobody can see, and it becomes unreviewable the first time two writers disagree. Keep a "needs human attention" signal a flag on the entity rather than a state of its own, or every real state acquires a shadow twin and the transition table doubles.
+
 ### TDD is mandatory
 
 Write a failing, behavior-focused test before any production code change. No production code without a test that demanded it — implementation follows the test, never the other way around.
@@ -101,10 +105,34 @@ Record it wherever this project already records decisions (ADR, design doc,
 changelog entry); if it keeps none of those, say so explicitly in the PR
 description instead of adding the dependency silently.
 
-This stays advisory until it's a failing build: wire the ArchUnitNET check
-from `dotnet-domain-modeling`'s "Domain Purity Enforcement" section
-(`Types().That().ResideInAssembly(...).Should().NotDependOnAny(...)`) into
-CI. Without that test, nothing actually stops the dependency from landing.
+This stays advisory until it's a failing build. Two ways to enforce it, and
+the cheaper one is usually the better one.
+
+**A reference allowlist.** Assert that the domain assembly's
+`GetReferencedAssemblies()` is a subset of an approved set. It runs in
+milliseconds, needs no extra test-project dependencies, and rejects the next
+infrastructure package nobody thought to deny — a denylist only catches what
+someone remembered to name.
+
+**An ArchUnitNET rule**, if you want type-level granularity. Two failure modes
+to know about first:
+
+- **A rule over types that were never loaded matches nothing, and a rule over
+  an empty set passes.** `Types().That().ResideInNamespaceMatching(...)`
+  filters against the architecture you built, so if the loader was given only
+  the domain assembly, the forbidden types are absent and every input passes.
+  There is no error and no zero-match diagnostic. Load the assemblies holding
+  the forbidden types, and expect that to cost both suite time and a test-project
+  reference to the very dependency closure the rule exists to exclude.
+- **A namespace is not an assembly.** `IHttpClientFactory` lives in namespace
+  `System.Net.Http` but ships in `Microsoft.Extensions.Http`, so a namespace
+  rule and an assembly rule disagree about it. Whichever you pick, know which
+  question you are asking.
+
+Either way, [prove the check fails](../../common/invariants/prove-the-check-fails.md)
+before trusting it: add a type that violates the rule, watch it go red, remove
+it. A gate that has only ever passed is indistinguishable from one that cannot
+fail, and this one has a documented history of being the latter.
 
 ### High-performance logging
 

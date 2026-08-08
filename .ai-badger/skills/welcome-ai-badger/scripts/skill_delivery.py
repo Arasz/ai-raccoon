@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from _shared import _test_ignore, PROJECT_LOCAL_FILE, _within
 from scaffold_context import ScaffoldContext
@@ -31,6 +31,9 @@ def project_owned_names(skill_name: str) -> List[str]:
 # Hermes-authored skills live under one directory the namespace links whole.
 LEARNED_SKILLS_DIR = "learned"
 HERMES_HOME_ENV = "HERMES_HOME"
+
+# The tail every namespace link ai-badger writes shares: <project>/.ai-badger/skills/<name>.
+SKILLS_DIR_PARTS = (".ai-badger", "skills")
 
 
 def hermes_skills_root() -> Path:
@@ -67,7 +70,7 @@ def relink_hermes_skills(target: Path, config: Dict[str, Any],
     import badger_lib as bl
 
     project_name = config.get("project", {}).get("name", "unknown")
-    skills_root = target / ".ai-badger" / "skills"
+    skills_root = target.joinpath(*SKILLS_DIR_PARTS)
     hermes_skills = hermes_skills_root()
     namespace_dir = hermes_skills / project_name
     if not _within(hermes_skills, namespace_dir):
@@ -116,6 +119,129 @@ def relink_hermes_skills(target: Path, config: Dict[str, Any],
         link.symlink_to(os.path.relpath(skills_base / name, link_base))
         created.append(name)
     return {"created": created, "removed": removed}
+
+
+# --------------------------------------------------------- namespaces whose project is gone
+# prune_namespaces outcomes, mirroring framework_copies.prune_home_cache.
+REPORTED = "reported"
+REMOVED = "removed"
+FAILED = "failed"
+
+PRUNE_NAMESPACES_COMMAND = "den-refresh --prune-namespaces"
+
+
+class Namespace(NamedTuple):
+    """One ~/.hermes/skills/<project>/ whose whole target tree is gone, and what became of it.
+
+    `links` is how many dead links ai-badger placed there; `kept` how many entries it did not.
+    A non-zero `kept` means the directory outlives the prune.
+    """
+
+    path: Path
+    links: int
+    kept: int
+    target: str
+    status: str
+    detail: str
+
+
+def _badger_link_target(entry: Path) -> Optional[str]:
+    """Where *entry* points when it is a link of the shape `relink_hermes_skills` writes.
+
+    Read, never resolved: the links this exists to find are dangling, and a dangling link
+    resolves to nothing. The path shape — `<project>/.ai-badger/skills/<name>` — is what says
+    ai-badger placed it, the same claim `_owns_link` makes about a project still on disk.
+    """
+    try:
+        raw = os.readlink(str(entry))
+    except OSError:
+        return None  # not a link at all: a Hermes-authored skill directory, or a file
+    target = os.path.normpath(os.path.join(str(entry.parent), raw))
+    if Path(target).parts[-3:-1] != SKILLS_DIR_PARTS:
+        return None
+    return target
+
+
+def _dead_links(namespace: Path) -> Optional[Tuple[List[Path], int, str]]:
+    """The links ai-badger placed in *namespace*, when every one of them dangles.
+
+    Returns them with the count of entries ai-badger did not place and the tree they point at;
+    None when the directory holds no link of ours, or when one of them still resolves. That
+    second case is a project still on disk, whose own relink owns whatever is stale inside it
+    (ADR-0003). A directory ai-badger never linked into — a Hermes category, an empty one —
+    names no link here and so is never returned.
+    """
+    if namespace.is_symlink() or not namespace.is_dir():
+        return None
+    try:
+        entries = sorted(namespace.iterdir())
+    except OSError:
+        return None
+    dead: List[Path] = []
+    kept, target = 0, ""
+    for entry in entries:
+        pointed_at = _badger_link_target(entry)
+        if pointed_at is None:
+            kept += 1  # a Hermes-authored skill, or anything else somebody else keeps here
+            continue
+        if os.path.exists(pointed_at):
+            return None
+        dead.append(entry)
+        target = os.path.dirname(pointed_at)
+    if not dead:
+        return None
+    return dead, kept, target
+
+
+def _remove(namespace: Path, dead: List[Path]) -> Optional[str]:
+    """Unlink each dead link and drop the directory if that empties it; else the error message.
+
+    Only the links are removed, and the directory only when nothing is left — a namespace that
+    also holds a Hermes-authored skill keeps both the skill and the directory around it.
+    """
+    try:
+        for link in dead:
+            link.unlink()
+        if not any(namespace.iterdir()):
+            namespace.rmdir()
+    except OSError as exc:
+        return f"could not clear {namespace}: {exc}"
+    return None
+
+
+def prune_namespaces(execute: bool = False, root: Optional[Path] = None) -> List[Namespace]:
+    """Report every namespace under the Hermes skills root whose project is gone.
+
+    Reporting is the default: a namespace can be dangling because its drive is not mounted,
+    and deleting from a user's home during an ordinary refresh is surprising and hard to undo
+    (framework_copies.prune_home_cache's contract). Every project's namespace is swept, not
+    just the one being refreshed — an orphan's project no longer exists to refresh, so nothing
+    else will ever reach it. Anything ai-badger did not create is neither reported nor removed.
+    """
+    base = Path(root) if root else hermes_skills_root()
+    try:
+        children = sorted(base.iterdir())
+    except OSError:
+        return []
+    found: List[Namespace] = []
+    for child in children:
+        orphan = _dead_links(child)
+        if orphan is None:
+            continue
+        dead, kept, target = orphan
+        keeps = (f"; {kept} entry(ies) ai-badger did not place stay, and the directory with "
+                 f"them" if kept else "")
+        if not execute:
+            found.append(Namespace(child, len(dead), kept, target, REPORTED,
+                                   f"{child} holds {len(dead)} link(s) into {target}, which no "
+                                   f"longer exists{keeps}; remove them with: "
+                                   f"{PRUNE_NAMESPACES_COMMAND}"))
+            continue
+        failure = _remove(child, dead)
+        found.append(Namespace(child, len(dead), kept, target, FAILED if failure else REMOVED,
+                               failure or f"removed {len(dead)} dead link(s) "
+                                          f"from {child}{keeps}"))
+    return found
 
 
 class SkillDelivery:

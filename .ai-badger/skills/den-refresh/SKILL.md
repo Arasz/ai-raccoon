@@ -47,7 +47,8 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
    ```bash
    python3 "$AI_BADGER/features/common/skills/den-refresh/scripts/refresh.py" --target . --root "$AI_BADGER"
    ```
-   Add `--prune-cache` only when the user has asked for it (see step 3). Add `--force` only
+   Add `--prune-cache` or `--prune-namespaces` only when the user has asked for it (steps 3
+   and 3c) — both delete from the user's home directory. Add `--force` only
    as recovery (see Error Recovery) — it re-scaffolds unconditionally, bypassing every drift
    signal.
    This:
@@ -95,6 +96,13 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
    - `skillUsage` — which delivered skills this project was observed using, so unused ones can
      be pruned from the listing budget (see step 3b). `used` / `unused` / `cannotTell`, plus the
      `window` the claim rests on, the `channels` that answered, and the `limits` of both
+   - `hermesNamespaces` — present only when every ai-badger symlink in a
+     `~/.hermes/skills/<project>/` directory is dangling: that project's `.ai-badger/skills/`
+     tree is gone. Every project's namespace is swept, not just this one (see step 3c). Each
+     entry carries `path`, `links` (dead links ai-badger placed), `kept` (entries it did not —
+     a non-zero `kept` means the directory itself survives the prune), the `target` that no
+     longer exists, and `status` (`reported` by default, `removed` with `--prune-namespaces`,
+     `failed` with the reason)
 
 3. **Surface competing copies.** When the report carries `frameworkCopies`, tell the user which
    trees exist and at what versions — a drift notice fires once per tree, so two contradictory
@@ -122,6 +130,22 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
      the one the user will regret
    - `hint`, when present, replaces the recommendation: nothing could be observed, and the fix
      it names (`behaviorist.py on 4h`, then work normally) is the whole answer
+
+3c. **Present the orphaned namespaces and ask.** When the report carries `hermesNamespaces`,
+   list each `path` with its `links` count and the `target` that no longer exists, then **ask
+   the user whether to remove them**. Only on a yes, re-run the command with
+   `--prune-namespaces`. Never pass the flag on your own initiative — a namespace can dangle
+   because its project sits on a drive that is not mounted right now, and a refresh that
+   deletes it takes the user's Hermes skill wiring with it. Two things to say out loud:
+   - the sweep covers **every** project's namespace, not just this one. That is deliberate —
+     an orphan's project no longer exists to run `den-refresh` in, so nothing else will ever
+     reach it — but it means the paths named may belong to work the user has forgotten
+   - only the links ai-badger placed are removed. Anything else in that directory — a
+     Hermes-authored skill, a link pointing outside a `.ai-badger/skills/` tree — stays, and
+     the directory stays with it: that is what a non-zero `kept` means. A directory holding
+     no ai-badger link at all, such as a Hermes category like `react` or `uncategorized`, is
+     never listed and never touched. If the user expected one of those gone, it is theirs to
+     delete by hand
 
 4. **Review the diff.** After re-scaffold, `git diff` shows exactly what
    changed. Seed-once files (state.json, markers-context.json, model.json) are
@@ -242,8 +266,9 @@ recovery before surfacing the failure to the user.
 ## Verification Checklist
 
 - [ ] `refresh.py` exited 0
-- [ ] Report read section by section: `frameworkVersion`, `drift.*`, `reScaffolded`, `note`, `frameworkCopies`
+- [ ] Report read section by section: `frameworkVersion`, `drift.*`, `reScaffolded`, `note`, `frameworkCopies`, `hermesNamespaces`
 - [ ] Competing copies surfaced; `~/.ai-badger/framework` pruned only on request
+- [ ] Orphaned Hermes namespaces presented and the user asked; `--prune-namespaces` passed only on a yes
 - [ ] Prune candidates offered, never pruned — `config.json` untouched
 - [ ] Diff reviewed before commit
 - [ ] Seed-once files (`state.json`, `markers-context.json`, `model.json`) absent from the diff

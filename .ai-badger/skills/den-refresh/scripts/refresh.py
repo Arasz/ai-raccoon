@@ -286,6 +286,21 @@ def report_framework_copies(root: Path, prune: bool) -> Optional[Dict[str, Any]]
     return report
 
 
+def report_hermes_namespaces(root: Path, prune: bool) -> List[Dict[str, Any]]:
+    """Name every ~/.hermes/skills/<project>/ whose project is gone, and act only when asked.
+
+    `report_framework_copies`' shape, for the same reason: a namespace can dangle because a
+    drive is unmounted, so the default reports and deletes nothing. A directory ai-badger did
+    not create is never listed here and never removed, flag or no flag.
+    """
+    scaffold_mod = _load_script(
+        "features/common/skills/welcome-ai-badger/scripts/scaffold.py", root
+    )
+    return [{"path": str(n.path), "links": n.links, "kept": n.kept, "target": n.target,
+             "status": n.status, "detail": n.detail}
+            for n in scaffold_mod.prune_namespaces(execute=prune)]
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point: check drift, re-scaffold if needed, print JSON report."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -297,6 +312,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Delete ~/.ai-badger/framework, the clone ai-badger makes when it "
                              "has no other root and never updates in place. Default reports it "
                              "and deletes nothing. Claude Code's plugin cache is never touched.")
+    parser.add_argument("--prune-namespaces", action="store_true",
+                        help="Delete every ~/.hermes/skills/<project>/ whose whole target tree "
+                             "is gone. Default reports them and deletes nothing. A directory "
+                             "ai-badger did not create is never removed.")
     parser.add_argument("--force", action="store_true",
                         help="Re-scaffold even when no drift signal fired. The documented "
                              "recovery path for a scaffold/config disagreement no signal "
@@ -433,6 +452,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     copies = report_framework_copies(root, args.prune_cache)
     if copies:
         report["frameworkCopies"] = copies
+    # Nothing else will ever reach these: an orphaned namespace's project is gone, so no
+    # den-refresh can run there again. Present only when one exists.
+    namespaces = report_hermes_namespaces(root, args.prune_namespaces)
+    if namespaces:
+        report["hermesNamespaces"] = namespaces
 
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0

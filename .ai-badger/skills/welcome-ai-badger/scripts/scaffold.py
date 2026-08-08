@@ -226,7 +226,7 @@ from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
-from skill_delivery import SkillDelivery, relink_hermes_skills  # noqa: E402
+from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 
