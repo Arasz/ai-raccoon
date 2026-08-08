@@ -170,22 +170,124 @@ internal static class MemorySchema
                                CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
+
                                """;
+
+
+    /// <summary>
+    ///     Bucket uniqueness (F3). Not part of <see cref="Ddl"/>: on a legacy bank the duplicates
+    ///     must be deleted before the index can be created, which is the ladder's job. A fresh
+    ///     bank has no rows to violate it, so it gets the indexes directly.
+    /// </summary>
+    private const string BucketIndexDdl = """
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_shared_bucket
+                                              ON entries(path, hash)
+                                              WHERE scope = 'shared';
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
+                                              ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                                              WHERE scope IN ('project', 'custom');
+                                          """;
+
+    /// <summary>
+    ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
+    ///     matching ladder step in <see cref="MigrateAsync"/> (ADR-0011).
+    /// </summary>
+    internal const int CurrentVersion = 1;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
+        var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
+        // A pre-versioning bank and a brand-new file both read 0 and need opposite treatment.
+        // What separates them is whether the file holds any table at all — checked before the
+        // DDL creates them, and not keyed to one table: the oldest banks predate `entries`.
+        var fresh = storedVersion == 0
+                    && await connection.ExecuteScalarAsync<long>(
+                        new CommandDefinition(
+                            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                            cancellationToken: cancellationToken)).ConfigureAwait(false) == 0;
+
         await using var command = connection.CreateCommand();
         command.CommandText = Ddl;
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        await MigrateAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
+        // it costs one indexed count, and a bank that was stamped by a newer build and then
+        // written by an older one would otherwise keep an unreachable scope forever.
+        await MigrateIngestScopeKeysAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        if (fresh)
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (storedVersion >= CurrentVersion)
+        {
+            return;
+        }
+
+        // Stamped only when the ladder completed: the bucket-index step is deliberately soft
+        // (a bank must never fail to open), and a bank stamped past a step that silently
+        // failed would never retry it.
+        if (await MigrateAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
-    ///     Adds the (source_file, section) and (heading_path, structure_embedding)
-    ///     columns when missing and rebuilds the FTS index when it predates the three-column
-    ///     shape. Fresh banks are untouched.
+    ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys
+    ///     moved from watch.scope.* to ingest.scope.* (1.2). Carrying pre-1.2 rows over is not
+    ///     cosmetic: the scope is deny-by-default, so a bank that kept the old key would refuse
+    ///     every ingest and every watch add after the upgrade.
     /// </summary>
-    private static async Task MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task MigrateIngestScopeKeysAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        // Probe first: this runs on every bank open, and an unconditional write would take a
+        // write lock every time — enough to change how a busy bank behaves under maintenance.
+        var legacyScopeRows = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (legacyScopeRows == 0)
+        {
+            return;
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    UPDATE OR IGNORE settings
+                       SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
+                     WHERE key LIKE 'watch.scope.%';
+                    DELETE FROM settings WHERE key LIKE 'watch.scope.%';
+                    """,
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<long> ReadVersionAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+    /// <summary>PRAGMA user_version takes no parameter binding, hence the interpolation of an int constant.</summary>
+    private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(
+            new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+    /// <summary>
+    ///     Ladder step 1 — everything shipped before the version marker existed: the four entries
+    ///     columns, the two watch-lease columns, the ingest-scope key move, the FTS rebuild and the
+    ///     bucket-uniqueness indexes. Every check is idempotent. Returns false when the soft
+    ///     bucket-index step did not complete, so the caller leaves the bank unstamped and the
+    ///     next open retries.
+    /// </summary>
+    private static async Task<bool> MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
@@ -249,32 +351,6 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE watches ADD COLUMN scan_lease_expires_at INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-        }
-
-        // The scope allowlist bounds every disk-reading surface, not just watching, so its keys
-        // moved from watch.scope.* to ingest.scope.* (1.2). Carrying pre-1.2 rows over is not
-        // cosmetic: the scope is deny-by-default, so a bank that kept the old key would refuse
-        // every ingest and every watch add after the upgrade. Idempotent, and it never
-        // overwrites a row the new key already holds.
-        // Probe first: this runs on every bank open, and an unconditional write would take a
-        // write lock every time — enough to change how a busy bank behaves under maintenance.
-        var legacyScopeRows = await connection.ExecuteScalarAsync<long>(
-                new CommandDefinition(
-                    "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        if (legacyScopeRows > 0)
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        UPDATE OR IGNORE settings
-                           SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
-                         WHERE key LIKE 'watch.scope.%';
-                        DELETE FROM settings WHERE key LIKE 'watch.scope.%';
-                        """,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }
@@ -439,7 +515,10 @@ internal static class MemorySchema
             catch
             {
                 // Degraded but open; the next open retries the dedupe + index creation.
+                return false;
             }
         }
+
+        return true;
     }
 }

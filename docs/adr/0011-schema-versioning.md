@@ -2,7 +2,7 @@
 
 Date: 2026-08-07
 
-Status: Accepted (problem + direction only — implementation is a separate work item)
+Status: Implemented 2026-08-08 (WI-5) — see the addendum at the end
 
 ## Context
 
@@ -67,3 +67,30 @@ eventual implementation:
 `MigrateAsync`, the four column-existence checks, the FTS rebuild probe, the index-existence
 probe); no `user_version` reference anywhere under `src/` (`grep -r user_version src` — zero
 hits).
+
+## Addendum — implemented 2026-08-08 (WI-5)
+
+`MemorySchema.CurrentVersion` is 1, and `EnsureAsync` now reads `PRAGMA user_version` before
+the DDL runs:
+
+- **Fresh bank** — no user table in `sqlite_master` — gets the DDL plus the bucket-uniqueness
+  indexes and is stamped directly; it never walks the ladder. (Freshness is *not* keyed to a
+  single table: the oldest banks in the wild predate `entries`, and keying on it stamped one of
+  them as new during implementation, which the watch-lease migration test caught.)
+- **Unstamped existing bank** walks ladder step 1 — everything that shipped before the marker
+  existed — and is stamped only if the step completed. The bucket-index step is deliberately
+  soft (a bank must never fail to open), so a bank that hit it stays unstamped and retries on
+  the next open.
+- **Stamped bank** skips the ladder entirely, which is where the saving is: the store opens a
+  connection per ingested file, and each open used to pay two `pragma_table_info` calls, two
+  `sqlite_master` lookups and, when the FTS shape matched, two `count(*)` scans.
+
+One step is deliberately outside the version gate: the `watch.scope.*` → `ingest.scope.*` key
+move runs on every open. It is a data move guarding a deny-by-default gate, it costs one
+indexed count, and a bank stamped by a newer build and then written by an older one would
+otherwise keep a scope nothing can reach.
+
+The bucket-uniqueness indexes moved out of the shared DDL into their own constant: on a legacy
+bank the duplicates have to be deleted before the index can be created, so the DDL cannot
+create them unconditionally — the ladder still owns that path.
+

@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Time.Testing;
@@ -406,6 +407,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         await File.WriteAllTextAsync(file, "first chunk\n\nsecond chunk\n\nthird chunk",
             TestContext.Current.CancellationToken);
 
+        await AllowIngestScopeAsync(_dataRoot);
+
         var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
         indexed.ShouldBe(1);
@@ -426,6 +429,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(dir, "b.md"), "beta content", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(dir, "notes.txt"), "plain text", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(dir, "image.png"), "not text", TestContext.Current.CancellationToken);
+
+        await AllowIngestScopeAsync(_dataRoot);
 
         var first = await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
         var second = await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
@@ -672,6 +677,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "shared fact"),
             TestContext.Current.CancellationToken);
+        await AllowIngestScopeAsync(_dataRoot);
         var barrier = new Barrier(2);
         var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
         {
@@ -696,6 +702,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
         var entryB = await _store.WriteAsync(new MemoryWriteRequest("beta", "cross-project fact"),
             TestContext.Current.CancellationToken);
+        await AllowIngestScopeAsync(_dataRoot);
         var barrier = new Barrier(2);
         var tasks = new[]
         {
@@ -745,6 +752,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var file = Path.Combine(_dataRoot, "multi.md");
         await File.WriteAllTextAsync(file, "chunk one\n\nchunk two\n\nchunk three",
             TestContext.Current.CancellationToken);
+        await AllowIngestScopeAsync(_dataRoot);
         var barrier = new Barrier(2);
         var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
         {
@@ -799,4 +807,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
+
+    /// <summary>Ingest is deny-by-default since #126; these tests exercise chunking, not containment.</summary>
+    private Task AllowIngestScopeAsync(string path) =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
+            TestContext.Current.CancellationToken);
 }
