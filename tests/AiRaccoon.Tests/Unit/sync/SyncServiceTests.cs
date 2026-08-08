@@ -979,14 +979,24 @@ public class SyncServiceTests : IDisposable
             await fs.WriteAsync(garbage, ct);
         }
 
+        // Prove the precondition the two corruption tests rely on, instead of trusting it by hand.
+        await using (var verify = new SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            await verify.OpenAsync(ct);
+            await using var check = verify.CreateCommand();
+            check.CommandText = "PRAGMA quick_check";
+            var result = (string)(await check.ExecuteScalarAsync(ct))!;
+            result.ShouldNotBe("ok", "the corrupt fixture must actually fail its own integrity check");
+        }
+
         return path;
     }
 
     //
     // Issue #115: quick_check never runs on the bytes actually pushed by the merge branch.
     // A genuinely corrupt VACUUM INTO source fails VACUUM itself, so this substitutes a
-    // pre-corrupted file at the exact call ordinal the merge-branch integrity check uses —
-    // the same openReadOnly seam SyncService already calls quick_check through.
+    // pre-corrupted file for the merged-snapshot check specifically — the same openReadOnly
+    // seam SyncService already calls quick_check through.
     //
     [Fact]
     public async Task MemorySync_MergeBranchWithExistingRemote_CorruptMergedSnapshot_RejectedBeforeUpload()
@@ -1028,14 +1038,25 @@ public class SyncServiceTests : IDisposable
         var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
         try
         {
-            // openReadOnly call ordinals: 1 = local snapshot check, 2 = remote snapshot
-            // check, 3 = merged-snapshot check. That third call is substituted here.
-            var callCount = 0;
+            // The merged snapshot is identified by path, not by call position: it is whatever
+            // path StripNonSyncableAsync (the openSnapshot seam) most recently ran on, as long
+            // as that path isn't the first one it ran on (the local snapshot, always stripped
+            // first). That stays correct even if a new openReadOnly call is inserted anywhere
+            // else in the flow.
+            string? localSnapshotPath = null;
+            string? lastSnapshotPath = null;
+
+            async Task<SqliteConnection> OpenSnapshot(string path, CancellationToken ct)
+            {
+                localSnapshotPath ??= path;
+                lastSnapshotPath = path;
+                return await OpenSnapshotAsync(path, ct);
+            }
 
             async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
             {
-                callCount++;
-                var actualPath = callCount == 3 ? corruptPath : path;
+                var isMergedSnapshotCheck = path == lastSnapshotPath && path != localSnapshotPath;
+                var actualPath = isMergedSnapshotCheck ? corruptPath : path;
                 var c = new SqliteConnection($"Data Source={actualPath}");
                 await c.OpenAsync(ct);
                 return c;
@@ -1043,7 +1064,7 @@ public class SyncServiceTests : IDisposable
 
             var service = new SyncService(cloud,
                 ct => CreateAndOpenAsync(BankPath, ct),
-                OpenSnapshotAsync,
+                OpenSnapshot,
                 OpenReadOnly,
                 TimeProvider.System, NullLogger<SyncService>.Instance);
 
@@ -1107,16 +1128,25 @@ public class SyncServiceTests : IDisposable
         var corruptPath = await CreateCorruptSnapshotAsync(TestContext.Current.CancellationToken);
         try
         {
-            // openReadOnly call ordinals: 1 = local check, 2 = remote check (initial pull),
-            // 3 = merged-snapshot check (first attempt — left valid so the conflict/retry
-            // path is actually reached), 4 = remote check (post-conflict re-pull), 5 =
-            // merged-snapshot check on the retry path. That fifth call is substituted here.
-            var callCount = 0;
+            // Same path-identity rule as the single-merge test above (last openSnapshot path,
+            // excluding the local snapshot), further narrowed to only the check that runs
+            // after a conflict was actually raised. Without that narrowing this would also
+            // match the first (valid) merge attempt's own check, which must stay valid or the
+            // conflict/retry branch is never reached.
+            string? localSnapshotPath = null;
+            string? lastSnapshotPath = null;
+
+            async Task<SqliteConnection> OpenSnapshot(string path, CancellationToken ct)
+            {
+                localSnapshotPath ??= path;
+                lastSnapshotPath = path;
+                return await OpenSnapshotAsync(path, ct);
+            }
 
             async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
             {
-                callCount++;
-                var actualPath = callCount == 5 ? corruptPath : path;
+                var isMergedSnapshotCheck = path == lastSnapshotPath && path != localSnapshotPath;
+                var actualPath = isMergedSnapshotCheck && cloud.ConflictWasRaised ? corruptPath : path;
                 var c = new SqliteConnection($"Data Source={actualPath}");
                 await c.OpenAsync(ct);
                 return c;
@@ -1124,7 +1154,7 @@ public class SyncServiceTests : IDisposable
 
             var service = new SyncService(cloud,
                 ct => CreateAndOpenAsync(BankPath, ct),
-                OpenSnapshotAsync,
+                OpenSnapshot,
                 OpenReadOnly,
                 TimeProvider.System, NullLogger<SyncService>.Instance);
 

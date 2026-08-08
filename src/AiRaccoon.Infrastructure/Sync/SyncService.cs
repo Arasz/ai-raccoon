@@ -147,7 +147,7 @@ public partial class SyncService(
                             }
 
                             await StripNonSyncableAsync(retryPath, cancellationToken).ConfigureAwait(false);
-                            await EnsureSnapshotIntegrityAsync(retryPath, "Merged", cancellationToken).ConfigureAwait(false);
+                            await EnsureSnapshotIntegrityAsync(retryPath, "Retry-merged", cancellationToken).ConfigureAwait(false);
                             snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken).ConfigureAwait(false);
                         }
                         finally
