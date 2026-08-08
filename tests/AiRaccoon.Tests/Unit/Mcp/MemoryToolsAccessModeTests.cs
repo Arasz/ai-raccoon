@@ -341,7 +341,7 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "rw");
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _promotion.List("acme-web", limit, TestContext.Current.CancellationToken));
+            _promotion.List("acme-web", limit, cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("invalid-params: limit must be at least 1");
     }
 }
