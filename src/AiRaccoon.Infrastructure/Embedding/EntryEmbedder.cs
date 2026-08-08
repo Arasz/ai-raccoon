@@ -13,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// </summary>
 internal sealed class EntryEmbedder(EmbeddingService embeddings)
 {
-    private const int BatchSize = 32;
+    public const int BatchSize = 32;
     private const string BundledModel = "bundled";
 
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>

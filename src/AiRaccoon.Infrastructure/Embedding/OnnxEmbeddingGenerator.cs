@@ -17,8 +17,12 @@ namespace AiRaccoon.Infrastructure.Embedding;
 internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath) : IEmbeddingGenerator<string, Embedding<float>>
 {
     private const int MaxSequenceLength = 256;
+    private const int MaxBatchSize = EntryEmbedder.BatchSize;
+
+    private readonly ArrayPool<long> _pool = ArrayPool<long>.Create(MaxSequenceLength * MaxBatchSize, 3);
 
     private readonly InferenceSession _session = new(modelPath);
+
 
     private readonly BertTokenizer _tokenizer = BertTokenizer.Create(vocabPath, new BertOptions
     {
@@ -47,12 +51,14 @@ internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath)
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var maxLen = Math.Min(MaxSequenceLength, items.Max(i => i.Ids.Length));
+        var maxLen = Math.Min(MaxSequenceLength, items.Max(i => i.Ids.Count));
         var batch = items.Count;
 
-        using var inputIds = new MemoryOwner<long>(ArrayPool<long>.Shared, batch * maxLen);
-        using var attentionMask = new MemoryOwner<long>(ArrayPool<long>.Shared, batch * maxLen);
-        using var tokenTypeIds = new MemoryOwner<long>(ArrayPool<long>.Shared, batch * maxLen);
+        var length = batch * maxLen;
+
+        using var inputIds = new MemoryOwner<long>(_pool, length);
+        using var attentionMask = new MemoryOwner<long>(_pool, length);
+        using var tokenTypeIds = new MemoryOwner<long>(_pool, length);
 
         for (var i = 0; i < batch; i++)
         {
@@ -60,13 +66,11 @@ internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath)
             var mask = items[i].Mask;
             for (var s = 0; s < maxLen; s++)
             {
-                if (s >= ids.Length)
+                if (s < ids.Count)
                 {
-                    continue;
+                    inputIds[i * maxLen + s] = ids[s];
+                    attentionMask[i * maxLen + s] = mask[s];
                 }
-
-                inputIds[i * maxLen + s] = ids[s];
-                attentionMask[i * maxLen + s] = mask[s];
             }
         }
 
@@ -105,8 +109,8 @@ internal sealed class OnnxEmbeddingGenerator(string modelPath, string vocabPath)
 
         var mask = new int[ids.Count];
         Array.Fill(mask, 1);
-        return new Item([.. ids], mask);
+        return new Item(ids.ToArray(), mask);
     }
 
-    private readonly record struct Item(int[] Ids, int[] Mask);
+    private readonly record struct Item(ArraySegment<int> Ids, ArraySegment<int> Mask);
 }
