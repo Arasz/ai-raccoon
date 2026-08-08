@@ -11,3 +11,6 @@ packaging metadata. Filenames are bare nouns.
 - [`embedding-benchmark.md`](embedding-benchmark.md) — measured retrieval
   quality and latency per embedding model (small local GGUF vs LM Studio
   served models), with every metric explained and a size/speed recommendation.
+- [`logging-event-ids.md`](logging-event-ids.md) — the measured, zero-duplicate
+  `[LoggerMessage]` `EventId` allocation across the solution, and how the table is
+  reproduced.

@@ -8,13 +8,17 @@ The canonical documentation tree for AiRaccoon. Docs root: `docs/`.
 |---|---|
 | `tutorials/` | Learning-oriented walkthroughs — we choose the goal, the reader follows |
 | `how-to/` | Task-oriented recipes — the reader has a goal, we show the steps |
-| `reference/` | Information-oriented lookups — consulted mid-task. Currently: [agent-memory-server.md](reference/agent-memory-server.md) (tool contract) |
-| `explanation/` | Understanding-oriented background — why it is like this. Currently: [agent-memory-architecture.md](explanation/agent-memory-architecture.md) |
+| `reference/` | Information-oriented lookups — consulted mid-task. See [reference/README.md](reference/README.md) |
+| `explanation/` | Understanding-oriented background — why it is like this. See [explanation/README.md](explanation/README.md) |
 | `adr/` | Architecture decision records — immutable, frozen |
 | `work/` | Dated work records: plans, designs, research, reviews, incidents, backlog |
+| `plans/` | Historical implementation plans for shipped work — dated snapshots, not current guidance |
+| `research/` | Historical technology research and evaluation notes — dated snapshots |
+| `reviews/` | Dated integration and manual review reports |
+| `notes/` | Standalone design notes not yet folded into an ADR or explanation doc |
 | `assets/` | Images and diagrams for the documentation |
 | `meta/` | Machine state: ledger, indexes, baselines |
-| `features/` | Feature dossiers + Gherkin contracts, indexed by [features/README.md](features/README.md). Currently: agent-memory (Implemented) |
+| `features/` | Feature dossiers + Gherkin contracts, indexed by [features/README.md](features/README.md) |
 
 ## Conventions
 
