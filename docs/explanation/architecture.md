@@ -544,7 +544,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
-  Sync/                     SyncService, S3CloudStore, FakeCloudStore
+  Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
   Chunking/                 TokenizerChunker (o200k_base)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
