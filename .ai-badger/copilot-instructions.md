@@ -3,7 +3,7 @@
 C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
-> Stacks: dotnet, mcp, python
+> Stacks: dotnet, mcp, python, github
 > Scaffolded by ai-badger 0.113.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Non-negotiable invariants
@@ -71,6 +71,9 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 - **MCP stays thin** — An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own.
   → `.ai-badger/invariants/mcp-thin.md`
 
+- **Pin actions to a commit SHA; declare least-privilege permissions** — Every third-party GitHub Action referenced in a workflow is pinned to a full commit SHA, never a tag or branch — a mutable tag is remote code you re-fetch on every run, not a fixed dependency.
+  → `.ai-badger/invariants/pin-actions-to-sha.md`
+
 ## Commands
 
 - `build`: `dotnet build`
@@ -84,6 +87,7 @@ Before editing matching files, read the applicable scoped instruction file:
 - `**/*.cs,**/*.csproj,Directory.Build.props,Directory.Packages.props` → `.ai-badger/instructions/csharp.instructions.md`
 - `**/*Mcp*/**` → `.ai-badger/instructions/mcp.instructions.md`
 - `**/*.py` → `.ai-badger/instructions/python.instructions.md`
+- `**/.github/workflows/*.yml,**/.github/workflows/*.yaml` → `.ai-badger/instructions/github-actions.instructions.md`
 
 ## Agent delegation
 

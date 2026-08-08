@@ -4,7 +4,7 @@
 
 ## Stacks
 
-dotnet, mcp, python
+dotnet, mcp, python, github
 
 ## Personas available here
 

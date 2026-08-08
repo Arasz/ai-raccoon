@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "2b283e05487503504f28b3821efa44983b76ca463e5bbdf3cf74ef07bba6234f",
+  "configHash": "7fd5e6a3dd71c59974421991a9419d2a26ff69f64878e7e64e36dfd042fa2efd",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -111,6 +111,15 @@
       "target": ".ai-badger/instructions/python.instructions.md",
       "frameworkVersion": "0.113.0",
       "hash": "54d87946cc16b321829b32962aa2700d67a379803614dfb8a32ca72a156a0e97"
+    },
+    {
+      "feature": "instructions",
+      "stack": "github",
+      "name": "github-actions.instructions",
+      "source": "features/github/instructions/github-actions.instructions.md",
+      "target": ".ai-badger/instructions/github-actions.instructions.md",
+      "frameworkVersion": "0.113.0",
+      "hash": "dddff56e7b9d977c6aad71dcb7d5bade6a20358f8aa869b6a4a5d4d0a7af8918"
     },
     {
       "feature": "invariants",
@@ -300,6 +309,15 @@
       "target": ".ai-badger/invariants/mcp-thin.md",
       "frameworkVersion": "0.113.0",
       "hash": "a118e9dfdcdf83981a0dcd7daba6f4379b626f5c0fa49060ab190410c4bf78fc"
+    },
+    {
+      "feature": "invariants",
+      "stack": "github",
+      "name": "pin-actions-to-sha",
+      "source": "features/github/invariants/pin-actions-to-sha.md",
+      "target": ".ai-badger/invariants/pin-actions-to-sha.md",
+      "frameworkVersion": "0.113.0",
+      "hash": "775423167ecb74b8ce5abdb1994a9c44b516a142d50b6da567a77362819993d8"
     },
     {
       "feature": "skills",
@@ -1071,6 +1089,174 @@
       ]
     },
     {
+      "feature": "skills",
+      "stack": "common",
+      "name": "artifact-verification",
+      "source": "features/common/skills/artifact-verification",
+      "target": ".ai-badger/skills/artifact-verification",
+      "frameworkVersion": "0.113.0",
+      "hash": "5d88ec53ed57cb493bf3c093231f53c77d6e021fd47f6b38e559fb5e59d91bce",
+      "dirMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "sourceHash": "5d88ec53ed57cb493bf3c093231f53c77d6e021fd47f6b38e559fb5e59d91bce",
+      "sourceMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "code-review-evidence",
+      "source": "features/common/skills/code-review-evidence",
+      "target": ".ai-badger/skills/code-review-evidence",
+      "frameworkVersion": "0.113.0",
+      "hash": "4b0b4a7422bf5ce21b6c5a2cc5d16d87fdcca6a3d742581718075b3c80cb3527",
+      "dirMeta": {
+        "file_count": 11,
+        "dir_count": 1
+      },
+      "sourceHash": "4b0b4a7422bf5ce21b6c5a2cc5d16d87fdcca6a3d742581718075b3c80cb3527",
+      "sourceMeta": {
+        "file_count": 11,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "design-gate-audit",
+      "source": "features/common/skills/design-gate-audit",
+      "target": ".ai-badger/skills/design-gate-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "fc6222edb1c5d17ab9637b8fdf7364c6e84e2eb42392e662f72ead52c95579a7",
+      "dirMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "sourceHash": "fc6222edb1c5d17ab9637b8fdf7364c6e84e2eb42392e662f72ead52c95579a7",
+      "sourceMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "documentation-drift-audit",
+      "source": "features/common/skills/documentation-drift-audit",
+      "target": ".ai-badger/skills/documentation-drift-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "f979849f7a409ae1836abc3d37e13f530fb98f8744041bf03e06b4bc6da51535",
+      "dirMeta": {
+        "file_count": 9,
+        "dir_count": 1
+      },
+      "sourceHash": "f979849f7a409ae1836abc3d37e13f530fb98f8744041bf03e06b4bc6da51535",
+      "sourceMeta": {
+        "file_count": 9,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "multi-lane-report-assembly",
+      "source": "features/common/skills/multi-lane-report-assembly",
+      "target": ".ai-badger/skills/multi-lane-report-assembly",
+      "frameworkVersion": "0.113.0",
+      "hash": "e3eee611970f82700381e9241fd20267f563f2880eba973ce3bf8d4e0f6c8445",
+      "dirMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "sourceHash": "e3eee611970f82700381e9241fd20267f563f2880eba973ce3bf8d4e0f6c8445",
+      "sourceMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "parallel-expert-review",
+      "source": "features/common/skills/parallel-expert-review",
+      "target": ".ai-badger/skills/parallel-expert-review",
+      "frameworkVersion": "0.113.0",
+      "hash": "97198b19a424312288c1be6550b086e2d0f1f35d8b3ea0fe8998319fdd1602ab",
+      "dirMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "sourceHash": "97198b19a424312288c1be6550b086e2d0f1f35d8b3ea0fe8998319fdd1602ab",
+      "sourceMeta": {
+        "file_count": 2,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "pre-push-gate-debugging",
+      "source": "features/common/skills/pre-push-gate-debugging",
+      "target": ".ai-badger/skills/pre-push-gate-debugging",
+      "frameworkVersion": "0.113.0",
+      "hash": "3f498b694ab5a18e9bfd67f7a64e0b2a03a35d5d11a27519ac82730e6b3dcad4",
+      "dirMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "sourceHash": "3f498b694ab5a18e9bfd67f7a64e0b2a03a35d5d11a27519ac82730e6b3dcad4",
+      "sourceMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "research-record-audit",
+      "source": "features/common/skills/research-record-audit",
+      "target": ".ai-badger/skills/research-record-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "fce0299562bf16c3397afae9c997c6a1d4f6cb195e79f86faaa2850895699e22",
+      "dirMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      },
+      "sourceHash": "fce0299562bf16c3397afae9c997c6a1d4f6cb195e79f86faaa2850895699e22",
+      "sourceMeta": {
+        "file_count": 3,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
       "feature": "templates",
       "stack": "common",
       "name": "agent-instructions/schema.json",
@@ -1386,6 +1572,78 @@
     {
       "feature": "adjustments",
       "stack": "claude",
+      "name": "adjustments/.claude/skills/artifact-verification",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/artifact-verification",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/code-review-evidence",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/code-review-evidence",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/design-gate-audit",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/design-gate-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/documentation-drift-audit",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/documentation-drift-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/multi-lane-report-assembly",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/multi-lane-report-assembly",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/parallel-expert-review",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/parallel-expert-review",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/pre-push-gate-debugging",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/pre-push-gate-debugging",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/research-record-audit",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/research-record-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
       "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
       "source": "features/claude/adjustments/adjust_retrieval.py",
       "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
@@ -1638,6 +1896,78 @@
     {
       "feature": "adjustments",
       "stack": "copilot",
+      "name": "adjustments/.github/skills/artifact-verification",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/artifact-verification",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/code-review-evidence",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/code-review-evidence",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/design-gate-audit",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/design-gate-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/documentation-drift-audit",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/documentation-drift-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/multi-lane-report-assembly",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/multi-lane-report-assembly",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/parallel-expert-review",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/parallel-expert-review",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/pre-push-gate-debugging",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/pre-push-gate-debugging",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/research-record-audit",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/research-record-audit",
+      "frameworkVersion": "0.113.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
       "name": "adjustments/.github/agents/architect.agent.md",
       "source": "features/copilot/adjustments/adjust_agents.py",
       "target": ".github/agents/architect.agent.md",
@@ -1868,6 +2198,15 @@
       "target": ".ai-badger/skills-data/python/skills.json",
       "frameworkVersion": "0.113.0",
       "hash": "d9799400de3c342c036bc90548488ec66e0c436c0d8985eac9aa0515588945e2"
+    },
+    {
+      "feature": "skills",
+      "stack": "github",
+      "name": "github/skills.json",
+      "source": "features/github/skills.json",
+      "target": ".ai-badger/skills-data/github/skills.json",
+      "frameworkVersion": "0.113.0",
+      "hash": "5875bafd3c61f4bbdbd0dbd8f7ce1e26870e1d03289ada235f6aeaf7f8b6265e"
     }
   ]
 }
