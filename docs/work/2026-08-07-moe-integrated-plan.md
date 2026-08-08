@@ -277,10 +277,10 @@ anywhere in the solution**. The claim was an artifact of the old reference doc, 
 | WI-5 | still open: `grep user_version src/` → 0 hits, no migration marker | — (ADR-0011 owns it) |
 | WI-6a | **Shipped in #123** | — |
 | WI-6c | **Shipped in #126** | — |
-| WI-7c | **Half shipped in #134** — the port is Core-native now; `ApiEnvelope` itself is still at Core's root, deliberately, until MCP contract tests exist | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-7c | **Complete** — `McpToolContractTests.cs` now pins the wire contract, and `ApiEnvelope` moved out of Core to `src/AiRaccoon/Tools/ApiEnvelope.cs` | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
 | WI-7e | **Shipped in #132** | — |
-| WI-8 | still open: `SqliteMemoryStore` is 1274 lines (was 1227 — it grew) | — |
-| WI-9 | **Half shipped in #130** — the unreachable hooks are gone; whether the extension host itself stays is still the owner's call | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
+| WI-8 | **8b shipped in #161** (file ingestion extracted to `Infrastructure/Ingestion/FileIngestor.cs`; 8c already out via `Infrastructure/Embedding/EntryEmbedder.cs`, #149) — `SqliteMemoryStore` is 956 lines, down from 1274. 8a (settings store) and 8d (transactions) still open | — |
+| WI-9 | **Shipped in #162, per ADR-0016** — the extension host, `IMemoryExtension`, and `RetrievalRatingExtension` are deleted, not kept. Supersedes ADR-0013 | [#118](https://github.com/Arasz/ai-raccoon/issues/118) |
 | WI-11 | still open, and worse: 14 worktrees, 51 remote branches | — |
 
 **WI-7c and WI-7e had fallen off this list entirely** — present in neither Shipped, Cancelled, nor Still-open —
@@ -294,16 +294,17 @@ The 1.2.0 integration review's 10 blockers and most of its residuals have shippe
 What is left, ordered by what a user actually loses:
 
 1. **[#118](https://github.com/Arasz/ai-raccoon/issues/118) Architecture drift — the remainder.** Items 2, 3 and 4
-   shipped (#130, #132); item 1's cheap half shipped (#134). Left: whether `ApiEnvelope` leaves Core's root, which
-   is gated on MCP contract tests, and whether the extension host itself stays now that its unreachable hooks are
-   gone (WI-9, still the owner's call — removing it reverses a ratified spec section).
+   shipped (#130, #132); item 1 is now complete (`ApiEnvelope` left Core's root once `McpToolContractTests.cs`
+   landed, #134); WI-9 is resolved too — the owner ruled to delete the extension host outright rather than keep
+   it, shipped as ADR-0016 + #162.
 2. **[#135](https://github.com/Arasz/ai-raccoon/issues/135) Re-propose overwrites score unconditionally.** Opened
    out of #117 item 3: the scoring inputs are consistent now, but `ON CONFLICT DO UPDATE SET score = excluded.score`
    still means the newest propose wins outright. Needs a ruling on what a re-score means for eviction.
 3. **WI-5 — schema versioning.** `grep user_version src/` still returns nothing; ADR-0011 states the problem and
    owns it. Every bank migration so far has been a probe-and-patch on open, which does not scale.
-4. **WI-8 — `SqliteMemoryStore` decomposition.** 1274 lines, up from the 1227 the review measured. Gated on the
-   WI-9 ruling, since removing the extension host changes what the store has to dispatch.
+4. **WI-8 — `SqliteMemoryStore` decomposition, remainder.** 8b (file ingestion) shipped in #161, bringing the file
+   to 956 lines (down from 1274). 8a (settings store extraction) and 8d (transactions) are still open; the WI-9
+   ruling that used to gate this item has now landed, so nothing blocks starting them.
 5. **WI-11 — branch and worktree hygiene.** 14 worktrees and 51 remote branches on this machine, several belonging
    to agent lanes that have already merged. Mechanical, but it is now actively confusing: two lanes opened
    competing PRs for #119 on 2026-08-08 (#137 and #138) because neither could see the other.
