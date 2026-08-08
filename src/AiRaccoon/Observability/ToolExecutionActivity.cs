@@ -19,14 +19,19 @@ public sealed class ToolExecutionActivity : IDisposable
     private readonly ToolCallMetrics _metrics;
     private readonly Stopwatch _stopwatch;
     private readonly string _toolName;
-    private readonly string _projectId;
+    private readonly string _metricProjectId;
     private bool _recorded;
 
-    public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId)
+    /// <summary>
+    ///     The span always tags <paramref name="projectId"/>. The counter tags
+    ///     <paramref name="metricProjectId"/> when given, or <paramref name="projectId"/> otherwise —
+    ///     callers whose span id is unbounded (e.g. a joined composite) must pass a bounded value.
+    /// </summary>
+    public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId, string? metricProjectId = null)
     {
         _metrics = metrics;
         _toolName = toolName;
-        _projectId = projectId;
+        _metricProjectId = metricProjectId ?? projectId;
         _activity = metrics.ActivitySource.StartActivity(toolName);
         _activity?.SetTag(ToolActivityTag, toolName);
         _activity?.SetTag(ProjectIdActivityTag, projectId);
@@ -51,7 +56,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _recorded = true;
         _activity?.SetStatus(ActivityStatusCode.Ok);
         _activity?.SetTag(ResultActivityTag, ResultSuccess);
-        _metrics.RecordInvocation(_toolName, _projectId, _stopwatch.Elapsed, false);
+        _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, false);
     }
 
     /// <summary>Marks the activity as failed and records the invocation with the exception's type name.</summary>
@@ -66,6 +71,6 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
         _activity?.SetTag(ResultActivityTag, ResultError);
-        _metrics.RecordInvocation(_toolName, _projectId, _stopwatch.Elapsed, true, exception.GetType().Name);
+        _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
     }
 }

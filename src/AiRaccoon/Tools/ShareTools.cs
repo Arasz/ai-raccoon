@@ -22,6 +22,9 @@ public sealed class ShareTools(
     private const string TnMemoryShare = "memory_share";
     private const string TnMemoryShareExtract = "memory_share_extract";
 
+    /// <summary>Counter tag for share_extract: the span keeps the full project id composite, the counter is bounded to avoid unbounded cardinality (see ADR 0002).</summary>
+    private const string MultiProjectMetricTag = "multi";
+
     /// <summary>The activity tag is built before validation, and the protocol layer can still hand us a null array.</summary>
     private static string JoinProjectIds(string[]? projectIds) => projectIds is null ? string.Empty : string.Join(",", projectIds);
 
@@ -72,7 +75,7 @@ public sealed class ShareTools(
         CancellationToken cancellationToken = default)
     {
         using var activity = new ToolExecutionActivity(observability, TnMemoryShareExtract,
-            JoinProjectIds(projectIds));
+            JoinProjectIds(projectIds), MultiProjectMetricTag);
         try
         {
             if (projectIds is null || projectIds.Length == 0 || projectIds.Length > 8)

@@ -47,11 +47,25 @@ oversight, so both meter names are registered explicitly with
 `.AddMeter(...)`. The built-in `System.Runtime` Meter is exported alongside
 them — see ".NET runtime metrics" below.
 
-**Known cost, accepted:** `PromotionQueueMetrics` tags four of its seven
-instruments with `project_id` — the queued, eviction, promoted and discarded
-counters (`RecordQueued`, `RecordEviction`, `RecordPromoted`,
+**Known cost, accepted:** two meters tag `project_id`. `PromotionQueueMetrics`
+tags four of its seven instruments — the queued, eviction, promoted and
+discarded counters (`RecordQueued`, `RecordEviction`, `RecordPromoted`,
 `RecordDiscarded`); the wait-seconds histogram and the capacity-utilization
-gauge are untagged. `project_id` is unbounded, so every
+gauge are untagged. `ToolCallMetrics` tags its `ai_raccoon_tool_invocations`
+counter (2026-08-08; the duration histogram stays untagged — see ADR 0002).
+
+The two carry different costs, and the difference matters more than the
+similarity. On the queue counters `project_id` is the *only* tag, so N
+projects cost N series. On the tool counter it multiplies `tool` (22) ×
+`result` × `error_type`, so each project costs tens of series rather than
+one. The tool counter is also incremented on the error path, and the access
+gate that rejects unknown or unauthorized project ids runs *inside* the
+timed block — so a rejected call still mints a series under the id the
+caller supplied. `memory_share_extract` is deliberately exempt: it tags the
+counter with the sentinel `multi` rather than its comma-joined project list,
+which would have been combinatorial rather than linear.
+
+`project_id` is unbounded, so every
 distinct project becomes its own metric time series. That was free while
 collection was local-only over EventPipe, which is the context in which the
 cardinality was originally accepted; exporting changes the cost profile,

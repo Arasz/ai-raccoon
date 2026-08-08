@@ -98,6 +98,7 @@ public class ToolExecutionActivityTests
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
         invocations[0].Tags["error_type"].ShouldBe("InvalidOperationException");
+        invocations[0].Tags["project_id"].ShouldBe("acme");
 
         var stopped = stoppedActivities.ShouldHaveSingleItem();
         stopped.Status.ShouldBe(ActivityStatusCode.Error);
