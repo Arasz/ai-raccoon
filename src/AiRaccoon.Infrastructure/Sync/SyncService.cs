@@ -48,8 +48,8 @@ public partial class SyncService(
     private async Task<SyncResult> SyncCycleAsync(string projectId, string objectKey,
         CancellationToken cancellationToken)
     {
-        // F13: the cloud store is resolved per call from the current settings rows —
-        // `sync add/remove` take effect without a restart.
+        // The cloud store is resolved per call from the current settings rows — `sync add/remove`
+        // take effect without a restart.
         var cloud = await resolveCloud(cancellationToken).ConfigureAwait(false);
 
         // Fail fast, before any local VACUUM/read work: an unconfigured sync is guaranteed to
@@ -258,10 +258,10 @@ public partial class SyncService(
 
                 var received = 0;
 
-                // Merge entries: content-addressed near-union (skip duplicates).
-                // OR IGNORE also absorbs the F3 unique-bucket constraints: a replica pushing a
-                // row the local bank already has (same path/hash bucket) is silently skipped and
-                // converges on the next write (see docs/work/archive/2026-08-06-extraction-followups-plan.md).
+                // Merge entries: content-addressed near-union (skip duplicates). OR IGNORE also
+                // absorbs the unique-bucket constraints: a replica pushing a row the local bank
+                // already has is silently skipped and converges on the next write
+                // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     mergeEntries.CommandText = """
@@ -336,11 +336,9 @@ public partial class SyncService(
                 var reindexed = 0;
                 await using (var reindexCmd = conn.CreateCommand())
                 {
-                    // Nulls structure_embedding/heading_path alongside the content columns (#190):
-                    // vec_structure_pending fires off embed_state, so the trigger alone would drop the
-                    // vec row but leave the entry columns stale — that breaks the invariant that
-                    // vec_structure stays in lockstep with entries.structure_embedding, and a stale,
-                    // non-NULL heading_path would never re-open the row for the structure healing pass.
+                    // Nulls structure_embedding/heading_path alongside the content columns: the
+                    // vec_structure_pending trigger alone would drop the vec row but leave these stale,
+                    // breaking lockstep with entries.structure_embedding and blocking the structure heal pass.
                     reindexCmd.CommandText = """
                                              UPDATE entries
                                              SET embed_state = 'pending', embedding = NULL,
