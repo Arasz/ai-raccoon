@@ -2,6 +2,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Time.Testing;
@@ -54,6 +55,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
     {
         var file = Path.Combine(_dataRoot, "long-note.md");
         await File.WriteAllTextAsync(file, BuildLongNote(), TestContext.Current.CancellationToken);
+        await AllowIngestScopeAsync(_dataRoot);
 
         var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
@@ -76,4 +78,9 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
 
     private static string CreateTempRoot() =>
         TestData.CreateTempRoot("airaccoon-store-tests");
+
+    /// <summary>Ingest is deny-by-default since #126; these tests exercise chunking, not containment.</summary>
+    private Task AllowIngestScopeAsync(string path) =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
+            TestContext.Current.CancellationToken);
 }

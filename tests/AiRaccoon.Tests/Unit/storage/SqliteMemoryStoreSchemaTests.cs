@@ -293,8 +293,10 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
 
     /// <summary>
     ///     Opens a fresh bank, drops the unique bucket indexes (so duplicate rows can be
-    ///     seeded), inserts the given raw rows, and closes — leaving a bank that the next
-    ///     open must heal. Mirrors the real production bank shape: current DDL, no indexes.
+    ///     seeded), inserts the given raw rows, unstamps the schema version, and closes —
+    ///     leaving a bank that the next open must heal. Mirrors the real production bank shape:
+    ///     current DDL, no indexes, and no version marker, which is what every bank written
+    ///     before ADR-0011's marker looks like.
     /// </summary>
     private async Task SeedDuplicateBucketsAsync(params (string Hash, string Path, string? Scope, string ProjectId, string? WorkspaceId)[] rows)
     {
@@ -317,6 +319,10 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
                     "VALUES (@hash, @path, 'dup', @scope, @projectId, @workspaceId, 1, 1)",
                     new { hash, path, scope, projectId, workspaceId });
             }
+
+            // Without this the bank carries the current marker and the next open skips the
+            // ladder — correctly, since a stamped bank is asserting it has already healed.
+            await connection.ExecuteAsync("PRAGMA user_version = 0", TestContext.Current.CancellationToken);
         }
     }
 
