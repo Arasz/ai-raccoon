@@ -73,6 +73,17 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task Write_WithUnknownWorkspace_IsAProtocolError()
+    {
+        _store.WriteError = new UnknownWorkspaceException("ws-x", "acme");
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Write("acme", "content", workspaceId: "ws-x", cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("unknown-workspace:");
+    }
+
+    [Fact]
     public async Task ShareExtract_Propose_ReturnsCandidates_WithoutSharing()
     {
         _store.Candidates.Add(new ExtractionCandidateRow("h1", "h1.md",
@@ -442,10 +453,12 @@ public class MemoryToolsTests
 
         public List<string> ProjectIds { get; } = ["acme"];
 
+        public Exception? WriteError { get; set; }
+
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            return Task.FromResult(Entry);
+            return WriteError is not null ? Task.FromException<MemoryEntry>(WriteError) : Task.FromResult(Entry);
         }
 
         public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,

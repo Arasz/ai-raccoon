@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Core.Ingestion;
@@ -109,6 +110,33 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         row.ShouldNotBeNull();
         row.WorkspaceId.ShouldBe("ws-1");
         row.Scope.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Write_WithNonexistentWorkspaceId_ThrowsUnknownWorkspaceException()
+    {
+        var ex = await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            _store.WriteAsync(new MemoryWriteRequest("acme", "draft finding", WorkspaceId: "ghost"),
+                TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("ghost");
+        ex.Message.ShouldContain("acme");
+    }
+
+    [Fact]
+    public async Task Write_WithDiscardedWorkspaceId_ThrowsUnknownWorkspaceException()
+    {
+        // The realistic agent mistake: workspaceId is a stale id from before a discard/consolidate,
+        // not a random typo. The workspaces row survives close (see IWorkspaceStore) so this must
+        // be caught by an active-status check, not merely a row-existence check.
+        await EnsureWorkspaceAsync("ws-1");
+        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        await workspaceStore.CloseAsync("acme", "ws-1", WorkspaceStatus.Closed, FixedNow,
+            TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            _store.WriteAsync(new MemoryWriteRequest("acme", "stale write", WorkspaceId: "ws-1"),
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
