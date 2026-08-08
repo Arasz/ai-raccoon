@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-08T12:19:30Z",
+  "lastUpdated": "2026-08-09T01:40:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "integration-maintenance",
+      "title": "Integration maintenance: comment/doc cleanup, doc-code sync, MoE hot-spot review, 1.3.1 tool sweep",
+      "finished": "2026-08-09T01:40:00Z",
+      "pr": "207",
+      "summary": "Swept all 22 MCP tools over stdio JSON-RPC against 1.3.1 and found 7 defects, then fixed them: consolidate crashing on its own documented keep:'all'; four different answers for an unknown workspace; untyped refusals on unknown hash and on the forward-version guard, so 'update ai-raccoon' never reached the operator; memory_stats leaking every project's contexts; consolidate reporting promoted entries as discarded; and a one-entry scope tier ranking 1.0000 for every scope=all query. Promotion queue was running two scorer generations - 204/288 rows never scored by v3 because a propose pass emitted only the top 20. Integration review refuted 5 structure-vector hypotheses and found 5 real defects (unbounded heal pass, sync bypassing the schema guard, a heal/reindex race, dropped source_file). OTLP diagnosed as two separate non-defects plus an untested export path. Comment cleanup against a written rule across src and tests; ADR-0019 written for a guard that shipped without one; 12 doc citations repointed after a 657-reference sweep."
+    },
     {
       "id": "hermes-envelope",
       "title": "Unwrap the ApiEnvelope in the Hermes provider client",
@@ -427,7 +434,7 @@
       "hasNotes": true
     }
   ],
-  "next": "airacimprovcont: MemoryExtensionHost removal (WI-9), WI-8 step 2 ingest, #147 #148 #150 #151 #153",
+  "next": "Open from this task: cross-context retrieval measurement has no ground truth (scope=all with two populated tiers is unmeasured); promotion propose tier still has no drain (extract.mode=propose, no depth alarm); docs/tutorials empty and docs/how-to has no product-usage content.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
