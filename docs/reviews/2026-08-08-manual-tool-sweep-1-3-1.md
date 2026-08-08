@@ -226,6 +226,14 @@ bank"). It is not a measured cross-context improvement, and that absence is why 
 Adding a cross-context stratum to `scripts/baseline-queries.json` with a shared-tier fixture is the
 open corpus-scope question.
 
+**A/B against the live bank**, six real queries run through the installed 1.3.1 and a build of the
+fix, over 2,400 entries: **top-1 agreement 6/6**, with all three returned positions and their
+rankings identical on every query. Note what that does and does not prove — the shared tier was
+empty at the time, so `scope=all` reduced to one context, which is exactly where the new path is a
+no-op. It is evidence of no regression on the common case, not evidence about the multi-tier case.
+The multi-tier behaviour was checked separately, by repopulating the tier and confirming the
+off-topic queries above stopped capturing.
+
 ## Promotion queue — quality assessment
 
 Measured across all 288 waiting candidates (`memory_promotion_list`, limit 1000).
