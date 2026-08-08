@@ -66,8 +66,8 @@ public class QuietLoggingTests
     }
 
     /// <summary>Per-request ASP.NET Core chatter and the MCP request-handler INFO lines flood a
-    /// non-quiet serve log (owner report from a real serve.log); this pins the default-level fix
-    /// without reaching for --quiet, which would also silence AiRaccoon's own Information logs.</summary>
+    /// non-quiet serve log; this pins the default-level fix without reaching for --quiet, which
+    /// would also silence AiRaccoon's own Information logs.</summary>
     [Fact]
     public void HttpHost_QuietsAspNetCoreAndMcpServerCategories_ButKeepsAppInfo()
     {

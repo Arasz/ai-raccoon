@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Pins the watch error types the port raises (S2 surface).</summary>
+/// <summary>Pins the watch error types the port raises.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchServicePortTests

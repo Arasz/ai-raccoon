@@ -14,13 +14,8 @@ using Shouldly;
 namespace AiRaccoon.Tests.BDD;
 
 /// <summary>
-///     Bindings for docs/features/file-watcher/file-watcher.feature (62 scenarios). The real
-///     watch stack lives in FileWatcherFeatureContext; steps drive it through the real
-///     WatchTools (MCP tool layer, incl. access guard) exactly like NativeMemorySteps drives
-///     the real store/services. Ticks are FakeTimeProvider-deterministic; OS event delivery is
-///     bounded by StepUntil polling (≤5s real). The 6 scenarios of rule "Watch configuration is
-///     CLI-only and user-facing" invoke the REAL CLI (`CliArgs.Parse` + `ConfigCommands.RunAsync`
-///     against the scenario's store) — end-to-end: the CLI writes settings, the watcher reads them.
+///     Bindings for docs/features/file-watcher/file-watcher.feature; test wiring is documented in
+///     docs/plans/file-watcher-implementation.md.
 /// </summary>
 [Binding]
 public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
@@ -68,17 +63,13 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     // ── Helpers ──
 
     /// <summary>
-    ///     Runs a real CLI config command in-process against the scenario's store
-    ///     (CliArgs.Parse + ConfigCommands.RunAsync — the same dispatch as Program.cs).
-    ///     Captures combined output in _lastCliMessage and, on non-zero exit, stderr in
-    ///     _lastCliError. This is the integration seam that validates the CLI's watch
-    ///     commands against the watcher's settings reads end-to-end.
+    ///     Runs a real CLI config command in-process against the scenario's store (same dispatch as
+    ///     Program.cs), capturing combined output in _lastCliMessage and stderr in _lastCliError on
+    ///     non-zero exit.
     /// </summary>
     private async Task<string> RunCliAsync(params string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        // A step that does not parse is a broken contract (e.g. a missing bool argument):
-        // fail the scenario loudly instead of dispatching with defaults.
         if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)
         {
             throw new InvalidOperationException(
@@ -132,8 +123,6 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
 
         await Ctx.SetWatchEnabledGlobalAsync(true);
-        // Add to the scope rather than replace it: a scenario watching three repos has all
-        // three in scope, and ingest is bound by that scope too.
         await Ctx.AddWatchScopeGlobalAsync(path);
         _scopeExplicitlySet = true;
         await Ctx.Service.AddAsync(projectId, path);
@@ -223,7 +212,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         MakeUnreadable(path);
     }
 
-    /// <summary>Drives N consecutive failing digests with exponential-backoff time advances (rule 14).</summary>
+    /// <summary>Drives N consecutive failing digests with exponential-backoff time advances.</summary>
     private async Task DriveFailuresAsync(string filePath, int count, bool firstQueued)
     {
         if (firstQueued)
@@ -962,10 +951,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         ToolRefusals.PrefixFor(_lastError!).ShouldBe(code);
     }
 
-    // "the tool errors with access-denied" is intentionally NOT bound here: NativeMemorySteps
-    // binds that exact text for real (reads scenarioContext["LastError"], set above), so this
-    // scenario shares that assertion instead of duplicating it. Also pinned unit-side by
-    // WatchToolsAccessModeTests (S6).
+    // "the tool errors with access-denied" is bound in NativeMemorySteps (reads
+    // scenarioContext["LastError"], set above); also pinned by WatchToolsAccessModeTests.
 
     [Then("^the tool errors with missing-project$")]
     public void ThenToolErrorsMissingProject()
@@ -1339,8 +1326,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [Then("^exactly one memory entry holds that path$")]
     public async Task ThenExactlyOneContentSetHoldsThatPath()
     {
-        // Plan §10 decision 2: "exactly one memory entry" = one CONTENT SET (old content absent,
-        // new content present, no orphan chunks) — not a row-count-of-1 assertion (one file = N chunks).
+        // "Exactly one memory entry" means one CONTENT SET (old content absent, new content
+        // present, no orphan chunks), not a row-count-of-1 (docs/plans/file-watcher-implementation.md).
         var target = Path.Combine(Ctx.RepoDir, "b.md");
         var source = Path.Combine(Ctx.RepoDir, "a.md");
         var incoming = _contentByPath[source];
@@ -1379,10 +1366,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var token = NextToken("edited");
         Ctx.WriteFile(real, $"{token} content");
         _contentByPath[real] = token;
-        // The watched path is a bare FILE: WatchEventSource cannot start a FileSystemWatcher on
-        // a file (FileSystemWatcher requires a directory — S5 src limitation), so the edit event
-        // is delivered through the pipeline's public Enqueue seam (the same seam WatchCatchUp
-        // uses); the digest machinery below is the real one.
+        // The watched path is a bare FILE, and FileSystemWatcher cannot watch a single file (only
+        // a directory), so the edit event is delivered via the pipeline's Enqueue seam instead.
         Ctx.Pipeline.Enqueue(new WatchEvent(DefaultProject, real, WatchEventKind.Changed));
         (await EnsureSearchableAsync(DefaultProject, token, real)).ShouldBeTrue(
             "editing the watched file did not become searchable");

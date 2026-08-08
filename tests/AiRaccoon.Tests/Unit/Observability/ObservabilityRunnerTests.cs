@@ -16,7 +16,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
-///     `serve observability &lt;kind&gt;` (ADR 0008/P4): dials a live server's /observability
+///     `serve observability &lt;kind&gt;` (ADR-0008): dials a live server's /observability
 ///     endpoint, prints the requested monitoring command with its PID filled in, and maps
 ///     every failure to an actionable stderr line, a non-zero exit, and empty stdout.
 /// </summary>
@@ -304,8 +304,8 @@ public sealed class ObservabilityRunnerTests : IDisposable
         throw new TimeoutException($"timed out waiting for serve output; stderr: {run.Stderr}");
     }
 
-    /// <summary>A stand-in for a pre-P4 ai-raccoon: a real HTTP listener with no /observability
-    /// route mapped, so GET /observability naturally 404s the way an older build would.</summary>
+    /// <summary>A stand-in for an ai-raccoon build without the observability endpoint: a real HTTP
+    /// listener with no /observability route mapped, so GET /observability naturally 404s.</summary>
     private static async Task<WebApplication> StartOldServerWithoutObservabilityAsync(int port)
     {
         var builder = WebApplication.CreateBuilder([]);
