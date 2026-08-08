@@ -34,8 +34,8 @@ public sealed partial class SqliteMemoryStore(
     private FileIngestor? _ingestorInstance;
     private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider);
 
-    // The remote API key is a settings row (embedding.apiKey) — the single-channel
-    // ruling (2026-08-04) moved it out of process memory and environment.
+    // The remote API key is a settings row (embedding.apiKey) — the single-channel ruling moved it
+    // out of process memory and environment.
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -90,7 +90,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
 
         // Bucket-key re-read, not last_insert_rowid: a concurrent same-bucket insert may have
-        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids (F3).
+        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids.
         var row = bucket.Scope == "shared"
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
                     Def(MemorySql.SelectSharedEntryByPathAndHash,
@@ -138,21 +138,18 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        // Source-path queries (plan C §3 2c; see docs/plans/retrieval-improvement-c.md): match
-        // the source/section columns with AND semantics so the exact chunk ranks first (see
-        // SourcePathQuery); the OR fallback does not apply — the path expression is exact by
-        // construction.
-        // The source-affinity pass is skipped for path queries — the exact chunk is the
-        // answer by construction and sibling boosts would displace it.
+        // Source-path queries (docs/plans/retrieval-improvement-c.md §3 2c) match source/section
+        // columns with AND semantics so the exact chunk ranks first (see SourcePathQuery); the OR
+        // fallback does not apply. The source-affinity pass is also skipped — the exact chunk is
+        // the answer by construction and sibling boosts would displace it.
         var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
         if (isPathQuery)
         {
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
-        // Dual-vector fusion alpha (see docs/plans/retrieval-improvement-c.md §3 Wave 6): the
-        // fixed blend between the content and structure (heading-path) similarities, read once
-        // per search from settings.
+        // Dual-vector fusion alpha (docs/plans/retrieval-improvement-c.md §3 Wave 6): the fixed
+        // blend between content and structure (heading-path) similarities, read once per search.
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
@@ -397,10 +394,9 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Removes every committed chunk of one source path and everything under it (a deleted
-    ///     directory cascades to its subtree), plus the per-path watch fingerprints in the same
-    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale chunks.
-    ///     The watch registration survives.
+    ///     Removes every committed chunk of one source path and its subtree (directory delete
+    ///     cascades), plus the per-path watch fingerprints, in the same transaction — a
+    ///     delete-then-recreate cycle must not hash-skip back to stale chunks. Watch registration survives.
     /// </summary>
     public async Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
@@ -704,10 +700,9 @@ public sealed partial class SqliteMemoryStore(
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>
-    ///     Keyword modality: FTS5 candidates without snippet() (perf: deferred, §WP7 issue #198 — see
-    ///     <see cref="BuildFtsResults" />). <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" />
-    ///     and <paramref name="idByHash" /> carry each candidate's raw value, matching @query text and
-    ///     row id out so the caller can resolve its snippet after ranking.
+    ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).
+    ///     <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" /> and <paramref name="idByHash" />
+    ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
         SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
@@ -775,13 +770,9 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
-    ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
-    ///     degrade to content-only order. Snippet computation is deferred (perf: most candidates
-    ///     never reach the final top-K) — <paramref name="valueByHash" /> carries each survivor's
-    ///     raw value out so the caller can resolve it after ranking. <paramref name="parameters"/>
-    ///     already carries the vec0 partition key (ctx), the candidate window (limit) and the
-    ///     query vector — both statements query their own vec0 table with the same partition.
+    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha
+    ///     (docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors degrade
+    ///     to content-only order. Snippet computation is deferred; <paramref name="valueByHash" /> carries each survivor's raw value out for resolution after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
         SqliteConnection connection, DynamicParameters parameters, double alpha,
@@ -830,11 +821,9 @@ public sealed partial class SqliteMemoryStore(
         ];
 
     /// <summary>
-    ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder
-    ///     (§WP7, issue #198): an FTS-originated survivor gets the real FTS5 snippet() text (matching
-    ///     the same @query it was matched by); everything else — vector-only survivors, and an
-    ///     FTS-originated one whose snippet() came back empty — falls back to
-    ///     <see cref="SnippetFallback" />, exactly as before deferral.
+    ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder:
+    ///     an FTS-originated survivor gets the real FTS5 snippet() text (matching the @query it was
+    ///     matched by); everything else falls back to <see cref="SnippetFallback" />, as before deferral.
     /// </summary>
     private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
