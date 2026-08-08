@@ -7,15 +7,18 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
-///     Local-only verification against the real labeled candidate pool from the 3-agent scoring
-///     evaluation (docs/adr/0018-promotion-scoring-v2.md). The fixture quotes private-repo docs, so it
-///     is never committed here — set AIRACCOON_SCORING_EVAL_FIXTURE to one or more local JSON paths
-///     (Path.PathSeparator-delimited) to run this locally; CI has no such file and the test skips.
+///     Local-only verification against the real labeled candidate pools from the scoring evaluations
+///     (docs/adr/0018-promotion-scoring-v2.md, v3 section). The fixtures quote private-repo docs, so
+///     they are never committed here — set AIRACCOON_SCORING_EVAL_FIXTURE to one or more local JSON
+///     paths (Path.PathSeparator-delimited) to run this locally; CI has no such file and the test skips.
 ///
-///     Gate is picked from the data, not the filename: a fixture with any id > 1000 is the v2 set (61
-///     original + 86 organic backup-slice entries) and is held to full-set Spearman >= 0.45 and
-///     organic-only-subset (id > 1000) Spearman >= 0.50; a fixture with none is the v1 61-candidate set,
-///     held to full-set Spearman >= 0.60.
+///     Gate is picked from the candidate count, not the filename (every reference set's size is fixed
+///     and documented in the round-2 scoreboard): 61 candidates is the v1 set (full-set Spearman >= 0.60);
+///     147 is the v2 set (full-set >= 0.45, id > 1000 organic-subset >= 0.50); 292 is the v3 set
+///     (full-set >= 0.60, AND within ±0.03 of the python prototype's measured +0.665); 42 is the
+///     round-2 secret orchestrator-only holdout (within ±0.03 of the prototype's measured +0.690).
+///     Prototype numbers were measured by running docs/work/promotion-scoring-eval/round2/agentC/scorer.py
+///     against the same fixtures via promotion-scoring-eval/eval.py (see PR for #192).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -25,6 +28,10 @@ public sealed class PromotionScoringRealDataTests
     private const double V1FullSetFloor = 0.60;
     private const double V2FullSetFloor = 0.45;
     private const double V2OrganicSubsetFloor = 0.50;
+    private const double V3FullSetFloor = 0.60;
+    private const double PrototypeParityTolerance = 0.03;
+    private const double PrototypeFullSetSpearman = 0.665;
+    private const double PrototypeSecretHoldoutSpearman = 0.690;
 
     [Fact]
     public void ScoresCorrelateWithHandLabeledUsefulness()
@@ -53,18 +60,31 @@ public sealed class PromotionScoringRealDataTests
 
         var allProjectIds = labeled.Select(c => c.ProjectId).Distinct().ToList();
         var scores = labeled.ToDictionary(c => c.Id, c => Score(c, allProjectIds));
-
-        var isV2 = labeled.Any(c => c.Id > 1000);
         var fullSpearman = Spearman(
             labeled.Select(c => scores[c.Id]).ToList(), labeled.Select(c => (double)c.Usefulness).ToList());
 
-        if (!isV2)
+        switch (labeled.Count)
         {
-            fullSpearman.ShouldBeGreaterThanOrEqualTo(V1FullSetFloor,
-                $"{path}: v1 full-set Spearman {fullSpearman:F3} below the {V1FullSetFloor:F2} gate");
-            return;
+            case 42:
+                VerifySecretHoldout(path, fullSpearman);
+                return;
+            case 292:
+                VerifyV3(path, fullSpearman);
+                return;
+            case 147:
+                VerifyV2(path, labeled, scores, fullSpearman);
+                return;
+            default:
+                fullSpearman.ShouldBeGreaterThanOrEqualTo(V1FullSetFloor,
+                    $"{path}: v1 full-set Spearman {fullSpearman:F3} below the {V1FullSetFloor:F2} gate");
+                return;
         }
+    }
 
+    private static void VerifyV2(
+        string path, IReadOnlyList<LabeledCandidate> labeled, IReadOnlyDictionary<int, double> scores,
+        double fullSpearman)
+    {
         fullSpearman.ShouldBeGreaterThanOrEqualTo(V2FullSetFloor,
             $"{path}: v2 full-set Spearman {fullSpearman:F3} below the {V2FullSetFloor:F2} gate");
 
@@ -73,6 +93,22 @@ public sealed class PromotionScoringRealDataTests
             organicOnly.Select(c => scores[c.Id]).ToList(), organicOnly.Select(c => (double)c.Usefulness).ToList());
         organicSpearman.ShouldBeGreaterThanOrEqualTo(V2OrganicSubsetFloor,
             $"{path}: v2 organic-subset Spearman {organicSpearman:F3} below the {V2OrganicSubsetFloor:F2} gate");
+    }
+
+    private static void VerifyV3(string path, double fullSpearman)
+    {
+        fullSpearman.ShouldBeGreaterThanOrEqualTo(V3FullSetFloor,
+            $"{path}: v3 full-set Spearman {fullSpearman:F3} below the {V3FullSetFloor:F2} gate");
+        Math.Abs(fullSpearman - PrototypeFullSetSpearman).ShouldBeLessThanOrEqualTo(PrototypeParityTolerance,
+            $"{path}: v3 full-set Spearman {fullSpearman:F3} misses python prototype parity " +
+            $"({PrototypeFullSetSpearman:F3} ± {PrototypeParityTolerance:F2})");
+    }
+
+    private static void VerifySecretHoldout(string path, double fullSpearman)
+    {
+        Math.Abs(fullSpearman - PrototypeSecretHoldoutSpearman).ShouldBeLessThanOrEqualTo(PrototypeParityTolerance,
+            $"{path}: secret-holdout Spearman {fullSpearman:F3} misses python prototype parity " +
+            $"({PrototypeSecretHoldoutSpearman:F3} ± {PrototypeParityTolerance:F2})");
     }
 
     private static double Score(LabeledCandidate candidate, IReadOnlyList<string> allProjectIds)

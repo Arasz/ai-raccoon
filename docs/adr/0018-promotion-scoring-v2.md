@@ -155,3 +155,90 @@ not hold up as well as the smaller round did, which is worth a follow-up look at
 `OrganicRefinement`'s status/durable-language lexicons against the harder cases in this
 slice, but does not block this PR: the two committed gates (v1, v2) are unaffected and
 both still measure against the same reference-labeled data the model was designed for.
+
+## v3 — channel-routed prior + bounded evidence (2026-08-08)
+
+The v2-informational gap above (292-candidate full-set 0.4512, organic-subset dropping to
+0.3875) motivated a round-2 tournament: three isolated agents on the fable model, each with
+~84 labeled training rows drawn from the 292-candidate set, scored against a 42-candidate
+orchestrator-only holdout none of them ever saw labeled. Full scoreboard and method:
+`docs/work/2026-08-08-promotion-scoring-round2.md`. Winner: **Agent C** (channel-routed
+prior + bounded content evidence), alone — best on every uncontaminated comparison, no
+fusion beat it on the secret holdout. This section records the C# port of that design as
+v3, superseding v2's model (not this ADR's decision record, which stays as history).
+
+**Evolution, not rewrite.** v3 keeps v2's three-stage shape and file seams —
+`ProvenanceArchetypeClassifier` (channel routing), `PromotionContentEvidence` (bounded
+content evidence), `OrganicRefinement` (organic-note refinement), combined by
+`PromotionScorer` — because the winning design is the *same architecture family* as v2's,
+just with a finer-grained channel table and more evidence rules; there was no
+decomposition mismatch large enough to justify a rewrite. Where v2's structure and the
+Python prototype disagreed on where a rule lived (e.g. the auto-memory-note channel needed
+its own bespoke evidence, not v2's generic doc-channel evidence), the port added a seam
+rather than distorting an existing one. A new `CandidateFeatures`/`CandidateFeatureExtractor`
+centralizes the ~20 regex-based features the prototype's `features()` computes once per
+candidate, rather than duplicating them across the three evaluator files (the "derive the
+list, or delete it" concern applies as much to duplicated regexes as to duplicated lists).
+
+**Channel table delta (14 archetypes → 19 channels).** New channels, all first-match-wins
+ahead of the existing table: `turn-mirror` gets a **prose-prefix rescue** — a transcript
+starting 300+ chars in no longer sinks the whole entry, only the transcript is dropped and
+the prose before it is scored on its own channel (fixes a label-4 measured fact the v2
+baseline sank to ~0.45 purely because a tool-call transcript was appended to it).
+`.remember/` status journals and Claude auto-memory `session-*`/status/handoff dumps are
+new hard-noise channels (prior 0.30, no content rescue — same treatment as `doc-index`
+and `turn-mirror`). The Claude auto-memory tree splits three ways: `MEMORY.md` index rows
+(0.55, small rescue if rule-language density is high), *named* auto-memory notes (2.70 —
+the curated-gotcha shape the shared tier wants, second only to `organic-note`), and
+`session-*`/status/handoff dumps (0.30, hard noise). A bare `/docs/` path that isn't any
+more specific channel splits from `work-note` into a new `other-doc` channel. A dated
+`YYYY-MM-DD-*-charter.md` under docs/work now routes to `review` (in-flight coordination)
+instead of `charter` (durable project charter). All 19 priors changed from v2's values;
+see `ProvenanceArchetypeClassifierTests.Prior_MatchesTheEvalReport` for the exact table.
+
+**Evidence deltas.** `PromotionContentEvidence`: rule-language detection now excludes
+first-person uncertainty (`(?<!\bI )(?<!we )\bcannot\b` — "I cannot" is not a contract);
+the plan channel caps its rule-language bonus at 0.45 (vs 1.10 elsewhere) because plans
+quote gates as "must" without the fact being durable; a verified-measurement-plus-rule
+combination gets a +0.35 bonus; new first-person-narrative, metadata-header-block, and
+imperative-checklist penalties; the recency/access-count bonus is gone entirely — the
+prototype's `doc_adjust()` never referenced it, so content evidence is shape-only now
+(recency remains the `SharedExtractionService` sort tie-break, unchanged from v2).
+`OrganicRefinement`: the short-definitional floor moves 2.2 → 2.4 and its clamp range
+-2.8..1.5 → -2.2..1.6; it picks up the doc-channel's pointer/table/metadata-header/
+imperative-checklist/superseded pushes plus new contents-index, directory-readme,
+link-heavy, and docname-heavy penalties and a foreign-subject bonus — the prototype's
+`organic_adjust()` shares most of `doc_adjust()`'s vocabulary, just with different weights.
+Status-opener detection is checked after stripping leading markdown decoration (`*#>-–`)
+from the head, and now also recognizes a generic "`<X> complete/done/closed/finished/
+delivered`" opener shape instead of only the earlier enumerated literal openers.
+
+**CandidateFloor: kept at 0.4, re-examined not changed.** All four new hard-noise channel
+priors (`remember-log`/`auto-memory-session` 0.30, `turn-mirror` 0.35, `doc-index` 0.35)
+sit below 0.4 with no content rescue, so the floor still cleanly excludes them exactly as
+it did in v2 (where the floor was derived from `doc-index` sitting at or below 0.4). The
+weakest real channel, `plan` (0.70), can still be pushed below 0.4 by heavy ephemera —
+matching v2's behavior. `auto-memory-index` (0.55, up to 0.70 with the rule-density lift)
+intentionally clears the floor — the round-2 scoreboard's own channel table calls it "low",
+not excluded, since an index row pointing at a genuinely durable note is still weak
+signal, not noise. No re-derivation was needed; 0.4 continues to sit in the gap between
+the hard-noise ceiling (0.35) and the weakest real channel (0.70).
+
+**Measured numbers** (`PromotionScoringRealDataTests`, local-only,
+`AIRACCOON_SCORING_EVAL_FIXTURE`; python prototype run via
+`docs/work/promotion-scoring-eval/round2/agentC/scorer.py` through
+`promotion-scoring-eval/eval.py`):
+
+| Fixture | C# port | Python prototype | Gate |
+|---|---|---|---|
+| v1 full (61) | 0.705 | 0.735 | >= 0.60 |
+| v2 full (147) | 0.684 | 0.696 | >= 0.45 |
+| v2 organic-subset (id>1000, 86) | 0.691 | 0.697 | >= 0.50 |
+| v3 full (292) | 0.660 | 0.665 | >= 0.60 AND within ±0.03 of prototype |
+| secret holdout (42, orchestrator-only) | 0.688 | 0.690 | within ±0.03 of prototype |
+
+All five gates pass; v3-full and secret-holdout parity with the prototype are within
+0.005 and 0.002 respectively, well inside the ±0.03 tolerance. The v2 gates (full-set
+>= 0.45, organic-subset >= 0.50) and the v1 gate (>= 0.60) — none of which the port was
+required to hold, since v3 changed the underlying model — still pass with margin, so v2's
+shipped behavior did not regress on its own reference data.
