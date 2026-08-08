@@ -172,7 +172,8 @@ its own errors to an `EventSource` that nothing listens to unless you drop an
 means a broken endpoint fails quietly — `serve observability otlp` reports what
 the server is actually exporting to.
 
-Spans carry `project_id` in plaintext. No memory content, queries or embeddings
+Spans and the tool-invocation and promotion-queue counters carry `project_id` in
+plaintext. No memory content, queries or embeddings
 ever leave the process — see [SECURITY.md](SECURITY.md#what-leaves-the-process-when-otlp-export-is-on)
 and [ADR 0009](docs/adr/0009-otlp-export.md).
 

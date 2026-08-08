@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
@@ -11,8 +12,10 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
+using AiRaccoon.Tests.Unit.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
@@ -21,8 +24,12 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Mcp;
 
+// Attaches an ActivityListener to the shared "AiRaccoon.MemoryTools" ActivitySource in
+// ShareExtract_BoundsCounterProjectId_ButKeepsFullCompositeOnTheSpan, so this class joins the
+// Observability collection to avoid cross-test contamination (see ObservabilityCollection).
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ObservabilityCollection.Name)]
 public class MemoryToolsTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -35,22 +42,23 @@ public class MemoryToolsTests
     private readonly WorkspaceTools _workspace;
     private readonly SweepTools _sweep;
     private readonly SyncTools _syncTools;
+    private readonly ToolCallMetrics _metrics;
 
     public MemoryToolsTests()
     {
         var access = new MemoryAccessGuard(_store);
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        var metrics = new ToolCallMetrics();
+        _metrics = new ToolCallMetrics();
         var gate = new ToolGate(access, _queue);
-        _tools = new MemoryTools(_store, gate, metrics);
-        _share = new ShareTools(_store, gate, metrics,
+        _tools = new MemoryTools(_store, gate, _metrics);
+        _share = new ShareTools(_store, gate, _metrics,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue);
-        _workspace = new WorkspaceTools(workspaces, gate, metrics);
-        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate, metrics);
+        _workspace = new WorkspaceTools(workspaces, gate, _metrics);
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate, _metrics);
         _syncTools = new SyncTools(_sync,
-            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance), gate, metrics);
+            new SyncCloudStoreFactory(_store, NullLoggerFactory.Instance), gate, _metrics);
     }
 
     private void SeedSyncSettings(string? objectKey = null)
@@ -201,6 +209,31 @@ public class MemoryToolsTests
 
         result.Data!.PromotedHashes.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
+    }
+
+    // F1: the composite of up to 8 project ids is unbounded cardinality on the counter (see
+    // ADR 0002), so the counter gets the "multi" sentinel while the span keeps the
+    // full comma-joined composite for traceability.
+    [Fact]
+    public async Task ShareExtract_BoundsCounterProjectId_ButKeepsFullCompositeOnTheSpan()
+    {
+        using var collector = new MetricCollector<long>(_metrics.Meter, "ai_raccoon_tool_invocations");
+        var startedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = startedActivities.Add;
+        listener.ActivityStopped = _ => { };
+        ActivitySource.AddActivityListener(listener);
+
+        await _share.ShareExtract(["acme", "widget"], cancellationToken: TestContext.Current.CancellationToken);
+
+        var started = startedActivities.ShouldHaveSingleItem();
+        started.Tags.Any(kv => kv.Key == "project_id" && kv.Value == "acme,widget").ShouldBeTrue();
+
+        var measurements = collector.GetMeasurementSnapshot();
+        measurements.ShouldHaveSingleItem();
+        measurements[0].Tags["project_id"].ShouldBe("multi");
     }
 
     [Fact]

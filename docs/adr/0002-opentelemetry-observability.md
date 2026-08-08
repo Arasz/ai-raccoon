@@ -41,11 +41,13 @@ A single `Meter` named `"AiRaccoon.MemoryTools"` exposes two instruments:
 | Call duration | `Histogram<double>` | `ai_raccoon_tool_duration_ms` | `ms` | `tool`, `result`, `error_type` |
 
 > **2026-08-08 update.** The counter row gained `project_id`; the histogram
-> row deliberately did not. Histograms carry a far smaller safe cardinality
-> budget than counters (Microsoft guidance: roughly 1,000 tag combinations
-> for counters, 10–100× lower for histograms), and per-project latency was
-> not requested. This matches `PromotionQueueMetrics`, which tags
-> `project_id` on its counters but not its histograms — see ADR 0009.
+> row deliberately did not. Microsoft's multi-dimensional-metrics guidance
+> says "likely less than 1000 combinations for one instrument is safe" and
+> that because histograms "use far more memory than other metrics, so safe
+> limits could be 10-100 times lower" — hedged guidance, not a hard limit.
+> Per-project latency was not requested, so the histogram does not spend that
+> budget. This matches `PromotionQueueMetrics`, which tags `project_id` on
+> its counters but not its histograms — see ADR 0009.
 
 Custom histogram buckets (milliseconds):
 `1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000`.
