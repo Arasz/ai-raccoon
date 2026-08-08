@@ -289,17 +289,43 @@ public sealed class ExtractionHostedServiceTests
 
         var records = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 507).ToList();
         records.Count.ShouldBe(2);
-        records.ShouldAllBe(r => r.Level == LogLevel.Information);
+        // Debug, not Information: "there is no need to log this info, it should be just
+        // counted by metrics" (owner) — the detail survives for local debugging, but a
+        // default-level serve.log no longer carries it.
+        records.ShouldAllBe(r => r.Level == LogLevel.Debug);
         records[0].Message.ShouldContain("#1");
         records[0].Message.ShouldContain("acme");
+        records[0].Message.ShouldContain("h1");
         records[0].Message.ShouldContain("h1.md");
         records[0].Message.ShouldContain("organic-note");
         records[0].Message.ShouldContain("foreign-subject");
         records[0].Message.ShouldContain("rule-language");
+        // The content preview is dropped from the message (a data-leak into logs otherwise).
+        records[0].Message.ShouldNotContain("must never drop a message silently");
         // Rank ordering: #1 before #2 in emission order (the list is pre-sorted by score).
         records[1].Message.ShouldContain("#2");
-        // Counts line still emitted alongside the details.
-        logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 502);
+        // Counts line still emitted alongside the details, also demoted to Debug.
+        var passRecords = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 502).ToList();
+        passRecords.ShouldNotBeEmpty();
+        passRecords.ShouldAllBe(r => r.Level == LogLevel.Debug);
+    }
+
+    /// <summary>The per-pass summary is the operator-facing survivor of the quiet-down: unlike
+    /// 502/507, it stays at Information so a default-level serve.log still shows the run happened.</summary>
+    [Fact]
+    public async Task RunOnce_LogsTheRunSummary_AtInformation()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service, queue) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+        queue.PromoteOutcome = new PromoteOutcome(["h1"], 1, new Dictionary<string, int>());
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var summary = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 504);
+        summary.Level.ShouldBe(LogLevel.Information);
     }
 
     [Fact]

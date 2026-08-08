@@ -51,6 +51,49 @@ public class QuietLoggingTests
         entries.ShouldContain(e => e.Contains("loud-info-marker", StringComparison.Ordinal));
     }
 
+    private static ServerConfig HttpConfig(bool quiet = false) => new(
+        0, McpTransport.Http,
+        new InfrastructureOptions { DataRoot = Path.GetTempPath(), Scope = InstallScope.User, Quiet = quiet });
+
+    private static List<string> CaptureHttp(Action<ILoggerFactory> emit, bool quiet = false)
+    {
+        using var host = McpServerSetup.CreateServerHost(HttpConfig(quiet));
+        var factory = host.Services.GetRequiredService<ILoggerFactory>();
+        var recorder = new RecorderProvider();
+        factory.AddProvider(recorder);
+        emit(factory);
+        return recorder.Entries;
+    }
+
+    /// <summary>Per-request ASP.NET Core chatter and the MCP request-handler INFO lines flood a
+    /// non-quiet serve log (owner report from a real serve.log); this pins the default-level fix
+    /// without reaching for --quiet, which would also silence AiRaccoon's own Information logs.</summary>
+    [Fact]
+    public void HttpHost_QuietsAspNetCoreAndMcpServerCategories_ButKeepsAppInfo()
+    {
+        var entries = CaptureHttp(factory =>
+        {
+            var aspNetCore = factory.CreateLogger("Microsoft.AspNetCore.Hosting.Diagnostics");
+            aspNetCore.LogInformation("aspnet-info-marker");
+            aspNetCore.LogWarning("aspnet-warn-marker");
+
+            var routing = factory.CreateLogger("Microsoft.AspNetCore.Routing.EndpointMiddleware");
+            routing.LogInformation("routing-info-marker");
+
+            var mcpServer = factory.CreateLogger("ModelContextProtocol.Server.McpServer");
+            mcpServer.LogInformation("mcp-info-marker");
+
+            var app = factory.CreateLogger("AiRaccoon.Something");
+            app.LogInformation("app-info-marker");
+        });
+
+        entries.ShouldNotContain(e => e.Contains("aspnet-info-marker", StringComparison.Ordinal));
+        entries.ShouldContain(e => e.Contains("aspnet-warn-marker", StringComparison.Ordinal));
+        entries.ShouldNotContain(e => e.Contains("routing-info-marker", StringComparison.Ordinal));
+        entries.ShouldNotContain(e => e.Contains("mcp-info-marker", StringComparison.Ordinal));
+        entries.ShouldContain(e => e.Contains("app-info-marker", StringComparison.Ordinal));
+    }
+
     private sealed class RecorderProvider : ILoggerProvider
     {
         public List<string> Entries { get; } = [];
