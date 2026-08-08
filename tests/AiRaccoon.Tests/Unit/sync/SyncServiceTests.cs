@@ -56,6 +56,8 @@ public class SyncServiceTests : IDisposable
                               ttl_days INTEGER NULL,
                               embed_state TEXT NOT NULL DEFAULT 'pending',
                               embedding BLOB NULL,
+                              heading_path TEXT NULL,
+                              structure_embedding BLOB NULL,
                               chunk_index INTEGER NOT NULL DEFAULT 0,
                               total_chunks INTEGER NOT NULL DEFAULT 0
                           );

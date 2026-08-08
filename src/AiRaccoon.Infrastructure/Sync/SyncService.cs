@@ -321,9 +321,15 @@ public partial class SyncService(
                 var reindexed = 0;
                 await using (var reindexCmd = conn.CreateCommand())
                 {
+                    // Nulls structure_embedding/heading_path alongside the content columns (#190):
+                    // vec_structure_pending fires off embed_state, so the trigger alone would drop the
+                    // vec row but leave the entry columns stale — that breaks the invariant that
+                    // vec_structure stays in lockstep with entries.structure_embedding, and a stale,
+                    // non-NULL heading_path would never re-open the row for the structure healing pass.
                     reindexCmd.CommandText = """
                                              UPDATE entries
-                                             SET embed_state = 'pending', embedding = NULL
+                                             SET embed_state = 'pending', embedding = NULL,
+                                                 structure_embedding = NULL, heading_path = NULL
                                              WHERE embed_state = 'embedded'
                                                AND id IN (
                                                    SELECT e.id FROM entries e

@@ -91,6 +91,18 @@ internal static class MemorySchema
                                    INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
                                END;
 
+                               -- Clear arm for vec_structure (#190): merge-reindex invalidates a row by
+                               -- setting embed_state back to 'pending' (see SyncService's reindex UPDATE,
+                               -- which also nulls structure_embedding/heading_path in the same statement) —
+                               -- without this, the vec_structure row survives and structure search returns
+                               -- an entry whose content vector was deliberately invalidated. Mirrors
+                               -- vec_entries_pending exactly, keyed off embed_state, not structure_embedding.
+                               CREATE TRIGGER IF NOT EXISTS vec_structure_pending AFTER UPDATE OF embed_state ON entries
+                               WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                               BEGIN
+                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
+                               END;
+
                                CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
                                    INSERT INTO entries_fts(rowid, value, source_file, section)
                                    VALUES (new.id, new.value, new.source_file, new.section);
