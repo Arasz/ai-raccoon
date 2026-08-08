@@ -13,9 +13,8 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     Wave 2 gates of docs/plans/retrieval-improvement-c.md: search results carry source
-///     identity (SourceFile/ChunkIndex/TotalChunks), the FTS source column answers identifier
-///     queries without the vector modality, source-path queries land on the exact chunk, and
-///     invariants C1/C2/C5 stay at rank 1.
+///     identity, FTS-only queries resolve via the source column, and invariants C1/C2/C5
+///     hold their pinned hybrid ranks.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -79,7 +78,6 @@ public sealed class SourceIdentityTests : IDisposable
         hit.TotalChunks.ShouldBeGreaterThanOrEqualTo(2, "ADR-0011 is chunked into several sections");
         hit.ChunkIndex.ShouldBeInRange(0, hit.TotalChunks - 1, "ChunkIndex is 0-based within the source");
 
-        // Every sourced result carries a consistent identity.
         foreach (var result in results.Where(r => r.SourceFile is not null))
         {
             result.TotalChunks.ShouldBeGreaterThanOrEqualTo(1);
@@ -87,13 +85,7 @@ public sealed class SourceIdentityTests : IDisposable
         }
     }
 
-    /// <summary>
-    ///     S2 (Wave 2 gate; see docs/plans/retrieval-improvement-c.md §3 Wave 2): the ADR-0011 file must rank within the top 3. The
-    ///     Decision-section chunk itself is logged — the FTS cannot bridge 'decide' to the
-    ///     '## Decision' heading (no stemming) and bm25's document-length normalization
-    ///     crushes the 13.8 KB decision chunk; the section-level &lt;=3 target is Wave 6's
-    ///     dual-vector structure signal (measured hybrid rank: see output).
-    /// </summary>
+    /// <summary>S2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the Decision-chunk's own rank is logged, not asserted — Wave 6's dual-vector structure signal is the target for that.</summary>
     [Fact]
     public async Task S2_WhatDoesAdr0011Decide_FindsAdr0011WithinTop3_AndLogsDecisionChunkRank()
     {
@@ -110,12 +102,7 @@ public sealed class SourceIdentityTests : IDisposable
         _output.WriteLine($"S2: Decision-section chunk at hybrid rank {(decisionHit is null ? "not found" : decisionRank.ToString())} (Wave 6 target: <= 3)");
     }
 
-    /// <summary>
-    ///     Q2 (Wave 2 gate; see docs/plans/retrieval-improvement-c.md §3 Wave 2): 'ADR-0070' identifier-only returns ADR-0070's file at
-    ///     FTS-only rank &lt;=3 — the source-column fix works without the vector modality. The
-    ///     decision chunk's exact rank is logged (the header chunk legitimately outranks it
-    ///     for a bare identifier — it carries the ADR's title).
-    /// </summary>
+    /// <summary>Q2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the decision chunk's rank is logged, not asserted — the header chunk legitimately outranks it for a bare identifier.</summary>
     [Fact]
     public async Task Q2_IdentifierOnly_Adr0070_FtsOnlyFileRankWithinTop3()
     {
@@ -148,10 +135,9 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>
-    ///     Invariant-query gates re-pinned 2026-08-06 to the re-pinned jsaa corpus (9397bbef;
-    ///     see docs/work/2026-08-06-baseline-repin-new-corpus.md): C1 keeps hybrid rank 1; C5
-    ///     measured 5 — new secrets/config ADR content (0039/0012) now outranks the invariant
-    ///     chunk. The pins are the measured no-regression floor, not an aspiration.
+    ///     Gates re-pinned to the jsaa corpus (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md):
+    ///     C1 holds hybrid rank 1; C5's floor is 5 (ADR content on secrets/config now outranks
+    ///     it). The pins are the measured no-regression floor, not an aspiration.
     /// </summary>
     [Theory]
     [InlineData("Is TDD required?", InvariantTdd, 1)]
@@ -171,11 +157,9 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>
-    ///     C2's hybrid rank collapsed with clean content (2d; see docs/plans/retrieval-improvement-c.md §3 2d):
-    ///     its vector rank is &gt;100, so the RRF fusion (k=60) sinks a perfect FTS rank 1 — the
-    ///     Wave 0 hybrid rank 1 was an artifact of the embedded provenance prefix. The source
-    ///     column holds the invariant at FTS-only rank 1; the fusion weighting is Wave 4's sweep
-    ///     (see docs/adr/0006-rrf-parameter-optimization.md).
+    ///     C2's hybrid rank collapsed once clean content dropped the embedded provenance prefix
+    ///     (docs/plans/retrieval-improvement-c.md §3 2d): a vector rank &gt;100 sinks a perfect FTS
+    ///     rank 1 in RRF fusion, so this pins FTS-only rank 1 instead (fusion weighting: docs/adr/0006-rrf-parameter-optimization.md).
     /// </summary>
     [Fact]
     public async Task InvariantC2_ScreamingArchitecture_FtsOnlyRank1()

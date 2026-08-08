@@ -30,7 +30,7 @@ public class LoggerMessageEventIdTests
         duplicates.ShouldBeEmpty(string.Join("; ", duplicates));
     }
 
-    /// <summary>Each owner holds one block of ids; two owners' ranges may not interleave (#119 item 5).</summary>
+    /// <summary>Each owner holds one block of ids; two owners' ranges may not interleave.</summary>
     [Fact]
     public void EventIdBlocks_DoNotInterleaveBetweenOwners()
     {
@@ -49,7 +49,7 @@ public class LoggerMessageEventIdTests
         overlaps.ShouldBeEmpty(string.Join("; ", overlaps));
     }
 
-    /// <summary>The guard is only as wide as the assembly list, so the list is itself asserted (#119 item 2).</summary>
+    /// <summary>The guard is only as wide as the assembly list, so the list is itself asserted.</summary>
     [Fact]
     public void TheGuard_CoversEveryProductAssembly()
     {

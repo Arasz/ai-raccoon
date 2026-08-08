@@ -16,13 +16,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Boots the real HTTP MCP server in-process over WebApplicationFactory and exposes an
-///     MCP client bound to it. Each instance gets its own temp data root. Launch identity
-///     flows through the real entry point's args: WebApplicationFactory renders
-///     UseSetting values as --key=value args (transport/data-root/install-scope), which the
-///     parse-first Program consumes like any user invocation. The global access mode is
-///     runtime config (single channel), so the factory seeds access.mode.global=full the
-///     same way `ai-raccoon access default set full` would — before the first bank open.
+///     Boots the real HTTP MCP server in-process via WebApplicationFactory and exposes an MCP
+///     client bound to it, each instance under its own temp data root. Launch identity flows
+///     through entry-point args (docs/plans/cli-args-parsing.md); access mode defaults to full before the first bank open.
 /// </summary>
 public sealed class McpServerFactory : WebApplicationFactory<Program>
 {
@@ -39,8 +35,8 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
     public async Task<McpClient> CreateClientAsync()
     {
-        // full mode so the workspace consolidate/discard E2E flows keep working under FR-NM-2 (see docs/work/features-native-memory/native-memory.feature)
-        // (the settings row is read per call by the access guard).
+        // Full access mode keeps the workspace consolidate/discard E2E flows working under FR-NM-2
+        // (docs/work/features-native-memory/native-memory.feature); the settings row is read per call.
         await SeedGlobalAccessModeAsync();
         var httpClient = CreateClient();
         var transport = new HttpClientTransport(
