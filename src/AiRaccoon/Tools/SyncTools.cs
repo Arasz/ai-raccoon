@@ -5,7 +5,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
 using JetBrains.Annotations;
-using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument
@@ -39,49 +38,15 @@ public sealed class SyncTools(
             var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
             if (!syncSettings.IsConfigured)
             {
-                var notConfigured = new McpException(
-                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
-                activity.RecordError(notConfigured);
-                throw notConfigured;
+                throw new SyncNotConfiguredException();
             }
 
             var objectKey = syncSettings.ObjectKey ?? $"memory-{projectId}.db";
-            try
-            {
-                var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
-                var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-                var envelope = await gate.WrapAsync(syncResult, cancellationToken);
-                activity.RecordInvocation();
-                return envelope;
-            }
-            catch (SyncNotConfiguredException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException(
-                    "sync-not-configured: run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted");
-            }
-            catch (SyncAuthFailedException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException(
-                    "sync-auth-failed: run 'az login' (azure --cli) or 'aws configure' / 'aws sso login' (s3 --cli), or verify the keys with 'ai-raccoon sync show'");
-            }
-            catch (SyncConflictException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException(
-                    "sync-conflict: remote changed during merge — retry the sync");
-            }
-            catch (SyncNetworkException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException($"sync-network: {ex.Message}");
-            }
-            catch (SyncCorruptFileException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException($"sync-corrupt-file: {ex.Message}");
-            }
+            var result = await sync.MemorySyncAsync(projectId, objectKey, cancellationToken);
+            var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
+            var envelope = await gate.WrapAsync(syncResult, cancellationToken);
+            activity.RecordInvocation();
+            return envelope;
         }
         catch (Exception ex)
         {

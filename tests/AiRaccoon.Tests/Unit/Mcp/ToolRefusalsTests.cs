@@ -1,0 +1,163 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text.RegularExpressions;
+using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Encryption;
+using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Watch;
+using AiRaccoon.Core.Workspace;
+using AiRaccoon.Infrastructure.Sync;
+using AiRaccoon.Setup;
+using AiRaccoon.Setup.Serve;
+using AiRaccoon.Tools;
+using FluentValidation;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Unit.Mcp;
+
+/// <summary>
+///     #151: a correct refusal (path-outside-scope) must not read as a crash — the SDK logs Error
+///     on every exception escaping a tool, McpException included, so the old catch-and-rethrow
+///     shape produced an Error record for an expected refusal. Drives a real McpServer over the
+///     real HTTP pipeline so the assertion exercises the SDK's own exception handling.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class ToolRefusalsTests : IDisposable
+{
+    private readonly string _dataRoot = TestData.CreateTempRoot("tool-refusals-tests");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
+    [Fact]
+    public async Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog()
+    {
+        var port = FreePort();
+        var host = McpServerSetup.CreateServerHost(
+            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(_dataRoot), default));
+        var fakeLogs = new FakeLoggerProvider();
+        host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+            var transport = new HttpClientTransport(
+                new HttpClientTransportOptions
+                {
+                    Name = "tool-refusals-test",
+                    Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
+                    TransportMode = HttpTransportMode.StreamableHttp
+                },
+                httpClient,
+                NullLoggerFactory.Instance,
+                true);
+            await using var client = await McpClient.CreateAsync(transport,
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            var result = await client.CallToolAsync("memory_ingest_file",
+                new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            result.IsError.ShouldBe(true);
+            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+            text.ShouldStartWith("path-outside-scope:");
+
+            // The defect #151 names: every fail-level record here is a real crash, none are refusals.
+            var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
+            errors.ShouldBeEmpty(string.Join('\n', errors.Select(e => e.Message)));
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    private static int FreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    public static TheoryData<Exception, string> MappedRefusals => new()
+    {
+        { new PathOutsideScopeException("/etc"), "path-outside-scope" },
+        { new PathNotFound("/missing"), "path-not-found" },
+        { new UnknownWorkspaceException("ws-1", "acme"), "unknown-workspace" },
+        { new WatchDisabledException("acme"), "watching-disabled" },
+        { new SyncNotConfiguredException(), "sync-not-configured" },
+        { new SyncAuthFailedException("bad creds"), "sync-auth-failed" },
+        { new SyncConflictException("remote changed"), "sync-conflict" },
+        { new SyncNetworkException("timed out"), "sync-network" },
+        { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
+        { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
+        { new ValidationException("projectId is required"), "invalid-params" }
+    };
+
+    [Theory]
+    [MemberData(nameof(MappedRefusals))]
+    public void PrefixFor_MapsEachKnownRefusalType(Exception exception, string expectedPrefix) =>
+        ToolRefusals.PrefixFor(exception).ShouldBe(expectedPrefix);
+
+    [Fact]
+    public void PrefixFor_RejectsAnUnlistedType()
+    {
+        // The encryption family stays fail-level on purpose: a bad key source is a real fault, not a refusal.
+        ToolRefusals.PrefixFor(new BankKeyMismatchException("bank open failed")).ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     Doc/code drift guard: every prefix the reference doc's error-shapes table promises must
+    ///     resolve to exactly one type in the mapping table itself — no hand-duplicated expectation list.
+    /// </summary>
+    [Fact]
+    public void DocumentedPrefixes_EachResolveToExactlyOneMappedType()
+    {
+        var doc = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
+        var section = ErrorShapesSection(doc);
+        var documentedPrefixes = Regex.Matches(section, "`([a-z][a-z-]*):")
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        documentedPrefixes.ShouldNotBeEmpty("the error-shapes table regex matched nothing — has the doc's format changed?");
+
+        foreach (var prefix in documentedPrefixes)
+        {
+            ToolRefusals.RefusalPrefixes.Values.Count(p => p == prefix)
+                .ShouldBe(1, $"prefix '{prefix}' documented in agent-memory-server.md should map from exactly one exception type");
+        }
+    }
+
+    private static string ErrorShapesSection(string doc)
+    {
+        const string heading = "## Error shapes";
+        var start = doc.IndexOf(heading, StringComparison.Ordinal);
+        start.ShouldBeGreaterThanOrEqualTo(0, "could not find the '## Error shapes' heading in agent-memory-server.md");
+        var end = doc.IndexOf("\n## ", start + heading.Length, StringComparison.Ordinal);
+        return end < 0 ? doc[start..] : doc[start..end];
+    }
+
+    private static string RepoFile(string relative)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, relative);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
+    }
+}

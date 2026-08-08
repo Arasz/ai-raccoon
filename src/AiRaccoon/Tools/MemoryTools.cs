@@ -1,11 +1,8 @@
-using AiRaccoon.Core.Ingestion;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Watch;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Observability;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -68,11 +65,6 @@ public sealed class MemoryTools(
             var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
-        }
-        catch (UnknownWorkspaceException ex)
-        {
-            activity.RecordError(ex);
-            throw new McpException($"unknown-workspace: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -258,11 +250,6 @@ public sealed class MemoryTools(
             activity.RecordInvocation();
             return envelope;
         }
-        catch (PathOutsideScopeException ex)
-        {
-            activity.RecordError(ex);
-            throw new McpException($"path-outside-scope: {ex.Message}");
-        }
         catch (Exception ex)
         {
             activity.RecordError(ex);
@@ -291,11 +278,6 @@ public sealed class MemoryTools(
             var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
-        }
-        catch (PathOutsideScopeException ex)
-        {
-            activity.RecordError(ex);
-            throw new McpException($"path-outside-scope: {ex.Message}");
         }
         catch (Exception ex)
         {

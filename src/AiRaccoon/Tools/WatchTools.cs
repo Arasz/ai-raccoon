@@ -1,11 +1,9 @@
-using AiRaccoon.Core.Ingestion;
 using System.ComponentModel;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Observability;
-using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
@@ -35,25 +33,7 @@ public sealed class WatchTools(
         {
             await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
-            try
-            {
-                await watch.AddAsync(projectId, path, cancellationToken);
-            }
-            catch (WatchDisabledException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException($"watching-disabled: {ex.Message}");
-            }
-            catch (PathOutsideScopeException ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException($"path-outside-scope: {ex.Message}");
-            }
-            catch (PathNotFound ex)
-            {
-                activity.RecordError(ex);
-                throw new McpException($"path-not-found: {ex.Message}");
-            }
+            await watch.AddAsync(projectId, path, cancellationToken);
             var envelope = await gate.WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
 
             activity.RecordInvocation();
