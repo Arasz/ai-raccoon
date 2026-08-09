@@ -73,7 +73,13 @@ ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}
 ai-raccoon retrieval alpha show
 
-# sweep: degradation cutoff
+# sweep: the background reaper — ON by default, deletes expired entries on its
+# cadence (default every 24 h). 'sweep disable' is the kill switch; 'sweep show'
+# reports the whole policy (enabled, interval, threshold). Interval changes apply
+# live, no server restart needed.
+ai-raccoon sweep enable
+ai-raccoon sweep disable
+ai-raccoon sweep interval-hours {1..8760}
 ai-raccoon sweep threshold set {0..1}
 ai-raccoon sweep show
 

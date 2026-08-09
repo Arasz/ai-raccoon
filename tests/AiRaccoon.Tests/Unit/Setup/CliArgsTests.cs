@@ -327,7 +327,8 @@ public class CliArgsTests
     [Fact]
     public void Parse_SweepTtl_IsNotACommand()
     {
-        // sweep ttl_days is REMOVED, not moved — no ttl command exists.
+        // The GLOBAL sweep.ttl_days knob is REMOVED, not moved — no ttl command exists.
+        // Per-entry ttl_days is live data, set by the memory_set_ttl tool, never by the CLI.
         CliArgs.TryParse(["sweep", "ttl", "set", "30"], out var parsed);
 
         parsed.Errors.ShouldNotBeEmpty();

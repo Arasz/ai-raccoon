@@ -8,7 +8,7 @@ using AiRaccoon.Infrastructure.Sync;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>One-shot settings verb handlers: access modes, embedding model, retrieval alpha, sweep threshold.</summary>
+/// <summary>One-shot settings verb handlers: access modes, embedding model, retrieval alpha, sweep policy.</summary>
 public sealed class SettingsCommands
 {
     public async Task<int> AccessDefaultSetAsync(ParseResult parseResult, IMemoryStore store,
@@ -206,12 +206,45 @@ public sealed class SettingsCommands
         return 0;
     }
 
+    /// <summary>The kill switch for the background reaper; `disable` is the only way to disarm a default-on deleter.</summary>
+    public async Task<int> SweepEnabledSetAsync(bool enabled, IMemoryStore store, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(SweepConfigKeys.EnabledGlobal, enabled ? "true" : "false", cancellationToken);
+        await stdout.WriteLineAsync($"sweep {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    public async Task<int> SweepIntervalHoursSetAsync(ParseResult parseResult, IMemoryStore store,
+        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("hours")!;
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var hours) ||
+            hours < SweepConfigKeys.MinIntervalHours || hours > SweepConfigKeys.MaxIntervalHours)
+        {
+            await stderr.WriteLineAsync(
+                $"ai-raccoon: invalid interval '{raw}' (expected a whole number of hours in {SweepConfigKeys.MinIntervalHours}..{SweepConfigKeys.MaxIntervalHours})");
+            return 1;
+        }
+
+        await store.SetSettingAsync(SweepConfigKeys.IntervalHoursGlobal,
+            hours.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        await stdout.WriteLineAsync($"sweep interval set to {hours} h");
+        return 0;
+    }
+
+    /// <summary>The whole policy — a reader must be able to tell whether the reaper is armed, not just its cutoff.</summary>
     public async Task<int> SweepShowAsync(IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
     {
-        var raw = await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken);
-        var threshold = SweepThreshold.Parse(raw);
-        await stdout.WriteLineAsync(SweepThreshold.Format(threshold));
+        var enabled = SweepConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken));
+        var hours = SweepConfigKeys.ParseIntervalHours(
+            await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken));
+        var threshold = SweepThreshold.Parse(
+            await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken));
+        await stdout.WriteLineAsync(
+            $"enabled: {enabled}  interval: {hours} h  threshold: {SweepThreshold.Format(threshold)}");
         return 0;
     }
 

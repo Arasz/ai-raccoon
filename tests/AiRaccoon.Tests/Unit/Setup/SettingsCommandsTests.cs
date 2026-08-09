@@ -1,5 +1,6 @@
 using System.Globalization;
 using AiRaccoon.Access;
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
@@ -32,6 +33,9 @@ public class SettingsCommandsTests
             ["model", "show"] => await commands.ModelShowAsync(store, stdout, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "show"] => await commands.RetrievalAlphaShowAsync(store, stdout, TestContext.Current.CancellationToken),
+            ["sweep", "enable"] => await commands.SweepEnabledSetAsync(true, store, stdout, TestContext.Current.CancellationToken),
+            ["sweep", "disable"] => await commands.SweepEnabledSetAsync(false, store, stdout, TestContext.Current.CancellationToken),
+            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["sweep", "show"] => await commands.SweepShowAsync(store, stdout, TestContext.Current.CancellationToken),
             _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
@@ -98,12 +102,12 @@ public class SettingsCommandsTests
     }
 
     [Fact]
-    public async Task SweepShow_NoRow_PrintsDefault()
+    public async Task SweepShow_NoRow_PrintsTheDefaultPolicy()
     {
         var (exit, stdout, _) = await Run(["sweep", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("0.3");
+        stdout.Trim().ShouldBe("enabled: True  interval: 24 h  threshold: 0.3");
     }
 
     [Fact]
@@ -116,10 +120,44 @@ public class SettingsCommandsTests
 
         setExit.ShouldBe(0);
         showExit.ShouldBe(0);
-        showOut.Trim().ShouldBe("0.55");
+        showOut.Trim().ShouldBe("enabled: True  interval: 24 h  threshold: 0.55");
 
         var policy = new ForgettingPolicyService(store, new MemoryAccessGuard(store));
         var threshold = await policy.GetSweepThresholdAsync("proj-1", TestContext.Current.CancellationToken);
         threshold.ShouldBe(0.55);
+    }
+
+    /// <summary>The kill switch round-trips through the same parse the reaper reads it with.</summary>
+    [Fact]
+    public async Task SweepDisableThenEnable_RoundTripsThroughCliShowAndSweepConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (disableExit, _, _) = await Run(["sweep", "disable"], store);
+        var (_, disabledOut, _) = await Run(["sweep", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        SweepConfigKeys.ParseEnabled(store.Settings[SweepConfigKeys.EnabledGlobal]).ShouldBeFalse();
+
+        var (enableExit, _, _) = await Run(["sweep", "enable"], store);
+        var (_, enabledOut, _) = await Run(["sweep", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        SweepConfigKeys.ParseEnabled(store.Settings[SweepConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SweepIntervalHours_RoundTripsThroughCliShowAndSweepConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, _, _) = await Run(["sweep", "interval-hours", "8760"], store);
+        var (_, showOut, _) = await Run(["sweep", "show"], store);
+
+        setExit.ShouldBe(0);
+        showOut.ShouldContain("interval: 8760 h");
+        SweepConfigKeys.ParseIntervalHours(store.Settings[SweepConfigKeys.IntervalHoursGlobal]).ShouldBe(8760);
     }
 }

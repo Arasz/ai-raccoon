@@ -124,6 +124,16 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   to delete. An entry is a candidate only when it carries a per-entry TTL, its retrieval
   rating is below the sweep threshold (default 0.3) *and* its age exceeds that TTL.
   `shared` entries are never swept.
+- **Background reaper:** the same sweep also runs unattended on HTTP/S hosts, and it is
+  **ON by default** — every 24 h it sweeps each project and *deletes* (never a dry run).
+  It is the one background service that destroys data, so it has a kill switch:
+  `ai-raccoon sweep disable`. `ai-raccoon sweep show` reports the whole policy —
+  `enabled: True  interval: 24 h  threshold: 0.3` — and `sweep interval-hours {1..8760}`
+  retunes the cadence live, no server restart needed. The kill switch fails safe: any
+  casing of `false` in `sweep.enabled.global` disarms it, and only an explicit `false`
+  does — an absent or unreadable row leaves the reaper armed. Nothing without a per-entry
+  TTL is ever a candidate, so a bank that has never called `memory_set_ttl` has nothing
+  to lose.
 - **`memory_set_ttl`:** the only way to give an entry a TTL — without one it can never be
   swept. `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
   but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
@@ -499,7 +509,13 @@ ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}
 ai-raccoon retrieval alpha show
 
-# sweep: degradation cutoff
+# sweep: the background reaper — ON by default, deletes expired entries on its
+# cadence (default every 24 h). 'sweep disable' is the kill switch; 'sweep show'
+# reports the whole policy (enabled, interval, threshold). Interval changes apply
+# live, no server restart needed.
+ai-raccoon sweep enable
+ai-raccoon sweep disable
+ai-raccoon sweep interval-hours {1..8760}
 ai-raccoon sweep threshold set {0..1}
 ai-raccoon sweep show
 
