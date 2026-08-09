@@ -91,6 +91,15 @@ process for a `url` entry, so nothing would ever start the server.
 - **The proxy never kills or signals any process.** Daemon lifetime belongs to `IdleWatchdog` alone.
   When a forward fails at the connection level the proxy re-acquires once and retries once; it does
   not ping `/mcp` on a timer to keep the backend alive.
+- **`/mcp` is guarded by a loopback token, shipped in this same change.** `serve` mints a random
+  secret into `<data-root>/mcp-token` (0600, exclusive create, reused across restarts) *before* it
+  binds, and the proxy reads that file after a successful probe and sends it as a header. Comparison
+  is `CryptographicOperations.FixedTimeEquals`; generation is `RandomNumberGenerator.GetBytes`. No
+  client config changes, so the zero-config property survives. `/observability` stays open — it
+  returns a PID and OTLP status, nothing that touches the bank, and ADR-0008's discovery depends on
+  it being reachable. The probe also stays unauthenticated and gains 401 as an accepted status, so
+  it keeps recognising a live server across data roots. Full design:
+  [the token flow](../plans/2026-08-09-mcp-loopback-token-flow.md).
 
 ## Consequences
 
@@ -105,16 +114,16 @@ process for a `url` entry, so nothing would ever start the server.
   `stack-mcp.schema.json` is `additionalProperties: false` with no `url`. That blocked an HTTP `url`
   entry; a proxy needs a spawnable `command`, which is exactly what the scaffolder emits. R16's
   compromise is now satisfied by design instead of by concession, and no upstream change is needed.
-- **Negative — the security posture is strictly worse, and this is the one thing that must not ship
-  unnoticed.** There is no authentication on `/mcp`; the only control is the loopback bind
-  (`McpServerSetup.cs:95`). `SECURITY.md:50-51` names the mitigation explicitly: *"Keep the HTTP
-  endpoint opt-in and loopback-only for the same reason: an unauthenticated `localhost` listener is
-  reachable by any local process."* This decision removes the "opt-in" half of that sentence. A
-  permanently-running unauthenticated loopback listener exposes 22 tools — including delete and
-  sweep, and the settings table holding cloud-sync credentials — to every local process on the box.
-  The `ro`/`rw`/`full` access modes are the only remaining brake and the default is `rw`.
-  `SECURITY.md:37-38` is corrected in the same change: "stdio transport (default)" and "HTTP
-  transport (opt-in)" are both now false.
+- **Mixed — the "opt-in" mitigation is removed and replaced, not simply dropped.**
+  `SECURITY.md:50-51` names the old mitigation explicitly: *"Keep the HTTP endpoint opt-in and
+  loopback-only for the same reason: an unauthenticated `localhost` listener is reachable by any
+  local process."* This decision removes the "opt-in" half — a server now runs whenever any agent
+  has touched memory, exposing 22 tools including delete and sweep, and the settings table holding
+  cloud-sync credentials. The loopback token above replaces it, raising the bar from "any local
+  process" to "any process that can read a 0600 file in the data root". That is a bar, not a
+  boundary: a process running as the same user can read the file. On Windows the 0600 does not
+  apply at all and the file inherits the directory ACL. `SECURITY.md:37-38` is corrected in the
+  same change: "stdio transport (default)" and "HTTP transport (opt-in)" are both now false.
 - **Negative — a behaviour change for every installed client.** Bare `ai-raccoon` no longer serves
   memory by itself. A machine where `serve` cannot start loses memory entirely rather than
   degrading, which is deliberate (see Alternatives) but is a real blast radius: one broken backend
@@ -136,7 +145,13 @@ process for a `url` entry, so nothing would ever start the server.
 
 ## Non-Goals
 
-- **Authenticating `/mcp`.** Deferred by name — see below.
+- **Authorizing callers.** The token proves the caller can read a file in the data root; every
+  holder still gets the full tool surface, and the `ro`/`rw`/`full` access mode remains the only
+  privilege split.
+- **Transport security.** Traffic stays plaintext on loopback; TLS on 127.0.0.1 would protect
+  against nothing that can already read the token file.
+- **An explicit Windows ACL on the token file.** `UnixFileMode` is POSIX-only; on Windows the file
+  inherits the data-root directory's ACL. Recorded as a real limitation, not papered over.
 - **Detaching the daemon from the client's process group.** No pid file, no orphan reaping, no
   SIGTERM forwarding. Reconnect replaces detachment.
 - **Keeping the backend alive with proxy-side pings.** Rejected: it would make `IdleTimeout`
@@ -146,19 +161,16 @@ process for a `url` entry, so nothing would ever start the server.
   `WatchDigestExecutor.cs:39-53` is fixed on its own merits in the same change as this ADR, not by
   this ADR.
 
-## Deferred decision — loopback token for `/mcp`
+## The loopback token
 
-**Deliberately out of scope here, and named so it is not lost.** A random token minted at first
-`serve`, written `0600` into the data root, required as a request header. The proxy reads the file
-itself, so no client config changes and the zero-config property survives. It is a shared secret
-compared in constant time — not key derivation, token signing or session protection — so it does not
-trip the no-hand-rolled-crypto invariant.
+Originally drafted as a deferred follow-up; **folded into this decision on owner instruction,
+2026-08-09**, on the grounds that shipping the transport change without it is a real regression
+against `SECURITY.md:50-51` rather than a small one.
 
-Deferred rather than bundled because it is a separable change with its own threat model, its own
-failure modes (token rotation, a stale token file, multi-user machines) and its own test surface,
-and bundling it would make the transport change unreviewable. **The rationale for deferring is not
-that the risk is small.** Shipping this ADR without the token is a real regression against
-`SECURITY.md:50-51`, and the follow-up should be scheduled, not merely recorded.
+The full flow — mint-before-bind ordering, the exclusive-create race, the 401 status that keeps
+`ServeRunner`'s probe working across data roots, and the failure-mode table — is
+[the token flow](../plans/2026-08-09-mcp-loopback-token-flow.md). It ships in the same change as
+the proxy.
 
 ## Alternatives considered
 
