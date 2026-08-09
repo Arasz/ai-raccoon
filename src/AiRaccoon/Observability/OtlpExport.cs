@@ -1,3 +1,5 @@
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
@@ -16,18 +18,18 @@ internal static partial class OtlpExport
     {
         /// <summary>No-op unless OTLP is enabled (ADR 0009): zero threads, zero sockets when unconfigured.
         /// resolvedState is a test seam — production callers always resolve from the environment.</summary>
-        internal IServiceCollection AddOtlpExport(OtlpExportState? resolvedState = null)
+        internal IServiceCollection AddOtlpExport(InfrastructureOptions options, OtlpExportState? resolvedState = null)
         {
             var state = resolvedState ?? OtlpExportState.Resolve();
             if (!state.Enabled)
             {
                 if (state.InvalidEndpointReason is not null)
                 {
-                    // No DI logger yet (AddOtlpExport runs before builder.Build()): same throwaway
-                    // stderr-only idiom as ServeRunner/ObservabilityRunner. Never stdout — `serve`
-                    // reserves stdout for the bound-URL line.
-                    using var loggerFactory = LoggerFactory.Create(b => b.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace));
-                    Log.InvalidEndpoint(loggerFactory.CreateLogger("OtlpExport"), state.InvalidEndpointReason);
+                    // No DI logger yet (AddOtlpExport runs before builder.Build()): the shared
+                    // pre-host seam (same one ServeRunner/ObservabilityRunner use) routes this
+                    // through quiet's file destination instead of stderr when quiet is set.
+                    using var log = PreHostLogging.CreateLogger("OtlpExport", options);
+                    Log.InvalidEndpoint(log.Logger, state.InvalidEndpointReason);
                 }
 
                 return services;

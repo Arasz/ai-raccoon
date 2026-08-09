@@ -41,6 +41,8 @@ public sealed class OtlpExportTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-export");
 
+    private InfrastructureOptions TestOptions => new() { DataRoot = _dataRoot, Scope = InstallScope.User };
+
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private static readonly OtlpExportState Disabled = new(false, null, null);
@@ -51,7 +53,7 @@ public sealed class OtlpExportTests : IDisposable
     {
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Disabled);
+        services.AddOtlpExport(TestOptions, Disabled);
         using var provider = services.BuildServiceProvider();
 
         provider.GetService<TracerProvider>().ShouldBeNull();
@@ -133,7 +135,7 @@ public sealed class OtlpExportTests : IDisposable
     {
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
 
         // Force-builds the providers, then probes each meter/source: Instrument.Enabled /
@@ -160,7 +162,7 @@ public sealed class OtlpExportTests : IDisposable
         var services = new ServiceCollection();
         var exportedItems = new List<Activity>();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems));
         await using var provider = services.BuildServiceProvider();
         var tracerProvider = provider.GetRequiredService<TracerProvider>();
@@ -187,7 +189,7 @@ public sealed class OtlpExportTests : IDisposable
         var services = new ServiceCollection();
         var exportedItems = new List<Metric>();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         services.AddOpenTelemetry().WithMetrics(m => m.AddInMemoryExporter(exportedItems));
         await using var provider = services.BuildServiceProvider();
         var meterProvider = provider.GetRequiredService<MeterProvider>();
@@ -214,7 +216,7 @@ public sealed class OtlpExportTests : IDisposable
         // dotnet/aspnetcore's WebHostBuilder.cs); it must never gain a listener here.
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
         provider.GetRequiredService<TracerProvider>();
 
