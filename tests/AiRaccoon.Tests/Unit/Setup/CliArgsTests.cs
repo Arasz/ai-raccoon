@@ -1,7 +1,9 @@
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
@@ -703,6 +705,86 @@ public class CliArgsTests
         CliArgs.TryParse(["--transport", "ftp"], out var parsed);
 
         parsed.Errors.ShouldHaveSingleItem().ShouldContain("--transport");
+    }
+
+    /// <summary>
+    ///     H1: a verb after the bad top-level option changes System.CommandLine's error-eagerness
+    ///     — `--transport`/`--install-scope` (custom-enum Options) only surface a type-coercion
+    ///     failure through `parseResult.Errors` when there is no matched subcommand; with one
+    ///     present the failure is silent until `GetValueOrDefault&lt;T&gt;()` is actually called,
+    ///     and that call throws rather than recording an error. `--port` (a built-in `int`) does
+    ///     not have this gap. Pinned by reading System.CommandLine 2.0.10's raw ParseResult directly.
+    /// </summary>
+    [Theory]
+    [InlineData("--install-scope")]
+    [InlineData("--transport")]
+    [InlineData("--port")]
+    public void Parse_BadTopLevelOptionValueWithVerb_NeverDiscardsDataRootOnSuccess(string badOption)
+    {
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", badOption, "garbage", "access", "default", "show"], out var parsed);
+
+        if (ok)
+        {
+            parsed.Options.DataRoot.ShouldBe("/tmp/x");
+        }
+        else
+        {
+            parsed.Errors.ShouldNotBeEmpty();
+        }
+    }
+
+    [Fact]
+    public void Parse_BadInstallScopeWithVerb_RefusesWithNonZeroExit()
+    {
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--install-scope", "garbage", "access", "default", "show"], out var parsed);
+
+        ok.ShouldBeFalse();
+        parsed.Errors.ShouldNotBeEmpty();
+        var writer = new StringWriter();
+        parsed.RenderTo(writer).ShouldNotBe(0);
+    }
+
+    [Fact]
+    public void Parse_BadTransportWithVerb_RefusesWithNonZeroExit()
+    {
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--transport", "garbage", "access", "default", "show"], out var parsed);
+
+        ok.ShouldBeFalse();
+        parsed.Errors.ShouldNotBeEmpty();
+        var writer = new StringWriter();
+        parsed.RenderTo(writer).ShouldNotBe(0);
+    }
+
+    [Fact]
+    public void Parse_BadPortWithVerb_RefusesWithNonZeroExit()
+    {
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--port", "garbage", "access", "default", "show"], out var parsed);
+
+        ok.ShouldBeFalse();
+        parsed.Errors.ShouldNotBeEmpty();
+        var writer = new StringWriter();
+        parsed.RenderTo(writer).ShouldNotBe(0);
+    }
+
+    [Fact]
+    public void Parse_BadInstallScopeWithVerbNoDataRoot_Refuses()
+    {
+        // No --data-root in play at all: still must not silently succeed with defaults.
+        var ok = CliArgs.TryParse(["--install-scope", "garbage", "access", "default", "show"], out var parsed);
+
+        ok.ShouldBeFalse();
+        parsed.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_ValidTopLevelOptionsWithVerb_StillParseCleanly()
+    {
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--install-scope", "project", "access", "default", "show"], out var parsed);
+
+        ok.ShouldBeTrue();
+        parsed.Errors.ShouldBeEmpty();
+        parsed.Options.DataRoot.ShouldBe("/tmp/x");
+        parsed.Options.InstallScope.ShouldBe(InstallScope.Project);
     }
 
     [Fact]
