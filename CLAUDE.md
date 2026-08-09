@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github
-> Scaffolded by ai-badger 0.113.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.115.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Non-negotiable invariants
 
@@ -36,6 +36,9 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 - **No hardcoded secrets** — No credentials, connection strings, API keys, or tokens in tracked files, examples, or fixtures.
   → `.ai-badger/invariants/no-hardcoded-secrets.md`
+
+- **Run what you changed; the pipeline runs the rest** — Run the build and the tests your change touches, and let the pipeline run everything else — a full local sweep buys no coverage the pipeline does not already have and spends the same time twice.
+  → `.ai-badger/invariants/pipeline-runs-the-rest.md`
 
 - **Plain names** — Name things with the simplest accurate word — variables, functions, types, files, folders, flags.
   → `.ai-badger/invariants/plain-names.md`

@@ -56,7 +56,7 @@ public sealed class ToolCallMetrics : IDisposable
         };
         if (errorType is not null)
         {
-            counterTags.Add("error_type", errorType);
+            counterTags.Add("error.type", errorType);
         }
 
         _invocationCount.Add(1, counterTags);
@@ -68,7 +68,7 @@ public sealed class ToolCallMetrics : IDisposable
         };
         if (errorType is not null)
         {
-            histoTags.Add("error_type", errorType);
+            histoTags.Add("error.type", errorType);
         }
 
         _invocationDuration.Record(duration.TotalSeconds, histoTags);

@@ -48,7 +48,7 @@ public class ToolCallMetricsTests
         measurements[0].Value.ShouldBe(1);
         measurements[0].Tags["tool"].ShouldBe("memory_sync");
         measurements[0].Tags["result"].ShouldBe("error");
-        measurements[0].Tags["error_type"].ShouldBe("SyncConflictException");
+        measurements[0].Tags["error.type"].ShouldBe("SyncConflictException");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class ToolCallMetricsTests
         measurements[0].Value.ShouldBe(1.5, 0.001);
         measurements[0].Tags["tool"].ShouldBe("memory_sync");
         measurements[0].Tags["result"].ShouldBe("error");
-        measurements[0].Tags["error_type"].ShouldBe("SyncConflictException");
+        measurements[0].Tags["error.type"].ShouldBe("SyncConflictException");
     }
 
     [Fact]
