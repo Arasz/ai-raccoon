@@ -2,6 +2,8 @@ using System.CommandLine;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 
 namespace AiRaccoon.Observability;
@@ -22,8 +24,14 @@ internal static partial class ObservabilityRunner
 
     public static async Task<int> RunAsync(CliParseResult parsed, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace));
-        var logger = loggerFactory.CreateLogger("ObservabilityRunner");
+        var options = new InfrastructureOptions
+        {
+            DataRoot = parsed.Options.DataRoot,
+            Scope = parsed.Options.InstallScope,
+            Quiet = parsed.Options.Quiet
+        };
+        using var log = PreHostLogging.CreateLogger("ObservabilityRunner", options);
+        var logger = log.Logger;
 
         var port = parsed.ParseResult.GetValue(CliCommandTree.ObservabilityPortOption);
         var kind = ResolveKind(parsed);

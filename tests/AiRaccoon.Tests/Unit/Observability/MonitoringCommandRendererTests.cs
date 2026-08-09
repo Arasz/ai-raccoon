@@ -19,7 +19,7 @@ public class MonitoringCommandRendererTests
     public void RenderTrace_ListsOnlyTheMemoryToolsActivitySource()
     {
         MonitoringCommandRenderer.RenderTrace(12345).ShouldBe(
-            "dotnet-trace collect -p 12345 --providers AiRaccoon.MemoryTools");
+            $"dotnet-trace collect -p 12345 --providers {string.Join(',', OtlpNames.Sources)}");
     }
 
     [Fact]

@@ -8,7 +8,9 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Shouldly;
@@ -39,6 +41,8 @@ public sealed class OtlpExportTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-export");
 
+    private InfrastructureOptions TestOptions => new() { DataRoot = _dataRoot, Scope = InstallScope.User };
+
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private static readonly OtlpExportState Disabled = new(false, null, null);
@@ -49,11 +53,81 @@ public sealed class OtlpExportTests : IDisposable
     {
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Disabled);
+        services.AddOtlpExport(TestOptions, Disabled);
         using var provider = services.BuildServiceProvider();
 
         provider.GetService<TracerProvider>().ShouldBeNull();
         provider.GetService<MeterProvider>().ShouldBeNull();
+    }
+
+    // WP4/A4: OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:4317 (no scheme) used to throw UriFormatException
+    // inside the exporter-configuration delegate, which runs inside app.StartAsync — the whole MCP
+    // server died at boot over an observability opt-in. This must reproduce the real path: the real
+    // web host, not the bare-ServiceCollection seam used above.
+    [Fact]
+    public async Task MalformedEndpoint_MissingScheme_ServerStartsWithExportDisabled()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        await Should.NotThrowAsync(() => host.StartAsync(TestContext.Current.CancellationToken));
+        try
+        {
+            host.Services.GetService(typeof(TracerProvider)).ShouldBeNull();
+            host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // WP4/A5: `new Uri("localhost:4318")` succeeds with Scheme="localhost" — this is the silent
+    // near-miss. An "assert no exception" test would pass today because the bug never throws;
+    // asserting the providers were never registered is what makes this check able to fail.
+    [Fact]
+    public async Task MalformedEndpoint_NonHttpScheme_ServerStartsWithExportDisabled()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            host.Services.GetService(typeof(TracerProvider)).ShouldBeNull();
+            host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // WP4: an observability opt-in must not degrade the product — the server must still serve a
+    // real tool call through the real DI-resolved MemoryTools, not just fail to crash.
+    [Fact]
+    public async Task MalformedEndpoint_ServerStillServesAToolCall()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var tools = ActivatorUtilities.CreateInstance<MemoryTools>(host.Services);
+
+            var envelope = await tools.Stats("wp4-probe", TestContext.Current.CancellationToken);
+
+            envelope.Data.ShouldNotBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
@@ -61,7 +135,7 @@ public sealed class OtlpExportTests : IDisposable
     {
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
 
         // Force-builds the providers, then probes each meter/source: Instrument.Enabled /
@@ -88,7 +162,7 @@ public sealed class OtlpExportTests : IDisposable
         var services = new ServiceCollection();
         var exportedItems = new List<Activity>();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems));
         await using var provider = services.BuildServiceProvider();
         var tracerProvider = provider.GetRequiredService<TracerProvider>();
@@ -115,7 +189,7 @@ public sealed class OtlpExportTests : IDisposable
         var services = new ServiceCollection();
         var exportedItems = new List<Metric>();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         services.AddOpenTelemetry().WithMetrics(m => m.AddInMemoryExporter(exportedItems));
         await using var provider = services.BuildServiceProvider();
         var meterProvider = provider.GetRequiredService<MeterProvider>();
@@ -128,10 +202,10 @@ public sealed class OtlpExportTests : IDisposable
 
         meterProvider.ForceFlush();
 
-        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_invocations");
-        var invocationMetric = exportedItems.Single(m => m.Name == "ai_raccoon_tool_invocations");
+        exportedItems.ShouldContain(m => m.Name == OtlpNames.ToolInvocations);
+        var invocationMetric = exportedItems.Single(m => m.Name == OtlpNames.ToolInvocations);
         HasToolTag(invocationMetric, "probe_tool").ShouldBeTrue();
-        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_duration_ms");
+        exportedItems.ShouldContain(m => m.Name == OtlpNames.ToolDuration);
     }
 
     [Fact]
@@ -142,7 +216,7 @@ public sealed class OtlpExportTests : IDisposable
         // dotnet/aspnetcore's WebHostBuilder.cs); it must never gain a listener here.
         var services = new ServiceCollection();
 
-        services.AddOtlpExport(Enabled);
+        services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
         provider.GetRequiredService<TracerProvider>();
 
@@ -258,6 +332,31 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
     }
 
+    // A6: the endpoint already carries the signal path AND a trailing slash — the SDK's own
+    // AppendPathIfNotPresent checks the "path + /" form too; the hand-rolled EndsWith guard didn't,
+    // so this doubled to ".../v1/traces/v1/traces".
+    [Fact]
+    public void HttpProtobuf_SignalPathWithTrailingSlash_IsNotDoubled()
+    {
+        var state = new OtlpExportState(true, "http://host:4318/v1/traces/", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://host:4318/v1/traces/"));
+    }
+
+    // A6: the SDK's own guard uses OrdinalIgnoreCase; the hand-rolled one used Ordinal, so an
+    // upper-cased endpoint doubled to ".../V1/TRACES/v1/traces".
+    [Fact]
+    public void HttpProtobuf_CaseVariedSignalPath_IsNotDoubled()
+    {
+        var state = new OtlpExportState(true, "HTTP://HOST:4318/V1/TRACES", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("HTTP://HOST:4318/V1/TRACES"));
+    }
+
     [Fact]
     public void Grpc_EndpointIsUsedVerbatim()
     {
@@ -278,6 +377,21 @@ public sealed class OtlpExportTests : IDisposable
         var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
 
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    // Pins the per-export timeout to its one named source (ADR-0009). The SDK discards the
+    // OtlpExporterOptions instance once it derives the exporter's transmission handler from it
+    // (opentelemetry-dotnet, OtlpMetricExporter/OtlpTraceExporter ctors), so TimeoutMilliseconds
+    // does not survive into the built provider for reflection — ConfigureExporter is tested
+    // directly instead, the same way SignalEndpoint already is.
+    [Fact]
+    public void ConfigureExporter_SetsTimeoutToTheNamedConstant()
+    {
+        var options = new OtlpExporterOptions();
+
+        OtlpExport.ConfigureExporter(options, Enabled, "/v1/traces");
+
+        options.TimeoutMilliseconds.ShouldBe(OtlpExportState.ExportTimeoutMilliseconds);
     }
 
     // Must run through the real CreateWebHost pipeline (ADR-0009 "Configuration channel"): the SDK

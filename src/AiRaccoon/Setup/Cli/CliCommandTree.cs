@@ -86,7 +86,7 @@ internal static class CliCommandTree
         });
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
-        root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: info logs off (Warning+ only); the caller emits its own status cues" });
+        root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: every log level goes to a file beside the bank, nothing reaches stdout/stderr" });
         root.Add(LaunchPortOption);
         root.Add(new Option<string>("--environment") { Hidden = true });
         root.Add(new Option<string>("--contentRoot") { Hidden = true });

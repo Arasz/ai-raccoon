@@ -18,7 +18,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var startedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = startedActivities.Add;
         listener.ActivityStopped = _ => { };
@@ -36,7 +36,7 @@ public class ToolExecutionActivityTests
     public void RecordInvocation_ForwardsProjectIdToTheCounter()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         using var activity = new ToolExecutionActivity(metrics, "memory_write", "jsaa");
         activity.RecordInvocation();
@@ -50,11 +50,11 @@ public class ToolExecutionActivityTests
     public void RecordInvocation_EmitsSuccessMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        using var durationCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
+        using var durationCollector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
         var startedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = startedActivities.Add;
         listener.ActivityStopped = _ => { };
@@ -79,10 +79,10 @@ public class ToolExecutionActivityTests
     public void RecordError_EmitsErrorMetric_AndTagsActivity()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var stoppedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = _ => { };
         listener.ActivityStopped = stoppedActivities.Add;
@@ -112,7 +112,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var startedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = startedActivities.Add;
         listener.ActivityStopped = _ => { };
@@ -132,7 +132,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var stoppedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = _ => { };
         listener.ActivityStopped = stoppedActivities.Add;
@@ -153,7 +153,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var stoppedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = _ => { };
         listener.ActivityStopped = stoppedActivities.Add;

@@ -29,13 +29,13 @@ public class MemoryToolsInstrumentationTests
     public async Task Write_RecordsMetricsAndCreatesActivity()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
-        using var durationCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
+        using var durationCollector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
         var startedActivities = new List<Activity>();
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
+            ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope,
             Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = a => startedActivities.Add(a),
             ActivityStopped = _ => { }
@@ -65,7 +65,7 @@ public class MemoryToolsInstrumentationTests
     public async Task Write_WithStoreError_SetsErrorTags()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore { ThrowOnWrite = true };
         var tools = CreateTools(store, metrics);
@@ -85,11 +85,11 @@ public class MemoryToolsInstrumentationTests
         // WrapAsync (queue.GetMetaAsync) runs after the store call succeeds; a failure there
         // must still be recorded as an error, not as a success followed by a no-op RecordError.
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var stoppedActivities = new List<Activity>();
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools",
+            ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope,
             Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = _ => { },
             ActivityStopped = stoppedActivities.Add
@@ -118,7 +118,7 @@ public class MemoryToolsInstrumentationTests
         // The stopwatch must cover the full call, including WrapAsync's queue.GetMetaAsync —
         // not just the bookkeeping before it.
         var metrics = new ToolCallMetrics();
-        using var durationCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var durationCollector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
@@ -128,7 +128,7 @@ public class MemoryToolsInstrumentationTests
 
         var durations = durationCollector.GetMeasurementSnapshot();
         durations.Count.ShouldBe(1);
-        durations[0].Value.ShouldBeGreaterThanOrEqualTo(50.0);
+        durations[0].Value.ShouldBeGreaterThanOrEqualTo(0.05);
     }
 
     // SyncService owns the IsConfigured decision (NullCloudStore); this proves the tool's
@@ -137,7 +137,7 @@ public class MemoryToolsInstrumentationTests
     public async Task Sync_WhenServiceThrowsSyncNotConfigured_RecordsError()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService { Exception = new SyncNotConfiguredException() },
@@ -160,7 +160,7 @@ public class MemoryToolsInstrumentationTests
     public async Task Search_RecordsMetricsSuccessfully()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore();
         var tools = CreateTools(store, metrics);
@@ -177,7 +177,7 @@ public class MemoryToolsInstrumentationTests
     public async Task Stats_RecordsMetricsSuccessfully()
     {
         var metrics = new ToolCallMetrics();
-        using var invocationCollector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore();
         var tools = CreateTools(store, metrics);

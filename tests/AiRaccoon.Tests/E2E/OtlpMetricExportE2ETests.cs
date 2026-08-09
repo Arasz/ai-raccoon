@@ -55,7 +55,7 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
             _factory.Services.GetRequiredService<MeterProvider>().ForceFlush();
             await _collector.WaitForRequestAsync("/v1/metrics", TimeSpan.FromSeconds(5));
 
-            _collector.RequestedPaths.ShouldContain(path => path.Contains("/v1/metrics", StringComparison.Ordinal));
+            _collector.RequestedPaths.ShouldContain(path => path == "/v1/metrics");
             _collector.BodyLengthFor("/v1/metrics").ShouldBeGreaterThan(0);
         }
         finally

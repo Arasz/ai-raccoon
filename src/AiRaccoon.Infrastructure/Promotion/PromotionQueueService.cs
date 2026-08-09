@@ -24,7 +24,6 @@ public sealed partial class PromotionQueueService(
         ArgumentNullException.ThrowIfNull(candidates);
 
         var upserted = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
-        metrics.RecordQueued(projectId, upserted);
 
         var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
         var evicted = new List<EvictedRow>();
@@ -45,12 +44,11 @@ public sealed partial class PromotionQueueService(
 
             evicted.Add(new EvictedRow(target, victim.Hash, victim.Score, EvictionReason));
             metrics.RecordEviction(target, victim.Score, EvictionReason);
-            metrics.RecordQueued(target, -1);
             Log.Evicted(logger, target, victim.Hash, victim.Score, EvictionReason);
             stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        metrics.RecordUtilization(stats.TotalCount / (double)cap);
+        metrics.RecordSnapshot(stats, cap);
         Log.Proposed(logger, projectId, upserted, evicted.Count);
         return new ProposeOutcome(upserted, evicted);
     }
@@ -69,7 +67,6 @@ public sealed partial class PromotionQueueService(
         {
             var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
                 .Take(limit).ToList();
-            var drained = 0;
             foreach (var row in rows)
             {
                 // Claim before sharing: a concurrent discard may have removed this row since the
@@ -80,7 +77,6 @@ public sealed partial class PromotionQueueService(
                     continue;
                 }
 
-                drained++;
                 if (IsDuplicate(row, sharedIndex))
                 {
                     skipped++;
@@ -93,12 +89,10 @@ public sealed partial class PromotionQueueService(
                     metrics.RecordPromoted(projectId, wait);
                 }
             }
-
-            metrics.RecordQueued(projectId, -drained);
         }
 
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
-        metrics.RecordUtilization(remaining.TotalCount / (double)Math.Max(1, await ReadCapAsync(cancellationToken).ConfigureAwait(false)));
+        metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
         Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, skipped);
         return new PromoteOutcome(promoted, skipped, remaining.PerProject);
     }
@@ -111,13 +105,14 @@ public sealed partial class PromotionQueueService(
         var removed = await queue.DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
         if (removed.Count > 0)
         {
-            metrics.RecordQueued(projectId, -removed.Count);
             foreach (var row in removed)
             {
                 var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
                 metrics.RecordDiscarded(projectId, wait);
             }
 
+            var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
+            metrics.RecordSnapshot(stats, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
             Log.Discarded(logger, projectId, removed.Count);
         }
 

@@ -41,8 +41,9 @@ public sealed class PromotionQueueServicePromoteRaceTests
         outcome.PromotedHashes.ShouldNotContain("h1");
         store.SharedHashes.ShouldBe(["h2"]);
         outcome.PromotedHashes.ShouldBe(["h2"]);
-        metrics.QueuedDeltas.Where(d => d.ProjectId == "acme").Sum(d => d.Delta).ShouldBe(-1,
-            "only h2 was actually drained by this call; h1's queued-delta was already recorded by whichever caller discarded it");
+        metrics.Snapshots.ShouldHaveSingleItem().Stats.TotalCount.ShouldBe(0,
+            "h1 was claimed by a concurrent discard and h2 was drained by this call — the store is empty; " +
+            "RecordSnapshot reports its real state, not this call's own delta");
     }
 
     private sealed class RaceyQueueStore : IPromotionQueueStore
@@ -63,6 +64,9 @@ public sealed class PromotionQueueServicePromoteRaceTests
         {
             if (hash is not null && AlreadyGoneHashes.Contains(hash))
             {
+                // The concurrent caller's claim already applied to the store — this call gets
+                // nothing back, but the row is genuinely gone by the time GetStatsAsync runs.
+                Rows.RemoveAll(r => r.ProjectId == projectId && r.Hash == hash);
                 return Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
             }
 
@@ -165,12 +169,11 @@ public sealed class PromotionQueueServicePromoteRaceTests
 
     private sealed class SpyMetrics : IPromotionQueueMetrics
     {
-        public List<(string ProjectId, int Delta)> QueuedDeltas { get; } = [];
+        public List<(PromotionQueueStats Stats, int Capacity)> Snapshots { get; } = [];
 
-        public void RecordQueued(string projectId, int delta) => QueuedDeltas.Add((projectId, delta));
         public void RecordEviction(string projectId, double victimScore, string reason) { }
         public void RecordPromoted(string projectId, double waitSeconds) { }
         public void RecordDiscarded(string projectId, double waitSeconds) { }
-        public void RecordUtilization(double ratio) { }
+        public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 }

@@ -59,6 +59,36 @@ public class OtlpExportStateTests
         state.ShouldBe(new OtlpExportState(true, "http://localhost:4318", "http/protobuf"));
     }
 
+    // A4: no scheme means `new Uri(...)` throws UriFormatException inside the exporter-configuration
+    // delegate, which runs inside app.StartAsync — the MCP server dies at boot. Resolve() must
+    // catch this at the source instead of letting the bad string reach the SDK.
+    [Fact]
+    public async Task MalformedEndpoint_MissingScheme_DisablesExportWithAReason()
+    {
+        using var _ = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+
+        var state = OtlpExportState.Resolve();
+
+        state.Enabled.ShouldBeFalse();
+        state.InvalidEndpointReason.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    // A5: `new Uri("localhost:4318")` *succeeds* with Scheme="localhost" — UriKind.Absolute alone
+    // does not catch this. A naive "assert no exception" test passes today because the bug is
+    // silent; asserting the reason is what makes this check able to fail.
+    [Fact]
+    public async Task MalformedEndpoint_NonHttpScheme_DisablesExportWithAReason()
+    {
+        using var _ = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
+
+        var state = OtlpExportState.Resolve();
+
+        state.Enabled.ShouldBeFalse();
+        state.InvalidEndpointReason.ShouldNotBeNullOrWhiteSpace();
+    }
+
     // Serialized with the other env-var tests via TestData.EnvVarGate (process-global OTEL_* vars),
     // same mechanism as ServeRunnerTests.AcquireCleanEnvAsync.
     private static async Task<IDisposable> AcquireCleanEnvAsync()

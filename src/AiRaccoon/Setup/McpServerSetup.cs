@@ -39,10 +39,11 @@ internal static partial class McpServerSetup
         var builder = Host.CreateApplicationBuilder();
         builder.Configuration.Sources.Clear();
         var mcpTransport = IReadOnlyList<McpTransport>.Singleton(McpTransport.Stdio);
+        HostLogging.Configure(builder.Logging, mcpTransport, config.Options);
         builder.Services.RegisterMemoryServices(config.Options, mcpTransport);
         builder.Services
             .AddMcpServer()
-            .ConfigureMcpTransport(mcpTransport, builder.Logging, config.Options.Quiet)
+            .ConfigureMcpTransport(mcpTransport)
             .WithTools<MemoryTools>()
             .WithTools<ShareTools>()
             .WithTools<WorkspaceTools>()
@@ -69,17 +70,9 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(config.Options, transports);
         // Web host only (docs/adr/0009-otlp-export.md): stdio hosts recycle too often to pay
         // the exporter's batch delay / provider shutdown grace.
-        builder.Services.AddOtlpExport();
+        builder.Services.AddOtlpExport(config.Options);
         builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
-        builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        // Per-request ASP.NET Core / MCP server INFO chatter carries nothing an operator acts on
-        // above Warning, so both categories are floored here regardless of --quiet.
-        builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
-        builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
-        if (config.Options.Quiet)
-        {
-            builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        }
+        HostLogging.Configure(builder.Logging, transports, config.Options);
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
         if (config.IdleTimeout > TimeSpan.Zero)
@@ -131,11 +124,11 @@ internal static partial class McpServerSetup
 
     extension(WebApplicationBuilder webApplicationBuilder)
     {
-        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports, bool quietInfo = false) =>
+        private void ConfigureMcpServer(IReadOnlyCollection<McpTransport> transports) =>
             webApplicationBuilder
                 .Services
                 .AddMcpServer()
-                .ConfigureMcpTransport(transports, webApplicationBuilder.Logging, quietInfo)
+                .ConfigureMcpTransport(transports)
                 .WithTools<MemoryTools>()
                 .WithTools<ShareTools>()
                 .WithTools<WorkspaceTools>()
@@ -146,34 +139,22 @@ internal static partial class McpServerSetup
                 .WithPrompts<MemoryPrompts>();
     }
 
-    private static void AddStderrConsoleLogging(ILoggingBuilder loggingBuilder, bool quietInfo = false)
-    {
-        loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        if (quietInfo)
-        {
-            // Quiet mode: the caller (e.g. the Hermes provider) emits its own status cues;
-            // warnings and errors still surface.
-            loggingBuilder.SetMinimumLevel(LogLevel.Warning);
-        }
-    }
-
     extension(IMcpServerBuilder mcpServerBuilder)
     {
-        private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports,
-            ILoggingBuilder loggingBuilder, bool quietInfo = false)
+        private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
             mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
 
             if (selectedTransports.Count == 0)
             {
-                return mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo);
+                return mcpServerBuilder.WithStdioServerTransport();
             }
 
             foreach (var selectedTransport in selectedTransports)
             {
                 mcpServerBuilder = selectedTransport switch
                 {
-                    McpTransport.Stdio => mcpServerBuilder.HandleStdioTransport(loggingBuilder, quietInfo),
+                    McpTransport.Stdio => mcpServerBuilder.WithStdioServerTransport(),
                     McpTransport.Http => mcpServerBuilder.HandleHttpTransport(),
                     McpTransport.Https => mcpServerBuilder.HandleHttpsTransport(),
                     _ => mcpServerBuilder
@@ -181,12 +162,6 @@ internal static partial class McpServerSetup
             }
 
             return mcpServerBuilder;
-        }
-
-        private IMcpServerBuilder HandleStdioTransport(ILoggingBuilder loggingBuilder, bool quietInfo = false)
-        {
-            AddStderrConsoleLogging(loggingBuilder, quietInfo);
-            return mcpServerBuilder.WithStdioServerTransport();
         }
 
         private IMcpServerBuilder HandleHttpTransport() => mcpServerBuilder.WithHttpTransport(options => { options.Stateless = true; });

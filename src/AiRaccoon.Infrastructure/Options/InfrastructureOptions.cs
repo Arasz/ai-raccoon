@@ -21,6 +21,7 @@ public sealed record InfrastructureOptions
 
     public required InstallScope Scope { get; init; }
 
-    /// <summary>When true, info logs are quieted to Warning+ (the caller emits its own status cues).</summary>
+    /// <summary>When true, every log level is written to a file beside the bank instead of the
+    /// console — nothing reaches stdout/stderr (owner ruling 2026-08-09).</summary>
     public bool Quiet { get; init; }
 }

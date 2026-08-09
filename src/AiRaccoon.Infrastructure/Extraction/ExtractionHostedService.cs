@@ -162,7 +162,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
 
         /// <summary>No content preview (data-leak risk) — hash/path/reasons only, and Debug-only:
-        /// candidate counts are metered (ai_raccoon_queue_queued), not logged, at Information.</summary>
+        /// candidate counts are metered (ai_raccoon.queue.queued), not logged, at Information.</summary>
         [LoggerMessage(EventId = 507, Level = LogLevel.Debug,
             Message = "Extraction candidate #{Rank} for {ProjectId}: {Hash} {Path} ({Reasons})")]
         public static partial void Candidate(ILogger logger, int rank, string projectId,
