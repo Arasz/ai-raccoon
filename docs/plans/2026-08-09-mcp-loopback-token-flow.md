@@ -144,6 +144,37 @@ stays unauthenticated by design: it proves "an ai-raccoon server is here", never
 | File exists but is empty or unreadable | Treated as absent — fail, do not mint a second token | Same as missing |
 | Backend restarts mid-session | Token unchanged, reconnect succeeds | Nothing |
 
+## Corrections from implementation
+
+Four things this document got wrong or left out. Recorded rather than quietly fixed, because the
+doc was written before the code.
+
+**1. Three `ServeRunner` tests had to change, and the doc claimed none would.** The claim was that
+`BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership` passes untouched. The attach
+behaviour *is* untouched — what broke is its line 124, an unauthenticated `GET /mcp` asserting
+`405` as proof of ownership. Gating all of `/mcp` means that GET 401s before routing can answer
+405. Same assertion in `IdleTimeoutZero_KeepsServing`, and `PortZero_PrintsBoundUrl_AndMcpClient
+ReachesIt` drives a real MCP client with no token. The fix was to send the owner's token in all
+three, so they still assert `405`/success and additionally exercise the authorized path — not to
+relax the assertions to `401`, which would have weakened three checks to accommodate the change.
+
+**2. The token guards `serve`, not "the HTTP server".** A bare `ai-raccoon --transport http`
+launch goes through `Program.cs:33` with no token and is ungated. That is deliberate for now: the
+path is manual and opt-in — the posture `SECURITY.md` already accepted before ADR-0020 — so it is
+not a regression, and gating it would require the E2E `McpServerFactory` to read the token. It is
+a real hole for anyone who runs that command, and it is named in `SECURITY.md` rather than left
+for a reader to discover.
+
+**3. An empty token file wedges `serve`.** If a process dies between the exclusive create and the
+write, the file exists and holds nothing. `EnsureAsync` retries for 1 s and then refuses, which is
+right — re-minting over it could overwrite a live token a slow starter is about to write. But for
+an always-on server "wedged until a human deletes a file" needs to fail like every other `serve`
+failure: an `ExitCode` and one clean stderr line naming the file, not an unhandled exception with
+a stack trace.
+
+**4. EventId 640 was wrong.** It straddled `IdleWatchdog`, `ObservabilityRunner` and
+`BackendLauncher`, tripping `EventIdBlocks_DoNotInterleaveBetweenOwners`. Moved to 606.
+
 ## Known gap: file permissions are POSIX-only
 
 `0600` is enforced with `UnixFileMode` on the create. **On Windows it does not apply** — the file

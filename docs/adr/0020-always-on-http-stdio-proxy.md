@@ -170,6 +170,13 @@ process for a `url` entry, so nothing would ever start the server.
   against nothing that can already read the token file.
 - **An explicit Windows ACL on the token file.** `UnixFileMode` is POSIX-only; on Windows the file
   inherits the data-root directory's ACL. Recorded as a real limitation, not papered over.
+- **Gating `ai-raccoon --transport http` when started directly.** The token guards `serve`, which
+  is the path the proxy autostarts and therefore the one this decision makes always-on. A manual
+  `--transport http` launch stays ungated: it is opt-in and deliberate, i.e. exactly the posture
+  `SECURITY.md` accepted before this ADR, so it is not a regression from this change — and closing
+  it would require the E2E `McpServerFactory` to read the token. It is a genuine hole for anyone
+  who runs that command, and `SECURITY.md` names it rather than implying every listener is
+  authenticated.
 - **Detaching the daemon from the client's process group.** No pid file, no orphan reaping, no
   SIGTERM forwarding. Reconnect replaces detachment.
 - **Keeping the backend alive with proxy-side pings.** Rejected: it would make `IdleTimeout`
