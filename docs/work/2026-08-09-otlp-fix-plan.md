@@ -336,8 +336,22 @@ Checked against our code, not our intent:
   `SuppressActivityOpenTelemetryData` switch must both run before `WebApplication.CreateBuilder`.
   Neither does I/O, so no boot cost is expected — but it is the next thing added to that path.
 
-**Standing constraint for the rest of this work:** nothing in the OTLP path may block or do I/O during
-host startup. That was already true by design; it is now load-bearing for someone else's correctness.
+**Correction, same day, from the proxy lane: the 5 s correctness cliff is being removed.** Their fix
+makes the backend session adopt the client's protocol version instead of negotiating its own ahead of
+time, so the discover-probe timeout goes back to being a latency knob rather than a correctness
+boundary — a slow boot will make a user wait, not make the proxy reject them. They explicitly asked us
+**not** to buffer the quiet-mode writer or carry the constraint into WP7 on their account, and not to
+hold work for a boundary that is about to stop existing.
+
+The budget that does survive is `BackendLauncher`'s **30 s** acquire, of which the token self-heal can
+consume up to 10 s in the worst case *before* key resolve, bank decrypt and the ONNX load even begin —
+thinner than 30 s sounds. Nothing landed or planned here comes near it.
+
+**Standing guidance, downgraded from constraint:** nothing in the OTLP path should block or do I/O
+during host startup. That was already true by design and remains good hygiene; it is no longer
+load-bearing for another lane's correctness. Recorded here because the stronger version was committed
+a few minutes earlier and would otherwise have quietly shaped later decisions — a constraint that
+expires is worth striking explicitly rather than leaving to be inherited.
 
 ## Risks the plan carries
 
