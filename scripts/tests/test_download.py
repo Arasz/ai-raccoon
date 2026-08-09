@@ -52,6 +52,21 @@ def test_fetch_verified_mismatch_deletes_file_and_raises(tmp_path, capsys):
     assert "SHA-256 mismatch for model.bin: expected %s, got %s" % ("0" * 64, _sha256(CONTENT)) in err
 
 
+def test_fetch_verified_empty_download_fails_without_hashing_nothing(tmp_path, capsys):
+    """An empty body is an empty download, not a SHA mismatch against the hash of nothing."""
+    src = tmp_path / "empty.bin"
+    src.write_bytes(b"")
+    out_dir = tmp_path / "out"
+    with pytest.raises(download.EmptyDownloadError) as excinfo:
+        download.fetch_verified("model.bin", src.as_uri(), _sha256(CONTENT), out_dir)
+    message = str(excinfo.value)
+    assert src.as_uri() in message
+    assert "0 bytes" in message
+    assert not (out_dir / "model.bin").exists()
+    assert not (out_dir / "model.bin.part").exists()
+    assert _sha256(b"") not in capsys.readouterr().err
+
+
 def test_fetch_verified_replaces_stale_file_on_mismatch(tmp_path):
     src = tmp_path / "src.bin"
     src.write_bytes(CONTENT)
