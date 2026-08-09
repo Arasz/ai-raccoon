@@ -29,4 +29,8 @@ public interface IPromotionQueueStore
     /// <summary>The victim row of one project — lowest score, oldest created_at — removed; null when the project's queue is empty.</summary>
     Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes this project's queued rows whose scorer_version is not currentScorerVersion (ADR-0018). Returns the count removed.</summary>
+    Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+        CancellationToken cancellationToken = default);
 }
