@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Trace;
 using Shouldly;
@@ -55,6 +57,66 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             await _collector.WaitForRequestAsync("/v1/traces", TimeSpan.FromSeconds(5));
 
             _collector.RequestedPaths.ShouldContain(path => path == "/v1/traces");
+        }
+        finally
+        {
+            await client.DisposeAsync();
+        }
+    }
+
+    // ADR-0021: registering the ASP.NET Core request source (OtlpNames.AspNetCoreScope) fixes the
+    // orphan — the tool span's parent must now be a recorded, exported span, not the dangling id
+    // the old unrecorded Activity left behind. AddInMemoryExporter chains onto the same
+    // TracerProviderBuilder AddOtlpExport already configured for the real host (OtlpExportTests'
+    // bare-ServiceCollection tests use the same trick).
+    [Fact]
+    public async Task ToolCallSpan_NestsUnderAResolvableRequestSpan()
+    {
+        var exportedItems = new List<Activity>();
+        await using var factory = new McpServerFactory(configureAdditionalServices: services =>
+            services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+        var client = await factory.CreateClientAsync();
+        try
+        {
+            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                null, null, TestContext.Current.CancellationToken);
+
+            factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
+
+            var toolSpan = exportedItems.Single(a => a.OperationName == "memory_stats");
+            var requestSpan = exportedItems.SingleOrDefault(a =>
+                a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
+
+            requestSpan.ShouldNotBeNull();
+            requestSpan.TraceId.ShouldBe(toolSpan.TraceId);
+        }
+        finally
+        {
+            await client.DisposeAsync();
+        }
+    }
+
+    // ADR-0021 flags this as unverified: whether SuppressActivityOpenTelemetryData is read lazily
+    // per request or cached at type init. This proves the ordering (switch set before
+    // WebApplication.CreateBuilder) is early enough either way — the tags actually reach an
+    // exported span.
+    [Fact]
+    public async Task RequestSpan_CarriesHttpSemanticConventionTags()
+    {
+        var exportedItems = new List<Activity>();
+        await using var factory = new McpServerFactory(configureAdditionalServices: services =>
+            services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+        var client = await factory.CreateClientAsync();
+        try
+        {
+            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                null, null, TestContext.Current.CancellationToken);
+
+            factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
+
+            var requestSpan = exportedItems.First(a => a.Source.Name == OtlpNames.AspNetCoreScope);
+
+            requestSpan.GetTagItem("http.request.method").ShouldBe("POST");
         }
         finally
         {

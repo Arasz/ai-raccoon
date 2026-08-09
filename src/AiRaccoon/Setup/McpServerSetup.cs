@@ -17,6 +17,11 @@ internal static partial class McpServerSetup
 {
     private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
 
+    /// <summary>Flips ASP.NET Core 10's default off so the hosting request Activity carries OTel
+    /// HTTP semconv tags — what ASP.NET Core 11 does by default (docs/adr/0021).</summary>
+    private const string AspNetCoreHostingOpenTelemetryDataSwitch =
+        "Microsoft.AspNetCore.Hosting.SuppressActivityOpenTelemetryData";
+
     /// <summary>
     ///     Resolves the --transport value to the transports to enable; anything other than
     ///     "http" (case-insensitive) runs stdio.
@@ -69,6 +74,14 @@ internal static partial class McpServerSetup
     private static IHost CreateWebHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
         TimeProvider? timeProvider = null)
     {
+        // Must run before any ASP.NET Core hosting type is touched, and only when OTLP is enabled
+        // (docs/adr/0021): HostingApplicationDiagnostics reads the switch once, at host startup,
+        // from its own constructor — well after this point either way.
+        if (OtlpExportState.Resolve().Enabled)
+        {
+            AppContext.SetSwitch(AspNetCoreHostingOpenTelemetryDataSwitch, false);
+        }
+
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
         // Re-admits OTEL_*-prefixed env vars only (ADR-0009): the OTel SDK reads its entire OTEL_*

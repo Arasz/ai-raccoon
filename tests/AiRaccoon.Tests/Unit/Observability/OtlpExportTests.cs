@@ -209,18 +209,21 @@ public sealed class OtlpExportTests : IDisposable
     }
 
     [Fact]
-    public async Task EndpointSet_DoesNotRegisterAspNetCoreInstrumentation()
+    public async Task EndpointSet_RegistersAListenerForTheAspNetCoreRequestSource()
     {
-        // Pins ADR-0002/ADR-0009's standing non-goal: no Kestrel span per request. ASP.NET
-        // Core's own HTTP-request ActivitySource is "Microsoft.AspNetCore" (confirmed in
-        // dotnet/aspnetcore's WebHostBuilder.cs); it must never gain a listener here.
+        // ADR-0021 supersedes ADR-0002/ADR-0009's non-goal: the hosting request span must now be
+        // recorded and exported so the tool span's parent resolves. "Microsoft.AspNetCore" is the
+        // ActivitySource the framework creates HttpRequestIn on (dotnet/aspnetcore
+        // GenericWebHostBuilder.cs), confirmed by OtlpTraceExportE2ETests against a real request —
+        // ADR-0021's own text names "Microsoft.AspNetCore.Hosting", which is the hosting *Meter*
+        // name (HostingMetrics.cs), a different signal.
         var services = new ServiceCollection();
 
         services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
         provider.GetRequiredService<TracerProvider>();
 
-        new ActivitySource("Microsoft.AspNetCore").HasListeners().ShouldBeFalse();
+        new ActivitySource(OtlpNames.AspNetCoreScope).HasListeners().ShouldBeTrue();
     }
 
     [Fact]
