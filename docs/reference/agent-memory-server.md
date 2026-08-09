@@ -231,7 +231,7 @@ runs the server.
 | `--transport` | `proxy`, `stdio`, `http`, `https` (https → warning) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | any port; `0` = random free port | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`

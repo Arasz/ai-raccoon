@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -6,6 +7,9 @@ namespace AiRaccoon.Setup.Serve;
 
 /// <summary>The live backend URL, or null with the `serve` exit code when it never answered.</summary>
 internal readonly record struct BackendResult(string? Url, int? ServeExitCode);
+
+/// <summary>Raised when the backend binary could not be launched at all; carries the operator's reason.</summary>
+internal sealed class BackendStartException(string message, Exception inner) : Exception(message, inner);
 
 /// <summary>
 ///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020): probe first, else start
@@ -87,9 +91,7 @@ internal sealed partial class BackendLauncher
             // One last probe: another starter may have won the port between the two. It gets its own
             // bound, because the budget token may already be spent.
             cancellationToken.ThrowIfCancellationRequested();
-            using var lastChanceBudget = new CancellationTokenSource(LastChanceBudget, _timeProvider);
-            using var lastChance = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lastChanceBudget.Token);
-            if (await _probe.RespondsAsync(port, lastChance.Token))
+            if (await ProbeWithinAsync(port, LastChanceBudget, cancellationToken))
             {
                 Log.BackendLive(_logger, url);
                 return new BackendResult(url, null);
@@ -97,6 +99,21 @@ internal sealed partial class BackendLauncher
         }
 
         return GaveUp(url, backend.HasExited ? backend.ExitCode : null);
+    }
+
+    /// <summary>A probe under its own bound: the bound expiring is a miss, the caller's token is not.</summary>
+    private async Task<bool> ProbeWithinAsync(int port, TimeSpan bound, CancellationToken cancellationToken)
+    {
+        using var boundary = new CancellationTokenSource(bound, _timeProvider);
+        using var probing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, boundary.Token);
+        try
+        {
+            return await _probe.RespondsAsync(port, probing.Token);
+        }
+        catch (OperationCanceledException) when (boundary.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private BackendResult GaveUp(string url, int? serveExitCode)
@@ -124,7 +141,16 @@ internal sealed partial class BackendLauncher
             startInfo.ArgumentList.Add(argument);
         }
 
-        var backend = Process.Start(startInfo)!;
+        Process backend;
+        try
+        {
+            backend = Process.Start(startInfo)!;
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
+        {
+            throw new BackendStartException($"could not start {fileName} ({ex.Message})", ex);
+        }
+
         _ = DrainAsync(backend.StandardOutput);
         _ = DrainAsync(backend.StandardError);
         return backend;

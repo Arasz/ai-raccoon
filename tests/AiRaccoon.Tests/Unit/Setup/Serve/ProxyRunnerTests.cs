@@ -1,0 +1,40 @@
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
+using AiRaccoon.Setup.Serve;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Unit.Setup.Serve;
+
+/// <summary>
+///     ProxyRunner acceptance (ADR-0020): a port the proxy cannot dial is refused outright, because
+///     spawning a backend on a port nobody can reach orphans it until the idle watchdog retires it.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class ProxyRunnerTests : IDisposable
+{
+    private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-proxy-runner");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
+    [Theory]
+    [InlineData(0)] // "any free port": the spawned serve binds one the proxy can never learn
+    [InlineData(70000)] // out of range: EndpointFor cannot even build the URI
+    public async Task Run_WithAPortItCannotDial_RefusesWithoutSpawningABackend(int port)
+    {
+        var stderr = new StringWriter();
+        var config = new ServerConfig(port, McpTransport.Proxy,
+            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+
+        var exit = await ProxyRunner.RunAsync(config, stderr, TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        var message = stderr.ToString();
+        message.ShouldContain("--port 0");
+        // Names the supported way to get a random port instead.
+        message.ShouldContain("serve --port 0");
+        // Nothing was started: "serve exit" only ever appears once a backend has been spawned.
+        message.ShouldNotContain("serve exit");
+    }
+}

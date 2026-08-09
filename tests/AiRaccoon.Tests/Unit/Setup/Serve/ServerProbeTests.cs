@@ -48,6 +48,27 @@ public sealed class ServerProbeTests : IDisposable
         responds.ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task Probe_WhenTheCallerCancels_ThrowsInsteadOfReportingNoServer()
+    {
+        var port = HoldSilentListener();
+        using var caller = new CancellationTokenSource();
+        await caller.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            ServerProbe.ForLoopback().RespondsAsync(port, caller.Token));
+    }
+
+    [Fact]
+    public async Task Probe_WhenItsOwnTimeoutExpires_ReportsNoServer()
+    {
+        var port = HoldSilentListener();
+
+        var responds = await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+
+        responds.ShouldBeFalse();
+    }
+
     /// <summary>A plain-HTTP listener that answers 200 OK with text — anything but an MCP endpoint.</summary>
     private int HoldForeignListener()
     {
@@ -71,6 +92,36 @@ public sealed class ServerProbeTests : IDisposable
                 catch (Exception ex) when (ex is ObjectDisposedException or SocketException or IOException)
                 {
                     return;
+                }
+            }
+        });
+
+        return port;
+    }
+
+    /// <summary>A listener that accepts and never answers, so every probe attempt runs into its own timeout.</summary>
+    private int HoldSilentListener()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        _listeners.Add(listener);
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        _ = Task.Run(async () =>
+        {
+            var accepted = new List<TcpClient>();
+            try
+            {
+                while (true)
+                {
+                    accepted.Add(await listener.AcceptTcpClientAsync());
+                }
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or SocketException or IOException)
+            {
+                foreach (var client in accepted)
+                {
+                    client.Dispose();
                 }
             }
         });

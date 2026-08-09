@@ -10,16 +10,18 @@ using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
 ///     Loopback-token acceptance against a real `serve`
 ///     (docs/plans/2026-08-09-mcp-loopback-token-flow.md): /mcp demands the header, /observability
 ///     stays open, and the 401 keeps ServeRunner's probe recognizing the server.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
-[Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class McpTokenGateTests(McpTokenGateTests.ServeFixture serve) : IClassFixture<McpTokenGateTests.ServeFixture>
+[Trait(TestCategories.Category, TestCategories.E2E)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(E2ETestCollection.Name)]
+public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve)
+    : IClassFixture<McpTokenGateE2ETests.ServeFixture>
 {
     private static readonly HttpClient HttpClient = new();
 

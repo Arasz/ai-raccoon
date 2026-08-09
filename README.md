@@ -97,7 +97,7 @@ Launch flags (startup-scoped only):
 | `--transport` | `proxy`, `stdio`, `http`, `https` (https → warning) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | any port; `0` = random free port | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
 
 Diagnostics go to stderr; stdout carries only MCP protocol frames — true of
 the proxy too, which relays JSON-RPC frames without adding output of its own.

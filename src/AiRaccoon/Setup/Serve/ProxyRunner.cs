@@ -20,6 +20,14 @@ internal static partial class ProxyRunner
         Guard.IsNotNull(config);
         Guard.IsNotNull(stderr);
 
+        // Refused before anything is spawned: a backend on port 0 binds a random port the proxy can
+        // never dial, and ADR-0020 forbids the proxy from killing what it started.
+        if (config.Port is < 1 or > 65535)
+        {
+            await stderr.WriteLineAsync(Undialable(config.Port));
+            return ExitCode.ProxyBackendUnavailable;
+        }
+
         using var loggerFactory = CreateLoggerFactory(config);
         var logger = loggerFactory.CreateLogger("ProxyRunner");
         await using var backends = new BackendSessions(config, logger, loggerFactory);
@@ -143,8 +151,19 @@ internal static partial class ProxyRunner
 
         public async Task<McpClient> OpenAsync(string? revision, CancellationToken cancellationToken)
         {
-            var acquired = await _launcher.AcquireAsync(config.Port, Executable(), ServeArguments(config),
-                cancellationToken);
+            BackendResult acquired;
+            try
+            {
+                acquired = await _launcher.AcquireAsync(config.Port, Executable(), ServeArguments(config),
+                    cancellationToken);
+            }
+            catch (BackendStartException ex)
+            {
+                // `dotnet tool update` can replace the binary under a running proxy (ADR-0019):
+                // a launch that cannot exec is the same operator line, never a stack dump.
+                throw new BackendUnavailableException(Unavailable(ex.Message));
+            }
+
             if (acquired.Url is null)
             {
                 throw new BackendUnavailableException(Unavailable(
@@ -197,7 +216,13 @@ internal static partial class ProxyRunner
 
     /// <summary>This very binary: the backend is another ai-raccoon, started as `serve`.</summary>
     private static string Executable() =>
-        Environment.ProcessPath ?? throw new InvalidOperationException("the running executable path is unknown");
+        Environment.ProcessPath ?? throw new BackendUnavailableException(
+            Unavailable("the running executable path is unknown"));
+
+    /// <summary>The line a port the proxy cannot dial ends on; names the supported random-port path.</summary>
+    private static string Undialable(int port) =>
+        $"ai-raccoon: the proxy cannot dial --port {port}: expected 1-65535, and 0 means \"any free " +
+        "port\"; pass a fixed --port, or run: ai-raccoon serve --port 0";
 
     /// <summary>Every way the backend can be unusable ends on the same line, with the same escape hatch.</summary>
     private static string Unavailable(string reason) =>

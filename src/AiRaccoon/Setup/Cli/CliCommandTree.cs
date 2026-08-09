@@ -23,7 +23,7 @@ internal static class CliCommandTree
     /// as its fallback when serve's own --port is absent (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
-        Description = "HTTP port to bind; 0 picks a random free port",
+        Description = "HTTP backend port the proxy dials or starts (1-65535); 0 is serve-only",
         HelpName = "port",
         DefaultValueFactory = _ => 7721
     };

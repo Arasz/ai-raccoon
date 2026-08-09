@@ -147,6 +147,29 @@ public sealed class BackendLauncherTests : IDisposable
     }
 
     [Fact]
+    public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
+    {
+        var port = FreePort();
+
+        var failure = await Should.ThrowAsync<BackendStartException>(() =>
+            Launcher().AcquireAsync(port, "ai-raccoon-no-such-executable", [], TestContext.Current.CancellationToken));
+
+        failure.Message.ShouldContain("ai-raccoon-no-such-executable");
+    }
+
+    [Fact]
+    public async Task Acquire_WhenTheCallerHasAlreadyCancelled_ThrowsWithoutSpawning()
+    {
+        var port = FreePort();
+        using var caller = new CancellationTokenSource();
+        await caller.CancelAsync();
+
+        // An unstartable command: a spawn would surface as BackendStartException, never as a cancel.
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            Launcher().AcquireAsync(port, "ai-raccoon-no-such-executable", [], caller.Token));
+    }
+
+    [Fact]
     public async Task Acquire_WhenTheCallerCancels_PropagatesInsteadOfReportingFailure()
     {
         var port = FreePort();
