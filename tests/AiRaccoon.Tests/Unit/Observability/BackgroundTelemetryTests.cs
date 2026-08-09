@@ -164,4 +164,47 @@ public sealed class BackgroundTelemetryTests
         probe.Spans.ShouldHaveSingleItem().Tags.ShouldContain(kv => kv.Key == "projects" && kv.Value == "3");
         probe.Durations.ShouldHaveSingleItem().Tags.ShouldNotContainKey("projects");
     }
+
+    // ---- PartiallyFailed (H8): a pass that ran but where some units of work failed ----
+
+    [Fact]
+    public void PartiallyFailed_AlwaysEmitsASpan_EvenWithoutNoteWork()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.PartiallyFailed(2);
+        }
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Tags.ShouldContain(kv => kv.Key == "failures" && kv.Value == "2");
+    }
+
+    [Fact]
+    public void PartiallyFailed_RecordsADistinctResult_NotSuccess()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.PartiallyFailed(1);
+        }
+
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldNotBe("success");
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldNotBe("success");
+    }
+
+    [Fact]
+    public void PartiallyFailed_ThenDispose_RecordsExactlyOneMeasurement()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        var scope = probe.Telemetry.Begin(Operation);
+        scope.PartiallyFailed(1);
+        scope.Dispose();
+
+        probe.Durations.Count.ShouldBe(1);
+        probe.Passes.Count.ShouldBe(1);
+    }
 }
