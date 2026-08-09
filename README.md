@@ -6,7 +6,7 @@ An MCP server that gives AI agents persistent, project-scoped memory. It runs lo
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.6.1)
+## What's new (from 1.2.0 to 1.6.2)
 
 - **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that probes port 7721 and starts the backend itself, so every client on the machine shares one embedding model and one bank instead of paying for its own.
   [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
