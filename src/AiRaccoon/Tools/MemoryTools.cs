@@ -62,7 +62,7 @@ public sealed class MemoryTools(
 
             var entry = await store.WriteAsync(request, cancellationToken);
             var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -118,7 +118,7 @@ public sealed class MemoryTools(
 
             var results = await store.SearchAsync(searchQuery, cancellationToken);
             var result = new SearchResultList(results);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -141,7 +141,7 @@ public sealed class MemoryTools(
             await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
             var files = await store.ListFilesAsync(projectId, cancellationToken);
             var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -164,7 +164,7 @@ public sealed class MemoryTools(
             await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
             var stats = await store.GetStatsAsync(projectId, cancellationToken);
             var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -191,7 +191,7 @@ public sealed class MemoryTools(
 
             var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
             var result = new DeletedResult(deleted ? 1 : 0);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -218,7 +218,7 @@ public sealed class MemoryTools(
 
             var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
             var result = new DeletedContextResult(deleted);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -247,7 +247,7 @@ public sealed class MemoryTools(
 
             var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
             var result = new IngestResult(indexed);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -276,7 +276,7 @@ public sealed class MemoryTools(
 
             var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
             var result = new ScannedResult(scanned);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -302,7 +302,7 @@ public sealed class MemoryTools(
 
             var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
             var embedResult = new EmbedResult(result.Processed, result.Pending);
-            var envelope = await gate.WrapAsync(embedResult, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, embedResult, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }

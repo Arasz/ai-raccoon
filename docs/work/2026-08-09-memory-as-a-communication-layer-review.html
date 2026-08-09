@@ -1,0 +1,674 @@
+<meta charset="utf-8">
+<title>REVIEW TITLE — review</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+    title: "Six corrections, eight decisions, three open items",
+    subtitle: "Design exploration · 2026-08-09 · memory as a communication layer",
+    source: "docs/work/2026-08-09-memory-as-a-communication-layer.md",
+    outName: "2026-08-09-memory-as-a-communication-layer-feedback.md",
+    expectedDir: "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/memory-as-a-communication-layer/docs/work",
+    storageKey: "refinement:2026-08-09-memory-comms-layer:v1"
+  };
+
+  var DECISIONS = [
+    {
+      group: "Corrections — true regardless of what we decide about the board",
+      id: "C1",
+      claim: "No agent can set a TTL on a memory entry, because no tool exposes one",
+      detail: [
+        "<code>SetEntryTtlAsync</code> is plumbed all the way down — <code>IMemoryStore.cs:85</code> → <code>SqliteMemoryStore.cs:679</code> → <code>ForgettingPolicyService.cs:36</code> — but a grep of <code>src/AiRaccoon/Tools/</code> for <code>ttlDays</code> returns <strong>nothing</strong>.",
+        "So zero rows in the bank can ever carry a TTL. The capability exists in code and is unreachable from the protocol."
+      ],
+      why: "<b>If we don't fix it:</b> every design that says “TTL'd claims” is building on a parameter agents cannot pass. It also means the expiry branch has never run against real data.",
+      placeholder: "Notes — expose ttlDays on memory_write? on a new tool? or delete the store method?"
+    },
+    {
+      id: "C2",
+      claim: "The sweep reaper does not exist — nothing schedules it",
+      detail: [
+        "<code>SweepAsync</code> has exactly one caller in the whole tree: <code>SweepTools.cs:40</code>, the manual <code>memory_sweep</code> tool, with <code>dryRun</code> defaulting to <strong>true</strong>.",
+        "Three hosted services are registered (<code>Dependencies.cs:76,118,144</code>) and none of them sweeps. A reaper that runs only when an agent remembers to ask is not a reaper."
+      ],
+      why: "<b>If we don't fix it:</b> anything with <code>expires_at</code> leaks forever. Combined with C1, the TTL path is dead at both ends.",
+      placeholder: "Notes — put SweepService on a PeriodicTimer beside the other three?"
+    },
+    {
+      id: "C3",
+      claim: "agentId is inert, and on memory_workspace_begin it is discarded entirely",
+      detail: [
+        "<code>entries.agent_id</code> is written (<code>MemorySql.cs:89</code>) and never read back — no SELECT projects it, <code>MemoryEntry</code> has no agent field.",
+        "<code>memory_workspace_begin</code> declares <code>agentId</code> and <code>name</code> (<code>WorkspaceTools.cs:31,34</code>) then calls <code>BeginAsync(projectId, ct)</code> at <code>:42</code>. The <code>workspaces.agent_id</code> and <code>workspaces.name</code> columns are never written by any path."
+      ],
+      why: "<b>If we don't fix it:</b> three parameters cost tokens on every <code>tools/list</code> and document behaviour the server does not have. A caller reasonably believes provenance is being recorded.",
+      placeholder: "Notes — wire them, or delete them?"
+    },
+    {
+      id: "C4",
+      claim: "The tool registration list is hand-maintained in two places",
+      detail: [
+        "<code>McpServerSetup.cs:57-64</code> (stdio host) and <code>:143-150</code> (web host) are two copies of the same <code>WithTools&lt;…&gt;</code> sequence, with nothing comparing them.",
+        "This is the <code>derive-or-delete-the-list</code> invariant exactly. Any new tool means editing both, and a miss is silent — the tool simply does not exist on one transport."
+      ],
+      why: "<b>If we don't fix it:</b> it is a prerequisite for adding any tool at all, board or otherwise.",
+      placeholder: "Notes — extract one WithAiRaccoonTools() helper called from both?"
+    },
+    {
+      id: "C5",
+      claim: "The response envelope is unbounded in project count",
+      detail: [
+        "<code>PromotionMeta.WaitingByProject</code> and <code>CapacityByProject</code> are dictionaries keyed by project. Measured live at 5 projects: <strong>527 bytes ≈ 155 tokens</strong>, growing ~86 bytes per project.",
+        "That rides on all 22 tools, every call. At 20 projects it is ~530 tokens per call."
+      ],
+      why: "<b>If we don't fix it:</b> “the envelope is bounded” is false today, before any board exists. Capping it is owed either way.",
+      placeholder: "Notes — top-N with an overflow count? what N?"
+    },
+    {
+      id: "C6",
+      claim: "The advisory envelope notice is empirically ignored — we already ran this experiment",
+      detail: [
+        "<code>ToolGate.WrapAsync</code> attaches <code>PromotionMeta</code> to every response on all 22 tools, by design: <em>“always present (zero is informative, never absent)”</em> (<code>PromotionMeta.cs:3</code>).",
+        "Measured from this session's own responses: <strong>616 items waiting, the oldest for 16.6 hours</strong>, average 7.5 hours, across five projects. An unmissable per-call notice has said so for two-thirds of a day and no agent acted."
+      ],
+      why: "<b>Why it matters:</b> this is the exact mechanism the request proposes for board state (“return the state of the board in each tool response”). The one thing that <em>does</em> change agent behaviour here is the memory-first gate — because it <strong>denies</strong>, not because it informs.",
+      placeholder: "Notes — do you read the meta block? Does this match your experience?"
+    },
+
+    {
+      group: "The design",
+      id: "D1",
+      claim: "Ship T0 now: two PreToolUse hooks, no AiRaccoon change",
+      detail: [
+        "A dirty-file check on <code>Edit|Write|MultiEdit</code> (<code>git worktree list</code> + per-tree <code>git status --porcelain</code> — measured at <strong>0.51s across 31 worktrees</strong>, and it found a live three-way collision), and a blast-radius <strong>deny</strong> on <code>Bash</code> matching <code>pkill|killall|build-server shutdown</code> when more than one lane is live.",
+        "Hours of work, zero token tax, totally reversible, no new tables or tools."
+      ],
+      why: "<b>Why it matters:</b> the deny is the only mechanism in any tier that would have prevented incident 8 — the one incident in the article note that actually landed.",
+      placeholder: "Notes"
+    },
+    {
+      id: "D2",
+      claim: "Do not introduce an agent identity — use the git worktree path as the lane key",
+      detail: [
+        "There is nothing to borrow: the HTTP transport is <code>Stateless = true</code> (<code>McpServerSetup.cs:196</code>) and nothing reads <code>ClientInfo</code>. A self-declared <code>agentId</code> fails open — two careless agents pick <code>\"claude\"</code> and silently impersonate each other.",
+        "A worktree path is computed by a hook from <code>cwd</code>, so it is <em>observed</em> rather than claimed. The article note's own stated limit is that everything relied on accurate self-report."
+      ],
+      why: "<b>Open risk:</b> worktree paths are not unique across machines. If notices ever sync, they need a machine prefix — or notices never sync, like settings (ADR-0014).",
+      placeholder: "Notes — or do you want a real identity for other reasons?"
+    },
+    {
+      id: "D3",
+      claim: "Do not put board state in the tool-response envelope",
+      detail: [
+        "It would cost roughly 53 tokens × 22 tools × every call to reproduce a mechanism C6 shows agents ignore.",
+        "If a signal is wanted, it should be an enforcing <code>PreToolUse</code> deny on the specific action — narrow and blocking — not a notice attached to everything."
+      ],
+      why: "<b>If we do it anyway:</b> we pay a permanent tax on every call for a channel with a measured 0% action rate.",
+      placeholder: "Notes"
+    },
+    {
+      id: "D4",
+      claim: "If a claim surface is built, build it on label: contexts before building a table",
+      detail: [
+        "The board is already expressible: <code>memory_write(context: \"board/&lt;topic&gt;\")</code> posts, <code>memory_search(contextLabel: …)</code> reads topic-scoped, and <code>ContextNaming.LabelContext</code> (<code>ContextNaming.cs:23-27</code>) already namespaces it.",
+        "On that path the marginal build is C1 + C2 + a naming convention + tests proving expiry fires — versus a new table, a schema-ladder step to v4, two tools and a reaper (5 work packages)."
+      ],
+      why: "<b>Why it matters:</b> it fixes C1 and C2 as a side effect, and those are owed anyway. The table can still be built later if the convention proves too loose.",
+      placeholder: "Notes — or go straight to the notices table?"
+    },
+    {
+      id: "D5",
+      claim: "Do not build T2 (the full pub/sub board: topics, subscriptions, cursors, replies)",
+      detail: [
+        "Four tables, six tools, ~1.5–2 agent-weeks, ~40–90 tokens on every call. Two of its four registries (<code>board_cursors</code>, <code>board_subscriptions</code>) are the stale-<code>current-session.json</code> failure reproduced in SQL.",
+        "Its one incremental win over a claims table is incident 2 — and it catches that only if two agents independently guess the same free-text topic."
+      ],
+      why: "<b>Why it matters:</b> no MCP server and no mainstream agent framework uses topic pub/sub for resource contention; they all use KV, queues or locks. We would be first, against that grain.",
+      placeholder: "Notes"
+    },
+    {
+      id: "D6",
+      claim: "Record claude/channel (T3) as a rejected alternative and stop costing it",
+      detail: [
+        "Three independent blockers: <code>Stateless = true</code> drops unsolicited notifications; <code>claude/channel</code> is stdio-only and ADR-0020 makes stdio a <em>proxy</em> that would consume backend notifications; and it needs <code>--dangerously-load-development-channels</code> plus a full-screen warning per client per machine.",
+        "It is also a research preview with silent drops, zero portability, and is documented by Anthropic as a prompt-injection vector."
+      ],
+      why: "<b>Why it matters:</b> it is the only real push path into a model's context, so someone will re-derive it every few months unless the reasoning is on file.",
+      placeholder: "Notes"
+    },
+    {
+      id: "D7",
+      claim: "Route semantic coupling (incident 2) to code-review-graph, not to any board",
+      detail: [
+        "The <code>project_id</code> conflict is a string-literal edge between <code>OtlpExport.cs:32</code> (<code>.AddMeter(\"AiRaccoon.PromotionQueue\")</code>) and <code>PromotionQueueMetrics.cs:24</code> (<code>new Meter(\"AiRaccoon.PromotionQueue\")</code>) — two files, disjoint diffs, both suites green.",
+        "That is a static edge, and this repo already runs the <code>code-review-graph</code> MCP server. A graph query catches it deterministically; a board catches it only if someone volunteers intent and someone else picks the same topic."
+      ],
+      why: "<b>Why it matters:</b> incident 2 is the case the proposal most wants to claim, and it is the one it is least able to deliver.",
+      placeholder: "Notes"
+    },
+    {
+      id: "D8",
+      claim: "The article and the build are separable — part one is publishable today",
+      detail: [
+        "<code>docs/work/2026-08-07-cross-session-agent-coordination.md</code> needs no engineering to publish. Its thesis is that coordination emerged <em>without</em> a mechanism.",
+        "Shipping a mechanism does not illustrate that thesis — but the note names its own missing mechanism twice, so a part two (“here is what we built, and what the evidence said about advisory notices”) is a stronger piece than part one alone."
+      ],
+      why: "<b>Why it matters:</b> if the article is the real goal, it does not need to wait on any of the decisions above. This is a narrative argument and should not carry an engineering vote.",
+      placeholder: "Notes — publish now, hold for part two, or both?"
+    },
+
+    {
+      group: "Open items",
+      id: "O1",
+      claim: "ADR-0020 exists only in another worktree, not in main",
+      detail: [
+        "It is at <code>.ai-badger/worktrees/mcp-server/docs/adr/0020-always-on-http-stdio-proxy.md</code>, accepted 2026-08-09. <code>docs/adr/</code> on main stops at 0019.",
+        "The T3 analysis in D6 depends on what that proxy does with backend-originated notifications, which the ADR does not specify."
+      ],
+      why: "<b>Open risk:</b> a decision on D6 rests on an unmerged document, and the ADR number is claimed but not visible to anyone reading main.",
+      placeholder: "Notes"
+    },
+    {
+      id: "O2",
+      claim: "Is cross-machine coordination a real need or a speculative one?",
+      detail: [
+        "ADR-0014 (settings never sync) exists because multiple machines share one bank through an object store, and <code>Infrastructure/Sync/</code> ships S3 and Azure Blob stores.",
+        "Sync moves <code>entries</code> — so a claim written as an entry crosses machines for free. None of git, hooks, or unix-socket messaging leaves the host."
+      ],
+      why: "<b>Why it matters:</b> this is the one capability where the alternatives are not merely worse — they are absent. If you never coordinate across machines, it is worth nothing.",
+      placeholder: "Notes — do you actually run this repo on more than one machine?"
+    },
+    {
+      id: "O3",
+      claim: "The prior LOW ranking rested on a premise that has expired",
+      detail: [
+        "The 2026-08-04 gap analysis rated a coordination table LOW and last, with one stated reason: <em>“AiRaccoon's primary use case is currently single-agent.”</em>",
+        "Measured today: 31 worktrees, 17 live <code>claude</code> processes, 3 cross-session sockets, 4 tasks started today."
+      ],
+      why: "<b>Why it matters:</b> collision probability scales roughly with the square of concurrent lanes. Eight incidents at N=2 could be eighty at N=10 — and the mix would shift toward the semantic class T0 cannot see.",
+      placeholder: "Notes — how many lanes do you expect to run concurrently in a month?"
+    }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* The status line is the whole point of the fallback chain: it names the mechanism used and
+     where the bytes went. Never let a save be silent. */
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown (see references/result-template.md) ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory -------------------------------------------------
+     A file:// page cannot discover its own folder, and startIn takes only the
+     WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+     What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+     IndexedDB (which works on file://), and write silently on every later save. Handles
+     survive reload; the permission does not, so it is re-requested inside the click
+     handler, where a user gesture is available. Net effect: one dialog ever, not one per
+     save. Choose the folder holding this HTML file and the picker never returns. */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  /// Writes into a granted directory. Returns false if permission is refused or gone.
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+     Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+     context, but throws SecurityError unless called inside the click handler. Firefox and
+     WebKit do not expose it at all and fall straight through to the download. */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        // 1a) Already granted a folder in a previous session — write with no dialog at all.
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    // 3) clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      // 4) always-visible textarea — the guaranteed way out
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>

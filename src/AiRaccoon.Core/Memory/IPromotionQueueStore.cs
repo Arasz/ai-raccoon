@@ -22,6 +22,10 @@ public interface IPromotionQueueStore
     /// <summary>Total count, per-project counts, and average wait age (now − created_at) over the queue.</summary>
     Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Waiting count and wait ages for one project — the whole bank when projectId is null — plus the occupying-project count.</summary>
+    Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>The victim row of one project — lowest score, oldest created_at — removed; null when the project's queue is empty.</summary>
     Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
         CancellationToken cancellationToken = default);
