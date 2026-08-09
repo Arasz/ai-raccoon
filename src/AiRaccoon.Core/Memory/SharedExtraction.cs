@@ -36,7 +36,11 @@ public sealed record ShareCandidate(
 /// <summary>Extraction outcome: ranked candidates; in promote mode the hashes actually promoted.</summary>
 public sealed record ShareExtractResult(
     IReadOnlyList<ShareCandidate> Candidates,
-    IReadOnlyList<string> PromotedHashes);
+    IReadOnlyList<string> PromotedHashes)
+{
+    public int SkippedDuplicates { get; init; }
+    public IReadOnlyList<PromoteFailure> Failures { get; init; } = [];
+}
 
 /// <summary>Dedup index over the existing shared tier.</summary>
 public sealed record SharedIndex(IReadOnlyList<string> Values, IReadOnlyList<string> Paths);

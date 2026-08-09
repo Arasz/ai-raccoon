@@ -62,6 +62,7 @@ public sealed partial class PromotionQueueService(
 
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         var promoted = new List<string>();
+        var failures = new List<PromoteFailure>();
         var skipped = 0;
         foreach (var projectId in projectIds)
         {
@@ -69,24 +70,44 @@ public sealed partial class PromotionQueueService(
                 .Take(limit).ToList();
             foreach (var row in rows)
             {
-                // Claim before sharing: a concurrent discard may have removed this row since the
-                // ListAsync snapshot above. An empty result means this call lost the race.
-                var claimed = await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
-                if (claimed.Count == 0)
+                try
                 {
-                    continue;
-                }
+                    // Claim before sharing: a concurrent discard may have removed this row since the
+                    // ListAsync snapshot above. An empty result means this call lost the race.
+                    var claimed = await queue.DiscardAsync(projectId, row.Hash, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (claimed.Count == 0)
+                    {
+                        continue;
+                    }
 
-                if (IsDuplicate(row, sharedIndex))
-                {
-                    skipped++;
+                    if (IsDuplicate(row, sharedIndex))
+                    {
+                        skipped++;
+                    }
+                    else
+                    {
+                        await store.ShareAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
+                        promoted.Add(row.Hash);
+                        var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
+                        metrics.RecordPromoted(projectId, wait);
+                    }
                 }
-                else
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    await store.ShareAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
-                    promoted.Add(row.Hash);
-                    var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
-                    metrics.RecordPromoted(projectId, wait);
+                    // The row is already claimed off the queue by this point; re-queuing it would
+                    // reopen the discard-before-share race and reset CreatedAt. Drop it and report
+                    // why instead — the rest of this batch, and the trailing snapshot, still run.
+                    if (ex is UnknownHashException)
+                    {
+                        failures.Add(new PromoteFailure(projectId, row.Hash, "stale-hash"));
+                        Log.StaleHash(logger, projectId, row.Hash, ex);
+                    }
+                    else
+                    {
+                        failures.Add(new PromoteFailure(projectId, row.Hash, "share-failed"));
+                        Log.ShareFailed(logger, projectId, row.Hash, ex);
+                    }
                 }
             }
         }
@@ -94,7 +115,7 @@ public sealed partial class PromotionQueueService(
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
         Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, skipped);
-        return new PromoteOutcome(promoted, skipped, remaining.PerProject);
+        return new PromoteOutcome(promoted, skipped, remaining.PerProject) { Failures = failures };
     }
 
     public async Task<int> DiscardAsync(string projectId, string? hash,
@@ -194,5 +215,13 @@ public sealed partial class PromotionQueueService(
         [LoggerMessage(EventId = 704, Level = LogLevel.Warning,
             Message = "Queue-capacity read failed; falling back to the default")]
         public static partial void CapReadFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 705, Level = LogLevel.Debug,
+            Message = "Promote candidate stale for {ProjectId}: {Hash} (claimed but no longer resolves)")]
+        public static partial void StaleHash(ILogger logger, string projectId, string hash, Exception exception);
+
+        [LoggerMessage(EventId = 706, Level = LogLevel.Warning,
+            Message = "Promote candidate failed to share for {ProjectId}: {Hash}")]
+        public static partial void ShareFailed(ILogger logger, string projectId, string hash, Exception exception);
     }
 }

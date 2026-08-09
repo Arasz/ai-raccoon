@@ -43,9 +43,15 @@ public sealed record EvictedRow(string ProjectId, string Hash, double Score, str
 /// <summary>Outcome of persisting candidates into the propose tier.</summary>
 public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evicted);
 
+/// <summary>One candidate that could not be promoted: claimed from the queue but never shared.</summary>
+public sealed record PromoteFailure(string ProjectId, string Hash, string Reason);
+
 /// <summary>Outcome of promoting from the queue: shared hashes, duplicates skipped, what still waits.</summary>
 public sealed record PromoteOutcome(
     IReadOnlyList<string> PromotedHashes,
     int SkippedDuplicates,
-    IReadOnlyDictionary<string, int> RemainingByProject);
+    IReadOnlyDictionary<string, int> RemainingByProject)
+{
+    public IReadOnlyList<PromoteFailure> Failures { get; init; } = [];
+}
 

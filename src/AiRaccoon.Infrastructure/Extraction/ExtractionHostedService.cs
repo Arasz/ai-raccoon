@@ -104,7 +104,18 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                         .ConfigureAwait(false);
                     promotedTotal += outcome.PromotedHashes.Count;
-                    Log.Pass(_logger, projectId, mode, outcome.PromotedHashes.Count, outcome.PromotedHashes.Count);
+                    var candidateCount = outcome.PromotedHashes.Count + outcome.SkippedDuplicates
+                        + outcome.Failures.Count;
+                    Log.Pass(_logger, projectId, mode, candidateCount, outcome.PromotedHashes.Count);
+                    if (outcome.Failures.Count > 0)
+                    {
+                        Log.PromoteFailures(_logger, projectId, outcome.Failures.Count);
+                        foreach (var failure in outcome.Failures)
+                        {
+                            Log.PromoteFailureDetail(_logger, projectId, failure.Hash, failure.Reason);
+                        }
+                    }
+
                     continue;
                 }
 
@@ -178,5 +189,14 @@ public sealed partial class ExtractionHostedService : BackgroundService
         [LoggerMessage(EventId = 506, Level = LogLevel.Warning,
             Message = "Extraction interval read failed; falling back to the default")]
         public static partial void IntervalReadFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 508, Level = LogLevel.Warning,
+            Message = "Promote for {ProjectId} had {Count} candidate failure(s); see the debug log for hashes")]
+        public static partial void PromoteFailures(ILogger logger, string projectId, int count);
+
+        [LoggerMessage(EventId = 509, Level = LogLevel.Debug,
+            Message = "Promote failure for {ProjectId}: {Hash} ({Reason})")]
+        public static partial void PromoteFailureDetail(ILogger logger, string projectId, string hash,
+            string reason);
     }
 }

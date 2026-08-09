@@ -123,6 +123,27 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task ShareExtract_Promote_ForwardsSkippedDuplicatesAndFailures()
+    {
+        // Without this, a caller receiving promotedHashes: [] can't tell "everything was already
+        // shared" from "everything failed" — the same defect PromoteOutcome.Failures fixes one
+        // level down, repeated at the wire if ShareTools doesn't forward it.
+        _queue.PromoteOutcome = new PromoteOutcome(["h1"], 2, new Dictionary<string, int>())
+        {
+            Failures = [new PromoteFailure("acme", "h2", "stale-hash")]
+        };
+
+        var result = await _share.ShareExtract(["acme"], mode: "promote",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.SkippedDuplicates.ShouldBe(2);
+        result.Data!.Failures.ShouldHaveSingleItem();
+        result.Data!.Failures[0].ProjectId.ShouldBe("acme");
+        result.Data!.Failures[0].Hash.ShouldBe("h2");
+        result.Data!.Failures[0].Reason.ShouldBe("stale-hash");
+    }
+
+    [Fact]
     public async Task ShareExtract_DefaultLimit_MatchesSharedConstant()
     {
         // 25 eligible rows: the default limit must bind at the shared constant, not a literal.
