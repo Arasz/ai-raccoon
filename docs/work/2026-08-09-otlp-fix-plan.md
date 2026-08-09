@@ -93,6 +93,19 @@ put the defect in front of the check and watch it fail before fixing it.
 | **WP18** | `ServerInfo` reads resolved state (panel) | The CLI verb cannot report "enabled" for an endpoint the exporter refused | New test; this is a **regression WP4 would otherwise introduce** |
 | **WP19** | `IMeterFactory` migration | Meters come from the factory; the two `IDisposable`s go | Existing suite — runs **last**, on settled constructors |
 
+### WP5's seam, located
+
+The pre-host logging problem is **one shared seam with three call sites**, not three unrelated ones.
+`ServeRunner.RunAsync`, `ObservabilityRunner.RunAsync` and now `OtlpExport.AddOtlpExport` each
+hand-roll a throwaway `LoggerFactory.Create(b => b.AddConsole(…))`, because none of them has a DI
+logger yet — two are pre-host CLI runners and the third runs *during* service registration, before
+`builder.Build()`.
+
+So WP5 does not thread a `quiet` flag through three signatures. It extracts one helper — a
+`PreHostLogging.CreateLogger(category, quiet)` shape — that all three call, and branches there to a
+file sink or console. WP4 deliberately left its warning isolated in a single `if` block immediately
+before the early return, so WP5 can replace that block without touching the validation logic.
+
 ## Sequencing
 
 `OtlpExport.cs` and `McpServerSetup.cs` are the hot files — five and three reasons to edit them
