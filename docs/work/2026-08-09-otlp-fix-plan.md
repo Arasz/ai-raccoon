@@ -143,9 +143,26 @@ the work rather than merely confirming it:
 - **D6 → combined mode is reachable**, and logging configuration gets **one home that accepts the
   transport**. See "WP5's seam" above — this merges two configuration sites, it does not just add a
   sink to one.
-- **D8 carried a question**, not an objection: is there a *profile* concept in the tooling that could
-  say "capture everything we care about" instead of a hand-typed provider list? Being researched;
-  the derived-registry fallback stands until that comes back.
+- **D8's question is answered: no user-definable profile concept exists**, and the answer suggests a
+  better shape than either option we had. Verified against Microsoft's docs and the `dotnet-monitor`
+  repo:
+  - `dotnet-trace --profile` is a **closed set** — `dotnet-common`, `dotnet-sampled-thread-time`,
+    `gc-verbose`, `gc-collect`, `database`. A project cannot register `AiRaccoon-full`.
+    (`cpu-sampling` was removed from `collect` as misleading; it survives only under the Linux-only
+    `collect-linux`.)
+  - **No wildcards.** `--providers` names are exact-match, so `AiRaccoon*` matches nothing — every
+    scope must be named in full. Same for `dotnet-counters --counters`, which has no profile concept
+    at all (it does accept a bare meter name to mean "all counters from that meter").
+  - `dotnet-monitor` has a real `TraceProfile` enum, but it is equally closed, and it lives in a
+    separate tool with its own config that never feeds the `dotnet-trace` command we print.
+  - The one mechanism that gives the *ergonomics* asked for is a **`.rsp` response file** —
+    `dotnet-trace @airaccoon.rsp` is genuinely one token. But a hand-written `.rsp` is another
+    hand-maintained list with exactly the drift this decision exists to prevent.
+
+  **So: generate the `.rsp` from the registry.** That is the synthesis — the owner gets the one-token
+  profile ergonomics, and the file cannot drift because nothing hand-maintains it. Rendering the
+  provider list inline stays as the zero-file fallback. Either way the list is derived, which is what
+  `dotnet-monitor`'s `Providers` array or a hand-written `.rsp` would have made us maintain anyway.
 
 The decisions themselves are recorded below as originally posed.
 
