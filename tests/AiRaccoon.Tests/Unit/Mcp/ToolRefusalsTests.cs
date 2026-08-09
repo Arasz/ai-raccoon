@@ -323,7 +323,7 @@ public sealed class ToolRefusalsTests : IDisposable
     [Fact]
     public void DocumentedPrefixes_MatchCodeExactlyInBothDirections()
     {
-        var doc = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
+        var doc = File.ReadAllText(TestData.RepoFile("docs/reference/agent-memory-server.md"));
         var section = ErrorShapesSection(doc);
         var documentedPrefixes = Regex.Matches(section, @"^\| `([a-z][a-z-]*)` \|", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
@@ -353,17 +353,4 @@ public sealed class ToolRefusalsTests : IDisposable
         return end < 0 ? doc[start..] : doc[start..end];
     }
 
-    private static string RepoFile(string relative)
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, relative);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
-    }
 }

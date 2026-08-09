@@ -230,7 +230,7 @@ and a backgrounded `serve` does not tell you what it is — so ask it:
 
 ```bash
 ai-raccoon serve observability counters   # dotnet-counters monitor -p 4711
-ai-raccoon serve observability trace      # dotnet-trace collect -p 4711 --providers AiRaccoon.MemoryTools
+ai-raccoon serve observability trace      # dotnet-trace collect -p 4711 --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http
 ai-raccoon serve observability pid        # 4711
 ai-raccoon serve observability otlp       # http://127.0.0.1:4317
 ```
