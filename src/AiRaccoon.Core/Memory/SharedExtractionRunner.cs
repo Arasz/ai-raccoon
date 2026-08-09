@@ -25,6 +25,11 @@ public sealed class SharedExtractionRunner(
         ArgumentNullException.ThrowIfNull(sharedIndex);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
+        // Auto-clear before ranking (ADR-0018): a row stamped by a retired scorer version is
+        // deleted rather than re-scored in place — it may no longer be a candidate at all, and the
+        // ranking below re-admits anything still eligible on merit in this same pass.
+        await queue.ClearStaleAsync(projectId, PromotionScorer.Version, cancellationToken).ConfigureAwait(false);
+
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
@@ -66,8 +71,8 @@ public sealed class SharedExtractionRunner(
         var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
         return candidates
             .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
-                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
+                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons, PromotionScorer.Version)
+                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons, PromotionScorer.Version))
             .ToList();
     }
 }

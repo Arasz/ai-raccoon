@@ -135,6 +135,20 @@ public sealed class FakePromotionQueue : IPromotionQueue
     public string? LastMetaProject { get; private set; }
     public bool MetaAsked { get; private set; }
 
+    /// <summary>(ProjectId, CurrentScorerVersion) for every ClearStaleAsync call, in order.</summary>
+    public List<(string ProjectId, int CurrentScorerVersion)> ClearStaleCalls { get; } = [];
+
+    /// <summary>Simulates the real store: removes this project's rows off-version from <see cref="Rows"/> so
+    /// a later ListAsync in the same pass reflects the clear, the way SharedExtractionRunner depends on.</summary>
+    public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ClearStaleCalls.Add((projectId, currentScorerVersion));
+        var before = Rows.Count;
+        Rows = Rows.Where(r => r.ProjectId != projectId || r.ScorerVersion == currentScorerVersion).ToList();
+        return Task.FromResult(before - Rows.Count);
+    }
+
     public async Task<PromotionMeta> GetMetaAsync(string? projectId, CancellationToken cancellationToken = default)
     {
         LastMetaProject = projectId;

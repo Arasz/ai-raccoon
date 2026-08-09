@@ -154,6 +154,9 @@ public sealed class PromotionQueueServicePromoteRaceTests
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingShareStore : IMemoryStore

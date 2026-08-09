@@ -197,6 +197,7 @@ internal static class MemorySchema
                                    source_file TEXT NULL,
                                    score       REAL NOT NULL,
                                    reasons     TEXT NOT NULL DEFAULT '[]',
+                                   scorer_version INTEGER NOT NULL DEFAULT 0,
                                    created_at  INTEGER NOT NULL,
                                    updated_at  INTEGER NOT NULL,
                                    UNIQUE (project_id, hash)
@@ -231,9 +232,9 @@ internal static class MemorySchema
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/>/
-    ///     <see cref="MigrateToV3Async"/> (ADR-0011).
+    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/> (ADR-0011).
     /// </summary>
-    internal const int CurrentVersion = 3;
+    internal const int CurrentVersion = 4;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -302,6 +303,13 @@ internal static class MemorySchema
             // Hard step: heals rows a pre-guard binary wrote into a v2 bank without running the
             // write-path chunk recompute.
             await MigrateToV3Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 4)
+        {
+            // Hard step: ALTER TABLE ADD COLUMN is not idempotent, so it needs the version gate
+            // (unlike promotion_queue_entries_ad above, which reaches every bank via IF NOT EXISTS).
+            await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         if (healthy)
@@ -714,6 +722,28 @@ internal static class MemorySchema
                     new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 4 (ADR-0018): adds promotion_queue.scorer_version. DEFAULT 0 on the column
+    ///     covers a fresh bank; existing rows backfill to 0 by SQLite's own ADD COLUMN default —
+    ///     deliberately, since none of them were ever scored by a versioned scorer.
+    /// </summary>
+    private static async Task MigrateToV4Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('promotion_queue')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("scorer_version"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
         }
     }
 

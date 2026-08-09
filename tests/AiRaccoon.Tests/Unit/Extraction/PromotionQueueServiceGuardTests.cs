@@ -106,6 +106,9 @@ public sealed class PromotionQueueServiceGuardTests
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     /// <summary>Simulates a store that found nothing to discard — every other member is unreachable
@@ -129,6 +132,9 @@ public sealed class PromotionQueueServiceGuardTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

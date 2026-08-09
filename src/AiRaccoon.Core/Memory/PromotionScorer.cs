@@ -5,6 +5,12 @@ namespace AiRaccoon.Core.Memory;
 /// score_candidate(), see docs/adr/0018-promotion-scoring-v2.md v3 section).</summary>
 internal static class PromotionScorer
 {
+    /// <summary>Stamped onto every queue row this scorer produces; bumped whenever the scoring
+    /// model changes in a way that makes previously-computed scores incomparable
+    /// (docs/adr/0018-promotion-scoring-v2.md). Independent of the ADR's "v3" design-generation
+    /// label — this is the persisted stamp, starting fresh at 1.</summary>
+    internal const int Version = 1;
+
     private const int MinWordsFloor = 8;
     private const double MinWordsCap = 0.50;
     private const int ShortChunkWords = 25;

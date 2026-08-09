@@ -51,6 +51,7 @@ public sealed class SqlitePromotionQueueStore(
                         row.SourceFile,
                         row.Score,
                         Reasons = JsonSerializer.Serialize(row.Reasons),
+                        row.ScorerVersion,
                         CreatedAt = now,
                         UpdatedAt = now
                     },
@@ -158,6 +159,18 @@ public sealed class SqlitePromotionQueueStore(
         return victim is null ? null : ToRow(victim);
     }
 
+    public async Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(
+                new CommandDefinition(
+                    PromotionQueueSql.ClearStale,
+                    new { ProjectId = projectId, CurrentVersion = currentScorerVersion },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     ///     Rows whose backing entries row was deleted before the promotion_queue_entries_ad
     ///     trigger existed (ADR-0023) — the trigger covers everything from here on; this is the
@@ -192,7 +205,7 @@ public sealed class SqlitePromotionQueueStore(
 
     private static PromotionQueueRow ToRow(PromotionQueueRowRow row) =>
         new(row.ProjectId, row.Hash, row.Path, row.Value, row.SourceFile, row.Score,
-            ParseReasons(row.Reasons), row.CreatedAt, row.UpdatedAt);
+            ParseReasons(row.Reasons), row.CreatedAt, row.UpdatedAt, (int)row.ScorerVersion);
 
     private static IReadOnlyList<string> ParseReasons(string? json)
     {
@@ -211,5 +224,5 @@ public sealed class SqlitePromotionQueueStore(
     // Dapper mapping target: TEXT columns map to string, REAL to double, INTEGER to long.
     private sealed record PromotionQueueRowRow(
         string ProjectId, string Hash, string Path, string Value, string? SourceFile,
-        double Score, string? Reasons, long CreatedAt, long UpdatedAt);
+        double Score, string? Reasons, long CreatedAt, long UpdatedAt, long ScorerVersion);
 }
