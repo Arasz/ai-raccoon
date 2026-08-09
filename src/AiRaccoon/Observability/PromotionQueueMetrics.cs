@@ -46,7 +46,9 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
             ObserveQueued,
             unit: "{item}",
             description: "Queued promotions per project, read from the store's current state. "
-                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process.");
+                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process. "
+                + "A project's series stops reporting rather than reporting 0 once it drains to empty — it retires, "
+                + "it is not a confident 0.");
         Meter.CreateObservableGauge(
             OtlpNames.QueueCapacityUtilization,
             ObserveUtilization,
