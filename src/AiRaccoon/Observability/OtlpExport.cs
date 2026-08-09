@@ -37,7 +37,7 @@ internal static partial class OtlpExport
             services.AddOpenTelemetry()
                 // Fixed product identity (ADR-0009): registered after CreateDefault()'s environment
                 // detector, so it wins the resource merge even though OTEL_SERVICE_NAME reaches it too.
-                .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))
+                .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName, serviceVersion: ServerInfo.BinaryVersion))
                 .WithMetrics(m => m
                     .AddMeter([.. OtlpNames.Meters])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))

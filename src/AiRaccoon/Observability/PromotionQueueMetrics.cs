@@ -20,7 +20,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 
     public PromotionQueueMetrics()
     {
-        Meter = new Meter(OtlpNames.PromotionQueueScope);
+        Meter = new Meter(OtlpNames.PromotionQueueScope, ServerInfo.BinaryVersion);
         _evictions = Meter.CreateCounter<long>(
             OtlpNames.QueueEvictions,
             unit: "{eviction}",

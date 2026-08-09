@@ -15,8 +15,8 @@ public sealed class ToolCallMetrics : IDisposable
 
     public ToolCallMetrics()
     {
-        Meter = new Meter(OtlpNames.MemoryToolsScope);
-        ActivitySource = new ActivitySource(OtlpNames.MemoryToolsScope);
+        Meter = new Meter(OtlpNames.MemoryToolsScope, ServerInfo.BinaryVersion);
+        ActivitySource = new ActivitySource(OtlpNames.MemoryToolsScope, ServerInfo.BinaryVersion);
 
         _invocationCount = Meter.CreateCounter<long>(
             OtlpNames.ToolInvocations,

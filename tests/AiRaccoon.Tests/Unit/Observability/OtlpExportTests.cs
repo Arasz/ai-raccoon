@@ -520,6 +520,33 @@ public sealed class OtlpExportTests : IDisposable
             .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
     }
 
+    // WP11: without service.version, InstrumentationScope.version is empty on every signal and an
+    // operator cannot tell which build produced a series across a rollout.
+    [Fact]
+    public async Task HttpHost_ResourceCarriesTheAssemblyServiceVersion()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        ResourceAttribute(host.Services.GetRequiredService<TracerProvider>(), "service.version")
+            .ShouldBe(ServerInfo.BinaryVersion);
+    }
+
+    // WP11: one assembly-attribute read (ServerInfo.BinaryVersion) feeds the Meter/ActivitySource
+    // constructors too, so InstrumentationScope.version is non-empty on every signal.
+    [Fact]
+    public void ToolCallMetrics_AndPromotionQueueMetrics_ReportANonEmptyScopeVersion()
+    {
+        using var toolMetrics = new ToolCallMetrics();
+        using var queueMetrics = new PromotionQueueMetrics();
+
+        toolMetrics.Meter.Version.ShouldNotBeNullOrEmpty();
+        toolMetrics.ActivitySource.Version.ShouldNotBeNullOrEmpty();
+        queueMetrics.Meter.Version.ShouldNotBeNullOrEmpty();
+    }
+
     // OTEL_RESOURCE_ATTRIBUTES reaches the SDK via DI's IConfiguration, the same channel
     // McpServerSetup's config-clearing fix restores (ADR-0009, "Configuration channel"). Reads
     // TracerProvider.Resource via reflection, so it proves the attribute reaches the provider,
