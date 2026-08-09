@@ -261,10 +261,13 @@ internal static class MemorySql
     // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
     // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
     // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
+    // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
+    // columns, while manual memory_write rows carry path = <sha256(content)>.md and merely cite the
+    // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
     public const string DeleteBySourcePath = """
                                              DELETE FROM entries
                                              WHERE project_id = @projectId AND workspace_id IS NULL
-                                               AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
+                                               AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
                                              """;
 
     // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
@@ -289,7 +292,7 @@ internal static class MemorySql
                                                           AND EXISTS (SELECT 1 FROM entries e
                                                                       WHERE e.project_id = q.project_id AND e.hash = q.hash
                                                                         AND e.scope = 'project'
-                                                                        AND (e.source_file = @path OR e.source_file LIKE @pathPrefix ESCAPE '\'))
+                                                                        AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
                                                         """;
 
     public const string RestoreQueueRowsStillBacked = """
