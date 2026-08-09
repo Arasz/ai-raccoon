@@ -24,8 +24,10 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
     private static readonly HashSet<string> IndexableExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
 
+    /// <summary>Set <paramref name="embedInline"/> false when the caller holds a write transaction: embedding
+    /// runs the engine per chunk, and a lock held that long stalls another process's first bank open.</summary>
     public async Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken)
+        string? context, CancellationToken cancellationToken, bool embedInline = true)
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
@@ -35,7 +37,7 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return await InsertChunksAsync(connection, projectId, path, content, context, cancellationToken)
+        return await InsertChunksAsync(connection, projectId, path, content, context, cancellationToken, embedInline)
             .ConfigureAwait(false);
     }
 
@@ -67,7 +69,7 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
     private async Task<int> InsertChunksAsync(SqliteConnection connection, string projectId, string path,
-        string content, string? context, CancellationToken cancellationToken)
+        string content, string? context, CancellationToken cancellationToken, bool embedInline = true)
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
@@ -140,8 +142,12 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
                 continue;
             }
 
-            await embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
-                .ConfigureAwait(false);
+            if (embedInline)
+            {
+                await embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             inserted++;
         }
 

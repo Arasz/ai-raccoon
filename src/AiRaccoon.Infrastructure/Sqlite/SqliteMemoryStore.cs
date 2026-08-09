@@ -432,6 +432,64 @@ public sealed partial class SqliteMemoryStore(
         }
     }
 
+    /// <summary>
+    ///     Watch-digest replace-by-path, all in one transaction so no reader ever sees the file
+    ///     chunkless and a crash rolls the whole replace back: fingerprint re-check (the write lock
+    ///     makes it the authoritative one, so a concurrent process re-does no chunking or embedding),
+    ///     delete, re-ingest, fingerprint write. Embedding is left pending for the caller to run
+    ///     after the commit — the engine is far too slow to hold the bank's write lock through.
+    /// </summary>
+    public async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var stored = await connection.ExecuteScalarAsync<string?>(
+                    Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken))
+                .ConfigureAwait(false);
+            var replaced = !string.Equals(stored, fileHash, StringComparison.Ordinal);
+            if (replaced)
+            {
+                var pathPrefix = LikePattern.Escape(path) + "/%";
+                await connection.ExecuteAsync(
+                        Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                    .ConfigureAwait(false);
+                await Ingestor
+                    .IngestFileAsync(connection, projectId, path, null, cancellationToken, embedInline: false)
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        Def(MemorySql.UpsertWatchFile,
+                            new
+                            {
+                                projectId, path, fileHash,
+                                updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                            }, cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return replaced;
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);

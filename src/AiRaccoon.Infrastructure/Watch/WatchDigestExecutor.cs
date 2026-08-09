@@ -47,16 +47,24 @@ public sealed partial class WatchDigestExecutor(
             return;
         }
 
-        await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
-        await store.IngestFileAsync(projectId, normalized, null, cancellationToken).ConfigureAwait(false);
-        await TryEmbedPendingAsync(projectId, cancellationToken).ConfigureAwait(false);
-        await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken).ConfigureAwait(false);
+        // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
+        // only a cheap filter, and a concurrent process either loses the race and skips or, on a
+        // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
+        var replaced = await store.ReplaceFileAsync(projectId, normalized, hash, cancellationToken)
+            .ConfigureAwait(false);
+        if (replaced)
+        {
+            await TryEmbedPendingAsync(projectId, cancellationToken).ConfigureAwait(false);
+        }
+
+        await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Best-effort retry net for rows the inline embed left pending: the ingest path embeds
-    ///     only when a provider is configured and the inline embed succeeds, and nothing else
-    ///     retries a pending row. A failure here is logged and never breaks the digest.
+    ///     Embeds the rows the replace transaction left pending — it defers embedding rather than
+    ///     hold the bank's write lock through the engine, and nothing else retries a pending row.
+    ///     A failure here is logged and never breaks the digest.
     /// </summary>
     private async Task TryEmbedPendingAsync(string projectId, CancellationToken cancellationToken)
     {

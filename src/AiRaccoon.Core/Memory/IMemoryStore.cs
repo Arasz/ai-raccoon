@@ -74,6 +74,14 @@ public interface IMemoryStore
     /// <summary>Deletes every committed chunk whose source path is the given path or lies under it (mirror delete/rename/directory cascade).</summary>
     Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Atomic replace-by-path for the watch digest: in one transaction, skips when the stored
+    ///     fingerprint already equals <paramref name="fileHash"/>, else deletes the path's chunks,
+    ///     re-ingests the file and stores the fingerprint. False means another writer got there first.
+    /// </summary>
+    Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>
     Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default);

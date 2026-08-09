@@ -47,6 +47,10 @@ internal sealed class FakeConfigStore : IMemoryStore
     public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
     public Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

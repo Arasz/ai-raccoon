@@ -152,6 +152,10 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

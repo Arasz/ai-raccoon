@@ -256,6 +256,10 @@ public class WorkspaceServiceTests
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries.Count : 0);
         }
 
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
@@ -370,6 +374,10 @@ public class WorkspaceServiceTests
             DeletedContexts.Add(context);
             return Task.FromResult(1);
         }
+
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
