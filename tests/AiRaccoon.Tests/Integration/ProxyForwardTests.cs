@@ -26,12 +26,15 @@ public sealed class ProxyForwardTests : IAsyncLifetime
 {
     private const string LocalServerName = "proxy-local-must-not-be-advertised";
 
+    private readonly List<McpServerFactory> _reacquired = [];
     private McpClient _backend = null!;
+    private bool _failReacquire;
     private McpServerFactory _factory = null!;
     private FakeEmbeddingEndpoint _openAi = null!;
     private McpClient _proxyClient = null!;
     private McpServer _proxyServer = null!;
     private Task _proxyServerRun = null!;
+    private int _reacquireCount;
     private BackendRecorder _recorder = null!;
     private ReadRecorder _wire = null!;
 
@@ -49,7 +52,8 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         {
             ServerInfo = new Implementation { Name = LocalServerName, Version = "0.0.0" }
         };
-        options.Filters.Message.IncomingFilters.Add(ProxyForwarder.Create(_recorder, NullLogger.Instance));
+        options.Filters.Message.IncomingFilters.Add(
+            ProxyForwarder.Create(_recorder, ReacquireAsync, NullLogger.Instance));
 
         var toProxy = new Pipe();
         var fromProxy = new Pipe();
@@ -72,7 +76,26 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         await _proxyServerRun.WaitAsync(TimeSpan.FromSeconds(10)).ContinueWith(_ => { }, TaskScheduler.Default);
         await _backend.DisposeAsync();
         await _factory.DisposeAsync();
+        foreach (var factory in _reacquired)
+        {
+            await factory.DisposeAsync();
+        }
+
         await _openAi.DisposeAsync();
+    }
+
+    /// <summary>Stands in for the runner's backend acquisition: a brand new server, counted.</summary>
+    private async Task<McpSession> ReacquireAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _reacquireCount);
+        if (_failReacquire)
+        {
+            throw new HttpRequestException("no backend could be started");
+        }
+
+        var factory = new McpServerFactory();
+        _reacquired.Add(factory);
+        return await factory.CreateClientAsync();
     }
 
     [Fact]
@@ -151,6 +174,50 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _proxyClient.ServerCapabilities.Tools.ShouldNotBeNull();
         _proxyClient.ServerCapabilities.Prompts.ShouldNotBeNull();
     }
+
+    [Fact]
+    public async Task WhenTheBackendDies_TheNextCallReacquiresAndSucceeds()
+    {
+        using var cts = Deadline();
+        (await CallAsync("memory_list", cts.Token)).IsError.ShouldNotBe(true);
+
+        // What IdleWatchdog does after four idle hours; the proxy never pings to prevent it.
+        await _factory.DisposeAsync();
+
+        (await CallAsync("memory_list", cts.Token)).IsError.ShouldNotBe(true);
+        _reacquireCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task WhenReacquireAlsoFails_TheClientGetsAJsonRpcError()
+    {
+        using var cts = Deadline();
+        _failReacquire = true;
+        await _factory.DisposeAsync();
+
+        await Should.ThrowAsync<McpException>(async () => await CallAsync("memory_list", cts.Token));
+
+        // Exactly once: not a loop, not a backoff ladder.
+        _reacquireCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task BackendError_DoesNotReacquire()
+    {
+        using var cts = Deadline();
+
+        // A backend that answers is alive, however unhappy the answer. x/unknown is the trap:
+        // it comes back as an HTTP-level failure, not an MCP one.
+        await Should.ThrowAsync<McpException>(async () => await _proxyClient.SendRequestAsync(
+            new JsonRpcRequest { Method = "x/unknown", Id = new RequestId("alive-1") }, cts.Token));
+        await Should.ThrowAsync<McpException>(async () => await CallAsync("no_such_tool", cts.Token));
+
+        _reacquireCount.ShouldBe(0);
+    }
+
+    private async Task<CallToolResult> CallAsync(string tool, CancellationToken cancellationToken) =>
+        await _proxyClient.CallToolAsync(tool, new Dictionary<string, object?> { ["projectId"] = "reconnect" }, null,
+            null, cancellationToken);
 
     private static CancellationTokenSource Deadline()
     {
