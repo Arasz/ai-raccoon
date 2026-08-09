@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
@@ -68,6 +69,7 @@ public static partial class Dependencies
             services.AddSingleton<IMemoryAccessGuard>(sp => new MemoryAccessGuard(sp.GetRequiredService<IMemoryStore>()));
             services.AddSingleton<ToolGate>();
             services.AddSingleton<ToolCallMetrics>();
+            services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
 
             services.RegisterWatchServices();
 
