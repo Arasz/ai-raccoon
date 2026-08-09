@@ -27,9 +27,28 @@ public class ToolExecutionActivityTests
         using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
 
         var started = startedActivities.ShouldHaveSingleItem();
-        started.OperationName.ShouldBe("memory_write");
+        started.OperationName.ShouldBe("tools/call memory_write");
         started.Tags.Any(kv => kv.Key == "tool" && kv.Value?.ToString() == "memory_write").ShouldBeTrue();
         started.Tags.Any(kv => kv.Key == "project_id" && kv.Value?.ToString() == "acme").ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Ctor_TagsMcpMethodName_AndGenAiToolName()
+    {
+        var metrics = new ToolCallMetrics();
+        var startedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = startedActivities.Add;
+        listener.ActivityStopped = _ => { };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_search", "acme");
+
+        var started = startedActivities.ShouldHaveSingleItem();
+        started.Tags.Any(kv => kv.Key == "mcp.method.name" && kv.Value == "tools/call").ShouldBeTrue();
+        started.Tags.Any(kv => kv.Key == "gen_ai.tool.name" && kv.Value == "memory_search").ShouldBeTrue();
     }
 
     [Fact]
@@ -70,9 +89,9 @@ public class ToolExecutionActivityTests
         invocations[0].Tags["result"].ShouldBe("success");
         durationCollector.GetMeasurementSnapshot().Count.ShouldBe(1);
 
-        // ADR-0002: error_type is absent on success (only set on the error path).
+        // ADR-0002: error.type is absent on success (only set on the error path).
         var started = startedActivities.ShouldHaveSingleItem();
-        started.Tags.Any(kv => kv.Key == "error_type").ShouldBeFalse();
+        started.Tags.Any(kv => kv.Key == "error.type").ShouldBeFalse();
     }
 
     [Fact]
@@ -97,13 +116,48 @@ public class ToolExecutionActivityTests
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
-        invocations[0].Tags["error_type"].ShouldBe("InvalidOperationException");
+        invocations[0].Tags["error.type"].ShouldBe("InvalidOperationException");
         invocations[0].Tags["project_id"].ShouldBe("acme");
 
         var stopped = stoppedActivities.ShouldHaveSingleItem();
         stopped.Status.ShouldBe(ActivityStatusCode.Error);
         stopped.StatusDescription.ShouldBe("boom");
-        stopped.Tags.Any(kv => kv.Key == "error_type" && kv.Value?.ToString() == "InvalidOperationException").ShouldBeTrue();
+        stopped.Tags.Any(kv => kv.Key == "error.type" && kv.Value?.ToString() == "InvalidOperationException").ShouldBeTrue();
+    }
+
+    [Fact]
+    public void RecordError_AddsExceptionEvent_WithStackTrace()
+    {
+        var metrics = new ToolCallMetrics();
+        var stoppedActivities = new List<Activity>();
+        using var listener = new ActivityListener();
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ActivityStarted = _ => { };
+        listener.ActivityStopped = stoppedActivities.Add;
+        ActivitySource.AddActivityListener(listener);
+
+        Exception thrown;
+        try
+        {
+            throw new InvalidOperationException("boom");
+        }
+        catch (InvalidOperationException caught)
+        {
+            thrown = caught;
+        }
+
+        using (var activity = new ToolExecutionActivity(metrics, "memory_search", "acme"))
+        {
+            activity.RecordError(thrown);
+        }
+
+        var stopped = stoppedActivities.ShouldHaveSingleItem();
+        var exceptionEvent = stopped.Events.ShouldHaveSingleItem();
+        exceptionEvent.Name.ShouldBe("exception");
+        exceptionEvent.Tags.Any(t => t.Key == "exception.type" && t.Value?.ToString() == "System.InvalidOperationException").ShouldBeTrue();
+        var stackTrace = exceptionEvent.Tags.SingleOrDefault(t => t.Key == "exception.stacktrace").Value?.ToString();
+        stackTrace.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]

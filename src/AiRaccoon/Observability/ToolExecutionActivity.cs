@@ -10,10 +10,16 @@ public sealed class ToolExecutionActivity : IDisposable
 {
     private const string ToolActivityTag = "tool";
     private const string ProjectIdActivityTag = "project_id";
-    private const string ErrorTypeActivityTag = "error_type";
+    private const string ErrorTypeActivityTag = "error.type";
     private const string ResultActivityTag = "result";
     private const string ResultSuccess = "success";
     private const string ResultError = "error";
+
+    // MCP semantic convention (open-telemetry/semantic-conventions-genai, docs/gen-ai/mcp.md):
+    // span name "{mcp.method.name} {target}", both carried as attributes.
+    private const string McpMethodNameActivityTag = "mcp.method.name";
+    private const string GenAiToolNameActivityTag = "gen_ai.tool.name";
+    private const string ToolsCallMethodName = "tools/call";
 
     private readonly Activity? _activity;
     private readonly ToolCallMetrics _metrics;
@@ -32,9 +38,11 @@ public sealed class ToolExecutionActivity : IDisposable
         _metrics = metrics;
         _toolName = toolName;
         _metricProjectId = metricProjectId ?? projectId;
-        _activity = metrics.ActivitySource.StartActivity(toolName);
+        _activity = metrics.ActivitySource.StartActivity($"{ToolsCallMethodName} {toolName}");
         _activity?.SetTag(ToolActivityTag, toolName);
         _activity?.SetTag(ProjectIdActivityTag, projectId);
+        _activity?.SetTag(McpMethodNameActivityTag, ToolsCallMethodName);
+        _activity?.SetTag(GenAiToolNameActivityTag, toolName);
         _stopwatch = Stopwatch.StartNew();
     }
 
@@ -71,6 +79,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
         _activity?.SetTag(ResultActivityTag, ResultError);
+        _activity?.AddException(exception);
         _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
     }
 }
