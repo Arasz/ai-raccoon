@@ -15,11 +15,11 @@ namespace AiRaccoon.Setup;
 /// </summary>
 internal static partial class McpServerSetup
 {
-    private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
+    private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [DefaultOptions.Transport];
 
     /// <summary>
-    ///     Resolves the --transport value to the transports to enable; anything other than
-    ///     "http" (case-insensitive) runs stdio.
+    ///     Resolves a --transport value to the transports to enable; an unparseable value falls back
+    ///     to the launch default rather than to a second one of its own.
     /// </summary>
     internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport) =>
         Enum.TryParse<McpTransport>(transport, true, out var mcpTransport)
@@ -216,5 +216,8 @@ public enum McpTransport
 {
     Stdio = 0,
     Http = 1,
-    Https = 2
+    Https = 2,
+
+    /// <summary>A stdio front end that relays every message to one HTTP backend (ADR-0020).</summary>
+    Proxy = 3
 }

@@ -30,6 +30,13 @@ if (cliParseResult.CommandPath.Length > 0)
         cancellationTokenSource.Token);
 }
 
+// Before the host is built (ADR-0020): the proxy resolves no key, opens no bank and loads no
+// model, which is the whole latency argument for making it the default.
+if (serverConfig.Transport == McpTransport.Proxy)
+{
+    return await ProxyRunner.RunAsync(serverConfig, Console.Error, cancellationTokenSource.Token);
+}
+
 var app = McpServerSetup.CreateServerHost(serverConfig);
 var embeddingAvailability = app.Services.GetRequiredService<EmbeddingAvailability>();
 var factory = app.Services.GetRequiredService<SqliteConnectionFactory>();

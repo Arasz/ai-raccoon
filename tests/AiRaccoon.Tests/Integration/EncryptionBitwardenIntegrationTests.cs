@@ -569,7 +569,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     /// <summary>
     ///     Runs the server binary with a hermetic PATH rooted at bwsDir (empty = bws missing, fake-bws dir =
     ///     resolves) plus the system dirs the fake script needs. Only this process-level path exercises
-    ///     Program.cs's error mapping and exit codes 1/2.
+    ///     Program.cs's error mapping and exit codes 1/2 — and since ADR-0020 that mapping lives behind
+    ///     --transport stdio, because a bare launch proxies and never opens a bank of its own.
     /// </summary>
     private async Task<(int Exit, string Stderr, string Stdout)> RunServerProcessAsync(string bwsDir)
     {
@@ -590,6 +591,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         };
         psi.ArgumentList.Add("exec");
         psi.ArgumentList.Add(dll);
+        psi.ArgumentList.Add("--transport");
+        psi.ArgumentList.Add("stdio");
         psi.ArgumentList.Add("--data-root");
         psi.ArgumentList.Add(_dataRoot);
         // Hermetic: the child sees only the fake dir + /usr/bin + /bin — a real bws on the
