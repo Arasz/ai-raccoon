@@ -314,6 +314,31 @@ does that should meet our sampler decision immediately rather than discover it t
 filters, because bare `ai-raccoon` forwards rather than executes. So D1's `CallToolFilter` registers
 on the **backend host only** — that constraint is now written down on their side, not just ours.
 
+### Cold-start duration is now a correctness constraint on this work
+
+Reported by the proxy lane 2026-08-09: going through a real gated `serve` surfaced a first-launch
+defect where the MCP SDK probes `server/discover` under a **5 s timeout**, a cold `serve` overruns it
+(key resolve + bank decrypt + a 23 MB ONNX load), the SDK falls back to the legacy handshake, and the
+proxy breaks on a protocol-version mismatch. They are fixing the proxy so it stops depending on that
+timing — but **until then, anything that lengthens `serve` boot widens the window**.
+
+Checked against our code, not our intent:
+
+- **The exporter does not block boot.** ADR-0009's "connections are lazy" posture was verified against
+  the pinned 1.17.0 assemblies. A dead collector costs nothing at startup; it costs up to ~5 s per
+  provider at *shutdown*, the opposite end of the process.
+- **WP4** adds a `Uri.TryCreate` and a scheme check, and removes a boot-time throw.
+- **WP5** adds one `Directory.CreateDirectory` and one `FileStream` open — a single persistent
+  `StreamWriter`, not an open/close per line. Its `AutoFlush = true` means a flush syscall per line,
+  which buys crash-safety; not tuned speculatively, per `measure-when-it-pays`, but it is the one
+  thing to buffer if the proxy lane's cold-start numbers ever land near the boundary.
+- **WP7 is the one to watch.** `AddSource("Microsoft.AspNetCore.Hosting")` and the
+  `SuppressActivityOpenTelemetryData` switch must both run before `WebApplication.CreateBuilder`.
+  Neither does I/O, so no boot cost is expected — but it is the next thing added to that path.
+
+**Standing constraint for the rest of this work:** nothing in the OTLP path may block or do I/O during
+host startup. That was already true by design; it is now load-bearing for someone else's correctness.
+
 ## Risks the plan carries
 
 - **WP7's pairing is load-bearing.** Removing `SetSampler` is only safe *because* the hosting source
