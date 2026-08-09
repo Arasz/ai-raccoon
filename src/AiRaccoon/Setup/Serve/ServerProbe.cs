@@ -50,9 +50,13 @@ internal sealed class ServerProbe(HttpClient httpClient)
                     }
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            catch (HttpRequestException)
             {
-                // Connection refused or probe timeout: not an ai-raccoon server.
+                // Connection refused: not an ai-raccoon server.
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // The probe's own timeout, not the caller's token: a miss, not a cancellation.
             }
         }
 
