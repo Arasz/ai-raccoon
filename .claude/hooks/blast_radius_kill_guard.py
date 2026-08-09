@@ -32,6 +32,10 @@ MARKER_DIR: Optional[Path] = _marker_dir()
 
 _SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh"))
 _SKIPPABLE = frozenset(("sudo", "command", "env", "nohup", "exec", "time"))
+# Options of the skippable wrappers that consume the following token as their argument.
+_WRAPPER_OPTION_WITH_ARG = frozenset(
+    ("-u", "--user", "-g", "--group", "-p", "--prompt", "-C", "--close-from", "-h", "--host",
+     "-r", "--role", "-t", "--type", "-S", "--split-string", "-c", "--chdir"))
 _OPERATORS = frozenset((";", "|", "||", "&", "&&", "(", ")", "<", ">", ">>"))
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _KILLALL = re.compile(r"^killall\d*$")
@@ -80,11 +84,21 @@ def _segments(command: str) -> List[List[str]]:
 
 
 def _split_command(tokens: List[str]) -> Optional[Tuple[str, List[str]]]:
-    """(program, args) for a segment, past env assignments, `sudo`-likes and any path prefix."""
-    for index, token in enumerate(tokens):
-        if _ENV_ASSIGN.match(token) or token in _SKIPPABLE:
-            continue
-        return token.rsplit("/", 1)[-1], tokens[index + 1:]
+    """(program, args) for a segment, past env assignments, `sudo`-likes, their options and any path prefix."""
+    index, skipping = 0, False
+    while index < len(tokens):
+        token = tokens[index]
+        if _ENV_ASSIGN.match(token):
+            index += 1
+        elif token in _SKIPPABLE:
+            index, skipping = index + 1, True
+        elif skipping and token == "--":
+            index, skipping = index + 1, False
+        elif skipping and token.startswith("-"):
+            # `sudo -u foo pkill` hid the real program behind an option and its argument.
+            index += 2 if token in _WRAPPER_OPTION_WITH_ARG else 1
+        else:
+            return token.rsplit("/", 1)[-1], tokens[index + 1:]
     return None
 
 
