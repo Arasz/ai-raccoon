@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -15,9 +16,12 @@ public sealed partial class SweepHostedService : BackgroundService
     /// <summary>Never a setting: a dry-run knob would turn the reaper into a no-op. The kill switch is sweep.enabled.</summary>
     private const bool DryRun = false;
 
+    internal const string OperationName = "sweep.reaper";
+
     private readonly IMemoryStore _store;
     private readonly SweepService _sweeper;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationTelemetry _telemetry;
     private readonly ILogger<SweepHostedService> _logger;
 
     /// <summary>Completed after each sweep pass; test seam.</summary>
@@ -30,11 +34,12 @@ public sealed partial class SweepHostedService : BackgroundService
     internal TickSignal IntervalReReads { get; } = new();
 
     public SweepHostedService(IMemoryStore store, SweepService sweeper, TimeProvider timeProvider,
-        ILogger<SweepHostedService> logger)
+        IOperationTelemetry telemetry, ILogger<SweepHostedService> logger)
     {
         _store = store;
         _sweeper = sweeper;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
         _logger = logger;
     }
 
@@ -71,6 +76,25 @@ public sealed partial class SweepHostedService : BackgroundService
 
     /// <summary>One sweep pass: kill-switch check, then a per-project sweep. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
+    {
+        using var pass = _telemetry.Begin(OperationName);
+        try
+        {
+            await RunPassAsync(cancellationToken).ConfigureAwait(false);
+            pass.Succeeded();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // shutdown cut the pass short: abandoned, not failed
+        }
+        catch (Exception ex)
+        {
+            pass.Failed(ex);
+            throw;
+        }
+    }
+
+    private async Task RunPassAsync(CancellationToken cancellationToken)
     {
         var enabled = SweepConfigKeys.ParseEnabled(
             await _store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));

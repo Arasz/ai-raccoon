@@ -41,7 +41,7 @@ public sealed class SweepHostedServiceTests : IDisposable
         _store = new SqliteMemoryStore(factory, _time, new StubChunker(), new EmbeddingService(),
             new FakeLogger<SqliteMemoryStore>());
         _service = new SweepHostedService(_store, new SweepService(_store, _time), _time,
-            new FakeLogger<SweepHostedService>());
+            TestTelemetry.None, new FakeLogger<SweepHostedService>());
     }
 
     public void Dispose()
