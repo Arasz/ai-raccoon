@@ -40,15 +40,13 @@ internal static partial class OtlpExport
                 // detector, so it wins the resource merge even though OTEL_SERVICE_NAME reaches it too.
                 .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))
                 .WithMetrics(m => m
-                    .AddMeter("AiRaccoon.MemoryTools")
-                    .AddMeter("AiRaccoon.PromotionQueue")
-                    .AddMeter("System.Runtime")
+                    .AddMeter([.. OtlpNames.Meters])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
                     // ASP.NET Core's unrecorded per-request Activity becomes the local parent for every
                     // tool-call span; the SDK's default ParentBased sampler drops those (ADR-0009).
                     .SetSampler(new AlwaysOnSampler())
-                    .AddSource("AiRaccoon.MemoryTools")
+                    .AddSource([.. OtlpNames.Sources])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
 
             return services;

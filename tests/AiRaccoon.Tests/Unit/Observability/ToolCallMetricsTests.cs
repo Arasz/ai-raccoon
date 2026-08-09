@@ -17,14 +17,14 @@ public class ToolCallMetricsTests
     public void Meter_HasCorrectName()
     {
         var metrics = new ToolCallMetrics();
-        metrics.Meter.Name.ShouldBe("AiRaccoon.MemoryTools");
+        metrics.Meter.Name.ShouldBe(OtlpNames.MemoryToolsScope);
     }
 
     [Fact]
     public void Counter_IncrementsOnRecordInvocation()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         metrics.RecordInvocation("memory_write", "acme", TimeSpan.FromMilliseconds(42), false);
 
@@ -39,7 +39,7 @@ public class ToolCallMetricsTests
     public void Counter_IncrementsOnErrorRecordInvocation()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(500), true, "SyncConflictException");
 
@@ -55,13 +55,13 @@ public class ToolCallMetricsTests
     public void Histogram_RecordsDurationWithTags()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
         metrics.RecordInvocation("memory_search", "acme", TimeSpan.FromMilliseconds(250), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
-        measurements[0].Value.ShouldBe(250.0, 1.0);
+        measurements[0].Value.ShouldBe(0.25, 0.001);
         measurements[0].Tags["tool"].ShouldBe("memory_search");
         measurements[0].Tags["result"].ShouldBe("success");
     }
@@ -70,13 +70,13 @@ public class ToolCallMetricsTests
     public void Histogram_RecordsErrorDurationWithErrorType()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
         metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(1500), true, "SyncConflictException");
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
-        measurements[0].Value.ShouldBe(1500.0, 1.0);
+        measurements[0].Value.ShouldBe(1.5, 0.001);
         measurements[0].Tags["tool"].ShouldBe("memory_sync");
         measurements[0].Tags["result"].ShouldBe("error");
         measurements[0].Tags["error_type"].ShouldBe("SyncConflictException");
@@ -89,7 +89,7 @@ public class ToolCallMetricsTests
         var started = new List<Activity>();
 
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = started.Add;
         listener.ActivityStopped = _ => { };
@@ -114,7 +114,7 @@ public class ToolCallMetricsTests
         Activity? stoppedActivity = null;
 
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = _ => { };
         listener.ActivityStopped = activity => stoppedActivity = activity;
@@ -136,9 +136,9 @@ public class ToolCallMetricsTests
     {
         var metrics = new ToolCallMetrics();
         // Meter name discoverable by dotnet-counters
-        metrics.Meter.Name.ShouldBe("AiRaccoon.MemoryTools");
+        metrics.Meter.Name.ShouldBe(OtlpNames.MemoryToolsScope);
 
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         metrics.RecordInvocation("memory_stats", "acme", TimeSpan.FromMilliseconds(10), false);
         collector.GetMeasurementSnapshot().Count.ShouldBe(1);
     }
@@ -147,7 +147,7 @@ public class ToolCallMetricsTests
     public void Counter_TagsProjectId()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
 
@@ -160,7 +160,7 @@ public class ToolCallMetricsTests
     public void Histogram_DoesNotTagProjectId()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_tool_duration_ms");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
         metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
 

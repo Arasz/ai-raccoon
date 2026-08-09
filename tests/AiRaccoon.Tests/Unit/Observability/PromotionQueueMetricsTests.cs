@@ -15,7 +15,7 @@ public class PromotionQueueMetricsTests
     public void RecordSnapshot_TagsDepthByProjectId()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_queued");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueQueued);
 
         metrics.RecordSnapshot(new PromotionQueueStats(3, null, new Dictionary<string, int> { ["acme"] = 3 }), 100);
         collector.RecordObservableInstruments();
@@ -29,7 +29,7 @@ public class PromotionQueueMetricsTests
     public void RecordEviction_TagsProjectId()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_evictions_total");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueEvictions);
 
         metrics.RecordEviction("acme", 0.5, "capacity");
 
@@ -42,7 +42,7 @@ public class PromotionQueueMetricsTests
     public void RecordPromoted_TagsProjectId()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_promoted_total");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueuePromoted);
 
         metrics.RecordPromoted("acme", 12.5);
 
@@ -54,7 +54,7 @@ public class PromotionQueueMetricsTests
     public void RecordDiscarded_TagsProjectId()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_discarded_total");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueDiscarded);
 
         metrics.RecordDiscarded("acme", 3.0);
 
@@ -66,7 +66,7 @@ public class PromotionQueueMetricsTests
     public void RecordEviction_RecordsTheVictimScore()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_evicted_score");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueEvictedScore);
 
         metrics.RecordEviction("acme", 0.42, "capacity");
 
@@ -78,7 +78,7 @@ public class PromotionQueueMetricsTests
     public void RecordEviction_LeavesTheScoreHistogramUntagged()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_evicted_score");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueEvictedScore);
 
         metrics.RecordEviction("acme", 0.42, "capacity");
 
@@ -96,7 +96,7 @@ public class PromotionQueueMetricsTests
         const int rowsInStoreBeforeRestart = 40;
         const int discardedAfterRestart = 5;
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_queued");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueQueued);
 
         var remaining = rowsInStoreBeforeRestart - discardedAfterRestart;
         var stats = new PromotionQueueStats(remaining, null, new Dictionary<string, int> { ["acme"] = remaining });
@@ -116,7 +116,7 @@ public class PromotionQueueMetricsTests
     public void UtilizationGauge_ReadBeforeAnyMutation_ReflectsPreloadedOccupancy_NotZero()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_capacity_utilization");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueCapacityUtilization);
 
         // A store pre-loaded at nonzero occupancy against a nonzero cap, published before any
         // propose/promote/discard runs in this process.
@@ -137,7 +137,7 @@ public class PromotionQueueMetricsTests
     public async Task RecordSnapshot_ConcurrentWithGaugeCollection_NeverThrows_AndObservesAWrittenValue()
     {
         using var metrics = new PromotionQueueMetrics();
-        using var collector = new MetricCollector<double>(metrics.Meter, "ai_raccoon_queue_capacity_utilization");
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueCapacityUtilization);
 
         var writer = Task.Run(() =>
         {

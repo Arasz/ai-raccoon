@@ -20,29 +20,36 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 
     public PromotionQueueMetrics()
     {
-        Meter = new Meter("AiRaccoon.PromotionQueue");
+        Meter = new Meter(OtlpNames.PromotionQueueScope);
         _evictions = Meter.CreateCounter<long>(
-            "ai_raccoon_queue_evictions_total",
+            OtlpNames.QueueEvictions,
+            unit: "{eviction}",
             description: "Propose-tier evictions (reason tag: capacity)");
         _evictedScore = Meter.CreateHistogram<double>(
-            "ai_raccoon_queue_evicted_score",
+            OtlpNames.QueueEvictedScore,
+            unit: "1",
             description: "Score of the evicted row");
         _waitSeconds = Meter.CreateHistogram<double>(
-            "ai_raccoon_queue_wait_seconds",
+            OtlpNames.QueueWait,
+            unit: "s",
             description: "Seconds a row waited before leaving the queue (promoted or discarded)");
         _promoted = Meter.CreateCounter<long>(
-            "ai_raccoon_queue_promoted_total",
+            OtlpNames.QueuePromoted,
+            unit: "{row}",
             description: "Rows promoted from the queue into the shared tier");
         _discarded = Meter.CreateCounter<long>(
-            "ai_raccoon_queue_discarded_total",
+            OtlpNames.QueueDiscarded,
+            unit: "{row}",
             description: "Rows discarded from the queue by the agent");
         Meter.CreateObservableUpDownCounter(
-            "ai_raccoon_queue_queued",
+            OtlpNames.QueueQueued,
             ObserveQueued,
+            unit: "{item}",
             description: "Queued promotions per project, read from the store's current state");
         Meter.CreateObservableGauge(
-            "ai_raccoon_queue_capacity_utilization",
+            OtlpNames.QueueCapacityUtilization,
             ObserveUtilization,
+            unit: "1",
             description: "Queue occupancy against the cap (1.0 = full)");
     }
 

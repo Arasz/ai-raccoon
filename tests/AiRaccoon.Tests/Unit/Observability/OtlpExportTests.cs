@@ -202,10 +202,10 @@ public sealed class OtlpExportTests : IDisposable
 
         meterProvider.ForceFlush();
 
-        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_invocations");
-        var invocationMetric = exportedItems.Single(m => m.Name == "ai_raccoon_tool_invocations");
+        exportedItems.ShouldContain(m => m.Name == OtlpNames.ToolInvocations);
+        var invocationMetric = exportedItems.Single(m => m.Name == OtlpNames.ToolInvocations);
         HasToolTag(invocationMetric, "probe_tool").ShouldBeTrue();
-        exportedItems.ShouldContain(m => m.Name == "ai_raccoon_tool_duration_ms");
+        exportedItems.ShouldContain(m => m.Name == OtlpNames.ToolDuration);
     }
 
     [Fact]

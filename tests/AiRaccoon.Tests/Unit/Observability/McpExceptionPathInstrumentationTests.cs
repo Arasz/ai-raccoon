@@ -32,7 +32,7 @@ public class McpExceptionPathInstrumentationTests
     public async Task WatchAdd_MissingProjectId_RecordsErrorMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
 
         await Should.ThrowAsync<McpException>(() =>
@@ -48,7 +48,7 @@ public class McpExceptionPathInstrumentationTests
     public async Task WatchStatus_MissingProjectId_RecordsErrorMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
 
         await Should.ThrowAsync<McpException>(() =>
@@ -64,7 +64,7 @@ public class McpExceptionPathInstrumentationTests
     public async Task WatchRemove_MissingProjectId_RecordsErrorMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
 
         await Should.ThrowAsync<McpException>(() =>
@@ -80,7 +80,7 @@ public class McpExceptionPathInstrumentationTests
     public async Task WatchAdd_AccessDenied_RecordsErrorMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var tools = new WatchTools(new FakeWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()), metrics);
 
         await Should.ThrowAsync<McpException>(() =>
@@ -96,7 +96,7 @@ public class McpExceptionPathInstrumentationTests
     public async Task Sync_AccessDenied_RecordsErrorMetric()
     {
         var metrics = new ToolCallMetrics();
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService(),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),

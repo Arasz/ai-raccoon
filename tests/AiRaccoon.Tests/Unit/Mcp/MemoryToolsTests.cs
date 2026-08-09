@@ -217,10 +217,10 @@ public class MemoryToolsTests
     [Fact]
     public async Task ShareExtract_BoundsCounterProjectId_ButKeepsFullCompositeOnTheSpan()
     {
-        using var collector = new MetricCollector<long>(_metrics.Meter, "ai_raccoon_tool_invocations");
+        using var collector = new MetricCollector<long>(_metrics.Meter, OtlpNames.ToolInvocations);
         var startedActivities = new List<Activity>();
         using var listener = new ActivityListener();
-        listener.ShouldListenTo = source => source.Name == "AiRaccoon.MemoryTools";
+        listener.ShouldListenTo = source => source.Name == OtlpNames.MemoryToolsScope;
         listener.Sample = (ref _) => ActivitySamplingResult.AllData;
         listener.ActivityStarted = startedActivities.Add;
         listener.ActivityStopped = _ => { };

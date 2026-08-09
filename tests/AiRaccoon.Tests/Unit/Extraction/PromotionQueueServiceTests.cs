@@ -224,7 +224,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
         _metrics.Discarded.ShouldBe([("acme", 45.0)],
             "RecordDiscarded must fire on the discard path, the same way RecordPromoted fires on the promote path — " +
-            "otherwise ai_raccoon_queue_discarded_total ships permanently flat");
+            "otherwise ai_raccoon.queue.discarded ships permanently flat");
     }
 
     [Fact]
