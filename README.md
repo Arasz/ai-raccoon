@@ -19,6 +19,11 @@ cloud sync to S3 or Azure Blob. Built on the
   cycles the server already on the port over an authenticated loopback shutdown —
   no PID, no lockout when `dotnet tool update` needs the file.
   [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
+- **Talking to the server directly works again.** The loopback token that ADR-0020
+  put in front of `/mcp` left every non-proxy caller unable to authenticate. `/mcp`
+  now also accepts `Authorization: Bearer <token>`, `serve --mcp-entry` prints the
+  `headers` map a client needs, and a 401 says whether the credential was missing or
+  wrong. [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
 - **Search got roughly ten times faster.** Persisted chunk columns and partition-key
   KNN took a vector batch from 32.2 ms to 3.05 ms and an FTS batch from 41.2 ms to
   9.60 ms, measured on a real bank.
@@ -41,9 +46,13 @@ cloud sync to S3 or Azure Blob. Built on the
 - **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy
   scheme, with a migration that moves an existing bank across without a re-import.
   [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
-- **Tracing now covers the HTTP hop.** OTLP export gained the ASP.NET request span, so
-  a tool call is traceable from the request in, and the tool span moved onto the MCP
-  semantic conventions. [ADR-0021](docs/adr/0021-export-the-aspnet-request-span.md)
+- **Tracing now covers the HTTP hop, and you control the sampling.** OTLP export gained
+  the ASP.NET request span, so a tool call is traceable from the request in, and the
+  tool span moved onto the MCP semantic conventions. `OTEL_TRACES_SAMPLER` is live
+  configuration again — a hardcoded always-on sampler had been overriding it. The
+  background services are traced too, but only the passes that did something: the watch
+  loop polls every second, so spanning every no-op would have been ~86,400 spans a day.
+  [ADR-0021](docs/adr/0021-export-the-aspnet-request-span.md)
 - **An old build can't corrupt a newer bank.** The schema is stamped and writes are
   refused when the binary is behind it — which matters now that one bank is shared by
   every project on the machine.
@@ -221,7 +230,7 @@ and a backgrounded `serve` does not tell you what it is — so ask it:
 
 ```bash
 ai-raccoon serve observability counters   # dotnet-counters monitor -p 4711
-ai-raccoon serve observability trace      # dotnet-trace collect -p 4711 --providers AiRaccoon.MemoryTools
+ai-raccoon serve observability trace      # dotnet-trace collect -p 4711 --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http
 ai-raccoon serve observability pid        # 4711
 ai-raccoon serve observability otlp       # http://127.0.0.1:4317
 ```

@@ -40,7 +40,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 320, 321 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
 | 330 | `src/AiRaccoon/Setup/Dependencies.cs` |
 | 400 | `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs` |
-| 410-412 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
+| 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 500-509 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` |
 | 510-516 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` |
 | 520-526 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` |
@@ -51,7 +51,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 633-635 | `src/AiRaccoon/Setup/Serve/BackendLauncher.cs` (ADR-0020) |
 | 636-639 | `src/AiRaccoon/Setup/Serve/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
-| 650-654 | `src/AiRaccoon/Setup/Serve/ServerRestart.cs` (ADR-0022) |
+| 650-655 | `src/AiRaccoon/Setup/Serve/ServerRestart.cs` (ADR-0022) |
 | 660 | `src/AiRaccoon/Setup/Serve/ShutdownEndpoint.cs` (ADR-0022) |
 | 700-706 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |

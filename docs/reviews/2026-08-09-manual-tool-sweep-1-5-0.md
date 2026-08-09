@@ -221,6 +221,57 @@ reason-labeling, not confirmed against the scoring code.
 before this sweep, oldest row 20.5h and growing. This is not a new capacity-tuning problem to chase
 separately; it is the observable consequence of D7 above.
 
+## Addendum — promote verified live on the fixed binary (2026-08-09, evening)
+
+D7's mechanical half is fixed and proven against the real bank. The owner authorised installing a
+locally built tool so the backend could run the fixed code before 1.6.0 publishes; it was packed as
+**1.5.2** (below 1.6.0, so the eventual nuget release supersedes it) and the backend was cycled onto
+it — `/observability` reported `1.5.2+b8b12cbf`, confirming the running server, not just the CLI.
+
+`memory_share_extract(ai-raccoon, mode=promote, limit=5)` then returned:
+
+```
+promotedHashes: 5   skippedDuplicates: 0   failures: []
+```
+
+with perfect conservation on the bank: queue 218 → 213 (−5), shared tier 1 → 6 (+5), all six
+`embed_state=embedded`, orphaned queue rows 0 before and after. Nothing was dequeued without being
+shared — which is precisely the loss this defect caused, so this is the acceptance test for it.
+The earlier orphan backlog was cleared the same evening with the new `ai-raccoon extract prune
+--apply` (30 → 0, idempotent on a second run).
+
+**But the ranking is not fixed, and it should not be switched back on yet.** Inspecting what those
+five promotions actually were:
+
+| # | opening of the promoted value | shape |
+|---|---|---|
+| 1 | `# 0013 — Extension host hook surface: drop OnSweepAsync…` | ADR header chunk, project-internal |
+| 2 | `\| Invariants \| C1/C2/C5 rank 1 \| **1/1/1** (C2 improves 5→1)` | a bare markdown table row |
+| 3 | `> \`AIRACCOON_SCORING_EVAL_FIXTURE\` is set. That is a known…` | blockquote fragment |
+| 4 | `measurably less "framework-free" than it was. - **Positive:**…` | **starts mid-sentence** |
+| 5 | `identical to the committed ones — the whole 96-point grid is unmoved` | **starts mid-sentence** |
+
+Four of five are chunk fragments and two literally open mid-sentence — the exact signal that is
+computed and then dropped in the `OrganicNote` and `AutoMemoryNote` channels, and worth only `-0.18`
+in the doc channel against an `adr` prior of 2.55. This is the quality half of the sweep's finding,
+unchanged, now demonstrated on live promotions rather than inferred from queue scores.
+
+So `extract.mode.global` stays on `propose`. At the default `limit: 20` per project on a 30-minute
+interval, flipping it would push roughly a hundred such fragments per pass into a tier that is
+**sweep-exempt and visible to every project** — and this repo has already had to wipe that tier twice
+for the same reason (see the 2026-08-08 entries in `.ai-badger/state.json`). The mechanical fix
+removed the data loss; it did not make the queue's top-ranked candidates worth sharing.
+
+The five test promotions were deleted afterwards (`memory_delete` on each shared hash); their
+project-scope source entries were untouched, so the shared tier is back to its single pre-existing
+row and no content was lost.
+
+**What would close this properly:** commit a labeled calibration fixture so
+`PromotionScoringRealDataTests` can run, then tune the chunk-boundary signals against it. Until that
+exists, any weight change is a guess — which is why this task changed detectors and left every weight
+alone.
+
+
 ## Method notes
 
 - Driver: this session's own live MCP connection (same proxy path every other client on the machine

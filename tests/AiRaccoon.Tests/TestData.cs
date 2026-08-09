@@ -55,6 +55,21 @@ public static class TestData
 
         return dot;
     }
+
+    /// <summary>Locates a repo-relative file by walking up from the test output directory.</summary>
+    public static string RepoFile(string relative)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, relative);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
+    }
 }
 
 /// <summary>Recording fake for the propose tier — tool/hosted-service unit tests that must not touch a bank.</summary>
