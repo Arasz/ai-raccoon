@@ -7,9 +7,6 @@ namespace AiRaccoon.Core.Memory;
 /// </summary>
 public interface IPromotionQueueMetrics
 {
-    /// <summary>Queue-size delta for a project: +upserts, −drained/promoted/discarded.</summary>
-    void RecordQueued(string projectId, int delta);
-
     /// <summary>One eviction; reason is the rule that fired (capacity).</summary>
     void RecordEviction(string projectId, double victimScore, string reason);
 
@@ -19,6 +16,7 @@ public interface IPromotionQueueMetrics
     /// <summary>A row left the queue discarded by the agent, after waiting waitSeconds.</summary>
     void RecordDiscarded(string projectId, double waitSeconds);
 
-    /// <summary>Queue occupancy against the cap, 0..1+ (over-cap right after a mutation is possible).</summary>
-    void RecordUtilization(double ratio);
+    /// <summary>Publishes the queue's current persisted state — per-project depth and occupancy
+    /// against capacity — for the observable depth and utilization instruments to read.</summary>
+    void RecordSnapshot(PromotionQueueStats stats, int capacity);
 }

@@ -1,3 +1,6 @@
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -6,7 +9,7 @@ using OpenTelemetry.Trace;
 namespace AiRaccoon.Observability;
 
 /// <summary>Wires the OTel SDK for OTLP export (ADR 0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT.</summary>
-internal static class OtlpExport
+internal static partial class OtlpExport
 {
     private const string TracesSignalPath = "/v1/traces";
     private const string MetricsSignalPath = "/v1/metrics";
@@ -15,11 +18,20 @@ internal static class OtlpExport
     {
         /// <summary>No-op unless OTLP is enabled (ADR 0009): zero threads, zero sockets when unconfigured.
         /// resolvedState is a test seam — production callers always resolve from the environment.</summary>
-        internal IServiceCollection AddOtlpExport(OtlpExportState? resolvedState = null)
+        internal IServiceCollection AddOtlpExport(InfrastructureOptions options, OtlpExportState? resolvedState = null)
         {
             var state = resolvedState ?? OtlpExportState.Resolve();
             if (!state.Enabled)
             {
+                if (state.InvalidEndpointReason is not null)
+                {
+                    // No DI logger yet (AddOtlpExport runs before builder.Build()): the shared
+                    // pre-host seam (same one ServeRunner/ObservabilityRunner use) routes this
+                    // through quiet's file destination instead of stderr when quiet is set.
+                    using var log = PreHostLogging.CreateLogger("OtlpExport", options);
+                    Log.InvalidEndpoint(log.Logger, state.InvalidEndpointReason);
+                }
+
                 return services;
             }
 
@@ -28,15 +40,13 @@ internal static class OtlpExport
                 // detector, so it wins the resource merge even though OTEL_SERVICE_NAME reaches it too.
                 .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))
                 .WithMetrics(m => m
-                    .AddMeter("AiRaccoon.MemoryTools")
-                    .AddMeter("AiRaccoon.PromotionQueue")
-                    .AddMeter("System.Runtime")
+                    .AddMeter([.. OtlpNames.Meters])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
                     // ASP.NET Core's unrecorded per-request Activity becomes the local parent for every
                     // tool-call span; the SDK's default ParentBased sampler drops those (ADR-0009).
                     .SetSampler(new AlwaysOnSampler())
-                    .AddSource("AiRaccoon.MemoryTools")
+                    .AddSource([.. OtlpNames.Sources])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
 
             return services;
@@ -44,14 +54,12 @@ internal static class OtlpExport
     }
 
     /// <summary>Endpoint/protocol/timeout stay explicit; other exporter config flows through the SDK's
-    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md).</summary>
-    private static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
+    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md). Internal, not private, for direct unit testing.</summary>
+    internal static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
     {
         options.Endpoint = SignalEndpoint(state, signalPath);
         options.Protocol = IsHttpProtobuf(state.Protocol) ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
-        // Bounds a single unreachable-collector export attempt from hanging a detached serve
-        // (docs/adr/0009-otlp-export.md).
-        options.TimeoutMilliseconds = 5_000;
+        options.TimeoutMilliseconds = OtlpExportState.ExportTimeoutMilliseconds;
     }
 
     /// <summary>Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the
@@ -60,7 +68,7 @@ internal static class OtlpExport
     internal static Uri SignalEndpoint(OtlpExportState state, string signalPath)
     {
         var endpoint = state.Endpoint!;
-        if (!IsHttpProtobuf(state.Protocol) || endpoint.EndsWith(signalPath, StringComparison.Ordinal))
+        if (!IsHttpProtobuf(state.Protocol) || HasSignalPath(endpoint, signalPath))
         {
             return new Uri(endpoint);
         }
@@ -68,6 +76,18 @@ internal static class OtlpExport
         return new Uri(endpoint.TrimEnd('/') + signalPath);
     }
 
+    /// <summary>Matches the SDK's own AppendPathIfNotPresent: the path form or the path-plus-slash
+    /// form, case-insensitively.</summary>
+    private static bool HasSignalPath(string endpoint, string signalPath) =>
+        endpoint.EndsWith(signalPath, StringComparison.OrdinalIgnoreCase) ||
+        endpoint.EndsWith(signalPath + "/", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsHttpProtobuf(string? protocol) =>
         string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 640, Level = LogLevel.Warning, Message = "ai-raccoon: OTLP export disabled — {Reason}")]
+        public static partial void InvalidEndpoint(ILogger logger, string reason);
+    }
 }

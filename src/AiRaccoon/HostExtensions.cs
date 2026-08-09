@@ -22,6 +22,13 @@ public static partial class HostExtensions
 
             await host.WaitForShutdownAsync(cancellationToken);
 
+            // Disposal is the OTel SDK's only flush trigger (docs/reviews/2026-08-09-otlp-export-review.md
+            // A3) — TelemetryHostedService.StopAsync is a no-op. Same idiom as ServeRunner.cs:90-93.
+            if (host is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+
             return ExitCode.Success;
         }
     }

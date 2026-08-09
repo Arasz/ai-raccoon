@@ -72,11 +72,11 @@ public sealed class PromotionQueueServiceTests : IDisposable
         outcome.Evicted.ShouldBeEmpty();
         var queued = await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken);
         queued.Count.ShouldBe(2);
-        _metrics.QueuedDeltas.ShouldBe([("acme", 2)]);
+        _metrics.Snapshots.ShouldHaveSingleItem().Stats.PerProject["acme"].ShouldBe(2);
     }
 
     [Fact]
-    public async Task Propose_ReProposingTheSameHash_RecordsZeroDelta_NotAnUpsertCount()
+    public async Task Propose_ReProposingTheSameHash_DoesNotGrowTheRealQueueSize()
     {
         await _service.ProposeAsync("acme", [Candidate("h1", "fact one", 1.0)],
             TestContext.Current.CancellationToken);
@@ -85,8 +85,8 @@ public sealed class PromotionQueueServiceTests : IDisposable
             [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
 
         outcome.Upserted.ShouldBe(0, "h1 already occupied a queue slot; the queue did not grow");
-        _metrics.QueuedDeltas.ShouldBe([("acme", 1), ("acme", 0)],
-            "RecordQueued must report the real queue-size delta, not the SQLite conflict-update count");
+        _metrics.Snapshots.Select(s => s.Stats.PerProject["acme"]).ShouldBe([1, 1],
+            "RecordSnapshot must report the real persisted queue size, not the SQLite conflict-update count");
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         (await _service.DiscardAsync("acme", "h1", TestContext.Current.CancellationToken)).ShouldBe(1);
         (await _service.DiscardAsync("acme", null, TestContext.Current.CancellationToken)).ShouldBe(1);
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken)).ShouldBeEmpty();
-        _metrics.QueuedDeltas.Sum(d => d.Delta).ShouldBe(0, "2 upserted, 2 discarded");
+        _metrics.Snapshots[^1].Stats.TotalCount.ShouldBe(0, "2 upserted, 2 discarded — the queue is back to empty");
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
         _metrics.Discarded.ShouldBe([("acme", 45.0)],
             "RecordDiscarded must fire on the discard path, the same way RecordPromoted fires on the promote path — " +
-            "otherwise ai_raccoon_queue_discarded_total ships permanently flat");
+            "otherwise ai_raccoon.queue.discarded ships permanently flat");
     }
 
     [Fact]
@@ -309,18 +309,16 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     private sealed class RecordingMetrics : IPromotionQueueMetrics
     {
-        public List<(string ProjectId, int Delta)> QueuedDeltas { get; } = [];
         public List<(string ProjectId, double Score, string Reason)> Evictions { get; } = [];
         public List<(string ProjectId, double Wait)> Promoted { get; } = [];
         public List<(string ProjectId, double Wait)> Discarded { get; } = [];
-        public List<double> Utilization { get; } = [];
+        public List<(PromotionQueueStats Stats, int Capacity)> Snapshots { get; } = [];
 
-        public void RecordQueued(string projectId, int delta) => QueuedDeltas.Add((projectId, delta));
         public void RecordEviction(string projectId, double victimScore, string reason) =>
             Evictions.Add((projectId, victimScore, reason));
         public void RecordPromoted(string projectId, double waitSeconds) => Promoted.Add((projectId, waitSeconds));
         public void RecordDiscarded(string projectId, double waitSeconds) => Discarded.Add((projectId, waitSeconds));
-        public void RecordUtilization(double ratio) => Utilization.Add(ratio);
+        public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 
     private sealed class StubChunker : IChunker

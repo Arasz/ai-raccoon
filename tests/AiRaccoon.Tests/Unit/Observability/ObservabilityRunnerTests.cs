@@ -74,7 +74,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
             var run = await RunObservabilityAsync("trace", port);
 
             run.Exit.ShouldBe(ExitCode.Success);
-            run.Stdout.ShouldBe($"dotnet-trace collect -p {Environment.ProcessId} --providers AiRaccoon.MemoryTools{Environment.NewLine}");
+            run.Stdout.ShouldBe($"dotnet-trace collect -p {Environment.ProcessId} --providers {string.Join(',', OtlpNames.Sources)}{Environment.NewLine}");
             run.Stderr.ShouldBeEmpty();
         }
         finally

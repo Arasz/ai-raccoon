@@ -46,9 +46,10 @@ public sealed class ExtractionMetricsTests
         var time = new FakeTimeProvider(FixedNow);
         using var metrics = new PromotionQueueMetrics();
         var (service, _) = NewStack(store, new InMemoryPromotionQueueStore(), metrics, time);
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_queued");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueQueued);
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
+        collector.RecordObservableInstruments();
 
         var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
         measurement.Value.ShouldBe(1);
@@ -71,7 +72,7 @@ public sealed class ExtractionMetricsTests
         await queue.ProposeAsync("acme",
             [new QueueCandidate("h1", "h1.md", "organic fact about beta", null, 3.0, ["organic-write"])],
             TestContext.Current.CancellationToken);
-        using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_promoted_total");
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueuePromoted);
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 

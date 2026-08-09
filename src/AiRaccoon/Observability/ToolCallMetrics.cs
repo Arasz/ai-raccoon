@@ -11,25 +11,28 @@ namespace AiRaccoon.Observability;
 public sealed class ToolCallMetrics : IDisposable
 {
     private readonly Counter<long> _invocationCount;
-    private readonly Histogram<double> _invocationDurationMs;
+    private readonly Histogram<double> _invocationDuration;
 
     public ToolCallMetrics()
     {
-        Meter = new Meter("AiRaccoon.MemoryTools");
-        ActivitySource = new ActivitySource("AiRaccoon.MemoryTools");
+        Meter = new Meter(OtlpNames.MemoryToolsScope);
+        ActivitySource = new ActivitySource(OtlpNames.MemoryToolsScope);
 
         _invocationCount = Meter.CreateCounter<long>(
-            "ai_raccoon_tool_invocations",
+            OtlpNames.ToolInvocations,
+            unit: "{invocation}",
             description: "Number of MCP tool invocations");
 
+        // Bucket boundaries prescribed by the MCP semantic convention for mcp.server.operation.duration
+        // (open-telemetry/semantic-conventions-genai, docs/gen-ai/mcp.md, read at implementation time).
         var advice = new InstrumentAdvice<double>
         {
-            HistogramBucketBoundaries = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000]
+            HistogramBucketBoundaries = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60, 120, 300]
         };
-        _invocationDurationMs = Meter.CreateHistogram<double>(
-            "ai_raccoon_tool_duration_ms",
-            "ms",
-            "Duration of MCP tool invocations in milliseconds",
+        _invocationDuration = Meter.CreateHistogram<double>(
+            OtlpNames.ToolDuration,
+            "s",
+            "Duration of MCP tool invocations",
             null,
             advice);
     }
@@ -68,7 +71,7 @@ public sealed class ToolCallMetrics : IDisposable
             histoTags.Add("error_type", errorType);
         }
 
-        _invocationDurationMs.Record(duration.TotalMilliseconds, histoTags);
+        _invocationDuration.Record(duration.TotalSeconds, histoTags);
     }
 
     public void Dispose() => Meter.Dispose();

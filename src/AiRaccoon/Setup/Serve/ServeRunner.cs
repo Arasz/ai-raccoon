@@ -29,8 +29,8 @@ internal static partial class ServeRunner
     public static async Task<int> RunAsync(CliParseResult parsed, ServerConfig config, TextWriter stdout,
         TextWriter stderr, CancellationToken cancellationToken = default)
     {
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace));
-        var logger = loggerFactory.CreateLogger("ServeRunner");
+        using var log = PreHostLogging.CreateLogger("ServeRunner", config.Options);
+        var logger = log.Logger;
 
         var port = ResolvePort(parsed);
         var serveConfig = config with
