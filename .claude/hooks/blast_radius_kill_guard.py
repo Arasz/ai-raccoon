@@ -1,77 +1,147 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: deny an unscoped process kill or shared-daemon reap while more than
-one agent lane is plausibly live on this machine.
-
-See docs/work/2026-08-07-cross-session-agent-coordination.md, incident 8: an agent told
-to "kill any build you have running" ran `pkill -f "dotnet build"` — an unscoped pattern
-match that killed every matching process on the machine, including another session's
-in-flight compile. The generalisable rule from that note: never pattern-match a kill or
-reap a shared daemon while another session may be using it. `pkill`, `killall`,
-`dotnet build-server shutdown`, and any `kill` that targets a pattern rather than a
-numeric PID are all the same hazard.
-
-Denies only when more than one lane is plausibly live (one socket per live top-level
-claude process under /tmp/cc-socks/*.sock, verified alive) — a single-session machine
-gets no friction. Carries the same 3-strike escape valve as memory_first_gate_hook.py so
-a genuinely-needed kill is still reachable; every path exits 0 (fail open).
+"""PreToolUse hook: deny an unscoped process kill or shared-cache reap while more than one
+agent lane is live; re-issuing the same command 3 times opens an escape valve for it alone.
+Rationale and the incident behind it: docs/work/2026-08-07-cross-session-agent-coordination.md.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shlex
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 SOCK_DIR = Path("/tmp/cc-socks")
-MARKER_DIR = Path.home() / ".ai-badger" / "blast-radius-guard"
 MAX_DENIALS = 3
+MARKER_TTL_SECONDS = 86400
 
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+
+def _marker_dir() -> Optional[Path]:
+    """The denial-counter directory, or None when this process has no home directory."""
+    try:
+        return Path.home() / ".ai-badger" / "blast-radius-guard"
+    except (RuntimeError, OSError):
+        return None
+
+
+MARKER_DIR: Optional[Path] = _marker_dir()
+
+_SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh"))
+_SKIPPABLE = frozenset(("sudo", "command", "env", "nohup", "exec", "time"))
+_OPERATORS = frozenset((";", "|", "||", "&", "&&", "(", ")", "<", ">", ">>"))
+_ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_KILLALL = re.compile(r"^killall\d*$")
 _SIGNAL_FLAG = re.compile(r"^-(?:\d+|[A-Za-z]+)$")
 _PID = re.compile(r"^\d+$")
-
-_PATTERNS = (
-    (re.compile(r"\bpkill\b"), "pkill matches processes by name/pattern, never by PID"),
-    (re.compile(r"\bkillall\b"), "killall matches processes by name, never by PID"),
-    (re.compile(r"dotnet\s+build-server\s+shutdown\b"),
-     "dotnet build-server shutdown reaps every worker on the shared MSBuild server"),
-)
+_SIGNAL_OPTION = frozenset(("-s", "--signal", "-n"))
+_RECURSIVE_RM = re.compile(r"^-(?!-)[a-zA-Z]*[rR]|^--recursive$")
+_SHARED_CACHE = re.compile(r"(^|/)(\.nuget|\.dotnet|\.local/share/nuget|msbuildcache)(/|$)")
 
 
-def _kill_hazard(segment: str) -> Optional[str]:
-    """A reason string when *segment* runs `kill` against something other than bare PIDs."""
+def _tokenize(text: str) -> List[str]:
+    """Shell tokens with operators kept separate; [] when the text does not lex."""
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
     try:
-        tokens = shlex.split(segment)
+        return list(lexer)
     except ValueError:
-        return None
-    if "kill" not in tokens:
-        return None
-    idx = tokens.index("kill")
-    args = tokens[idx + 1:]
-    targets = [t for t in args if not _SIGNAL_FLAG.match(t)]
-    if targets and all(_PID.match(t) for t in targets):
-        return None  # every target is a bare numeric PID — scoped, allowed
-    return "kill without an explicit numeric PID targets a pattern, not a process"
+        return []
 
 
-def find_hazard(command: str) -> Optional[str]:
+def _segments(command: str) -> List[List[str]]:
+    """The command split into pipeline/list segments, each a token list."""
+    out: List[List[str]] = []
+    for line in command.splitlines():
+        current: List[str] = []
+        for token in _tokenize(line):
+            if token in _OPERATORS:
+                if current:
+                    out.append(current)
+                current = []
+                continue
+            current.append(token)
+        if current:
+            out.append(current)
+    return out
+
+
+def _split_command(tokens: List[str]) -> Optional[Tuple[str, List[str]]]:
+    """(program, args) for a segment, past env assignments, `sudo`-likes and any path prefix."""
+    for index, token in enumerate(tokens):
+        if _ENV_ASSIGN.match(token) or token in _SKIPPABLE:
+            continue
+        return token.rsplit("/", 1)[-1], tokens[index + 1:]
+    return None
+
+
+def _kill_hazard(args: List[str]) -> Optional[str]:
+    """A reason when `kill` targets anything other than PIDs or job specs, else None."""
+    targets: List[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in _SIGNAL_OPTION:
+            skip_next = True
+            continue
+        if arg == "--" or _SIGNAL_FLAG.match(arg):
+            continue
+        targets.append(arg)
+    if targets and all(_PID.match(t) or t.startswith("%") for t in targets):
+        return None
+    return "kill without an explicit numeric PID or job spec targets a pattern, not a process"
+
+
+def _reap_hazard(program: str, args: List[str]) -> Optional[str]:
+    """A reason when the segment reaps a shared daemon or cache, else None."""
+    if program == "dotnet" and "build-server" in args and "shutdown" in args:
+        return "dotnet build-server shutdown reaps every worker on the shared MSBuild server"
+    if program == "launchctl" and "kickstart" in args and any(
+            a.startswith("-") and "k" in a for a in args):
+        return "launchctl kickstart -k restarts a system-wide service other sessions may be using"
+    if program == "rm" and any(_RECURSIVE_RM.match(a) for a in args):
+        for arg in args:
+            if _SHARED_CACHE.search(os.path.expanduser(arg).lower()):
+                return "a recursive delete of a shared NuGet/MSBuild cache breaks every other lane"
+    return None
+
+
+def _segment_hazard(tokens: List[str], depth: int) -> Optional[str]:
+    """A deliberate allowlist of known hazards; completeness is an explicit non-goal —
+    an unlisted command is allowed, so add to it as incidents teach us new ones."""
+    split = _split_command(tokens)
+    if split is None:
+        return None
+    program, args = split
+    if program == "pkill":
+        return "pkill matches processes by name/pattern, never by PID"
+    if _KILLALL.match(program):
+        return "killall matches processes by name, never by PID"
+    if program == "kill":
+        return _kill_hazard(args)
+    if program in _SHELLS and depth > 0 and "-c" in args:
+        index = args.index("-c")
+        if index + 1 < len(args):
+            return find_hazard(args[index + 1], depth - 1)
+    return _reap_hazard(program, args)
+
+
+def find_hazard(command: str, depth: int = 3) -> Optional[str]:
     """The reason *command* is a blast-radius hazard, or None when it looks scoped."""
-    for pattern, reason in _PATTERNS:
-        if pattern.search(command):
-            return reason
-    for segment in _SEGMENT_SPLIT.split(command):
-        reason = _kill_hazard(segment)
+    for tokens in _segments(command):
+        reason = _segment_hazard(tokens, depth)
         if reason:
             return reason
     return None
 
 
 def _live_lane_pids() -> List[int]:
-    """PIDs of live top-level claude processes, from /tmp/cc-socks/*.sock (self-cleaning:
-    one socket per live process, named by PID)."""
+    """PIDs of live top-level claude processes, one socket per process under SOCK_DIR."""
     try:
         sockets = list(SOCK_DIR.glob("*.sock"))
     except OSError:
@@ -95,31 +165,48 @@ def _live_lane_pids() -> List[int]:
     return pids
 
 
-def _safe_session(session_id: Optional[str]) -> str:
-    if not session_id:
-        return ""
-    return session_id.replace("/", "_").replace("\\", "_")
+def _denials_path(session_id: Optional[str], command: str) -> Optional[Path]:
+    """Counter file for this (session, exact command) pair, or None when unaddressable."""
+    if MARKER_DIR is None or not session_id:
+        return None
+    safe = str(session_id).replace("/", "_").replace("\\", "_")
+    digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:32]
+    return MARKER_DIR / f"{safe}.{digest}.denials"
 
 
-def _denials_path(session_id: Optional[str]) -> Path:
-    safe = _safe_session(session_id)
-    return MARKER_DIR / (safe + ".denials") if safe else Path("")
-
-
-def deny_count(session_id: Optional[str]) -> int:
+def deny_count(session_id: Optional[str], command: str) -> int:
+    path = _denials_path(session_id, command)
+    if path is None:
+        return 0
     try:
-        return int(_denials_path(session_id).read_text(encoding="utf-8").strip() or "0")
+        return int(path.read_text(encoding="utf-8").strip() or "0")
     except (OSError, ValueError):
         return 0
 
 
-def increment_denials(session_id: Optional[str]) -> bool:
-    path = _denials_path(session_id)
-    if not path.name:
+def _prune(directory: Path) -> None:
+    """Drop counter files older than MARKER_TTL_SECONDS; best effort."""
+    cutoff = time.time() - MARKER_TTL_SECONDS
+    try:
+        stale = list(directory.glob("*.denials"))
+    except OSError:
+        return
+    for marker in stale:
+        try:
+            if marker.stat().st_mtime < cutoff:
+                marker.unlink()
+        except OSError:
+            continue
+
+
+def increment_denials(session_id: Optional[str], command: str) -> bool:
+    path = _denials_path(session_id, command)
+    if path is None:
         return False
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(deny_count(session_id) + 1), encoding="utf-8")
+        _prune(path.parent)
+        path.write_text(str(deny_count(session_id, command) + 1), encoding="utf-8")
         return True
     except OSError:
         return False
@@ -131,8 +218,8 @@ def _reason(hazard: str, live_pids: List[int]) -> str:
         f"Blast-radius guard: {hazard}. {len(live_pids)} agent lanes are plausibly live "
         f"right now (PIDs {lanes}) — this command could kill another session's process. "
         f"Scope the kill to PIDs you started (e.g. `kill <pid>` for a PID you launched, "
-        f"not `pkill`/`killall`/a pattern). Re-issue this call if it is genuinely needed; "
-        f"it is allowed through after {MAX_DENIALS} denials."
+        f"not `pkill`/`killall`/a pattern). Re-issue this exact command if it is genuinely "
+        f"needed; that same command is allowed through after {MAX_DENIALS} denials."
     )
 
 
@@ -156,9 +243,9 @@ def decide(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {}  # exactly one (or zero, undetermined) lane live — nothing to protect
 
     session_id = payload.get("session_id") or payload.get("sessionId")
-    if deny_count(session_id) >= MAX_DENIALS:
-        return {}  # escape valve: a genuinely-needed kill still gets through
-    increment_denials(session_id)
+    if deny_count(session_id, command) >= MAX_DENIALS:
+        return {}  # escape valve: this exact command, re-issued, still gets through
+    increment_denials(session_id, command)
 
     return {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",

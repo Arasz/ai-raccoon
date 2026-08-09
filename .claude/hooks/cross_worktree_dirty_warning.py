@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: warn (never block) when the file an edit targets is also dirty in
-another worktree of this repo.
-
-Several Claude Code sessions can share one repository, each in its own git worktree
-(see docs/work/2026-08-07-cross-session-agent-coordination.md, incident 6: two sessions
-edited McpServerSetup.cs from different worktrees, unaware of each other). This hook
-gives the editing session a heads-up before it writes over ground another session is
-already standing on.
-
-Runs on every Edit/Write/MultiEdit/NotebookEdit call, so the full worktree sweep (git
-worktree list + a `git status --porcelain` per worktree) is cached to a temp file with a
-short TTL and reused across calls. Fails open on any error: a coordination hint that
-breaks the edit it was only meant to annotate is worse than no hint.
+"""PreToolUse hook: warn (never block) when the file an edit targets is also dirty in another
+worktree of this repo. The worktree sweep is cached unfiltered and shared across sessions;
+the calling worktree is excluded at read time. Fails open on every error.
 """
 from __future__ import annotations
 
@@ -32,8 +22,21 @@ _GIT_LOCATION_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FI
                      "GIT_PREFIX", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES")
 
 _GIT_TIMEOUT_SECONDS = 3
+_SWEEP_BUDGET_SECONDS = 6
 _CACHE_TTL_SECONDS = 10
 _EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+
+
+def _cache_root() -> Optional[Path]:
+    """The cache directory, or None when this process has no home directory. Deliberately
+    not the world-writable temp dir: the cached text is interpolated into a model's context."""
+    try:
+        return Path.home() / ".ai-badger" / "dirty-sweep"
+    except (RuntimeError, OSError):
+        return None
+
+
+CACHE_DIR: Optional[Path] = _cache_root()
 
 
 def _git_env() -> Dict[str, str]:
@@ -45,6 +48,8 @@ def _git_env() -> Dict[str, str]:
 
 def _run_git(args: List[str], cwd: str, timeout: float) -> Optional[str]:
     """stdout of a git invocation, or None on any failure (missing git, timeout, non-repo)."""
+    if timeout <= 0:
+        return None
     try:
         result = subprocess.run(
             ["git", *args], cwd=cwd, capture_output=True, text=True,
@@ -72,7 +77,7 @@ def _main_repo_root(cwd: str) -> Optional[Path]:
     """The main checkout's root, whether *cwd* is itself the main checkout or a linked
     worktree — `--git-common-dir` always points at the shared `.git`."""
     common_dir = _run_git(["rev-parse", "--path-format=absolute", "--git-common-dir"],
-                           cwd, _GIT_TIMEOUT_SECONDS)
+                          cwd, _GIT_TIMEOUT_SECONDS)
     if not common_dir:
         return None
     return Path(common_dir.strip()).parent
@@ -83,9 +88,11 @@ def _toplevel(cwd: str) -> Optional[Path]:
     return Path(top.strip()) if top else None
 
 
-def _cache_path(repo_root: Path) -> Path:
+def _cache_path(repo_root: Path) -> Optional[Path]:
+    if CACHE_DIR is None:
+        return None
     key = hashlib.sha1(str(repo_root).encode("utf-8")).hexdigest()[:16]
-    return Path(tempfile.gettempdir()) / f"ai-raccoon-dirty-sweep-{key}.json"
+    return CACHE_DIR / f"dirty-sweep-{key}.json"
 
 
 def _parse_worktree_porcelain(output: str) -> List[Dict[str, str]]:
@@ -129,22 +136,26 @@ def _parse_status_paths(output: str) -> List[str]:
     return paths
 
 
-def _sweep(repo_root: Path, skip: Path) -> Dict[str, List[Dict[str, str]]]:
-    """path -> [{"worktree": ..., "branch": ...}] for every OTHER worktree's dirty files."""
-    listing = _run_git(["worktree", "list", "--porcelain"], str(repo_root), _GIT_TIMEOUT_SECONDS)
+def _sweep(repo_root: Path) -> Dict[str, List[Dict[str, str]]]:
+    """path -> [{"worktree": ..., "branch": ...}] across EVERY worktree, caller included, so
+    the result is caller-independent and safe to share. Partial once the budget is spent."""
+    deadline = time.monotonic() + _SWEEP_BUDGET_SECONDS
+    if deadline - time.monotonic() <= 0:
+        return {}
+    listing = _run_git(["worktree", "list", "--porcelain"], str(repo_root),
+                       min(_GIT_TIMEOUT_SECONDS, deadline - time.monotonic()))
     if not listing:
         return {}
     data: Dict[str, List[Dict[str, str]]] = {}
     for wt in _parse_worktree_porcelain(listing):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break  # budget spent — a partial sweep beats blowing the hook timeout
         wt_path = Path(wt["path"])
-        try:
-            if wt_path.resolve() == skip.resolve():
-                continue
-        except OSError:
-            continue
         if not wt_path.is_dir():
             continue  # prunable/stale entry — git worktree list can carry these
-        status = _run_git(["status", "--porcelain"], str(wt_path), _GIT_TIMEOUT_SECONDS)
+        status = _run_git(["status", "--porcelain"], str(wt_path),
+                          min(_GIT_TIMEOUT_SECONDS, remaining))
         if status is None:
             continue
         for rel in _parse_status_paths(status):
@@ -153,20 +164,73 @@ def _sweep(repo_root: Path, skip: Path) -> Dict[str, List[Dict[str, str]]]:
     return data
 
 
-def _sweep_cached(repo_root: Path, skip: Path) -> Dict[str, List[Dict[str, str]]]:
-    cache_file = _cache_path(repo_root)
+def _valid_sweep(data: Any) -> bool:
+    """True only for the exact {path: [{"worktree": str, "branch": str}]} shape we write."""
+    if not isinstance(data, dict):
+        return False
+    for key, hits in data.items():
+        if not isinstance(key, str) or not isinstance(hits, list):
+            return False
+        for hit in hits:
+            if not isinstance(hit, dict):
+                return False
+            if not isinstance(hit.get("worktree"), str) or not isinstance(hit.get("branch"), str):
+                return False
+    return True
+
+
+def _read_cache(cache_file: Path) -> Optional[Dict[str, List[Dict[str, str]]]]:
     try:
-        age = time.time() - cache_file.stat().st_mtime
-        if age <= _CACHE_TTL_SECONDS:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+        if time.time() - cache_file.stat().st_mtime > _CACHE_TTL_SECONDS:
+            return None
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        pass
-    data = _sweep(repo_root, skip)
+        return None
+    return data if _valid_sweep(data) else None
+
+
+def _write_cache(cache_file: Path, data: Dict[str, List[Dict[str, str]]]) -> None:
+    """Atomic replace so a concurrent reader never sees a half-written sweep."""
     try:
-        cache_file.write_text(json.dumps(data), encoding="utf-8")
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        handle, temp_name = tempfile.mkstemp(dir=str(cache_file.parent), suffix=".tmp")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                json.dump(data, stream)
+            os.replace(temp_name, cache_file)
+        except OSError:
+            os.unlink(temp_name)
     except OSError:
         pass  # a cache write failure only costs the next call a fresh sweep
+
+
+def _sweep_cached(repo_root: Path) -> Dict[str, List[Dict[str, str]]]:
+    cache_file = _cache_path(repo_root)
+    if cache_file is None:
+        return _sweep(repo_root)
+    cached = _read_cache(cache_file)
+    if cached is not None:
+        return cached
+    data = _sweep(repo_root)
+    _write_cache(cache_file, data)
     return data
+
+
+def _elsewhere(hits: List[Dict[str, str]], mine: Path) -> List[Dict[str, str]]:
+    """The hits belonging to worktrees other than *mine* — self-exclusion at read time."""
+    try:
+        resolved = mine.resolve()
+    except OSError:
+        return hits
+    out: List[Dict[str, str]] = []
+    for hit in hits:
+        try:
+            if Path(hit["worktree"]).resolve() == resolved:
+                continue
+        except OSError:
+            pass
+        out.append(hit)
+    return out
 
 
 def check(payload: Dict[str, Any]) -> Optional[str]:
@@ -190,7 +254,7 @@ def check(payload: Dict[str, Any]) -> Optional[str]:
     except (OSError, ValueError):
         return None
 
-    hits = _sweep_cached(repo_root, toplevel).get(rel, [])
+    hits = _elsewhere(_sweep_cached(repo_root).get(rel, []), toplevel)
     if not hits:
         return None
     named = "; ".join(f"{h['worktree']} (branch {h['branch']})" for h in hits)
