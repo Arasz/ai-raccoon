@@ -29,6 +29,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
     private readonly WorkspaceService _workspaces;
+    private readonly SqlitePromotionQueueStore _queue;
 
     public SqliteMemoryStoreIntegrationTests()
     {
@@ -38,6 +39,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
             new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
+        _queue = new SqlitePromotionQueueStore(_factory, new FakeTimeProvider(FixedNow));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -358,6 +360,31 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
                 TestContext.Current.CancellationToken))
             .ShouldNotBeEmpty("a manual row citing the path as sourceFile must survive");
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ReplaceFile_KeepsPromotionCandidateBackedOnlyByManualRow()
+    {
+        var file = Path.Combine(_dataRoot, "cited-queue.md");
+        await File.WriteAllTextAsync(file, "oscillatory queued source", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        // The manual row cites the watched file but is not owned by it: path = <sha256>.md.
+        // Its promotion candidate is backed by that row alone.
+        var manual = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "thixotropic queued manual", SourceFile: file),
+            TestContext.Current.CancellationToken);
+        await _queue.UpsertAsync("acme",
+            [new QueueCandidate(manual.Hash, $"{manual.Hash}.md", manual.Value, file, 1.0, [])],
+            TestContext.Current.CancellationToken);
+
+        await File.WriteAllTextAsync(file, "oscillatory queued revised", TestContext.Current.CancellationToken);
+        await _store.ReplaceFileAsync("acme", file, "revised-hash", TestContext.Current.CancellationToken);
+
+        (await _queue.ListAsync("acme", TestContext.Current.CancellationToken))
+            .ShouldContain(r => r.Hash == manual.Hash,
+                "a candidate backed only by a manual row citing the path must survive the digest replace");
     }
 
     [Fact]
