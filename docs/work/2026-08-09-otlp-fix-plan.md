@@ -293,6 +293,27 @@ test observed green. Not an open question any more; a dependency. If that test c
 always-on sampler stays and D10 reopens: either the proxy samples (reopening "stdio gets no
 exporter"), or the server keeps a root-forcing sampler.
 
+**Status 2026-08-09 13:14 — one step from cleared.** `ProxyWireE2ETests.ForwardedRequests_CarryNoTraceparent`
+is **green on the lane branch** (`work/mcp-proxy-runner`). It asserts the right thing: a real backend
+on a real loopback socket records every inbound header name and neither `traceparent` nor `tracestate`
+appears, with the client under test being the **real bare `ai-raccoon` process** spawned as a child —
+production composition, not a harness resembling it.
+
+Still owed before we remove the sampler: the same test observed green **after** the merge into
+`task/mcp-server-http-proxy`, which adds an `X-AiRaccoon-Token` header to the outgoing request. Adding
+a header does not create an `Activity`, so no movement is expected — but the failure mode if we are
+wrong is *every server span silently dropped*, which is exactly the class of defect this whole hold
+exists to prevent. The cost of waiting is a few minutes; the cost of being wrong is invisible data
+loss. We wait.
+
+**ADR-0021 must cite that test by name**, not restate the reasoning. The test pins today's proxy
+composition, so a future change that wires an exporter into the proxy host turns it red — and whoever
+does that should meet our sampler decision immediately rather than discover it three layers down.
+
+**Confirmed by the proxy lane:** ADR-0020 now records that the proxy host composes no tool-layer
+filters, because bare `ai-raccoon` forwards rather than executes. So D1's `CallToolFilter` registers
+on the **backend host only** — that constraint is now written down on their side, not just ours.
+
 ## Risks the plan carries
 
 - **WP7's pairing is load-bearing.** Removing `SetSampler` is only safe *because* the hosting source
