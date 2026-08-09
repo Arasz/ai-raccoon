@@ -14,6 +14,9 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 - **Check the source, not your own reasoning** — Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you.
   → `.ai-badger/invariants/check-sources-not-yourself.md`
 
+- **CI owns the full suite** — Run the build and the tests you changed; let CI run everything else. A local full-suite run duplicates the pipeline, and an untagged test that slips past the filtered jobs is the real risk to watch.
+  → `.ai-badger/invariants/ci-owns-the-full-suite.md`
+
 - **Derive the list, or delete it** — A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them.
   → `.ai-badger/invariants/derive-or-delete-the-list.md`
 
