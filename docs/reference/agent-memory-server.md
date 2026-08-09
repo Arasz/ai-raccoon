@@ -234,6 +234,7 @@ runs the server.
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
+| `--quiet` | flag | off |
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
@@ -248,6 +249,19 @@ started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 `--transport stdio` is that escape hatch: a complete in-process server, no
 proxy, no autostart — exactly how the server behaved before `proxy` became
 the default.
+
+`--quiet` sends every log level to a file beside the bank instead of stdout/stderr —
+`~/.ai-raccoon/quiet.log` at the default user scope, or `<data-root>/.ai-raccoon/quiet.log`
+at project scope: the same directory `memory.db` lives in
+(`QuietLogging.LogFilePath`, `SqliteConnectionFactory.BankPathFor`). Nothing, not even a
+warning, reaches stdout or stderr in this mode, so a `--quiet` process that fails to start
+or misbehaves (e.g. an invalid `OTEL_EXPORTER_OTLP_ENDPOINT`) leaves no trace on the
+console — check `quiet.log` first. The file is append-only and never rotated; it
+accumulates for the life of the installation.
+
+Under `--quiet` the proxy's own failure line goes to `quiet.log` with everything else, so a
+backend that will not start leaves the console silent — check that file before concluding the
+proxy did nothing.
 
 ### Serve mode
 

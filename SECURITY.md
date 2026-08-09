@@ -91,9 +91,12 @@ Metrics differ by meter, and the difference matters:
 
 | Meter | Carries `project_id`? |
 |---|---|
-| `AiRaccoon.MemoryTools` (tool calls) | **Partially** — the `ai_raccoon_tool_invocations` counter carries it; the `ai_raccoon_tool_duration_ms` histogram does not (`ToolCallMetrics.RecordInvocation`) |
-| `AiRaccoon.PromotionQueue` | **Yes**, on four of its seven instruments — the queued/evicted/promoted/discarded counters (`PromotionQueueMetrics.RecordQueued`/`RecordEviction`/`RecordPromoted`/`RecordDiscarded`). The wait-seconds histogram and the capacity gauge carry no project tag |
+| `AiRaccoon.MemoryTools` (tool calls) | **Partially** — the `ai_raccoon.tool.invocations` counter carries it; the `mcp.server.operation.duration` histogram does not (`ToolCallMetrics.RecordInvocation`) |
+| `AiRaccoon.PromotionQueue` | **Yes**, on four of its seven instruments — the queued/evicted/promoted/discarded instruments: `evicted`/`promoted`/`discarded` via `PromotionQueueMetrics.RecordEviction`/`RecordPromoted`/`RecordDiscarded`, `queued` via the observable counter that `RecordSnapshot` publishes. The wait-seconds histogram and the capacity gauge carry no project tag |
 | `System.Runtime` (built-in) | No — process-level GC/CPU/memory only |
+
+Instrument names above are the current OTel-convention names; the single source of truth
+is `src/AiRaccoon/Observability/OtlpNames.cs`.
 
 So project names reach a collector through more than just trace spans: the
 tool-invocation counter and four of the promotion-queue instruments carry
@@ -117,9 +120,9 @@ For completeness: `project_id` already appears in plaintext in the server's own
 stderr log (`serve.log`, when redirected per the README's
 `ai-raccoon serve > serve.log 2>&1 &` pattern) regardless of whether OTLP export is
 on — e.g. `PromotionQueueService.Log.Proposed`
-(`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs:146`,
+(`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs:179`,
 `"Propose for {ProjectId}: ..."`) and `ExtractionHostedService.Log.Pass`
-(`src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs:179`,
+(`src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs:156`,
 `"Extraction pass for {ProjectId} ({Mode}): ..."`). OTLP export is not a new class of
 disclosure for this value — this is precisely why no hashing is applied before export
 (ADR 0009).

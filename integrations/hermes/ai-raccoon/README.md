@@ -56,7 +56,7 @@ plugins:
     url: http://127.0.0.1:7721/mcp   # http mode
     binary: ai-raccoon    # stdio mode (resolved on PATH)
     binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
-    quiet: true           # spawn the server with --quiet (no info logs)
+    quiet: true           # spawn the server with --quiet (all logs to a file, none on stdout/stderr)
     status_words: true    # one-word stderr cue per call ("searching", "remembering", …)
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
     search_limit: 5
@@ -86,7 +86,10 @@ provider emits both signals itself.
   stderr as each call starts — "searching", "remembering", "counting", … Set
   `status_words: false` to silence.
 - **Quiet server:** with `quiet: true` (default) the spawned server runs with `--quiet`
-  (info logs off, Warning+ only) — the status words are the only routine stderr output.
+  — every log level, including warnings, goes to a file beside the server's bank
+  (`quiet.log`) instead of stdout/stderr, so the status words are the *only* stderr
+  output, full stop. If a spawned server appears to fail silently, check that file
+  before assuming nothing was logged.
 - **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var is set (read by the
   provider at session start — a change needs a session restart; the spawned server merely
   inherits it), the provider appends one JSONL row per call:
