@@ -121,9 +121,14 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   it `Discarded`, both with `closed_at`, so the record says which trigger ended it. A
   workspace begun but never finished stays traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
-  to delete. An entry is a candidate only when it carries a per-entry TTL, its retrieval
-  rating is below the sweep threshold (default 0.3) *and* its age exceeds that TTL.
-  `shared` entries are never swept.
+  to delete. An entry is a candidate only when it carries a per-entry TTL, its rating is
+  below the sweep threshold (default 0.3) *and* its age exceeds that TTL. `shared` entries
+  are never swept, and the delete stays inside the `project` scope it enumerated — a
+  same-hash row in an active workspace or a custom context is not collateral.
+  Counter-intuitive but worth knowing: the rating is only recomputed when a search returns
+  the entry, so an entry nothing ever searches keeps its starting 0.5 and never becomes a
+  candidate, while searching an entry older than ~26 days is what drops it under the
+  threshold. `rating` does not affect search ranking.
 - **Background reaper:** the same sweep also runs unattended on HTTP/S hosts, and it is
   **ON by default** — every 24 h it sweeps each project and *deletes* (never a dry run).
   It is the one background service that destroys data, so it has a kill switch:

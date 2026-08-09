@@ -24,8 +24,9 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
   (default k=60, 1:1 weights). Tunable via `rrfK`,
   `ftsWeight`, and `vectorWeight`. Scoped by `scope=all|project|shared` and optional workspace. Degrades to FTS5-only
   when no embedding engine is configured.
-- **Rating and degradation.** Search hits raise an entry's retrieval rating; sweeps remove old, low-rated project
-  entries (`shared` is protected).
+- **Rating and degradation.** A search hit recomputes an entry's rating from its age, so an entry nothing
+  searches keeps its starting rating and is never swept; sweeps remove old, low-rated project entries that
+  carry a `memory_set_ttl` TTL (`shared` is protected).
 - **Access modes.** Three tiers enforced at the tool boundary: `ro` (read-only),
   `rw` (default: read + write), `full` (adds deletion, sweep execution, and workspace consolidation). Set with the
   `access` CLI commands (settings table).

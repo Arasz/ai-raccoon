@@ -16,21 +16,20 @@ cloud sync to S3 or Azure Blob. Built on the
   shares one embedding model and one bank instead of paying for its own.
   [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
 - **Upgrading no longer means hunting for a process.** `ai-raccoon serve --restart`
-  cycles the server already on the port over an authenticated loopback shutdown —
-  no PID, no lockout when `dotnet tool update` needs the file.
+  cycles the server already on the port over an authenticated loopback shutdown — no PID, no lockout when `dotnet tool update` needs the file. It cannot cycle a server older than 1.6.0, which has no endpoint to ask: this upgrade is the last
+  one that needs a manual stop.
   [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
 - **Talking to the server directly works again.** The loopback token that ADR-0020
   put in front of `/mcp` left every non-proxy caller unable to authenticate. `/mcp`
   now also accepts `Authorization: Bearer <token>`, `serve --mcp-entry` prints the
   `headers` map a client needs, and a 401 says whether the credential was missing or
   wrong. [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
-- **Search got roughly ten times faster.** Persisted chunk columns and partition-key
-  KNN took a vector batch from 32.2 ms to 3.05 ms and an FTS batch from 41.2 ms to
-  9.60 ms, measured on a real bank.
+- **Search got faster — about 10× on the vector path, 4× on FTS.** Persisted chunk columns and partition-key KNN took a vector batch from 32.20 ms to 3.05 ms, and an FTS batch from 41.23 ms to 9.60 ms. One bank, 4,423 entries, a 2,065-row
+  project context, k=300, warm, median of 20 reps. The FTS half is the smaller win and most of what remains is `snippet()`.
   [measurements](docs/plans/2026-08-08-search-knn-perf.md)
 - **The shared tier proposes better memories.** Promotion scoring v3 routes each
-  candidate through its own channel — an ADR section and a scratch note are no longer
-  judged by the same yardstick. [ADR-0018](docs/adr/0018-promotion-scoring-v2.md)
+  candidate through its own channel — an ADR section and a scratch note are no longer judged by the same yardstick. (The ADR is filed under v2; v3 is a later section in
+  it.) [ADR-0018 § v3](docs/adr/0018-promotion-scoring-v2.md#v3--channel-routed-prior--bounded-evidence-2026-08-08)
 - **Promotion stopped losing candidates.** The queue used to hold hashes whose entry
   had been re-ingested, and promoting one destroyed the candidate while reporting the
   whole call as failed. Deleting an entry now clears its queue row, and
@@ -40,9 +39,7 @@ cloud sync to S3 or Azure Blob. Built on the
   `invalid-argument:` naming the parameter, instead of the opaque
   `An error occurred invoking '<tool>'`.
   [tool reference](docs/reference/agent-memory-server.md)
-- **Headings count, not just words.** A second structure vector ranks a match by where
-  it sits in a document, so a heading path pulls its weight alongside the prose.
-  [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
+- **Headings count, not just words.** A second structure vector ranks a match by where it sits in a document. [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
 - **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy
   scheme, with a migration that moves an existing bank across without a re-import.
   [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
