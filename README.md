@@ -29,7 +29,7 @@ cloud sync to S3 or Azure Blob. Built on the
 - **Promotion stopped losing candidates.** The queue used to hold hashes whose entry
   had been re-ingested, and promoting one destroyed the candidate while reporting the
   whole call as failed. Deleting an entry now clears its queue row, and
-  `ai-raccoon extract prune` cleans up what already leaked.
+  `ai-raccoon extract prune` reports what already leaked (`--apply` removes it).
   [ADR-0023](docs/adr/0023-promotion-queue-entries-delete-invalidation.md)
 - **Errors tell your agent what to fix.** A wrong or blank argument now comes back as
   `invalid-argument:` naming the parameter, instead of the opaque
@@ -41,9 +41,9 @@ cloud sync to S3 or Azure Blob. Built on the
 - **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy
   scheme, with a migration that moves an existing bank across without a re-import.
   [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
-- **You can see what the server is doing.** OTLP export ships traces and metrics for
-  tool calls, the promotion queue and ASP.NET requests, following the MCP semantic
-  conventions. [ADR-0009](docs/adr/0009-otlp-export.md)
+- **Tracing now covers the HTTP hop.** OTLP export gained the ASP.NET request span, so
+  a tool call is traceable from the request in, and the tool span moved onto the MCP
+  semantic conventions. [ADR-0021](docs/adr/0021-export-the-aspnet-request-span.md)
 - **An old build can't corrupt a newer bank.** The schema is stamped and writes are
   refused when the binary is behind it — which matters now that one bank is shared by
   every project on the machine.

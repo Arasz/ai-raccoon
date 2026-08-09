@@ -263,6 +263,38 @@ internal static class MemorySql
                                                AND (source_file = @path OR source_file LIKE @pathPrefix ESCAPE '\')
                                              """;
 
+    // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
+    // (ADR-0023) fires even for chunks whose text is unchanged and which return under the same hash.
+    // These three hold the candidates across that round trip; see ReplaceFileAsync.
+    public const string CreateQueueRestoreTable = """
+                                                  CREATE TEMP TABLE IF NOT EXISTS queue_restore (
+                                                      project_id TEXT NOT NULL, hash TEXT NOT NULL, path TEXT NULL,
+                                                      value TEXT NOT NULL, source_file TEXT NULL, score REAL NOT NULL,
+                                                      reasons TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+                                                  DELETE FROM queue_restore;
+                                                  """;
+
+    public const string CaptureQueueRowsForSourcePath = """
+                                                        INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                        SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
+                                                        FROM promotion_queue q
+                                                        WHERE q.project_id = @projectId
+                                                          AND EXISTS (SELECT 1 FROM entries e
+                                                                      WHERE e.project_id = q.project_id AND e.hash = q.hash
+                                                                        AND e.workspace_id IS NULL
+                                                                        AND (e.source_file = @path OR e.source_file LIKE @pathPrefix ESCAPE '\'))
+                                                        """;
+
+    public const string RestoreQueueRowsStillBacked = """
+                                                       INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                       SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
+                                                       FROM queue_restore r
+                                                       WHERE EXISTS (SELECT 1 FROM entries e
+                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash)
+                                                       ON CONFLICT(project_id, hash) DO NOTHING;
+                                                       DELETE FROM queue_restore;
+                                                       """;
+
     public const string DeleteWatchFilesByProjectPathCascade = """
                                                                DELETE FROM watch_files
                                                                WHERE project_id = @projectId

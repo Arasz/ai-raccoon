@@ -159,7 +159,7 @@ public sealed class ExtractCommands(SqlitePromotionQueueStore? promotionQueueSto
         CancellationToken cancellationToken)
     {
         Guard.IsNotNull(promotionQueueStore);
-        var apply = parseResult.GetValue<bool>("apply");
+        var apply = parseResult.GetValue<bool>("--apply");
         var report = await promotionQueueStore.PruneOrphansAsync(apply, cancellationToken);
 
         if (report.TotalOrphans == 0)
