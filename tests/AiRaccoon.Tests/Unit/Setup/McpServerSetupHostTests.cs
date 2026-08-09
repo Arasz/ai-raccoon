@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
@@ -123,6 +124,34 @@ public class McpServerSetupHostTests : IDisposable
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
+    }
+
+    [Fact]
+    public void StdioOnlyHost_DoesNotRegisterTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is SweepHostedService);
+    }
+
+    [Fact]
+    public void HttpHost_RegistersTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is SweepHostedService);
+    }
+
+    [Fact]
+    public void BothTransportsHost_RegistersTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is SweepHostedService);
     }
 
     [Fact]
