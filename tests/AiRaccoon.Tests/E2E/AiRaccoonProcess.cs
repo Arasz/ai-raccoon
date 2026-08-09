@@ -12,6 +12,10 @@ public static class AiRaccoonProcess
         Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     public static Task<McpClient> ConnectAsync(string[] arguments, CancellationToken cancellationToken) =>
+        ConnectAsync(arguments, null, cancellationToken);
+
+    public static Task<McpClient> ConnectAsync(string[] arguments, McpClientOptions? clientOptions,
+        CancellationToken cancellationToken) =>
         McpClient.CreateAsync(
             new StdioClientTransport(
                 new StdioClientTransportOptions
@@ -22,7 +26,7 @@ public static class AiRaccoonProcess
                     ShutdownTimeout = TimeSpan.FromSeconds(10)
                 },
                 NullLoggerFactory.Instance),
-            cancellationToken: cancellationToken);
+            clientOptions, cancellationToken: cancellationToken);
 
     public static int FreePort()
     {
