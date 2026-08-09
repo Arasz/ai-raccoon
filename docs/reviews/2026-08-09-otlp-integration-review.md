@@ -90,7 +90,7 @@ could not see the store.
 
 | # | Severity | Location | Finding |
 |---|---|---|---|
-| **D1** | should-fix | `PromotionQueueMetrics.cs:86-88`, `PromotionQueueSql.cs:41-45` | Depth stops reporting instead of reporting 0 on drain-to-empty; undocumented |
+| **D1** | should-fix | `src/AiRaccoon/Observability/PromotionQueueMetrics.cs:86-88`, `src/AiRaccoon.Infrastructure/Sqlite/PromotionQueueSql.cs:44` | Depth stops reporting instead of reporting 0 on drain-to-empty; undocumented |
 | **D2** | should-fix | `docs/reference/logging-event-ids.md:48-49` | **EventId 640 is not in the registry.** The PR body flagged the *proxy lane's* missing block but not its own |
 | **J1** | should-fix | `HostLogging.cs:17-20` | Quiet bypasses the per-category floors, contradicting the file's own contract |
 | **J2** | should-fix | `QuietLogging.cs:14`, Hermes README/plugin | New destination undocumented; integration docs actively contradict it |
