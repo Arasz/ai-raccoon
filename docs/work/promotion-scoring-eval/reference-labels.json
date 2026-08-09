@@ -1,0 +1,437 @@
+[
+ {
+  "id": 1,
+  "project_id": "ai-raccoon",
+  "hash": "1b3f3c285cae242a56ee71c6475fb8c0d47b5c4036b1120491ef5ff482bb5352",
+  "usefulness": 3,
+  "score": 3.5,
+  "why": "cross-repo observability convention (BCL-only Meter pattern)"
+ },
+ {
+  "id": 2,
+  "project_id": "ai-raccoon",
+  "hash": "ffb27468c10aeed3e6913e3c55884fb3558e3558563d29a4f329556e14f98f7a",
+  "usefulness": 1,
+  "score": 3.5
+ },
+ {
+  "id": 3,
+  "project_id": "ai-raccoon",
+  "hash": "2b6de035394eaff6a3e21b938d9b7c76155769cb44e7c978a8b866b524ca0916",
+  "usefulness": 2,
+  "score": 3.5
+ },
+ {
+  "id": 4,
+  "project_id": "ai-raccoon",
+  "hash": "7a040cf943166cb87c1ea4b8096c2bb91db404cc1ca686c3292d8f35437fefdc",
+  "usefulness": 2,
+  "score": 3.5
+ },
+ {
+  "id": 5,
+  "project_id": "ai-raccoon",
+  "hash": "f1986b0343a2b7df92a63c469f763519fd8e32f6b1beffac8cca118f094f61f9",
+  "usefulness": 1,
+  "score": 3.5
+ },
+ {
+  "id": 6,
+  "project_id": "ai-raccoon",
+  "hash": "f12032ec2ae69254b0d8e835cbc807a9ecd0801dfaf099bc02eaeb4858b02b4b",
+  "usefulness": 0,
+  "score": 3.5
+ },
+ {
+  "id": 7,
+  "project_id": "ai-raccoon",
+  "hash": "8f73733407315789fa3da93bf147f28b597aa50ddaba5dba00b4b9483c1f597c",
+  "usefulness": 0,
+  "score": 3.5
+ },
+ {
+  "id": 8,
+  "project_id": "ai-raccoon",
+  "hash": "bea24bf45a4ec4772b158ee0e34aef566a89b9bbb1e3a4122b8a525ef3c15695",
+  "usefulness": 0,
+  "score": 3.5
+ },
+ {
+  "id": 9,
+  "project_id": "ai-raccoon",
+  "hash": "a1dca4870419bb35bd49eb62370cf71838064409ddf102dab23f9afd71784130",
+  "usefulness": 0,
+  "score": 3.5
+ },
+ {
+  "id": 10,
+  "project_id": "ai-raccoon",
+  "hash": "fb2841e6f636ad1721fa6eb199bbe32c0740c94ea02b8cf598d62beb9dd824c1",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 11,
+  "project_id": "ai-raccoon",
+  "hash": "df8329c772c9e0cf536eb30dac8a4133d98c5c849a077e2581b1153fe03488d0",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 12,
+  "project_id": "ai-raccoon",
+  "hash": "e85d6f014922a53190ca70b0461584a1f4f9166529f220e15be1e670a2461227",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 13,
+  "project_id": "ai-raccoon",
+  "hash": "a48642b70849351581c24412ef1ddc1996266f1091976d571dae160dff57c44e",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 14,
+  "project_id": "ai-raccoon",
+  "hash": "c2b0b71d2d098f4c5c3d7112f2bea211d7efeb5b38b50b7474fedb9420b67004",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 15,
+  "project_id": "ai-raccoon",
+  "hash": "d3f2a71704a3dab84d14781d524b5d6982471ce5f2923e2dd5d1f7e6c1140b30",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 16,
+  "project_id": "ai-raccoon",
+  "hash": "8f3fb177270b1d5993c1f0714493ac9e57e81be5b45cbf78e24bdf2c2ff0fe71",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 17,
+  "project_id": "ai-raccoon",
+  "hash": "718b4ffe4f4fa260612509a5b04cddebb5e391cda830232962b1bd9ade0238d5",
+  "usefulness": 3,
+  "score": 2.5,
+  "why": "ai-raccoon core semantics useful to all consumer projects"
+ },
+ {
+  "id": 18,
+  "project_id": "ai-raccoon",
+  "hash": "2dc1de857d7133afe51cf3d6d0e4cd62fe6835002c17274144d69735faa46a4d",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 19,
+  "project_id": "ai-raccoon",
+  "hash": "a420c2c6d1f5b0683f0136a7e8ab554225f3ce9216ff772334c20c4177e5240f",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 20,
+  "project_id": "ai-raccoon",
+  "hash": "825229f690d279680c479207dcad99ce9cba06df79ba562d250a9b5456f892ce",
+  "usefulness": 3,
+  "score": 2.5,
+  "why": "security lesson: unsalted digest of guessable slug is theater"
+ },
+ {
+  "id": 21,
+  "project_id": "ai-badger",
+  "hash": "be228be6d77812ecbed9e98a5c3d4a52a25c47837203566934559d43d6135946",
+  "usefulness": 4,
+  "score": 4.5,
+  "why": "organic measured fact, framework-wide impact"
+ },
+ {
+  "id": 22,
+  "project_id": "ai-badger",
+  "hash": "b2a423a06baead98c2eed8dc73c6a8a32bd59c11b8e49b2beeee850a816ab1c4",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 23,
+  "project_id": "ai-badger",
+  "hash": "23de3d7af2451b4a7e5d7038fe09e33a8a79156cd651c77975ad8ae3a33235bc",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 24,
+  "project_id": "ai-badger",
+  "hash": "dc7545567849a1340248d499294dfca23c4145d014bbc5c55fadc000d0b89d68",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 25,
+  "project_id": "ai-badger",
+  "hash": "3f45d31fc09dec301647eb5406c0e0a4b6ac1ca761962c0667773d1bbaa28ce3",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 26,
+  "project_id": "ai-badger",
+  "hash": "d5ac55b792ba657d7d1cd7cb09e308ea1ef34ac9402258753bd2f5940df8a8f0",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 27,
+  "project_id": "ai-badger",
+  "hash": "b23ec85ed866966e4634e514a6f3c415771b44527f49281cbd1edc7e08a95696",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 28,
+  "project_id": "ai-badger",
+  "hash": "6b983049c0305e7410dba1a4b6841cf4d136a2decf4696a1682f872387f0ba06",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 29,
+  "project_id": "ai-badger",
+  "hash": "8075a0b7c709a7792e54780080ba5bbf0a7a255dd57876d7faab51be8e54e6bb",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 30,
+  "project_id": "ai-badger",
+  "hash": "976799f25143dee25b97a0e5ad48fabf2541a90bd9d7bf2ea2c4561364f448ac",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 31,
+  "project_id": "ai-badger",
+  "hash": "715eca960e3e7a483f7ee470291a05e2fc697a4c2694bee91ed4f5ff108289bc",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 32,
+  "project_id": "ai-badger",
+  "hash": "52085e83409f90709a263dd765eae2594de5e4be4e1fe5af50fdd3c650cf5903",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 33,
+  "project_id": "ai-badger",
+  "hash": "2ebb1c9d0440e225123ea89972ec97af98f216b4c6fb9c7519c48e8b77d3d366",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 34,
+  "project_id": "ai-badger",
+  "hash": "21304d8474aa20a43d2af09b88e3f0c4e6d08ae7b62f18fa6a1c796329bd7a24",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 35,
+  "project_id": "ai-badger",
+  "hash": "3100bac5cb409a79171aad45e65e1839d48cc35bbc31a2b92e22fc2746de3f75",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 36,
+  "project_id": "ai-badger",
+  "hash": "d74c784d0dca5a069e2b3b240e7fd4c2a79b42782b5e2f7b36e5d0e700d15de0",
+  "usefulness": 3,
+  "score": 2.5,
+  "why": "framework guard remediation-command mismatch bites every project"
+ },
+ {
+  "id": 37,
+  "project_id": "ai-badger",
+  "hash": "484b83a469464666ece7a2364a7e2de5c8568ec3de78952a9fdbd7788400fd54",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 38,
+  "project_id": "ai-badger",
+  "hash": "8d2d7ac1aeb1ad711c88cc6eaf39971643351155c6178ae835b804edec3308d9",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 39,
+  "project_id": "ai-badger",
+  "hash": "0a889ea11b8d4769cfb51473eea8afcff8d506943e570f0eda826022287c1d5f",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 40,
+  "project_id": "ai-badger",
+  "hash": "6c858cb979c6009212088335e957ae09ebdd67418a34830d7e5f0d62ea047ffc",
+  "usefulness": 3,
+  "score": 2.5,
+  "why": "durable review methodology rules"
+ },
+ {
+  "id": 41,
+  "project_id": "jsaa",
+  "hash": "c8a6a3162aed02a816d27b78e98e646398d5616299e66688f1b617235f3948fe",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 42,
+  "project_id": "jsaa",
+  "hash": "6dd2ca3abb51382ffb93bb121377fb0df32acbed7ede8f9a5d64ca53f3c3aeef",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 43,
+  "project_id": "jsaa",
+  "hash": "034691e8148cc8d41601b7ec37e1c82fa46b2a85d49d1d9168df359a187661dd",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 44,
+  "project_id": "jsaa",
+  "hash": "b2daf9a57c31a1ef84cfc8d1063e94788c728dc5e7ace7d585525c569a9568cf",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 45,
+  "project_id": "jsaa",
+  "hash": "dc9c76b2635abdfa910835b9127a2c4f57e70ecdde69078f0dc30383e15df53b",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 46,
+  "project_id": "jsaa",
+  "hash": "0899eef6d3aa1bb745d8e6b2fbdd2d0cb651222c0de1ecc44884e2ca51b5dec2",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 47,
+  "project_id": "jsaa",
+  "hash": "fe6b72bd0d8bf80841a84e23bedc346e94b24fdc2403e3f202b6981b5e32209c",
+  "usefulness": 4,
+  "score": 2.5,
+  "why": "ai-raccoon UX gotcha: wrong project_id returns empty with no error"
+ },
+ {
+  "id": 48,
+  "project_id": "jsaa",
+  "hash": "faada604b66e8eaace95e343b2919a43f1d1f67e09bd3f467299bc48ec97b4fa",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 49,
+  "project_id": "jsaa",
+  "hash": "c0d2d89dfe3902d245d2669fdbab56bfb437eaced947b8bdca872f1d6cf2b09a",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 50,
+  "project_id": "jsaa",
+  "hash": "a60c4d6dcf0f54ba7e601a0cba15ab55a179ebae9d6f76c5cba7708b9ff58f96",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 51,
+  "project_id": "jsaa",
+  "hash": "e10c9246d58acb10d601e027094265b666eab5aa71f8f43543df3c43d536639d",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 52,
+  "project_id": "jsaa",
+  "hash": "d6d47513477ac471a0b69050a7c272512dfac85aec9b20c59d01b978ada44f2f",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 53,
+  "project_id": "jsaa",
+  "hash": "a4f32a2b691aa66b76bdffe99a05be20828616414520b976d6044ea48609318e",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 54,
+  "project_id": "jsaa",
+  "hash": "72bb0147afc6459a82606de07b312c13cac69ff6dd3c3f450f01647e3e4fd228",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 55,
+  "project_id": "jsaa",
+  "hash": "fe07505a34de0055d5f5703aca77c6ae6fb8eb313748c387cce3825e13c82b2e",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 56,
+  "project_id": "jsaa",
+  "hash": "b07bf76e4e4fd870d94950bbc10f0ab3e47639c2d802a70f358af467f9e03c6b",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 57,
+  "project_id": "jsaa",
+  "hash": "720963db765913b258e39c1284e99f7b33019d47c14d8bf07537b2432eb6a127",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 58,
+  "project_id": "jsaa",
+  "hash": "c730672d6b148ee22b7c68b16d16be55de7cc9005d3ee571c5f7c3c990a1ed99",
+  "usefulness": 2,
+  "score": 2.5
+ },
+ {
+  "id": 59,
+  "project_id": "jsaa",
+  "hash": "d17a89686ed1d47b158dbfa6021e794d2603d115caee88440ff0f0302aa11086",
+  "usefulness": 1,
+  "score": 2.5
+ },
+ {
+  "id": 60,
+  "project_id": "jsaa",
+  "hash": "b2022aadc4f0820cc0e28e744947ceaede3bf926fa060241f9a35f93c54da1ae",
+  "usefulness": 0,
+  "score": 2.5
+ },
+ {
+  "id": 61,
+  "project_id": "hermes-default",
+  "hash": "3f76c7890d5a46327d7e86bcd51c4b8e8ecc991cd01c3c5bcb67d1aed2e5515c",
+  "usefulness": 4,
+  "score": 3.5,
+  "why": "durable gate gotcha: e2e flake root cause CI env"
+ }
+]

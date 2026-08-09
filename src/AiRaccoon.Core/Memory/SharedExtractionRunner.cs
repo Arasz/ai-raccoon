@@ -25,6 +25,11 @@ public sealed class SharedExtractionRunner(
         ArgumentNullException.ThrowIfNull(sharedIndex);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
+        // Auto-clear before ranking (ADR-0018): a row stamped by a retired scorer version is
+        // deleted rather than re-scored in place — it may no longer be a candidate at all, and the
+        // ranking below re-admits anything still eligible on merit in this same pass.
+        await queue.ClearStaleAsync(projectId, PromotionScorer.Version, cancellationToken).ConfigureAwait(false);
+
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
@@ -34,13 +39,19 @@ public sealed class SharedExtractionRunner(
         {
             // Refreshing an already-queued row and enqueueing a new one are different operations:
             // a queued row is refreshed regardless of rank, but a not-yet-queued row is bounded by
-            // `limit`, so one pass cannot insert the whole eligible pool.
-            var alreadyQueued = (await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
-                    .ConfigureAwait(false))
-                .Select(r => r.Hash)
-                .ToHashSet(StringComparer.Ordinal);
+            // `limit` and the per-source-document cap, so one pass cannot insert the whole eligible
+            // pool nor let one document flood the queue (docs/work/2026-08-09-promotion-scoring-measurement.md).
+            var existingQueueRows = await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
+                .ConfigureAwait(false);
+            var alreadyQueued = existingQueueRows.Select(r => r.Hash).ToHashSet(StringComparer.Ordinal);
+            var queuedCountsBySourceFile = existingQueueRows
+                .Where(r => r.SourceFile is not null)
+                .GroupBy(r => r.SourceFile!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+            var notYetQueued = ranked.Where(c => !alreadyQueued.Contains(c.Hash)).ToList();
+            var admissibleNew = SharedExtractionService.CapPerSourceDocument(notYetQueued, queuedCountsBySourceFile);
             var toQueue = ranked.Where(c => alreadyQueued.Contains(c.Hash))
-                .Concat(ranked.Where(c => !alreadyQueued.Contains(c.Hash)).Take(limit))
+                .Concat(admissibleNew.Take(limit))
                 .ToList();
             if (toQueue.Count > 0)
             {
@@ -60,8 +71,8 @@ public sealed class SharedExtractionRunner(
         var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
         return candidates
             .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons)
-                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons))
+                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons, PromotionScorer.Version)
+                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons, PromotionScorer.Version))
             .ToList();
     }
 }

@@ -317,6 +317,69 @@ public sealed class MemorySchemaVersionTests
         rows.ShouldBe([("h1", 0, 2), ("h2", 1, 2)]);
     }
 
+    /// <summary>
+    ///     ADR-0018: promotion_queue rows carry the version of the scorer that produced them, so a
+    ///     retired scorer's rows can be told apart from current ones. DEFAULT 0 is deliberate — every
+    ///     pre-existing row was scored by no versioned scorer at all, so it must read as stale.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV3Bank_AddsScorerVersionColumn_AndExistingRowsDefaultToZero()
+    {
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            CREATE TABLE promotion_queue (
+                id          INTEGER PRIMARY KEY,
+                project_id  TEXT NOT NULL,
+                hash        TEXT NOT NULL,
+                path        TEXT NULL,
+                value       TEXT NOT NULL,
+                source_file TEXT NULL,
+                score       REAL NOT NULL,
+                reasons     TEXT NOT NULL DEFAULT '[]',
+                created_at  INTEGER NOT NULL,
+                updated_at  INTEGER NOT NULL,
+                UNIQUE (project_id, hash)
+            );
+            INSERT INTO promotion_queue (project_id, hash, path, value, score, created_at, updated_at)
+            VALUES ('acme', 'h1', 'h1.md', 'v1-scored value', 2.5, 1, 1);
+            PRAGMA user_version = 3;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await ColumnsAsync(connection, "promotion_queue");
+        columns.ShouldContain("scorer_version");
+        var scorerVersion = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT scorer_version FROM promotion_queue WHERE hash = 'h1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        scorerVersion.ShouldBe(0, "a pre-migration row was never scored by a versioned scorer, so it must read as stale");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>A bank already stamped at the current version must not re-run the column-add step —
+    /// witnessed by an explicit non-default value surviving a second EnsureAsync untouched.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAnAlreadyMigratedBank_DoesNotReMigrate_PromotionQueue()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO promotion_queue (project_id, hash, path, value, score, scorer_version, created_at, updated_at)
+            VALUES ('acme', 'h1', 'h1.md', 'v', 1.0, 7, 1, 1)
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var scorerVersion = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT scorer_version FROM promotion_queue WHERE hash = 'h1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        scorerVersion.ShouldBe(7, "a bank already at the current version must not be re-migrated");
+    }
+
     // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.
     private const string V1Ddl = """
                                  CREATE TABLE workspaces (
