@@ -282,7 +282,6 @@ public sealed class ToolRefusalsTests : IDisposable
         { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
         { new ArgumentException("The arguments dictionary is missing a value for the required parameter 'content'."), "invalid-argument" },
         { new ArgumentNullException("projectIds"), "invalid-argument" },
-        { new ArgumentOutOfRangeException("limit"), "invalid-argument" },
         { new UnknownHashException("deadbeef", "acme"), "unknown-hash" },
         {
             new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
@@ -300,6 +299,10 @@ public sealed class ToolRefusalsTests : IDisposable
     {
         // The encryption family stays fail-level on purpose: a bad key source is a real fault, not a refusal.
         ToolRefusals.PrefixFor(new BankKeyMismatchException("bank open failed")).ShouldBeNull();
+
+        // ArgumentOutOfRangeException is how .NET reports our own index arithmetic going wrong.
+        // Mapping it would mute Error-level alerting and tell the caller to retry a blameless argument.
+        ToolRefusals.PrefixFor(new ArgumentOutOfRangeException("limit")).ShouldBeNull();
     }
 
     [Theory]

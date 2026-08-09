@@ -123,7 +123,7 @@ the whole tool call's result, after already committing the earlier candidates' w
 > *intended* behavior in a then-green test, `Sweep_NeverTouchesTheQueue`.
 >
 > Fixed by a later work package: an `AFTER DELETE ON entries` trigger now drops the matching
-> `promotion_queue` row (see [ADR-0022](../adr/0022-promotion-queue-entries-delete-invalidation.md)),
+> `promotion_queue` row (see [ADR-0023](../adr/0023-promotion-queue-entries-delete-invalidation.md)),
 > and `PromoteAsync` now wraps the claim-then-share pair in a try/catch that reports a per-candidate
 > `stale-hash`/`share-failed` failure instead of aborting the batch
 > (`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs`).

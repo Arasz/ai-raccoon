@@ -520,7 +520,7 @@ ai-raccoon encryption migrate
 # per-connection and recycled before the loop can fire; default interval 30 min;
 # config changes apply live, no server restart needed; propose logs the ranked
 # candidates — path, preview, reasons — to the server log; prune reports/removes
-# promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0022) —
+# promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0023) —
 # read-only by default, --apply removes, idempotent)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
@@ -734,7 +734,7 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
-| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, a present-but-blank value fails a guard clause, or a value is out of the range a guard clause enforces — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. `ToolRefusals.PrefixFor` walks the exception's base-type chain, so this one table entry covers the whole `ArgumentException` family (`ArgumentException`, `ArgumentNullException`, `ArgumentOutOfRangeException`) as well as the SDK's own `JsonException` | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
+| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
