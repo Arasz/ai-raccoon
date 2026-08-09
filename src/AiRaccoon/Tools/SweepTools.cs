@@ -32,7 +32,7 @@ public sealed class SweepTools(
     {
         await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
 
-        var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
+        var threshold = await knobs.GetSweepThresholdAsync(cancellationToken);
         var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
         var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
