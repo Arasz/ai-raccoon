@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -6,7 +7,7 @@ using OpenTelemetry.Trace;
 namespace AiRaccoon.Observability;
 
 /// <summary>Wires the OTel SDK for OTLP export (ADR 0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT.</summary>
-internal static class OtlpExport
+internal static partial class OtlpExport
 {
     private const string TracesSignalPath = "/v1/traces";
     private const string MetricsSignalPath = "/v1/metrics";
@@ -20,6 +21,15 @@ internal static class OtlpExport
             var state = resolvedState ?? OtlpExportState.Resolve();
             if (!state.Enabled)
             {
+                if (state.InvalidEndpointReason is not null)
+                {
+                    // No DI logger yet (AddOtlpExport runs before builder.Build()): same throwaway
+                    // stderr-only idiom as ServeRunner/ObservabilityRunner. Never stdout — `serve`
+                    // reserves stdout for the bound-URL line.
+                    using var loggerFactory = LoggerFactory.Create(b => b.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace));
+                    Log.InvalidEndpoint(loggerFactory.CreateLogger("OtlpExport"), state.InvalidEndpointReason);
+                }
+
                 return services;
             }
 
@@ -68,4 +78,10 @@ internal static class OtlpExport
 
     private static bool IsHttpProtobuf(string? protocol) =>
         string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 640, Level = LogLevel.Warning, Message = "ai-raccoon: OTLP export disabled — {Reason}")]
+        public static partial void InvalidEndpoint(ILogger logger, string reason);
+    }
 }

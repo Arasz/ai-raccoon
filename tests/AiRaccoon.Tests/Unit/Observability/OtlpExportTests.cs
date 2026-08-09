@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -55,6 +56,76 @@ public sealed class OtlpExportTests : IDisposable
 
         provider.GetService<TracerProvider>().ShouldBeNull();
         provider.GetService<MeterProvider>().ShouldBeNull();
+    }
+
+    // WP4/A4: OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:4317 (no scheme) used to throw UriFormatException
+    // inside the exporter-configuration delegate, which runs inside app.StartAsync — the whole MCP
+    // server died at boot over an observability opt-in. This must reproduce the real path: the real
+    // web host, not the bare-ServiceCollection seam used above.
+    [Fact]
+    public async Task MalformedEndpoint_MissingScheme_ServerStartsWithExportDisabled()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        await Should.NotThrowAsync(() => host.StartAsync(TestContext.Current.CancellationToken));
+        try
+        {
+            host.Services.GetService(typeof(TracerProvider)).ShouldBeNull();
+            host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // WP4/A5: `new Uri("localhost:4318")` succeeds with Scheme="localhost" — this is the silent
+    // near-miss. An "assert no exception" test would pass today because the bug never throws;
+    // asserting the providers were never registered is what makes this check able to fail.
+    [Fact]
+    public async Task MalformedEndpoint_NonHttpScheme_ServerStartsWithExportDisabled()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            host.Services.GetService(typeof(TracerProvider)).ShouldBeNull();
+            host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // WP4: an observability opt-in must not degrade the product — the server must still serve a
+    // real tool call through the real DI-resolved MemoryTools, not just fail to crash.
+    [Fact]
+    public async Task MalformedEndpoint_ServerStillServesAToolCall()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var tools = ActivatorUtilities.CreateInstance<MemoryTools>(host.Services);
+
+            var envelope = await tools.Stats("wp4-probe", TestContext.Current.CancellationToken);
+
+            envelope.Data.ShouldNotBeNull();
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
