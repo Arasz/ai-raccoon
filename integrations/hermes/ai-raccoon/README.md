@@ -42,7 +42,7 @@ Rollback: `hermes config set memory.provider holographic` (or empty for built-in
 | `sync_turn(user, assistant)` | `memory_write` of the assistant message, `sourceFile=hermes/<session>`, `section=turn` (background) |
 | tools | `memory_search`, `memory_write`, `memory_stats`, `memory_share` (curated surface, `projectId` injected) |
 | `on_memory_write(add, …)` | `memory_write` mirror, `sourceFile=hermes-memory` |
-| `shutdown()` | terminates the spawned server / closes the HTTP session |
+| `shutdown()` | terminates the spawned child / closes the HTTP session — in stdio mode that child is the proxy; the `serve` backend it started keeps running until its own idle watchdog fires (4h default) |
 
 ## Config
 
@@ -66,10 +66,16 @@ plugins:
 ```
 
 - **stdio (default):** the provider spawns the installed `ai-raccoon` binary as a child
-  process and speaks MCP over stdio. No ports. For isolation (tests, scratch banks), pass
-  spawn args via `binary_args` — the production CLI resolves the data root ONLY from the
-  `--data-root` flag, so `binary_args: ["--data-root", "/tmp/bank"]` is the way to point a
-  spawned server at a temp bank.
+  process and speaks MCP over stdio. Since ADR-0020 that child is a *proxy*, not a
+  server: it probes `http://127.0.0.1:7721/mcp`, starts `ai-raccoon serve` when nothing
+  answers, and relays every message to it. So this mode does use a port, and the bank is
+  held by a separate long-lived backend process that outlives the provider. Pass
+  `--transport stdio` in `binary_args` for the old in-process behaviour. For isolation
+  (tests, scratch banks), pass spawn args via `binary_args` — the production CLI resolves
+  the data root ONLY from the `--data-root` flag, so
+  `binary_args: ["--data-root", "/tmp/bank"]` is the way to point a spawned server at a
+  temp bank; the proxy forwards `--data-root` and `--install-scope` to the backend it
+  starts.
 - **http:** the provider connects to a running server's Streamable HTTP endpoint —
   useful when one long-running server should serve several clients. Reads
   `token_file` (default `~/.ai-raccoon/mcp-token`) at connect and sends its
@@ -90,11 +96,14 @@ provider emits both signals itself.
 - **Status words:** with `status_words: true` (default) the provider prints one word to
   stderr as each call starts — "searching", "remembering", "counting", … Set
   `status_words: false` to silence.
-- **Quiet server:** with `quiet: true` (default) the spawned server runs with `--quiet`
-  — every log level, including warnings, goes to a file beside the server's bank
-  (`quiet.log`) instead of stdout/stderr, so the status words are the *only* stderr
-  output, full stop. If a spawned server appears to fail silently, check that file
-  before assuming nothing was logged.
+- **Quiet server:** with `quiet: true` (default) the spawned child runs with `--quiet`,
+  and passes it on to the `serve` backend it starts — every log level of that backend,
+  including warnings, goes to a file beside its bank (`quiet.log`) instead of
+  stdout/stderr. The proxy in the middle is exempt by design: it has no quiet
+  destination, so it still writes `Warning`-and-above to stderr, and the line saying the
+  backend could not be reached or started is written to stderr no matter what. Expect the
+  status words plus, on failure, that one line. If the backend appears to fail silently,
+  check `quiet.log` before assuming nothing was logged.
 - **Memory operation log:** when the `AIRACCOON_MEMORY_LOG` env var is set (read by the
   provider at session start — a change needs a session restart; the spawned server merely
   inherits it), the provider appends one JSONL row per call:
@@ -108,7 +117,7 @@ provider emits both signals itself.
 - `sync_turn` and prefetch run only for primary agents (`agent_context == "primary"`);
   cron and subagent contexts never write to the bank.
 - The plain-MCP ai-raccoon server registration in `~/.hermes/config.yaml` can stay
-  alongside (full 20-tool surface); the provider adds the lifecycle on top of the
+  alongside (full 22-tool surface); the provider adds the lifecycle on top of the
   curated 4-tool surface.
 
 ## Tests

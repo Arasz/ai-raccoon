@@ -42,6 +42,12 @@ internal static class CliCommandTree
         Description = "Print the MCP client config entry for the bound URL"
     };
 
+    /// <summary>Cycles the server already on the port instead of attaching to it (ADR-0022).</summary>
+    internal static readonly Option<bool> ServeRestartOption = new("--restart")
+    {
+        Description = "Stop the ai-raccoon server already on the port and serve in its place (a plain start when none is)"
+    };
+
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
     /// <summary>observability's own --port, read instance-based like ServePortOption
@@ -320,6 +326,7 @@ internal static class CliCommandTree
             ServeIdleTimeoutOption,
             ServeMcpEntryOption,
             ServeFormatOption,
+            ServeRestartOption,
             ObservabilityCommand()
         };
         // SetAction exists only because System.CommandLine requires a subcommand unless the

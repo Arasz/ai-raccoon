@@ -39,7 +39,7 @@ virtual tables and triggers ourselves gives us:
 - **Cloud sync** instead of SQLite Cloud. No managed database dependency — sync
   pushes VACUUM snapshots to a cloud object store (S3-compatible or Azure Blob) with If-Match conflict
   detection, 3-retry loop, and tombstones.
-- **Engine-agnostic embeddings.** The bundled `all-MiniLM-L6-v2` (ONNX, int8, ~21 MB)
+- **Engine-agnostic embeddings.** The bundled `all-MiniLM-L6-v2` (ONNX, int8, ~23 MB)
   runs in-process with zero network calls. An OpenAI-compatible provider routes through
   any endpoint — the extension hardcoded vectors.space.
 

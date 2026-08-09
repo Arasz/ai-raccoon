@@ -35,10 +35,12 @@ ai-raccoon --transport stdio  # complete in-process server, no backend, no autos
 ai-raccoon --transport http   # Streamable HTTP at /mcp
 ```
 
-The proxy is the zero-config path (`.mcp.json` never changes): the first tool
-call from any client probes `http://127.0.0.1:7721/mcp`, spawns `ai-raccoon
-serve` if nothing answers, and relays every JSON-RPC message to it. It opens
-no bank, holds no encryption key, and loads no embedding model itself — see
+The proxy is the zero-config path (`.mcp.json` never changes): on startup —
+before it serves any message — it probes `http://127.0.0.1:7721/mcp`, spawns
+`ai-raccoon serve` if nothing answers, and relays every JSON-RPC message to
+it. Connecting a client is enough to start the backend; no tool call is
+needed. It opens no bank, holds no encryption key, and loads no embedding
+model itself — see
 [Serve mode](#serve-mode-http) below and
 [ADR 0020](docs/adr/0020-always-on-http-stdio-proxy.md). If the backend can
 neither be reached nor started, the proxy exits loudly naming the URL and the
@@ -105,19 +107,23 @@ the proxy too, which relays JSON-RPC frames without adding output of its own.
 ### Serve mode (HTTP)
 
 Bare `ai-raccoon` (the default `proxy` transport) starts `ai-raccoon serve`
-for you the first time any client touches memory, and reads the loopback
-token itself — you normally never run `serve` by hand and never see the
-token.
+for you whenever a client launches it and nothing is already listening, and
+reads the loopback token itself — you normally never run `serve` by hand and
+never see the token. This section covers the manual path: connecting an
+HTTP-native client straight to a long-lived server, or attaching to one the
+proxy already started.
 
 `ai-raccoon serve` runs the same HTTP endpoint with an idle watchdog — after 4
 hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
 disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
 server, `serve` attaches to it and exits 0 (the first process owns the
-watchdog). `/mcp` requires `X-AiRaccoon-Token` or `Authorization: Bearer
-<token>`: before binding, `serve` mints a random token into
-`<data-root>/mcp-token` (0600) and every caller — the proxy included — must
-present one of the two; `/observability` stays open, unauthenticated.
-`serve --port 0` picks a random free port and reports it.
+watchdog) — pass `--restart` to cycle it instead, which is what an update
+needs (see [Updating](#updating)). `/mcp` and `/shutdown` require
+`X-AiRaccoon-Token` or `Authorization: Bearer <token>`: before binding,
+`serve` mints a random token into `<data-root>/mcp-token` (0600) and every
+caller — the proxy included — must present one of the two; `/observability`
+stays open, unauthenticated. `serve --port 0` picks a random free port and
+reports it.
 
 **Advanced: connecting a client directly to `serve`'s URL, bypassing the
 proxy.** Bare `ai-raccoon` already handles the token for you, so nothing
@@ -128,7 +134,30 @@ incantations (Hermes CLI, printed entry, Claude Code) are in
 [the direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced).
 
 A direct `ai-raccoon --transport http` launch (no `serve` verb) stays
-**ungated** — deliberate for now; see [SECURITY.md](SECURITY.md).
+**ungated** — deliberate for now; see [SECURITY.md](SECURITY.md). It also gets
+no `/shutdown` endpoint, so `--restart` cannot cycle it.
+
+### Updating
+
+The backend started by the proxy is long-lived, so `dotnet tool update` alone
+replaces the binary on disk while the *running* server keeps serving the old
+one. Cycle it:
+
+```bash
+dotnet tool update -g ai-raccoon
+ai-raccoon serve --restart > serve.log 2>&1 &
+ai-raccoon serve observability pid   # the new server's PID
+```
+
+`--restart` asks the running server to stop over a token-guarded loopback
+endpoint, waits for the port to free (in-flight calls drain for up to 10s),
+then serves in its place. With nothing listening it is a plain `serve`. It
+never kills a process, and it never falls back to attaching: if the server
+refuses the token (it serves another data root), is too old to have the
+endpoint, will not let go of the port, or another start wins the port first,
+`--restart` says which and exits non-zero. To confirm the update took, ask the
+server what it is running: `curl -s http://127.0.0.1:7721/observability`
+reports its `version` alongside its PID.
 
 ## Embeddings
 

@@ -7,7 +7,7 @@ using Microsoft.Net.Http.Headers;
 namespace AiRaccoon.Setup.Serve;
 
 /// <summary>
-///     Rejects /mcp requests that do not present the loopback token, either as
+///     Rejects /mcp and /shutdown requests that do not present the loopback token, either as
 ///     <c>X-AiRaccoon-Token</c> or as <c>Authorization: Bearer &lt;token&gt;</c>
 ///     (docs/plans/2026-08-09-http-token-clients.md D3). /observability stays open by design.
 /// </summary>
@@ -16,6 +16,11 @@ internal sealed class McpTokenGate
     public const string HeaderName = "X-AiRaccoon-Token";
 
     private const string BearerScheme = "Bearer";
+
+    private const string McpPath = "/mcp";
+
+    /// <summary>Every path the token guards; anything else is open (ADR-0022 added /shutdown).</summary>
+    private static readonly string[] GuardedPaths = [McpPath, ShutdownEndpoint.Path];
 
     /// <summary>JSON-RPC implementation-defined server error (-32000..-32099).</summary>
     private const int UnauthorizedCode = -32001;
@@ -34,17 +39,20 @@ internal sealed class McpTokenGate
         _expected = Encoding.UTF8.GetBytes(token);
         // A JSON-RPC error object, not a bare 401: ServerProbe's second discriminator is that the
         // endpoint speaks JSON-RPC at all, and naming the file makes a data-root mismatch diagnosable.
+        // One wording for every guarded path (ADR-0022). /mcp additionally distinguishes a
+        // presented-but-wrong credential (R4), because a human configures that endpoint by hand and
+        // an unexpanded ${AIRACCOON_MCP_TOKEN} is a *present* one. /shutdown keeps the single body:
+        // its only caller is `serve --restart` reading the token off disk, so the wording buys
+        // nothing there, and ADR-0022 pins the refusal not to say whether a token exists.
         _absentBody = Body(
-            $"ai-raccoon: /mcp needs the {HeaderName} header or Authorization: Bearer; the token is in {tokenPath}");
-        // Distinct from the absent message (R4): a presented-but-wrong credential tells the caller
-        // what it actually got wrong, rather than reprinting instructions it already followed.
+            $"ai-raccoon: this endpoint needs the {HeaderName} header or Authorization: Bearer; the token is in {tokenPath}");
         _mismatchBody = Body(
-            $"ai-raccoon: /mcp got a {HeaderName} or Authorization value that does not match the token in {tokenPath}");
+            $"ai-raccoon: this endpoint got a {HeaderName} or Authorization value that does not match the token in {tokenPath}");
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!context.Request.Path.StartsWithSegments("/mcp"))
+        if (!IsGuarded(context.Request.Path))
         {
             await _next(context);
             return;
@@ -56,10 +64,14 @@ internal sealed class McpTokenGate
             return;
         }
 
+        var diagnosable = credentialPresented && context.Request.Path.StartsWithSegments(McpPath);
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.ContentType = "application/json";
-        await context.Response.WriteAsync(credentialPresented ? _mismatchBody : _absentBody, context.RequestAborted);
+        await context.Response.WriteAsync(diagnosable ? _mismatchBody : _absentBody, context.RequestAborted);
     }
+
+    private static bool IsGuarded(PathString path) =>
+        GuardedPaths.Any(guarded => path.StartsWithSegments(guarded));
 
     /// <summary>
     ///     One credential, two envelopes: each is checked independently so a wrong value in one

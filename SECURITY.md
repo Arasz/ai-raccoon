@@ -38,11 +38,12 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | stdio transport (`--transport stdio`) | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr. A complete in-process server — the escape hatch when the backend cannot start           | The MCP client that launched the process      |
 | `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from `<data-root>/mcp-token` (0600), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
 | HTTP transport (`--transport http`, manual) | The same endpoint started directly rather than through `serve`. **Ungated** — see below                                                                                       | Any process that can reach the listening port |
-| `/observability` endpoint (HTTP mode) | Returns the server's PID and OTLP export state on the same loopback port as `/mcp`                                                                                          | Any process that can reach the listening port |
+| `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
+| `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only when a token exists — an ungated `--transport http` host has no such endpoint | Any local process that can read the token file |
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
 | Memory tools (22 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
-| Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled)                                                                                                     | The model file shipped with the binary        |
+| Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~23 MB, bundled)                                                                                                     | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
 | SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                              | Passphrase from `AIRACCOON_DB_PASSPHRASE`, or an ed25519 SSH key from Bitwarden Secrets Manager via `ai-raccoon encryption bitwarden` (HKDF-derived; ADR 0012) |
 
@@ -54,13 +55,24 @@ privileges.
 **The HTTP endpoint is no longer opt-in, so a token replaces that mitigation.** Until
 ADR-0020, this paragraph read "keep the HTTP endpoint opt-in and loopback-only" — an
 unauthenticated `localhost` listener is reachable by any local process, and being opt-in
-was half the defence. The proxy starts a server on first memory use, so that half is gone.
+was half the defence. The proxy starts a server whenever a client launches it and none is
+listening — connecting is enough, no tool call required — so that half is gone.
 In its place, `serve` mints a random token into `<data-root>/mcp-token` (0600) before it
 binds and requires it on `/mcp`. That is a bar, not a boundary: it raises the reach from
 "any local process" to "any process that can read that file", which on a single-user
 machine means anything running as you. `/observability` stays unauthenticated by design —
 it returns a PID and OTLP on/off, nothing that touches the bank, and discovery depends on
 it (ADR-0008).
+
+**The token now also authorises stopping the server (ADR-0022).** `serve --restart` cycles
+the running backend by asking it to stop over `POST /shutdown`, so a token holder can shut
+memory down as well as call tools. That is a small addition to an already-large authority:
+the same token already reaches `memory_delete` and `memory_sweep` across the whole bank, and
+the proxy starts a new backend on the next call. The endpoint is POST-only (so no
+cross-origin request from a browser on the machine can trip it), goes through the same
+`FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
+the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
+host with no token — an ungated `--transport http` launch exposes no shutdown.
 
 **Two known gaps, stated rather than implied.** `--transport http` started directly is
 **not** token-gated — it is manual and opt-in, i.e. the posture this document already
@@ -127,10 +139,13 @@ on — e.g. `PromotionQueueService.Log.Proposed`
 disclosure for this value — this is precisely why no hashing is applied before export
 (ADR 0009).
 
-The `/observability` endpoint discloses the server's PID, unauthenticated, on
-loopback. A PID is not a secret, and the same port already serves `/mcp`
-unauthenticated — this widens an existing surface rather than opening a new one, but
-it is still one more thing that port answers.
+The `/observability` endpoint discloses the server's PID and, since ADR-0022, the
+binary version it is running — unauthenticated, on loopback. Neither is a secret, and
+both are what makes a running server diagnosable at all: ADR-0008's PID discovery and
+`serve --restart`'s check that an update actually took. The cost is that any local
+process learns which build is serving, and therefore which published version's known
+issues apply. Kept open deliberately, because gating it would break discovery for
+exactly the case it exists for — a server whose data root the caller does not know.
 
 ## What is deliberately not here yet
 

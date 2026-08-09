@@ -3,7 +3,6 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Observability;
 using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
@@ -11,8 +10,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IWatchService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WatchTools(
     IWatchService watch,
-    ToolGate gate,
-    ToolCallMetrics observability)
+    ToolGate gate)
 {
     private const string TnWatchAdd = "memory_watch_add";
     private const string TnWatchStatus = "memory_watch_status";
@@ -28,22 +26,12 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnWatchAdd, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
-            await watch.AddAsync(projectId, path, cancellationToken);
-            var envelope = await gate.WrapAsync(projectId, new WatchAddResult(projectId, path), cancellationToken);
+        await watch.AddAsync(projectId, path, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId, new WatchAddResult(projectId, path), cancellationToken);
 
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        return envelope;
     }
 
     [McpServerTool(Name = TnWatchStatus)]
@@ -53,21 +41,11 @@ public sealed class WatchTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnWatchStatus, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
-            var states = await watch.StatusAsync(projectId, cancellationToken);
-            var envelope = await gate.WrapAsync(projectId, new WatchStatusResult(states), cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var states = await watch.StatusAsync(projectId, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId, new WatchStatusResult(states), cancellationToken);
+        return envelope;
     }
 
     [McpServerTool(Name = TnWatchRemove)]
@@ -78,21 +56,11 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnWatchRemove, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
-            await watch.RemoveAsync(projectId, path, cancellationToken);
-            var envelope = await gate.WrapAsync(projectId, new WatchRemoveResult(projectId, path), cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        await watch.RemoveAsync(projectId, path, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId, new WatchRemoveResult(projectId, path), cancellationToken);
+        return envelope;
     }
 
     public sealed record WatchAddResult(string ProjectId, string Path);
