@@ -1,4 +1,4 @@
-# 0023 — Unknown ids: idempotent removal reports a count, a state transition refuses
+# 0024 — Unknown ids: idempotent removal reports a count, a state transition refuses
 
 Date: 2026-08-09
 

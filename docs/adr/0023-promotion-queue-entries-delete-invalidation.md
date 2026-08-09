@@ -1,4 +1,4 @@
-# 0022 — Invalidate promotion_queue rows when their entry is deleted
+# 0023 — Invalidate promotion_queue rows when their entry is deleted
 
 Date: 2026-08-09
 
