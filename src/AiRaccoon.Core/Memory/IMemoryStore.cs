@@ -10,16 +10,6 @@ public interface IMemoryStore
 
     Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Deletes hash within one scope only — the sweep's own delete (H2), so a project-scoped
-    ///     pass cannot reach a sibling row sharing this hash in another scope (hash alone is not
-    ///     a unique row). Defaults to <see cref="DeleteAsync" />'s unscoped reach, so an
-    ///     implementation predating this distinction needs no change.
-    /// </summary>
-    Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
-        CancellationToken cancellationToken = default) =>
-        DeleteAsync(projectId, hash, cancellationToken);
-
     Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default);
 
     Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default);
