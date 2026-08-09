@@ -3,10 +3,14 @@
 Two transports behind one duck-typed surface:
 
 - ``stdio`` (default): spawns the ``ai-raccoon`` binary as a child process
-  (MCP over stdio; the child inherits the parent env, so a data-root
-  override such as ``AIRACCOON_DATA_ROOT`` flows through).
+  (MCP over stdio). Since ADR-0020 that child is a proxy that relays to an
+  ``ai-raccoon serve`` backend, starting one if none is listening. The data
+  root comes ONLY from the ``--data-root`` flag (pass it via ``binary_args``)
+  — no data-root environment variable is read by the CLI.
 - ``http``: connects to a running server's Streamable HTTP endpoint
-  (default ``http://127.0.0.1:7721/mcp``).
+  (default ``http://127.0.0.1:7721/mcp``). Note that ``serve`` gates ``/mcp``
+  behind an ``X-AiRaccoon-Token`` header read from ``<data-root>/mcp-token``,
+  which this client does not send.
 
 The official ``mcp`` SDK is imported lazily inside ``connect()`` so code
 that only constructs or fakes these clients (unit tests) never needs it.
@@ -189,10 +193,13 @@ class HttpClient(_MCPClient):
 def create_client(config: dict) -> _MCPClient:
     """Build a client for the plugin config (transport: stdio | http).
 
-    stdio spawns carry ``--quiet`` by default so the child server writes
-    nothing to stdout/stderr — every log level, including warnings, goes to
-    a file beside its bank instead (the provider emits its own status cues);
-    set ``quiet: false`` in the plugin config for full server logs.
+    stdio spawns carry ``--quiet`` by default, which the spawned child passes
+    on to the ``serve`` backend: every backend log level, including warnings,
+    goes to a file beside its bank instead of stdout/stderr (the provider
+    emits its own status cues). The proxy in the middle has no quiet
+    destination, so it still writes ``Warning``-and-above — and any
+    backend-unavailable line — to stderr. Set ``quiet: false`` in the plugin
+    config for full backend logs.
     """
     transport = config.get("transport", "stdio")
     if transport == "http":

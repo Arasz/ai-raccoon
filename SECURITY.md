@@ -42,7 +42,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
 | Memory tools (22 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
-| Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~21 MB, bundled)                                                                                                     | The model file shipped with the binary        |
+| Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~23 MB, bundled)                                                                                                     | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
 | SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                              | Passphrase from `AIRACCOON_DB_PASSPHRASE`, or an ed25519 SSH key from Bitwarden Secrets Manager via `ai-raccoon encryption bitwarden` (HKDF-derived; ADR 0012) |
 
@@ -54,7 +54,8 @@ privileges.
 **The HTTP endpoint is no longer opt-in, so a token replaces that mitigation.** Until
 ADR-0020, this paragraph read "keep the HTTP endpoint opt-in and loopback-only" — an
 unauthenticated `localhost` listener is reachable by any local process, and being opt-in
-was half the defence. The proxy starts a server on first memory use, so that half is gone.
+was half the defence. The proxy starts a server whenever a client launches it and none is
+listening — connecting is enough, no tool call required — so that half is gone.
 In its place, `serve` mints a random token into `<data-root>/mcp-token` (0600) before it
 binds and requires it on `/mcp`. That is a bar, not a boundary: it raises the reach from
 "any local process" to "any process that can read that file", which on a single-user
