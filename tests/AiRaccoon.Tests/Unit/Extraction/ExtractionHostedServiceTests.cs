@@ -287,8 +287,8 @@ public sealed class ExtractionHostedServiceTests
                 "The retry queue clears completed messages once every consumer has acknowledged them, " +
                 "keeping memory bounded during long backlogs without any operator intervention at all " +
                 "during normal day to day operation across every environment this service runs in."),
-            // bare low-prior plan chunk, no rule/measured/foreign evidence: below floor → excluded
-            Row("h3", "docs/plans/notes-plan.md",
+            // doc-index chunk: a hard-noise channel no content can rescue → below floor, excluded
+            Row("h3", "docs/README.md",
                 "notes about the plan that continue for a little while without stating anything durable " +
                 "or citing anything that would justify sharing this beyond the local scratch file it " +
                 "already lives in for the rest of the current sprint cycle around here.")

@@ -75,19 +75,21 @@ public sealed class SharedExtractionServiceTests
     }
 
     /// <summary>
-    ///     A bare, low-prior doc chunk with no rule/measured/foreign evidence sits below the
-    ///     candidate floor; v3 drops the recency/access-count bonus entirely (agentC's doc_adjust
-    ///     never referenced it — docs/adr/0018-promotion-scoring-v2.md v3 section).
+    ///     Round-3 lane-A refits the plan prior far above the floor (0.70 → 1.20, its labelled mean),
+    ///     so a bare plan chunk no longer sinks on prior alone — an ephemera- and pointer-heavy plan
+    ///     chunk still does, since content evidence has no recency/access-count rescue (scorer.py's
+    ///     doc_adjust never references it — docs/adr/0018-promotion-scoring-v2.md).
     /// </summary>
     [Fact]
-    public void Propose_BarePlanChunk_IsBelowTheFloor()
+    public void Propose_EphemeraAndPointerHeavyPlanChunk_IsBelowTheFloor()
     {
         var rows = new[]
         {
             Row("a", sourceFile: "docs/plans/notes-plan.md",
-                value: "notes about the plan that continue for a little while without stating anything " +
-                       "durable or citing anything that would justify sharing this beyond the local " +
-                       "scratch file it already lives in for the rest of the current sprint cycle.")
+                value: "AC: ship the batching change. Gate: perf review required. Effort: 2 days. " +
+                       "Impact: unclear. worktree feat/batching, Wave 3 of the rollout, dispatched to " +
+                       "the perf lane. | step | status |\n| --- | --- |\n| 1 | done |\n| 2 | open |\n" +
+                       "[see plan](docs/plans/a.md) [notes](docs/plans/b.md) [tracker](docs/plans/c.md)")
         };
 
         var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,

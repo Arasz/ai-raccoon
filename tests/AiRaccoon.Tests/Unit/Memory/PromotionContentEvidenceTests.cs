@@ -4,9 +4,10 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's doc_adjust() (docs/adr/0018-promotion-scoring-v2.md, v3): content
-/// evidence is shape-only now (no recency/access-count bonus) and the doc-index/turn-mirror evidence cap
-/// is gone — those channels are hard-noise in v3 and never reach Evaluate() (see PromotionScorer).</summary>
+/// <summary>Ports scorer.py's doc_adjust() (docs/adr/0018-promotion-scoring-v2.md, round-3 lane-A):
+/// evidence is zero-centred (rule-language, durability and portability can all go negative) rather
+/// than a pile of one-sided bonuses, and the doc-index/turn-mirror evidence cap is gone — those
+/// channels are hard-noise and never reach Evaluate() (see PromotionScorer).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionContentEvidenceTests
@@ -16,6 +17,15 @@ public sealed class PromotionContentEvidenceTests
     private static ContentEvidence Evaluate(string value, ProvenanceArchetype archetype = ProvenanceArchetype.WorkNote,
         string projectId = "proj-alpha") =>
         PromotionContentEvidence.Evaluate(value, archetype, projectId, AllProjects);
+
+    private static readonly CandidateFeatures NeutralFeatures = new(
+        RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
+        FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
+        Frontmatter: false, NChars: 700, NWords: 110, MidSentence: false,
+        TechBreadth: 0, XrefDensity: 0, ImpRuleDensity: 0,
+        ForeignSubject: false, HeadingStart: false, StatusOpener: false, StatusVocab: 0,
+        SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
+        FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
 
     [Fact]
     public void GeneralizableRuleLanguage_FiresPositiveAdjustment_WithReason()
@@ -27,7 +37,18 @@ public sealed class PromotionContentEvidenceTests
         withRule.Reasons.ShouldContain("rule-language");
     }
 
-    /// <summary>v3 change: "I cannot" / "we cannot" is first-person uncertainty, not a contract.</summary>
+    /// <summary>Round-3 lane-A centres rule-language: absent any rule wording, the term is a small
+    /// negative (-0.20), not a no-op — a document channel's chunks spread around their prior instead
+    /// of only ever being lifted by it.</summary>
+    [Fact]
+    public void NoRuleLanguage_IsAMildNegative_NotZero()
+    {
+        var noRule = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.WorkNote);
+
+        noRule.Adjustment.ShouldBeLessThan(0.0);
+    }
+
+    /// <summary>"I cannot" / "we cannot" is first-person uncertainty, not a contract.</summary>
     [Fact]
     public void FirstPersonCannot_DoesNotCountAsRuleLanguage()
     {
@@ -48,7 +69,6 @@ public sealed class PromotionContentEvidenceTests
         numbersOnly.Reasons.ShouldNotContain("measured-values");
     }
 
-    /// <summary>v3 addition: a durable rule backed by a verified measurement gets a combo bonus.</summary>
     [Fact]
     public void VerifiedMeasurementWithRuleLanguage_GetsAContractBonus()
     {
@@ -74,81 +94,60 @@ public sealed class PromotionContentEvidenceTests
         mentionedLate.Reasons.ShouldNotContain("foreign-subject");
     }
 
-    /// <summary>The +0.10 many-projects bonus must carry its own tag so the reason list can tell it
-    /// apart from the foreign-subject bonus — previously both effects reused the "foreign-subject" tag.</summary>
     [Fact]
-    public void TwoForeignProjects_TagTheCountSeparatelyFromTheSubject()
+    public void ForeignSubject_AddsExactlyFifteenHundredths()
     {
-        var subjectAndCount = new CandidateFeatures(
-            RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
-            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
-            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
-            ForeignProjects: 2, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
-            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
-            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
-        var countOnly = subjectAndCount with { ForeignSubject = false };
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.WorkNote);
+        var with = PromotionContentEvidence.Evaluate(
+            NeutralFeatures with { ForeignSubject = true }, ProvenanceArchetype.WorkNote);
 
-        var withSubject = PromotionContentEvidence.Evaluate(subjectAndCount, ProvenanceArchetype.WorkNote);
-        var withoutSubject = PromotionContentEvidence.Evaluate(countOnly, ProvenanceArchetype.WorkNote);
-
-        withSubject.Reasons.ShouldContain("foreign-subject");
-        withSubject.Reasons.ShouldContain("many-foreign-projects");
-        withoutSubject.Reasons.ShouldNotContain("foreign-subject");
-        withoutSubject.Reasons.ShouldContain("many-foreign-projects");
-        withSubject.Adjustment.ShouldBe(withoutSubject.Adjustment + 0.25, 0.0001);
+        with.Adjustment.ShouldBe(without.Adjustment + 0.15, 0.0001);
     }
 
+    /// <summary>Round-3 lane-A restores the heading-start bonus (scorer.py's `doc_adjust()`, dropped
+    /// for exact-parity reasons and reinstated on measurement — see docs/adr/0018): a document chunk
+    /// that opens on a markdown heading scores exactly 0.10 above an otherwise-identical chunk that
+    /// does not.</summary>
     [Fact]
-    public void HeadingStart_AddsPositiveAdjustment()
+    public void HeadingStart_AddsExactlyTenHundredths()
     {
-        var heading = Evaluate("# Cache invalidation\nThe queue clears entries older than the configured TTL.");
-        var midSentence = Evaluate("clears entries older than the configured TTL once the queue notices them.");
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.WorkNote);
+        var with = PromotionContentEvidence.Evaluate(
+            NeutralFeatures with { HeadingStart = true }, ProvenanceArchetype.WorkNote);
 
-        heading.Reasons.ShouldContain("heading-start");
-        heading.Adjustment.ShouldBeGreaterThan(midSentence.Adjustment);
+        with.Adjustment.ShouldBe(without.Adjustment + 0.10, 0.0001);
     }
 
+    /// <summary>Round-3 lane-A flips v3's sign: a chunk starting mid-sentence is body prose, not a
+    /// penalty — a chunk starting at a heading is disproportionately a section opener or a TOC.</summary>
     [Fact]
-    public void MidSentenceOpener_AddsPenalty()
+    public void MidSentenceOpener_AddsAPositiveAdjustment_NotAPenalty()
     {
-        var midSentence = Evaluate("clears entries older than the configured TTL once the queue notices them, " +
-                                    "which keeps memory pressure predictable across long-running sessions.");
-
-        midSentence.Reasons.ShouldContain("mid-sentence");
-    }
-
-    /// <summary>A fragment opening with markdown emphasis (e.g. "**minscore is measured...") is still a
-    /// mid-sentence fragment once the leading markup is stripped — the raw first character alone missed it.</summary>
-    [Fact]
-    public void MidSentenceOpener_BehindLeadingMarkup_StillCountsAsMidSentence()
-    {
-        var midSentence = Evaluate("**minscore is measured inert to whatever the caller passes as a filter, " +
-                                    "so it never trims results the way an agent expects it to.");
-
-        midSentence.Reasons.ShouldContain("mid-sentence");
-    }
-
-    /// <summary>The mid-sentence penalty must survive the positive-evidence clamp: a row with enough
-    /// other bonuses to already saturate Hi (before the penalty) must still come out 0.18 lower for
-    /// opening mid-sentence, not have the penalty silently absorbed by the ceiling.</summary>
-    [Fact]
-    public void MidSentenceOpener_StillDemotesAChunkAlreadyAtTheCeiling()
-    {
-        var saturated = new CandidateFeatures(
-            RuleDensity: 5.0, MeasureWords: 4, NumUnit: 4, Ephemera: 0, Superseded: false,
-            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
-            Frontmatter: false, NChars: 2000, NWords: 300, MidSentence: false, HeadingStart: true,
-            ForeignProjects: 0, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
-            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
-            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
-
-        var atCeiling = PromotionContentEvidence.Evaluate(saturated, ProvenanceArchetype.WorkNote);
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.WorkNote);
         var midSentence = PromotionContentEvidence.Evaluate(
-            saturated with { MidSentence = true, HeadingStart = false }, ProvenanceArchetype.WorkNote);
+            NeutralFeatures with { MidSentence = true }, ProvenanceArchetype.WorkNote);
 
-        atCeiling.Adjustment.ShouldBe(1.30, "the fixture must actually saturate Hi for this test to mean anything");
         midSentence.Reasons.ShouldContain("mid-sentence");
-        midSentence.Adjustment.ShouldBe(1.30 - 0.18);
+        midSentence.Adjustment.ShouldBe(without.Adjustment + 0.15, 0.0001);
+    }
+
+    /// <summary>Mid-sentence is summed into the same evidence total as everything else and clamped
+    /// together at the end — it does not apply after the ceiling has already absorbed it.</summary>
+    [Fact]
+    public void MidSentenceOpener_IsClampedTogetherWithEverythingElse_NotAppliedAfterTheCeiling()
+    {
+        var saturated = NeutralFeatures with
+        {
+            RuleDensity = 5.0, MeasureWords = 4, NumUnit = 4, NWords = 300, NChars = 2000,
+            ForeignSubject = true, TechBreadth = 5
+        };
+
+        var atCeiling = PromotionContentEvidence.Evaluate(saturated, ProvenanceArchetype.Adr);
+        var midSentence = PromotionContentEvidence.Evaluate(
+            saturated with { MidSentence = true }, ProvenanceArchetype.Adr);
+
+        atCeiling.Adjustment.ShouldBe(1.60, "the fixture must actually saturate Hi for this test to mean anything");
+        midSentence.Adjustment.ShouldBe(1.60, "already at the ceiling, so +0.15 more still clamps to Hi");
     }
 
     [Fact]
@@ -236,8 +235,8 @@ public sealed class PromotionContentEvidenceTests
         frontmatterOnly.Reasons.ShouldContain("frontmatter-only");
     }
 
-    /// <summary>v3 addition: plan-channel rule lift is capped low — plans quote gates as "must" without
-    /// the fact being durable.</summary>
+    /// <summary>Plan-channel rule lift is capped low — plans quote gates as "must" without the fact
+    /// being durable.</summary>
     [Fact]
     public void PlanArchetype_CapsRuleLanguageBonus()
     {
@@ -250,18 +249,73 @@ public sealed class PromotionContentEvidenceTests
         asPlan.Adjustment.ShouldBeLessThan(asWorkNote.Adjustment);
     }
 
-    /// <summary>The mid-sentence penalty is doc-channel-only by decision (pending calibration
-    /// fixtures): EvaluateAutoMemoryNote must never reference CandidateFeatures.MidSentence.</summary>
+    /// <summary>Portability (breadth of named third-party technology, less intra-repo cross-reference
+    /// density) applies only to the considered-document family (adr, charter, explanation,
+    /// measurement, research_synthesis, reference) — naming tools in a plan or review is enumerating
+    /// what was inspected, not deciding about a technology.</summary>
+    [Fact]
+    public void Portability_OnlyAppliesToTheDocumentFamily()
+    {
+        var techHeavy = NeutralFeatures with { TechBreadth = 5 };
+
+        var asAdr = PromotionContentEvidence.Evaluate(techHeavy, ProvenanceArchetype.Adr);
+        var asPlan = PromotionContentEvidence.Evaluate(techHeavy, ProvenanceArchetype.Plan);
+        var asAdrNoTech = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.Adr);
+
+        asAdr.Reasons.ShouldContain("portability");
+        asPlan.Reasons.ShouldNotContain("portability");
+        asAdr.Adjustment.ShouldBeGreaterThan(asAdrNoTech.Adjustment);
+    }
+
+    /// <summary>Dense intra-repo cross-referencing (ADR-nn, issue #nn, §, NFR-x) is portability's
+    /// mirror image and demotes a document-family chunk.</summary>
+    [Fact]
+    public void Portability_XrefDensity_DemotesADocumentFamilyChunk()
+    {
+        var withXrefs = NeutralFeatures with { XrefDensity = 5.0 };
+
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.Adr);
+        var with = PromotionContentEvidence.Evaluate(withXrefs, ProvenanceArchetype.Adr);
+
+        with.Adjustment.ShouldBeLessThan(without.Adjustment);
+    }
+
+    /// <summary>Durability (an impersonal is/are/means/requires/holds/applies ... never/always/only/not
+    /// clause) is centred so the median chunk contributes nothing, and applies to every document
+    /// channel, not just the portability-restricted family.</summary>
+    [Fact]
+    public void Durability_ImpersonalRuleClause_RaisesEveryDocumentChannel()
+    {
+        var withRule = NeutralFeatures with { ImpRuleDensity = 1.0 };
+
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.Plan);
+        var with = PromotionContentEvidence.Evaluate(withRule, ProvenanceArchetype.Plan);
+
+        with.Reasons.ShouldContain("durable-rule-language");
+        with.Adjustment.ShouldBeGreaterThan(without.Adjustment);
+    }
+
+    /// <summary>Substance ramp: a chunk near the corpus median length (110 words) contributes ~0; a
+    /// fragment is pushed down, a full-bodied chunk is pushed up — replacing the old two cliff
+    /// penalties at 420 chars / 60 words with a continuous ramp.</summary>
+    [Fact]
+    public void Substance_LongerChunk_ScoresHigherThanAFragment_AllElseEqual()
+    {
+        var fragment = NeutralFeatures with { NWords = 10 };
+        var fullBodied = NeutralFeatures with { NWords = 250 };
+
+        var fragmentEvidence = PromotionContentEvidence.Evaluate(fragment, ProvenanceArchetype.WorkNote);
+        var fullBodiedEvidence = PromotionContentEvidence.Evaluate(fullBodied, ProvenanceArchetype.WorkNote);
+
+        fullBodiedEvidence.Adjustment.ShouldBeGreaterThan(fragmentEvidence.Adjustment);
+    }
+
+    /// <summary>Auto-memory-note evidence never references MidSentence: the mid-sentence positive
+    /// term is doc-channel-only.</summary>
     [Fact]
     public void MidSentenceOpener_DoesNotChangeAnAutoMemoryNoteScore()
     {
-        var baseline = new CandidateFeatures(
-            RuleDensity: 0, MeasureWords: 1, NumUnit: 1, Ephemera: 0, Superseded: false,
-            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
-            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
-            ForeignProjects: 0, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
-            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
-            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+        var baseline = NeutralFeatures with { MeasureWords = 1, NumUnit = 1, ForeignSubject = true };
 
         var withoutMidSentence = PromotionContentEvidence.EvaluateAutoMemoryNote(baseline);
         var withMidSentence = PromotionContentEvidence.EvaluateAutoMemoryNote(baseline with { MidSentence = true });

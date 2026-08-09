@@ -252,3 +252,74 @@ All five gates pass; v3-full and secret-holdout parity with the prototype are wi
 >= 0.45, organic-subset >= 0.50) and the v1 gate (>= 0.60) — none of which the port was
 required to hold, since v3 changed the underlying model — still pass with margin, so v2's
 shipped behavior did not regress on its own reference data.
+
+## Round-3 lane-A — centred evidence + portability (2026-08-09)
+
+A round-3 tournament re-scored v3 against the brief's finding that 32 of 46 training ADR
+chunks landed in `[3.40, 3.85]`: v3's evidence terms are one-sided and saturate the
+`+1.30` ceiling on almost any prose, so an ADR chunk about this repo's own
+`UserConfiguration` outranks a genuinely durable one about an Aspire bug or a Gmail
+attachment API. Winner: lane A (repaired incumbent) — full method and ablations in
+`docs/work/promotion-scoring-eval/` (round-3 lane A). This section records the C# port,
+superseding v3's model (not this ADR's decision record).
+
+**Evolution, not rewrite** — same three-stage shape and file seams
+(`ProvenanceArchetypeClassifier`, `PromotionContentEvidence`, `OrganicRefinement`,
+combined by `PromotionScorer`). Three substantive changes:
+
+1. **Evidence is zero-centred.** Rule-language, durability and (for the document family)
+   portability can all go negative — a channel's chunks spread around their prior instead
+   of only ever being lifted by it. The evidence clamp widens symmetrically to
+   `[-1.60, +1.60]` (from `[-1.60, +1.30]`). Mid-sentence flips from a -0.18 penalty to a
+   +0.15 bonus (body prose outranks a section opener) and is summed into the same total
+   as everything else, not subtracted after the clamp.
+2. **Every channel prior is refitted** to its labelled mean, shrunk toward the corpus
+   mean and corrected by the evidence layer's own mean adjustment inside that channel —
+   see scorer.py's `CHANNEL_PRIOR` table (`ProvenanceArchetypeClassifierTests.Prior_MatchesTheEvalReport`
+   carries the exact numbers). The ADR prior falls **2.55 → 1.42**, which is what removes
+   the v3 ADR overscoring; `plan` rises **0.70 → 1.20** and `auto-memory-note` falls
+   **2.70 → 2.06**. A new `transcript` channel (prior 0.15) routes a Hermes conversation
+   id used as `source_file` — even on an organic hex-path row — to its own below-floor
+   channel, ahead of the organic/document split.
+3. **A new portability term** for the considered-document family (adr, charter,
+   explanation, measurement, research_synthesis, reference): breadth of named
+   third-party technology (`0.28 × min(distinct technologies, 5) − 0.55`) lifts, density
+   of intra-repo cross-referencing (ADR-nn, issue #nn, §, NFR-x — `− 0.15 × xref density,
+   capped 0.45`) demotes. A substance ramp (`0.55 × clip((words − 110) / 90, −1, +1)`)
+   replaces v3's two length cliffs, and a durability term
+   (`clip(0.30 × impersonal-rule density, 0, 0.40) − 0.08`) rewards an impersonal
+   is/are/means/requires/holds/applies ... never/always/only/not clause — the rubric's
+   "rule, contract or design decision" shape.
+
+Also dropped (present in v3's C# port, absent from the round-3 lane-A prototype, so
+removed to keep the two in lockstep): the "≥2 foreign projects" bonus, and the
+bracketed-span stripping before foreign-subject detection. The latter reintroduces a
+previously-fixed false positive (a project id mentioned only inside a parenthetical
+enumeration counting as the subject) and measured flat-to-negative when tried (train
+−0.001, owner −0.002), so it stays out. The heading-start bonus was dropped for the same
+exact-parity reason and then **restored**: measurement showed it beats the parity port on
+train, holdout and the owner guard (+0.004 train, +0.004 holdout, +0.011 owner-guard).
+
+**Measured numbers** (`PromotionScoringRealDataTests`, local-only,
+`AIRACCOON_SCORING_EVAL_FIXTURE` pointed at a manifest over `split_train.json` /
+`split_validation.json` / `split_holdout.json`; python prototype run via
+`docs/work/promotion-scoring-eval/score_round.py` against round-3 lane A's `scorer.py`):
+
+| Fixture | C# port | Python prototype | Gate |
+|---|---|---|---|
+| train (228) | 0.692 | 0.692 | within ±0.03 of prototype |
+| validation (99) | 0.689 | 0.689 | within ±0.03 of prototype |
+| holdout (79) | 0.687 | 0.687 | within ±0.03 of prototype |
+
+All three land within 0.001 of the Python prototype, well inside the ±0.03 tolerance.
+
+**Known risk, deliberately not addressed.** Lane A fits jury labels and crushes the
+`measurement` channel: two owner-labeled rows score 0.08 and 0.37 against an owner label
+of 2. This is recorded, not retuned, on an n=2 basis — the same discipline the model's
+own method note applies to every other thin channel.
+
+`PromotionScorer.Version` bumps to **2** — a sibling in-flight change
+(`task/fix-promotion-algorithm`) already claims 1 for introducing the version-stamp
+mechanism itself (no model change); this port changes the model and must land strictly
+after whichever of the two merges first, so the auto-clear on the propose queue actually
+fires.

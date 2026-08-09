@@ -4,7 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's channel() ordering; see docs/adr/0018-promotion-scoring-v2.md.</summary>
+/// <summary>Ports scorer.py's channel() ordering; see docs/adr/0018-promotion-scoring-v2.md
+/// round-3 lane-A section.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProvenanceArchetypeClassifierTests
@@ -27,8 +28,23 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.OrganicNote);
     }
 
+    /// <summary>The organic check (a hex `path`) must win even when `source_file` happens to look
+    /// like a document-channel path — on an organic write, `source_file` is a citation, not a
+    /// provenance (METHOD.md §7). This is the corrected rule order: is_organic before any
+    /// document-path-shaped routing, not after.</summary>
     [Fact]
-    public void RememberDirectoryPath_IsRememberLog_EvenBeforeTheOrganicCheck()
+    public void HexPathWithDocumentShapedSourceFile_IsStillOrganicNote_NotTheCitedChannel()
+    {
+        var hex = new string('a', 40) + ".md";
+
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            hex, sourceFile: ".remember/2026-08-01-status.md", value: "a fact");
+
+        archetype.ShouldBe(ProvenanceArchetype.OrganicNote);
+    }
+
+    [Fact]
+    public void RememberDirectoryPath_IsRememberLog()
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(
             ".remember/2026-08-01-status.md", sourceFile: ".remember/2026-08-01-status.md", value: "x");
@@ -117,8 +133,8 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldBe(ProvenanceArchetype.Charter);
     }
 
-    /// <summary>v3 change: a dated `YYYY-MM-DD-*-charter.md` under docs/work is in-flight review
-    /// coordination, not a durable project charter (docs/adr/0018-promotion-scoring-v2.md).</summary>
+    /// <summary>A dated `YYYY-MM-DD-*-charter.md` under docs/work is in-flight review coordination,
+    /// not a durable project charter (docs/adr/0018-promotion-scoring-v2.md).</summary>
     [Fact]
     public void DatedCharterInFilename_IsReview_NotCharter()
     {
@@ -252,30 +268,73 @@ public sealed class ProvenanceArchetypeClassifierTests
         archetype.ShouldNotBe(ProvenanceArchetype.TurnMirror);
     }
 
+    /// <summary>A Hermes conversation id used as source_file routes to its own below-floor channel —
+    /// a chat dump, whatever it looks like (METHOD.md §7) — checked before the mirror-adjacent
+    /// turn-mirror check has a chance to fall through, and before the organic/document split.</summary>
+    [Theory]
+    [InlineData("hermes/20260806_215718_fd7f66")]
+    [InlineData("some/prefix/hermes/20260806_215718_fd7f66")]
+    [InlineData("hermes/84304448-08b6-4aec-a32b-af9f3a67097b")]
+    public void HermesConversationIdSourceFile_IsTranscript(string sourceFile)
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "docs/work/notes.md", sourceFile: sourceFile, value: "a conversation recap");
+
+        archetype.ShouldBe(ProvenanceArchetype.Transcript);
+    }
+
+    /// <summary>A dated document that merely lives under a `hermes/` directory is not a conversation
+    /// id: both live id shapes are a timestamp followed by `_`, or a UUID, and neither admits a
+    /// dash-then-prose filename.</summary>
+    [Theory]
+    [InlineData("hermes/20260809-foo.md")]
+    [InlineData("hermes/notes-plan.md")]
+    public void DatedDocumentUnderAHermesDirectory_IsNotATranscript(string sourceFile)
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "docs/work/notes.md", sourceFile: sourceFile, value: "a durable note about something");
+
+        archetype.ShouldNotBe(ProvenanceArchetype.Transcript);
+    }
+
+    /// <summary>The transcript check reads `source_file` even on a hex (organic-write) path — a
+    /// citation of "this came from a chat" outranks the usual organic routing (METHOD.md §7).</summary>
+    [Fact]
+    public void HermesConversationIdSourceFile_OutranksOrganicRouting_OnAHexPath()
+    {
+        var hex = new string('a', 40) + ".md";
+
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            hex, sourceFile: "hermes/20260806_215718_fd7f66", value: "a conversation recap");
+
+        archetype.ShouldBe(ProvenanceArchetype.Transcript);
+    }
+
     [Fact]
     public void Prior_MatchesTheEvalReport()
     {
         var expected = new Dictionary<ProvenanceArchetype, double>
         {
-            [ProvenanceArchetype.TurnMirror] = 0.35,
+            [ProvenanceArchetype.Transcript] = 0.15,
+            [ProvenanceArchetype.TurnMirror] = 0.25,
             [ProvenanceArchetype.RememberLog] = 0.30,
             [ProvenanceArchetype.AutoMemorySession] = 0.30,
-            [ProvenanceArchetype.AutoMemoryIndex] = 0.55,
-            [ProvenanceArchetype.AutoMemoryNote] = 2.70,
-            [ProvenanceArchetype.OrganicNote] = 2.30,
-            [ProvenanceArchetype.DocIndex] = 0.35,
-            [ProvenanceArchetype.Adr] = 2.55,
-            [ProvenanceArchetype.Charter] = 2.30,
-            [ProvenanceArchetype.Explanation] = 2.15,
-            [ProvenanceArchetype.Measurement] = 2.10,
-            [ProvenanceArchetype.ResearchSynthesis] = 1.75,
-            [ProvenanceArchetype.Reference] = 1.45,
-            [ProvenanceArchetype.ChangelogEntry] = 1.05,
-            [ProvenanceArchetype.WorkNote] = 1.30,
-            [ProvenanceArchetype.Plan] = 0.70,
-            [ProvenanceArchetype.Review] = 0.95,
-            [ProvenanceArchetype.CatalogPage] = 1.05,
-            [ProvenanceArchetype.OtherDoc] = 1.10
+            [ProvenanceArchetype.AutoMemoryIndex] = 0.35,
+            [ProvenanceArchetype.DocIndex] = 0.30,
+            [ProvenanceArchetype.AutoMemoryNote] = 2.06,
+            [ProvenanceArchetype.OrganicNote] = 2.00,
+            [ProvenanceArchetype.Adr] = 1.42,
+            [ProvenanceArchetype.Charter] = 1.70,
+            [ProvenanceArchetype.Explanation] = 1.61,
+            [ProvenanceArchetype.Measurement] = 1.03,
+            [ProvenanceArchetype.ResearchSynthesis] = 1.48,
+            [ProvenanceArchetype.Reference] = 1.47,
+            [ProvenanceArchetype.ChangelogEntry] = 1.37,
+            [ProvenanceArchetype.WorkNote] = 1.44,
+            [ProvenanceArchetype.Plan] = 1.20,
+            [ProvenanceArchetype.Review] = 1.27,
+            [ProvenanceArchetype.CatalogPage] = 1.26,
+            [ProvenanceArchetype.OtherDoc] = 1.17
         };
 
         foreach (var (archetype, prior) in expected)
