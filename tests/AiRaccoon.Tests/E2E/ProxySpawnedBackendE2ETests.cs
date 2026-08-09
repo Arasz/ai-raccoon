@@ -48,13 +48,10 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     Skipped, not deleted: it reproduces an open defect on demand. The proxy negotiates its
-    ///     backend session before it sees the client, so HttpClientTransport stamps that version on
-    ///     every relayed request — a client on any other revision is rejected by the backend for a
-    ///     header/body mismatch. Real clients reach this on a cold start, when the 5s discover probe
-    ///     expires and the SDK falls back to the legacy initialize handshake.
+    ///     A client on the older revision is relayed as faithfully as one on the newest: the proxy
+    ///     carries whatever version the client asked for rather than the one its own session opened at.
     /// </summary>
-    [Fact(Skip = "Open defect: the proxy relays a client whose protocol version its backend session did not negotiate.")]
+    [Fact]
     public async Task LegacyProtocolClient_IsRelayed()
     {
         await using var client = await AiRaccoonProcess.ConnectAsync(
@@ -69,13 +66,10 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     [Fact]
     public async Task ProxyOverASpawnedServe_CallsAToolThroughTheGate()
     {
-        // The probe has to outlast a cold `serve` (key resolve, bank, ONNX) or the SDK falls back to
-        // the legacy handshake and trips the defect LegacyProtocolClient_IsRelayed records. The gate
-        // assertions below are untouched by this.
+        // A stock client, tuned for nothing: a cold `serve` may outlast the discover probe and send
+        // the SDK down the legacy handshake, which LegacyProtocolClient_IsRelayed proves is carried.
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString()],
-            new McpClientOptions { DiscoverProbeTimeout = TimeSpan.FromSeconds(60) },
-            TestContext.Current.CancellationToken);
+            ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
 
         var result = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
