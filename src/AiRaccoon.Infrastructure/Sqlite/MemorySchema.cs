@@ -141,16 +141,22 @@ internal static class MemorySchema
                                -- an entries row that may no longer exist. NOT EXISTS is load-bearing —
                                -- uq_entries_committed_bucket permits the same hash in two contexts of
                                -- one project, so deleting one live sibling must not drop a candidate
-                               -- the surviving sibling still backs. OLD.project_id is NULL for
-                               -- shared-scope deletes and `= NULL` never matches, so those are inert by
-                               -- construction (promotion dequeues explicitly). No CurrentVersion bump:
-                               -- IF NOT EXISTS lets an additive trigger reach every existing bank on its
-                               -- next open with no migration step (ADR-0023).
+                               -- the surviving sibling still backs. `e.scope = 'project'` matches what
+                               -- ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject):
+                               -- a custom- or workspace-scoped sibling cannot back a promotable candidate,
+                               -- so it must not count as "still live" here either (H4). OLD.project_id is
+                               -- NULL for shared-scope deletes and `= NULL` never matches, so those are
+                               -- inert by construction (promotion dequeues explicitly). No CurrentVersion
+                               -- bump for the trigger's original shape: IF NOT EXISTS let that additive
+                               -- trigger reach every existing bank with no migration step (ADR-0023) — but
+                               -- IF NOT EXISTS never replaces a body already on disk, so the H4 guard fix
+                               -- itself needs the versioned DROP+CREATE in MigrateToV5Async below.
                                CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
                                    DELETE FROM promotion_queue
                                    WHERE project_id = OLD.project_id AND hash = OLD.hash
                                      AND NOT EXISTS (SELECT 1 FROM entries e
-                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash);
+                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                       AND e.scope = 'project');
                                END;
 
                                CREATE TABLE IF NOT EXISTS sync_meta (
@@ -232,9 +238,9 @@ internal static class MemorySchema
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/>/
-    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/> (ADR-0011).
+    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/>/<see cref="MigrateToV5Async"/> (ADR-0011).
     /// </summary>
-    internal const int CurrentVersion = 4;
+    internal const int CurrentVersion = 5;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -310,6 +316,14 @@ internal static class MemorySchema
             // Hard step: ALTER TABLE ADD COLUMN is not idempotent, so it needs the version gate
             // (unlike promotion_queue_entries_ad above, which reaches every bank via IF NOT EXISTS).
             await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 5)
+        {
+            // Hard step: promotion_queue_entries_ad (H4) needed its guard body corrected, and
+            // CREATE TRIGGER IF NOT EXISTS in Ddl above cannot replace a body already on disk —
+            // only an explicit DROP+CREATE, gated by the version ladder, reaches an existing bank.
+            await MigrateToV5Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         if (healthy)
@@ -744,6 +758,48 @@ internal static class MemorySchema
                         "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 5 (H4): `CREATE TRIGGER IF NOT EXISTS` in <see cref="Ddl"/> never replaces a
+    ///     trigger body already on disk, so every bank opened before this fix carries the scope-blind
+    ///     `promotion_queue_entries_ad` guard forever unless this hard, versioned step drops and
+    ///     recreates it. DROP+CREATE inside one transaction so a crash mid-step cannot leave a bank
+    ///     with the trigger missing entirely.
+    /// </summary>
+    private static async Task MigrateToV5Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
+
+                        CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                            DELETE FROM promotion_queue
+                            WHERE project_id = OLD.project_id AND hash = OLD.hash
+                              AND NOT EXISTS (SELECT 1 FROM entries e
+                                              WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                AND e.scope = 'project');
+                        END;
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
         }
     }
 

@@ -96,6 +96,9 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     uq_entries_committed_bucket permits the same (project, hash) under two context labels.
     ///     This is the required prove-the-check-fails step for ADR-0023: written first against a
     ///     trigger with no NOT EXISTS guard (observed red), then against the guarded trigger (green).
+    ///     The surviving sibling (id=2) is project-scoped — post-H4 the guard only treats a
+    ///     project-scope backer as "still live" (see DeletingTheProjectEntry_WithOnlyACustomScopeSiblingSurviving_DropsTheQueuedCandidate
+    ///     below for the case where the *only* surviving sibling is not project-scoped).
     /// </summary>
     [Fact]
     public async Task DeletingOneOfTwoEntriesSharingAHash_KeepsTheQueuedCandidate()
@@ -106,8 +109,8 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
                 """
                 INSERT INTO entries (id, hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
                 VALUES (1, 'shared-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-a', 1, 1, 'embedded');
-                INSERT INTO entries (id, hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
-                VALUES (2, 'shared-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-b', 1, 1, 'embedded');
+                INSERT INTO entries (id, hash, path, value, scope, project_id, created_at, updated_at, embed_state)
+                VALUES (2, 'shared-hash', 'p.md', 'v', 'project', 'acme', 1, 1, 'embedded');
                 """);
         }
 
@@ -121,7 +124,131 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldContain("shared-hash",
-                "entry id=2 still backs this hash; deleting its sibling must not drop the candidate");
+                "entry id=2 is project-scoped and still backs this hash; deleting its custom-scope sibling must not drop the candidate");
+    }
+
+    /// <summary>
+    ///     H4: ShareAsync resolves candidates with `scope = 'project'`
+    ///     (MemorySql.SelectSourceByHashAndProject), so a queue row whose hash survives only as a
+    ///     custom-scope sibling is unpromotable — the trigger's NOT EXISTS guard must not treat it
+    ///     as "still live" the way DeletingOneOfTwoEntriesSharingAHash_KeepsTheQueuedCandidate does
+    ///     for two committed siblings of the same scope.
+    /// </summary>
+    [Fact]
+    public async Task DeletingTheProjectEntry_WithOnlyACustomScopeSiblingSurviving_DropsTheQueuedCandidate()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO entries (id, hash, path, value, scope, project_id, created_at, updated_at, embed_state)
+                VALUES (1, 'shared-hash', 'p.md', 'v', 'project', 'acme', 1, 1, 'embedded');
+                INSERT INTO entries (id, hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
+                VALUES (2, 'shared-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-a', 1, 1, 'embedded');
+                """);
+        }
+
+        await _queueStore.UpsertAsync("acme", [Candidate("shared-hash", "v", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync("DELETE FROM entries WHERE id = 1");
+        }
+
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldNotContain("shared-hash",
+                "only a custom-scope sibling backs this hash now; ShareAsync can never resolve it, " +
+                "so the guard must not keep the candidate alive on its account");
+    }
+
+    /// <summary>
+    ///     Prove-the-check-fails companion to the test above: with the trigger removed entirely,
+    ///     nothing here spontaneously drops the queue row, so the assertion above is attributable
+    ///     to the trigger's guard and not some incidental side effect of the delete. Everything
+    ///     stays on one connection — a fresh OpenBankAsync() re-runs EnsureAsync, whose
+    ///     `CREATE TRIGGER IF NOT EXISTS` would silently recreate the dropped trigger.
+    /// </summary>
+    [Fact]
+    public async Task WithTheTriggerDropped_DeletingTheProjectEntry_LeavesTheQueuedCandidateUntouched()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("DROP TRIGGER promotion_queue_entries_ad");
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO entries (id, hash, path, value, scope, project_id, created_at, updated_at, embed_state)
+            VALUES (1, 'shared-hash', 'p.md', 'v', 'project', 'acme', 1, 1, 'embedded');
+            INSERT INTO entries (id, hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
+            VALUES (2, 'shared-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-a', 1, 1, 'embedded');
+            INSERT INTO promotion_queue (project_id, hash, path, value, score, reasons, created_at, updated_at)
+            VALUES ('acme', 'shared-hash', 'p.md', 'v', 1.0, '[]', 1, 1);
+            """);
+
+        await connection.ExecuteAsync("DELETE FROM entries WHERE id = 1");
+
+        var survivor = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT hash FROM promotion_queue WHERE project_id = 'acme' AND hash = 'shared-hash'");
+        survivor.ShouldBe("shared-hash",
+            "with no trigger at all the row must survive; if it didn't, the fixture above would prove nothing");
+    }
+
+    /// <summary>Regression: a queue row backed by a live project-scope entry must not be disturbed
+    /// by an unrelated delete in the same project.</summary>
+    [Fact]
+    public async Task DeletingAnUnrelatedEntry_DoesNotAffectAQueueRowBackedByALiveProjectScopeEntry()
+    {
+        var kept = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "kept fact", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync("acme", [Candidate(kept.Hash, "kept fact", 1.0)],
+            TestContext.Current.CancellationToken);
+        var unrelated = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "unrelated fact", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
+
+        await _store.DeleteAsync("acme", unrelated.Hash, TestContext.Current.CancellationToken);
+
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldContain(kept.Hash);
+    }
+
+    /// <summary>
+    ///     H5: the orphan definition must match what ShareAsync can resolve ("no project-scope
+    ///     entry backs this hash"), not "no entries row at all" — otherwise `extract prune` is
+    ///     blind to exactly the orphan class the H4 trigger fix creates.
+    /// </summary>
+    [Fact]
+    public async Task Prune_TreatsACustomScopeSiblingAsAnOrphan_ButNotALiveProjectScopeEntry()
+    {
+        var live = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "still project-scoped", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync("acme", [Candidate(live.Hash, "still project-scoped", 2.0)],
+            TestContext.Current.CancellationToken);
+
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO entries (id, hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
+                VALUES (100, 'custom-only-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-a', 1, 1, 'embedded');
+                """);
+        }
+        await _queueStore.UpsertAsync("acme", [Candidate("custom-only-hash", "v", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        var dryRun = await _queueStore.PruneOrphansAsync(apply: false, TestContext.Current.CancellationToken);
+        dryRun.PerProject.ShouldBe(new Dictionary<string, int> { ["acme"] = 1 },
+            "the custom-scope sibling is the only hash ShareAsync could never resolve; " +
+            "the live project-scope row must not be reported");
+
+        var applied = await _queueStore.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
+        applied.TotalOrphans.ShouldBe(1);
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe([live.Hash], "the live project-scope candidate must survive prune");
+
+        var rerun = await _queueStore.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
+        rerun.TotalOrphans.ShouldBe(0, "idempotent — nothing left to remove on a second pass");
     }
 
     /// <summary>Orphans pre-dating the trigger — no backing entries row at all, unlike the sibling

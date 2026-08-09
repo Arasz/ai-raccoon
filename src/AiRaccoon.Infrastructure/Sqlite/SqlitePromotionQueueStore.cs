@@ -176,31 +176,39 @@ public sealed class SqlitePromotionQueueStore(
     ///     trigger existed (ADR-0023) — the trigger covers everything from here on; this is the
     ///     one-shot catch-up for a bank that already accumulated dead rows. Reports without
     ///     deleting unless <paramref name="apply"/> is true; idempotent either way (a second call
-    ///     after apply finds nothing left to report).
+    ///     after apply finds nothing left to report). Count and delete run inside one transaction
+    ///     so nothing can change the queue between them, and the reported total is the DELETE's own
+    ///     affected-row count, not the earlier count query's snapshot.
     /// </summary>
     public async Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         // Dynamic query: an orphan-free queue yields no rows, and Dapper cannot build a typed
         // deserializer from an empty result — the dynamic path materializes per row instead.
         var perProject = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var row in await connection.QueryAsync(
                      new CommandDefinition(PromotionQueueSql.OrphanCountsPerProject,
-                         cancellationToken: cancellationToken)).ConfigureAwait(false))
+                         transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false))
         {
             perProject[(string)row.ProjectId] = (int)(long)row.Count;
         }
 
-        if (apply && perProject.Count > 0)
+        if (!apply)
         {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(PromotionQueueSql.DeleteOrphans, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new PromotionQueueOrphanReport(perProject.Values.Sum(), perProject);
         }
 
-        return new PromotionQueueOrphanReport(perProject.Values.Sum(), perProject);
+        var removed = await connection.ExecuteAsync(
+                new CommandDefinition(PromotionQueueSql.DeleteOrphans,
+                    transaction: transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return new PromotionQueueOrphanReport(removed, perProject);
     }
 
     private static PromotionQueueRow ToRow(PromotionQueueRowRow row) =>

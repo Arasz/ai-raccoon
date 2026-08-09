@@ -370,4 +370,29 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         (await _store.EvictVictimAsync("acme", TestContext.Current.CancellationToken))
             .ShouldBeNull();
     }
+
+    // ------------------------------------------------------------------ prune orphans
+    /// <summary>
+    ///     H5: PruneOrphansAsync used to count and delete in two unsynchronised statements and
+    ///     report the pre-count as "removed". Wrapping both in one transaction and reporting the
+    ///     DELETE's own affected-row count means the reported total always equals what actually
+    ///     disappeared from the queue, not an earlier snapshot.
+    /// </summary>
+    [Fact]
+    public async Task PruneOrphansAsync_Apply_ReportsExactlyWhatDisappearedFromTheQueue()
+    {
+        await _store.UpsertAsync("acme",
+            [Candidate("orphan-a", "gone", 1.0), Candidate("orphan-b", "also gone", 1.0)],
+            TestContext.Current.CancellationToken);
+        await _store.UpsertAsync("other",
+            [Candidate("orphan-c", "gone too", 1.0)], TestContext.Current.CancellationToken);
+        var before = (await _store.ListAsync(null, TestContext.Current.CancellationToken)).Count;
+
+        var applied = await _store.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
+
+        var after = (await _store.ListAsync(null, TestContext.Current.CancellationToken)).Count;
+        applied.TotalOrphans.ShouldBe(before - after,
+            "the reported total must be the DELETE's own affected-row count, not an earlier count snapshot");
+        applied.TotalOrphans.ShouldBe(3);
+    }
 }
