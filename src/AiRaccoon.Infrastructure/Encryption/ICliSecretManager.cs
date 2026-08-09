@@ -15,8 +15,9 @@ public sealed record BwsResult(int ExitCode, string Stdout, string Stderr)
 public interface ICliSecretManager
 {
     /// <summary>
-    ///     Runs <c>bws [args]</c>, appending <c>-t &lt;token&gt;</c> when a token is given. The child
-    ///     inherits the environment, so BWS_ACCESS_TOKEN flows through at server start.
+    ///     Runs <c>bws [args]</c>. A given token is set as the child's BWS_ACCESS_TOKEN — never
+    ///     as an argument, which any same-user process could read off argv — overriding whatever
+    ///     the child would otherwise inherit from the environment.
     /// </summary>
     BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout);
 }
