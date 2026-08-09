@@ -253,6 +253,24 @@ public sealed class OtlpExportTests : IDisposable
         new ActivitySource(OtlpNames.AspNetCoreScope).HasListeners().ShouldBeTrue();
     }
 
+    // WP12: self-instrumenting since .NET 9 — no OpenTelemetry.Instrumentation.Http package.
+    // Captures embedding-endpoint and Azure Blob HttpClient latency (Blob traffic rides
+    // HttpClient too), nested under the tool span.
+    [Fact]
+    public async Task EndpointSet_RegistersAListenerForTheSystemNetHttpMeterAndSource()
+    {
+        var services = new ServiceCollection();
+
+        services.AddOtlpExport(TestOptions, Enabled);
+        await using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<TracerProvider>();
+        provider.GetRequiredService<MeterProvider>();
+
+        using var httpMeter = new Meter(OtlpNames.HttpScope);
+        httpMeter.CreateCounter<long>("probe_system_net_http").Enabled.ShouldBeTrue();
+        new ActivitySource(OtlpNames.HttpScope).HasListeners().ShouldBeTrue();
+    }
+
     [Fact]
     public async Task StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet()
     {
@@ -518,6 +536,33 @@ public sealed class OtlpExportTests : IDisposable
 
         ServiceName(host.Services.GetRequiredService<MeterProvider>())
             .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
+    }
+
+    // WP11: without service.version, InstrumentationScope.version is empty on every signal and an
+    // operator cannot tell which build produced a series across a rollout.
+    [Fact]
+    public async Task HttpHost_ResourceCarriesTheAssemblyServiceVersion()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
+
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        ResourceAttribute(host.Services.GetRequiredService<TracerProvider>(), "service.version")
+            .ShouldBe(ServerInfo.BinaryVersion);
+    }
+
+    // WP11: one assembly-attribute read (ServerInfo.BinaryVersion) feeds the Meter/ActivitySource
+    // constructors too, so InstrumentationScope.version is non-empty on every signal.
+    [Fact]
+    public void ToolCallMetrics_AndPromotionQueueMetrics_ReportANonEmptyScopeVersion()
+    {
+        using var toolMetrics = new ToolCallMetrics();
+        using var queueMetrics = new PromotionQueueMetrics();
+
+        toolMetrics.Meter.Version.ShouldNotBeNullOrEmpty();
+        toolMetrics.ActivitySource.Version.ShouldNotBeNullOrEmpty();
+        queueMetrics.Meter.Version.ShouldNotBeNullOrEmpty();
     }
 
     // OTEL_RESOURCE_ATTRIBUTES reaches the SDK via DI's IConfiguration, the same channel

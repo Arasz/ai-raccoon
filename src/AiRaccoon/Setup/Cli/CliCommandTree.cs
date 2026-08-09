@@ -261,7 +261,10 @@ internal static class CliCommandTree
                     { new Argument<string>("prefix") { HelpName = "prefix" } },
                 new Command("list", "Lists the excluded source_file prefixes")
             },
-            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)")
+            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)"),
+            new Command("prune",
+                "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
+                { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
         };
         return extract;
     }

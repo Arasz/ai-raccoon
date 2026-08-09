@@ -179,8 +179,11 @@ surface the failure, not to make the retry cleverer.
   records nothing. The server it forwards to does. `CreateAppHost` keeps no exporter,
   `OtlpExportTests.cs:153-164` keeps passing unchanged, and the practical coverage gap the exclusion
   created closes without the exclusion being touched.
-- **Neutral.** `McpEntryRenderer` and `serve --mcp-entry` are unaffected; a direct `url` entry
-  remains valid for anyone who wants one.
+- **Corrected 2026-08-09 — false the day it was written.** `McpEntryRenderer` and
+  `serve --mcp-entry` are not unaffected: the loopback token above shipped in this same change, so
+  a bare `url` entry does **not** work against a gated `serve` and never did after this ADR.
+  `serve --mcp-entry` now prints the `X-AiRaccoon-Token` header alongside the URL — a placeholder
+  value, never a live token — see "Amendment 2026-08-09" below.
 - **Constraint — the relay is one-directional, so "no proxy change" holds only client→backend.**
   `ProxyForwarder` filters the client's incoming messages and registers no notification or request
   handler on the backend session, so anything the backend originates — `notifications/progress`,
@@ -255,14 +258,60 @@ The full flow — mint-before-bind ordering, the exclusive-create race, the 401 
 [the token flow](../plans/2026-08-09-mcp-loopback-token-flow.md). It ships in the same change as
 the proxy.
 
+## Amendment 2026-08-09 — the gate also accepts Bearer
+
+`McpTokenGate.IsAuthorized` now accepts a second envelope for the same secret:
+`Authorization: Bearer <token>`, compared with the same
+`CryptographicOperations.FixedTimeEquals`, alongside the existing `X-AiRaccoon-Token`. One
+credential, two envelopes — no new store, no new lifetime, no second secret.
+
+**Why, and why the reasoning that first proposed this does not carry.** The original argument was
+that without a Bearer branch, the only way to point a direct-HTTP client at a gated `serve` was a
+hand-written `headers` block. That argument does not survive: `serve --mcp-entry` prints a document
+carrying the header with a placeholder value (the correction above), so pasting the printed entry
+plus one `.env` line already works with no Bearer branch at all — the regression this ADR's token
+broke is fixed for every named surface without touching `McpTokenGate`.
+
+The argument that does carry: `hermes mcp add ai-raccoon --url <url>` — the command this project's
+own docs point readers to, and the one in the regression report that started this — prompts *"Does
+this server require authentication?"* by default for every `--url` server, and its auth flow can
+only emit `Authorization: Bearer ${VAR}`. Without this branch, the documentation for that command
+would have to tell the reader to decline their own client's authentication prompt and hand-edit
+`~/.hermes/config.yaml` instead — the same class of defect ("the documented command cannot
+authenticate") this fix exists to remove. Secondarily, `Authorization: Bearer` is the header every
+other MCP client's own auth UI already emits, and the Hermes CLI's flow keeps the secret in `.env`
+rather than in `config.yaml`, for free.
+
+**Four Non-Goals stand exactly as written, untouched by this amendment:**
+
+- *Authorizing callers* — Bearer proves the same file-read capability as the custom header; every
+  holder still gets the full tool surface.
+- *Transport security* — traffic is still plaintext on loopback.
+- *An explicit Windows ACL on the token file* — still out of scope; this amendment adds a header
+  format, not a permissions model.
+- *Gating `ai-raccoon --transport http` when started directly* — that path stays ungated; the
+  amendment only widens what `serve`'s existing gate accepts.
+
+**Scope correction.** [The token flow doc](../plans/2026-08-09-mcp-loopback-token-flow.md)
+(§"Why this exists") says the token file is read by the proxy itself, so "no MCP client config
+changes and nobody types a secret anywhere." That is true, and stays true, only of the **default
+proxy path**. It was never true of the direct-HTTP route documented alongside `serve --mcp-entry`:
+there, a human has always had to put the token somewhere reachable at connect time, and this
+amendment adds a second place to put it (`~/.hermes/.env`, via the CLI's own prompt) beside the
+one that already existed (`~/.claude.json`, via `claude mcp add --header`). Neither file is
+committed, but "nobody types a secret" is a claim about the proxy path only, and every doc
+repeating it now says so.
+
 ## Alternatives considered
 
 ### An HTTP `url` entry in every client config (no proxy)
 
 Rejected: it cannot meet the requirement. No MCP client launches a process for a `url` entry, so
 nothing starts the server, and the entry simply fails if the server is down when the client boots.
-`McpEntryRenderer.cs:6-10` already renders the exact JSON for anyone who wants this manually.
-Secondary blocker at the time: the ai-badger scaffolder could not emit a `type`/`url` entry at all.
+`McpEntryRenderer.cs:6-10` renders that JSON for anyone who wants this manually — corrected
+2026-08-09: what it renders is not a bare `url`, because a bare `url` has never worked against a
+gated `serve`; see "Amendment 2026-08-09" below. Secondary blocker at the time: the ai-badger
+scaffolder could not emit a `type`/`url` entry at all.
 
 ### `--transport proxy` as an opt-in, or a separate `ai-raccoon proxy` verb
 

@@ -20,7 +20,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 
     public PromotionQueueMetrics()
     {
-        Meter = new Meter(OtlpNames.PromotionQueueScope);
+        Meter = new Meter(OtlpNames.PromotionQueueScope, ServerInfo.BinaryVersion);
         _evictions = Meter.CreateCounter<long>(
             OtlpNames.QueueEvictions,
             unit: "{eviction}",
@@ -63,20 +63,23 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 
     public void RecordEviction(string projectId, double victimScore, string reason)
     {
-        _evictions.Add(1, new TagList { { "project_id", projectId }, { "reason", reason } });
-        _evictedScore.Record(victimScore);
+        var tags = new TagList { { "project_id", projectId }, { "reason", reason } };
+        _evictions.Add(1, tags);
+        _evictedScore.Record(victimScore, tags);
     }
 
+    // outcome (promoted|discarded) costs two series, so the cardinality reasoning that omits
+    // project_id here (ADR-0009) does not apply (docs/work/2026-08-09-otlp-fix-plan.md WP10).
     public void RecordPromoted(string projectId, double waitSeconds)
     {
         _promoted.Add(1, new TagList { { "project_id", projectId } });
-        _waitSeconds.Record(waitSeconds);
+        _waitSeconds.Record(waitSeconds, new TagList { { "outcome", "promoted" } });
     }
 
     public void RecordDiscarded(string projectId, double waitSeconds)
     {
         _discarded.Add(1, new TagList { { "project_id", projectId } });
-        _waitSeconds.Record(waitSeconds);
+        _waitSeconds.Record(waitSeconds, new TagList { { "outcome", "discarded" } });
     }
 
     public void RecordSnapshot(PromotionQueueStats stats, int capacity) =>

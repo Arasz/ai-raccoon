@@ -134,7 +134,7 @@ public sealed class ServeRunnerTests : IDisposable
             var secondExit = await second.Exit;
 
             secondExit.ShouldBe(ExitCode.Success);
-            second.Stdout.ToString().ShouldBe($"{{\"ai-raccoon\":{{\"url\":\"{firstUrl}\"}}}}{Environment.NewLine}");
+            second.Stdout.ToString().ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
             second.Stderr.ToString().ShouldContain("attached");
             second.Stderr.ToString().ShouldNotContain("   at ");
 

@@ -46,6 +46,71 @@ public sealed class PromotionQueueServicePromoteRaceTests
             "RecordSnapshot reports its real state, not this call's own delta");
     }
 
+    [Fact]
+    public async Task PromoteAsync_StaleQueuedHash_IsDropped_TheRestPromote_AndTheOutcomeSaysSo()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+        queue.Rows.Add(new PromotionQueueRow("acme", "h2", "h2.md", "fact two", null, 3.0, [], 0, 0));
+
+        var store = new RecordingShareStore();
+        // h1 was claimed (discard succeeded) but the entry it points at is gone by share time —
+        // the scenario WP1's trigger normally prevents, and this test is the safety net for it.
+        store.FailingHashes["h1"] = new UnknownHashException("h1", "acme");
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldBe(["h2"],
+            "h1's failure must not stop h2, which was already claimed and ready to share");
+        store.SharedHashes.ShouldBe(["h2"]);
+        outcome.Failures.ShouldHaveSingleItem();
+        outcome.Failures[0].ProjectId.ShouldBe("acme");
+        outcome.Failures[0].Hash.ShouldBe("h1");
+        outcome.Failures[0].Reason.ShouldBe("stale-hash");
+        queue.Rows.ShouldBeEmpty("h1 was already claimed off the queue and must not be re-queued");
+    }
+
+    [Fact]
+    public async Task PromoteAsync_AFailureInOneProject_DoesNotStopTheNext()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+        queue.Rows.Add(new PromotionQueueRow("beta", "h2", "h2.md", "fact two", null, 5.0, [], 0, 0));
+
+        var store = new RecordingShareStore();
+        store.FailingHashes["h1"] = new InvalidOperationException("transient share failure");
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        var outcome = await service.PromoteAsync(["acme", "beta"], 10, TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldBe(["h2"], "acme's failure must not stop beta from promoting");
+        outcome.Failures.ShouldHaveSingleItem();
+        outcome.Failures[0].ProjectId.ShouldBe("acme");
+        outcome.Failures[0].Hash.ShouldBe("h1");
+        outcome.Failures[0].Reason.ShouldBe("share-failed");
+    }
+
+    [Fact]
+    public async Task PromoteAsync_Cancellation_StillPropagates()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+
+        var store = new RecordingShareStore();
+        store.FailingHashes["h1"] = new OperationCanceledException();
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken));
+    }
+
     private sealed class RaceyQueueStore : IPromotionQueueStore
     {
         public List<PromotionQueueRow> Rows { get; } = [];
@@ -95,12 +160,20 @@ public sealed class PromotionQueueServicePromoteRaceTests
     {
         public List<string> SharedHashes { get; } = [];
 
+        /// <summary>Hash -> exception ShareAsync throws for that hash instead of sharing it.</summary>
+        public Dictionary<string, Exception> FailingHashes { get; } = new(StringComparer.Ordinal);
+
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new SharedIndex([], []));
 
         public Task<MemoryEntry> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
+            if (FailingHashes.TryGetValue(hash, out var exception))
+            {
+                throw exception;
+            }
+
             SharedHashes.Add(hash);
             return Task.FromResult(new MemoryEntry(hash, $"{hash}.md", "shared", "value", 0));
         }

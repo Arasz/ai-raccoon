@@ -125,12 +125,38 @@ public sealed class OrganicRefinementTests
     [Fact]
     public void ForeignProjectSubject_IsRewarded()
     {
-        var foreign = Apply(1.0,
+        var withoutForeign = Apply(1.0,
+            "the retry queue caps concurrent workers at one per partition, a limit that has " +
+            "held since it was introduced and has never needed to change across any release since.",
+            projectId: "proj-alpha");
+        var withForeign = Apply(1.0,
             "proj-beta's retry queue caps concurrent workers at one per partition, a limit that has " +
             "held since it was introduced and has never needed to change across any release since.",
             projectId: "proj-alpha");
 
-        foreign.Reasons.ShouldContain("foreign-subject");
+        withForeign.Reasons.ShouldContain("foreign-subject");
+        withoutForeign.Reasons.ShouldNotContain("foreign-subject");
+        withForeign.Score.ShouldBe(withoutForeign.Score + 0.20, 0.0001);
+    }
+
+    /// <summary>The mid-sentence penalty is doc-channel-only by decision (pending calibration
+    /// fixtures): OrganicRefinement.Apply must never reference CandidateFeatures.MidSentence.</summary>
+    [Fact]
+    public void MidSentenceOpener_DoesNotChangeAnOrganicNoteScore()
+    {
+        var baseline = new CandidateFeatures(
+            RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
+            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
+            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
+            ForeignProjects: 0, ForeignSubject: false, StatusOpener: false, StatusVocab: 0,
+            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 1, DatedFact: false,
+            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+
+        var withoutMidSentence = OrganicRefinement.Apply(baseline, 2.30);
+        var withMidSentence = OrganicRefinement.Apply(baseline with { MidSentence = true }, 2.30);
+
+        withMidSentence.Score.ShouldBe(withoutMidSentence.Score);
+        withMidSentence.Reasons.ShouldNotContain("mid-sentence");
     }
 
     [Fact]

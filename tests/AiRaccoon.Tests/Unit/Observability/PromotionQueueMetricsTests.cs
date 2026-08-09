@@ -73,16 +73,36 @@ public class PromotionQueueMetricsTests
         collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Value.ShouldBe(0.42);
     }
 
-    /// <summary>Histograms here stay untagged (the wait-seconds sibling does too); the counters carry project_id.</summary>
+    /// <summary>WP10/R1: the score distribution must be sliceable by the same dimensions as its
+    /// sibling counter (RecordEviction_TagsProjectId above), which already carries both.</summary>
     [Fact]
-    public void RecordEviction_LeavesTheScoreHistogramUntagged()
+    public void RecordEviction_TagsTheScoreHistogram_WithProjectIdAndReason()
     {
         using var metrics = new PromotionQueueMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueEvictedScore);
 
         metrics.RecordEviction("acme", 0.42, "capacity");
 
-        collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Tags.ShouldBeEmpty();
+        var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
+        measurement.Tags["project_id"].ShouldBe("acme");
+        measurement.Tags["reason"].ShouldBe("capacity");
+    }
+
+    /// <summary>WP10/R1: outcome distinguishes the system working (promoted) from the agent
+    /// rejecting everything (discarded) — the only interesting question about this distribution.</summary>
+    [Fact]
+    public void PromotedAndDiscardedRows_ShareTheWaitHistogram_WithDifferentOutcomeTags()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueWait);
+
+        metrics.RecordPromoted("acme", 12.5);
+        metrics.RecordDiscarded("acme", 3.0);
+
+        var snapshot = collector.GetMeasurementSnapshot();
+        snapshot.Count.ShouldBe(2);
+        snapshot.Single(m => m.Value == 12.5).Tags["outcome"].ShouldBe("promoted");
+        snapshot.Single(m => m.Value == 3.0).Tags["outcome"].ShouldBe("discarded");
     }
 
     /// <summary>

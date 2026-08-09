@@ -74,6 +74,30 @@ public sealed class PromotionContentEvidenceTests
         mentionedLate.Reasons.ShouldNotContain("foreign-subject");
     }
 
+    /// <summary>The +0.10 many-projects bonus must carry its own tag so the reason list can tell it
+    /// apart from the foreign-subject bonus — previously both effects reused the "foreign-subject" tag.</summary>
+    [Fact]
+    public void TwoForeignProjects_TagTheCountSeparatelyFromTheSubject()
+    {
+        var subjectAndCount = new CandidateFeatures(
+            RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
+            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
+            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
+            ForeignProjects: 2, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
+            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
+            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+        var countOnly = subjectAndCount with { ForeignSubject = false };
+
+        var withSubject = PromotionContentEvidence.Evaluate(subjectAndCount, ProvenanceArchetype.WorkNote);
+        var withoutSubject = PromotionContentEvidence.Evaluate(countOnly, ProvenanceArchetype.WorkNote);
+
+        withSubject.Reasons.ShouldContain("foreign-subject");
+        withSubject.Reasons.ShouldContain("many-foreign-projects");
+        withoutSubject.Reasons.ShouldNotContain("foreign-subject");
+        withoutSubject.Reasons.ShouldContain("many-foreign-projects");
+        withSubject.Adjustment.ShouldBe(withoutSubject.Adjustment + 0.25, 0.0001);
+    }
+
     [Fact]
     public void HeadingStart_AddsPositiveAdjustment()
     {
@@ -224,6 +248,26 @@ public sealed class PromotionContentEvidenceTests
         var asPlan = Evaluate(ruleLanguageText, ProvenanceArchetype.Plan);
 
         asPlan.Adjustment.ShouldBeLessThan(asWorkNote.Adjustment);
+    }
+
+    /// <summary>The mid-sentence penalty is doc-channel-only by decision (pending calibration
+    /// fixtures): EvaluateAutoMemoryNote must never reference CandidateFeatures.MidSentence.</summary>
+    [Fact]
+    public void MidSentenceOpener_DoesNotChangeAnAutoMemoryNoteScore()
+    {
+        var baseline = new CandidateFeatures(
+            RuleDensity: 0, MeasureWords: 1, NumUnit: 1, Ephemera: 0, Superseded: false,
+            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
+            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
+            ForeignProjects: 0, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
+            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
+            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+
+        var withoutMidSentence = PromotionContentEvidence.EvaluateAutoMemoryNote(baseline);
+        var withMidSentence = PromotionContentEvidence.EvaluateAutoMemoryNote(baseline with { MidSentence = true });
+
+        withMidSentence.Adjustment.ShouldBe(withoutMidSentence.Adjustment);
+        withMidSentence.Reasons.ShouldNotContain("mid-sentence");
     }
 
     [Fact]

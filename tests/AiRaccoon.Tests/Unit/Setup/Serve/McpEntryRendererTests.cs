@@ -7,7 +7,9 @@ namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
 /// <summary>
 ///     Golden shapes for the --mcp-entry renderer: single-line JSON documents, hermes
-///     (url-only entry) and claude (type+url entry), and 'all' printing both in order.
+///     (url + headers entry) and claude (type+url+headers entry), and 'all' printing both in
+///     order. Both entries carry the token header as a `${VAR}` placeholder, never a live secret
+///     (docs/plans/2026-08-09-http-token-clients.md D4).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -18,7 +20,9 @@ public class McpEntryRendererTests
     {
         var json = McpEntryRenderer.RenderHermes(7721);
 
-        JsonDeepEqual(json, """{"ai-raccoon":{"url":"http://127.0.0.1:7721/mcp"}}""").ShouldBeTrue();
+        JsonDeepEqual(json, """
+            {"ai-raccoon":{"url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}
+            """).ShouldBeTrue();
         json.ShouldNotContain('\n');
         json.TrimEnd().ShouldBe(json);
     }
@@ -28,7 +32,9 @@ public class McpEntryRendererTests
     {
         var json = McpEntryRenderer.RenderClaude(7721);
 
-        JsonDeepEqual(json, """{"mcpServers":{"ai-raccoon":{"type":"http","url":"http://127.0.0.1:7721/mcp"}}}""").ShouldBeTrue();
+        JsonDeepEqual(json, """
+            {"mcpServers":{"ai-raccoon":{"type":"http","url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}}
+            """).ShouldBeTrue();
         json.ShouldNotContain('\n');
         json.TrimEnd().ShouldBe(json);
     }
@@ -38,6 +44,22 @@ public class McpEntryRendererTests
     {
         McpEntryRenderer.RenderAll(9000).ShouldBe(
             $"{McpEntryRenderer.RenderHermes(9000)}\n{McpEntryRenderer.RenderClaude(9000)}");
+    }
+
+    /// <summary>
+    ///     R7: criterion 1/2 already deep-equal the whole document, so a live token cannot appear
+    ///     without failing them first — "no 43-char Base64Url run" was unfalsifiable. This is the
+    ///     check that can actually fail: neither renderer takes a token as input at all.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(McpEntryRenderer.RenderHermes))]
+    [InlineData(nameof(McpEntryRenderer.RenderClaude))]
+    public void Renderer_TakesNoTokenParameter(string methodName)
+    {
+        var method = typeof(McpEntryRenderer).GetMethod(methodName);
+
+        method.ShouldNotBeNull();
+        method.GetParameters().Select(p => p.Name).ShouldBe(["port"]);
     }
 
     private static bool JsonDeepEqual(string actual, string expected)

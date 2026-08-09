@@ -34,7 +34,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
-| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...]}`                                                        |
+| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], skippedDuplicates, failures: [...]}`                    |
 | `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
@@ -76,6 +76,17 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   actually mean. The two tools that do not name a single project — `memory_promotion_list`
   with `projectId` omitted, and `memory_share_extract` over several ids — report a
   bank-wide count with `capacity` absent. No response names another project.
+- **`memory_share_extract(mode=promote)` result shape:** `candidates` is always `[]` in promote
+  mode (it is only populated by `propose`); `promotedHashes` are the hashes actually shared.
+  `skippedDuplicates` counts queued candidates that matched something already in `shared` by value
+  or path and were dropped without an error. `failures` is a list of `{projectId, hash, reason}`
+  for candidates claimed off the queue but never shared, where `reason` is a bounded token —
+  `stale-hash` (the queued hash no longer resolves in the entries table) or `share-failed` (any
+  other per-candidate error) — see `PromoteFailure`/`ShareExtractResult`
+  (`src/AiRaccoon.Core/Memory/PromotionQueue.cs`, `SharedExtraction.cs`). This exists so a caller
+  can tell "everything queued was already shared" (`skippedDuplicates` > 0, `failures` empty) apart
+  from "everything failed" (`failures` covers the whole batch), and can see partial success instead
+  of a single pass/fail verdict for the batch.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
@@ -133,6 +144,22 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   watch failures never fail the server.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+
+### Unknown-id rule
+
+An id that a tool cannot act on is handled one of two ways, and which way depends on what kind of
+tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
+
+- **A removal verb is idempotent and reports a count.** An unknown id is a no-op, not an error —
+  `memory_delete`, `memory_delete_context`, and `memory_promotion_discard` return `0` for the
+  count they would otherwise report; `memory_watch_remove` treats a non-existent watch the same
+  way. Calling a removal verb twice on the same id is safe by construction.
+- **A state transition refuses an id it cannot act on.** `memory_share` and the workspace family
+  (`memory_write` with `workspaceId`, `memory_workspace_status`, `memory_workspace_consolidate`,
+  `memory_workspace_discard`) return a typed refusal (`unknown-hash` / `unknown-workspace`, see
+  [Error shapes](#error-shapes)) instead of silently doing nothing — there is no well-defined
+  "already done" state for promoting a hash that was never written or writing into a workspace
+  that was never begun.
 
 ### `capacity` semantics
 
@@ -309,28 +336,99 @@ not identify as an ai-raccoon over `/observability` is never sent a shutdown:
 it is refused before the bind is attempted, with the unchanged exit code 3 and
 a line saying the port is held by something that is not an ai-raccoon.
 
-`/mcp` and `/shutdown` require the `X-AiRaccoon-Token` header: before binding,
-`serve` mints a random token into `<data-root>/mcp-token` (0600, exclusive
-create, reused across restarts), and every request to either must present it —
-the proxy reads the file after a successful probe and sends it automatically.
-Both answer an unauthorised call with the same 401 body, whether the header is
-absent, the wrong length or simply wrong. `/observability` stays
-unauthenticated by design (it returns a PID, the binary version and OTLP
-on/off state, nothing that touches the bank). A direct `ai-raccoon
---transport http` launch (no `serve` verb) is **not** gated, and gets no
-`/shutdown` at all — see [SECURITY.md](../../SECURITY.md) for the reasoning
-and the known gaps.
+`/mcp` and `/shutdown` require `X-AiRaccoon-Token` or `Authorization: Bearer
+<token>` (the Bearer envelope added 2026-08-09, see
+[ADR 0020](../adr/0020-always-on-http-stdio-proxy.md) §"Amendment
+2026-08-09"): before binding, `serve` mints a random token into
+`<data-root>/mcp-token` (0600, exclusive create, reused across restarts), and
+every request to either must present one of the two — the proxy reads the file
+after a successful probe and sends `X-AiRaccoon-Token` automatically. An
+unauthorised call gets one of two 401 bodies: one naming the headers when no
+credential was sent at all, one saying the presented value does not match when
+it was — the difference matters because an unexpanded `${AIRACCOON_MCP_TOKEN}`
+placeholder is a *present* credential, and the first wording would tell you to
+add the header you just added. Neither body names anything the other does not.
+`/observability` stays unauthenticated by design (it returns a PID, the binary
+version and OTLP on/off state, nothing that touches the bank). A direct
+`ai-raccoon --transport http` launch (no `serve` verb) is **not** gated, and
+gets no `/shutdown` at all — see [SECURITY.md](../../SECURITY.md) for the
+reasoning and the known gaps.
 
-`serve --mcp-entry [--format hermes|claude|all]` prints the client config entry
-for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
-http://127.0.0.1:7721/mcp`) or Claude Code (`.mcp.json` `type: http` entry).
-The printed entry carries the URL only, not the token, so a client connecting
-this way (bypassing the proxy) must add the `X-AiRaccoon-Token` header itself,
-read from `<data-root>/mcp-token`. Keep stderr out of the entry file:
+`serve --mcp-entry [--format hermes|claude|all]` prints the client config
+entry for the actually-bound URL, now with a `headers` map carrying
+`X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}` alongside the URL — a
+placeholder, never a live token. Keep stderr out of the entry file:
 `ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`. One long-lived
 HTTP server avoids the ~5-minute stdio recycle of per-connection processes and
 lets the background extraction and bank-maintenance hosted services actually
-fire.
+fire. Turning that entry, or `hermes mcp add`'s own auth prompt, into a
+connection that actually authenticates is the advanced path below.
+
+#### Direct HTTP access (advanced)
+
+Bare `ai-raccoon` (the proxy) is the default, handles the token itself, and
+needs none of what follows. Connecting a client straight to `serve`'s URL,
+bypassing the proxy, is still genuinely useful for two narrower cases: a
+client that cannot spawn a process at all (a containerised or remote client,
+a gateway reaching in over a tunnel), and bisecting a **proxy** failure —
+when bare `ai-raccoon` is what's broken, `--transport http` plus `curl` is
+the diagnostic you reach for exactly when the default is down.
+
+Every incantation below uses single quotes, or an unquoted `$(...)` meant to
+expand immediately, around the token — `--header "X: ${VAR}"` in double
+quotes is expanded by *your own shell* before the CLI ever sees it, silently
+storing an empty or corrupted value. That footgun sits directly in the
+copy-paste path, which is why it is worth avoiding by construction rather
+than by care.
+
+**1 — Hermes, via the CLI's own auth prompt.** The token lands in
+`~/.hermes/.env`, never in `config.yaml`:
+
+```bash
+ai-raccoon serve > serve.log 2>&1 &
+hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
+#   "Does this server require authentication?" -> y
+#   "API key / Bearer token"                   -> paste the output of: cat ~/.ai-raccoon/mcp-token
+```
+
+`hermes mcp add` only prompts when the `.env` key for this server is empty —
+a retry against a *different* `--data-root` (a different token) gets a
+silent 401 with no prompt the second time round; edit the `.env` line by
+hand or start from a fresh profile.
+
+**2 — Hermes, via the printed entry.** Paste `entry.json` under
+`mcp_servers` in `~/.hermes/config.yaml`, then add the one `.env` line the
+placeholder resolves against:
+
+```bash
+ai-raccoon serve --mcp-entry > entry.json 2> serve.log &
+echo "AIRACCOON_MCP_TOKEN=$(cat ~/.ai-raccoon/mcp-token)" >> ~/.hermes/.env
+```
+
+**3 — Claude Code.** Verified against the installed CLI: `${VAR}` expansion
+in `.mcp.json` covers `command`, `args`, `env`, `url` and `headers`, and
+`${VAR:-default}` works. An unset variable is not a hard failure —
+`claude mcp list` prints a warning, but the connection still fires and sends
+the literal `${AIRACCOON_MCP_TOKEN}` string, which the server's 401 then
+names. Export the variable before adding the server, and single-quote the
+header so *your* shell leaves the placeholder alone for Claude Code to
+expand. Use `--scope local` (the default) or `--scope user` — **never
+`--scope project`**, which writes `.mcp.json`, the one file a repo is likely
+to commit; `local` and `user` both write `~/.claude.json`, which is per-user
+and untracked:
+
+```bash
+export AIRACCOON_MCP_TOKEN=$(cat ~/.ai-raccoon/mcp-token)
+claude mcp add --transport http --scope user ai-raccoon http://127.0.0.1:7721/mcp \
+  --header 'X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}'
+```
+
+None of the three commands above has been run by this change — the gate
+that makes `Authorization: Bearer` and the `${AIRACCOON_MCP_TOKEN}`
+placeholder real ships in a parallel lane. Treat all three as
+**untested-by-you**: the proof is
+[the regression-fix plan](../plans/2026-08-09-http-token-clients.md)'s own
+§E integration gate, run against a live `serve`, not this doc.
 
 `serve observability <counters|trace|otlp|pid> [--port <n>]` prints a ready-to-run
 diagnostic command for the **running** server, with its process id filled in. It
@@ -421,7 +519,9 @@ ai-raccoon encryption migrate
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
 # config changes apply live, no server restart needed; propose logs the ranked
-# candidates — path, preview, reasons — to the server log)
+# candidates — path, preview, reasons — to the server log; prune reports/removes
+# promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0022) —
+# read-only by default, --apply removes, idempotent)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
@@ -430,6 +530,7 @@ ai-raccoon extract exclude add {prefix}
 ai-raccoon extract exclude remove {prefix}
 ai-raccoon extract exclude list
 ai-raccoon extract list
+ai-raccoon extract prune [--apply]
 
 # maintenance: bank housekeeping (every process checkpoints the WAL at startup
 # and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
@@ -633,13 +734,24 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
-| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared) — caught at argument-binding time, before the tool method runs | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
+| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, a present-but-blank value fails a guard clause, or a value is out of the range a guard clause enforces — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. `ToolRefusals.PrefixFor` walks the exception's base-type chain, so this one table entry covers the whole `ArgumentException` family (`ArgumentException`, `ArgumentNullException`, `ArgumentOutOfRangeException`) as well as the SDK's own `JsonException` | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
-a key, or any other unmapped exception — is a genuine failure, not a refusal: it escapes
-as a normal tool-call error, logged at `Error`, e.g. `OpenAI-compatible embeddings
-require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'.`
+a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
+does **not** reach the caller. The MCP SDK's `CreateToolCallErrorResult` surfaces the exception
+message only for `McpException`; for every other exception type it discards the message and
+replaces it with the bare string `"An error occurred invoking '<tool>'."` (measured against the
+live server; see `docs/adr/0019-forward-version-write-guard.md`). So a call that hits, say, the
+embeddings service's plain `InvalidOperationException`
+(`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` —
+`"OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model>
+--api-key <key>'."`, thrown from whichever tool needed the embedding engine — `memory_write`,
+`memory_search`, `memory_ingest_file/directory`, `memory_embed_pending`) does not get that text on
+the wire at all: the caller sees only `"An error occurred invoking '<tool>'."`, logged at `Error`,
+with no indication of what to fix. This is precisely why the `ArgumentException` family is mapped
+to `invalid-argument` above instead of being left unmapped — an unmapped exception type's message
+is unrecoverable information loss, not just an untyped prefix.
 
 ## Managed store
 
