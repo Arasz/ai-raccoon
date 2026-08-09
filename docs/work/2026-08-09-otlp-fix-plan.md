@@ -89,7 +89,7 @@ put the defect in front of the check and watch it fail before fixing it.
 | **WP14** | Test-gap closure (R4) | The four named gaps closed; the two misnamed "configured exporter" tests renamed; the vacuous non-goal test given a positive counterpart | Gate re-run |
 | **WP15** | Hygiene batch (R5) | ActivitySource disposed; cancellation not counted as a server error; `_stopwatch.Reset()` gone | Existing suite + one cancellation test |
 | **WP16** | Doc corrections (C1, C2) | ADR-0009's four false claims fixed; README's `observability otlp` overclaim corrected; `IPromotionQueueMetrics`'s false layering rationale corrected; `Quiet` doc comments rewritten | Doc review |
-| **WP17** | ADR-0020 | Records the non-goal reversal, its provenance, remedy B, the `AppContext` switch, and the span-kind question; supersedes ADR-0002 §Non-Goals b2 and ADR-0009 §Non-Goals b1; retires ADR-0009's 2026-08-08 sampler block; ADR-0002 → **Superseded** | Doc review |
+| **WP17** | **ADR-0021** (not 0020 — the proxy lane already owns 0020) | Records the non-goal reversal, its provenance, remedy B, the `AppContext` switch, and the `Internal` span-kind ruling; supersedes ADR-0002 §Non-Goals b2 and ADR-0009 §Non-Goals b1; retires ADR-0009's 2026-08-08 sampler block; ADR-0002 → **Superseded** | Doc review |
 | **WP18** | `ServerInfo` reads resolved state (panel) | The CLI verb cannot report "enabled" for an endpoint the exporter refused | New test; this is a **regression WP4 would otherwise introduce** |
 | **WP19** | `IMeterFactory` migration | Meters come from the factory; the two `IDisposable`s go | Existing suite — runs **last**, on settled constructors |
 
@@ -119,6 +119,10 @@ owner's, and the plan does not assume them.
   from `request.Params.Arguments` rather than a typed parameter, plus a projection for the two tools
   that don't pass a plain id. **Reverses ADR-0002's AOP rejection.** Recommend yes — it converts
   WP9's 22-site fan-out and WP13's drift risk into one registration.
+  **Proxy constraint:** once `DefaultOptions.Transport` flips to `Proxy`, bare `ai-raccoon` executes
+  no tools — it forwards. So this filter registers on the **backend host only**; on the proxy it
+  would mint tool metrics for calls that process never ran. The proxy's own forwarding uses
+  `IncomingFilters` at the same seam, so the two must be shown never to fire in one process.
 - **D2 — Adopt `mcp.server.operation.duration`, or keep `ai_raccoon.tool.duration`?** Same
   measurement; adopting avoids a private shape we would migrate off later, but the convention is
   Development stability and could move again. Recommend adopt.
@@ -170,7 +174,15 @@ Three compounding effects, all in the same direction:
    a client config file sets" — a much easier place to typo.
 3. **Diagnosability.** The client sees a connection failure; the cause is in the backend's log, which
    under the quiet-mode ruling is a file. WP18 (`ServerInfo` reads resolved, not env, state) stops
-   being a nicety.
+   being a nicety. The proxy lane's `BackendLauncher` does capture the child's exit code, so the
+   failure reads as "serve exited N" rather than "backend unavailable" — but that only helps once
+   WP4 stops the crash happening at all.
+4. **Worse than per-client, per the proxy lane.** The spawned `serve` inherits the *proxy's*
+   environment, and the proxy is spawned by every MCP client on the machine. So **the first client to
+   start the backend fixes `OTEL_*` for every other client's traffic** — one project's `.mcp.json`
+   typo takes memory down for all of them. This is the argument for WP4 being defensive at the parse
+   site rather than validated at one edge, and it is specifically the "never throw" half that earns
+   its keep.
 
 None of this changes WP4's design — validate, disable, warn, never throw. It raises its priority and
 makes "never take the server down" the load-bearing property rather than a nicety.
@@ -182,20 +194,28 @@ makes "never take the server down" the load-bearing property rather than a nicet
 there is no genuine remote-parent case."* A stdio→HTTP proxy is an HTTP client calling our own
 server, so that premise stops being true the day it ships.
 
-If the proxy propagates `traceparent` (.NET's `HttpClient` does this via `DiagnosticsHandler` when an
-Activity is current — **verify against the actual proxy implementation, do not assume**), then
-`HttpRequestIn` becomes a child of a *remote* parent instead of a trace root. `ParentBased` then
-honours the proxy's sampling decision. And the proxy is a stdio process, which under ADR-0009 wires
-no exporter at all — so its Activity is unrecorded, the remote parent reads as not-sampled, and
-**every server span is dropped again**. That is issue #181 reappearing one layer up, introduced by
-the very fix meant to close it.
+If the proxy propagated `traceparent`, `HttpRequestIn` would become a child of a *remote* parent
+instead of a trace root, `ParentBased` would honour the proxy's sampling decision, and — since a
+stdio proxy wires no exporter under ADR-0009 — the remote parent would read as not-sampled and
+**every server span would be dropped**. That is issue #181 one layer up, introduced by the very fix
+meant to close it.
 
-**Therefore:** WP7 splits. The `AddSource("Microsoft.AspNetCore.Hosting")` half (the approved remedy
-B, which fixes the orphan) is safe and proceeds. The `SetSampler` removal half is **held** until the
-proxy's trace-context behaviour is known. New decision **D10**: once the proxy exists, either it
-propagates and must itself sample (which reopens "stdio gets no exporter"), or it must not propagate,
-or the server keeps a root-forcing sampler. Cheapest guard regardless: an E2E test that drives a tool
-call *through the proxy* and asserts a span still reaches the collector.
+**Answered by the proxy lane (2026-08-09): it propagates nothing.** By construction of their
+ADR-0020 the proxy registers no tools and no prompts, wires no exporter, and with no `ActivityListener`
+or `MeterListener` in the process, `HttpClient`'s `DiagnosticsHandler` is bypassed and injects no
+headers. `HttpRequestIn` stays a trace root.
+
+**But that holds only incidentally** — it is a consequence of three independent design choices, any
+one of which could be reversed without anyone noticing our premise broke. The proxy lane is adding an
+explicit test pinning "a forwarded request carries no `traceparent`/`tracestate` header", citing this
+decision as the reason it exists. They also flagged that their reading of `DiagnosticsHandler`'s
+global-enable behaviour is not yet measured, and asked us to hold.
+
+**Therefore:** WP7 splits. The `AddSource("Microsoft.AspNetCore.Hosting")` half proceeds now. The
+`SetSampler` removal is **held with a named unblock condition** — the proxy lane's no-`traceparent`
+test observed green. Not an open question any more; a dependency. If that test comes back red, the
+always-on sampler stays and D10 reopens: either the proxy samples (reopening "stdio gets no
+exporter"), or the server keeps a root-forcing sampler.
 
 ## Risks the plan carries
 
