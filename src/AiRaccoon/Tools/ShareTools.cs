@@ -117,7 +117,11 @@ public sealed class ShareTools(
             {
                 var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false);
-                var promoteEnvelope = await gate.WrapAsync(metaProject, new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
+                var promoteResult = new ShareExtractResult([], outcome.PromotedHashes)
+                {
+                    SkippedDuplicates = outcome.SkippedDuplicates, Failures = outcome.Failures
+                };
+                var promoteEnvelope = await gate.WrapAsync(metaProject, promoteResult, cancellationToken);
                 activity.RecordInvocation();
                 return promoteEnvelope;
             }
