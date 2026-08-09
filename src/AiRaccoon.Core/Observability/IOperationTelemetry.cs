@@ -12,14 +12,21 @@ public interface IOperationTelemetry
 }
 
 /// <summary>
-///     One background pass: a span for its lifetime, and exactly one duration + outcome
-///     measurement. A scope disposed without <see cref="Succeeded" /> or <see cref="Failed" />
-///     records result=unknown rather than nothing — an abandoned pass is a hole, not a success.
+///     One background pass: exactly one duration + outcome measurement always, but a span only
+///     when the pass is worth reading — <see cref="NoteWork" /> was called, or the outcome is
+///     failure or unknown (docs/work/2026-08-09-otlp-fix-plan.md WP13 fix). A scope disposed
+///     without <see cref="Succeeded" /> or <see cref="Failed" /> records result=unknown rather than
+///     nothing — an abandoned pass is a hole, not a success.
 /// </summary>
 public interface IOperationScope : IDisposable
 {
-    /// <summary>Adds a span attribute. Span only: the metrics carry operation and result alone.</summary>
+    /// <summary>Adds a span attribute, applied if and when a span is recorded. Span only: the
+    /// metrics carry operation and result alone.</summary>
     void Tag(string key, string value);
+
+    /// <summary>Marks the pass as having done something worth a span. A clean, no-op success
+    /// without this call records its metrics but no span.</summary>
+    void NoteWork();
 
     void Succeeded();
 

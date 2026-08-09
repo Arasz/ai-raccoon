@@ -154,6 +154,7 @@ public sealed partial class WatchHostedService : BackgroundService
                 if (wasActive)
                 {
                     _eventSource.Stop(registration.ProjectId, registration.Path);
+                    pass.NoteWork();
                 }
 
                 continue;
@@ -170,6 +171,7 @@ public sealed partial class WatchHostedService : BackgroundService
                 continue;
             }
 
+            pass.NoteWork();
             _eventSource.Start(registration.ProjectId, registration.Path);
             if (registration.LastChangeTs == 0)
             {
@@ -190,6 +192,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
         foreach (var s in stale)
         {
+            pass.NoteWork();
             _eventSource.Stop(s.ProjectId, s.Path);
             // Raises WatchPipeline.Unregistered — the same removal choke point (D-1,
             // docs/plans/2026-08-07-watch-scan-runaway-fix.md) OnWatchUnregistered also handles.

@@ -17,12 +17,13 @@ public sealed class BackgroundTelemetryTests
     private const string Operation = "probe.pass";
 
     [Fact]
-    public void Begin_StartsASpanOnTheBackgroundSource_NamedForTheOperation()
+    public void NoteWork_ThenSucceeded_StartsASpanOnTheBackgroundSource_NamedForTheOperation()
     {
         using var probe = new BackgroundTelemetryProbe(Operation);
 
         using (var scope = probe.Telemetry.Begin(Operation))
         {
+            scope.NoteWork();
             scope.Succeeded();
         }
 
@@ -31,6 +32,59 @@ public sealed class BackgroundTelemetryTests
         span.OperationName.ShouldBe(Operation);
         span.Kind.ShouldBe(ActivityKind.Internal);
         span.Status.ShouldBe(ActivityStatusCode.Ok);
+    }
+
+    [Fact]
+    public void Succeeded_WithoutNoteWork_RecordsMeasurementsButEmitsNoSpan()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Succeeded();
+        }
+
+        probe.Spans.ShouldBeEmpty();
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public void Failed_WithoutNoteWork_StillEmitsASpan()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Failed(new InvalidOperationException("zephyrtwo"));
+        }
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
+    }
+
+    [Fact]
+    public void Dispose_WithoutAnOutcome_AlsoEmitsASpan_BecauseATruncatedPassIsWorthSeeing()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        probe.Telemetry.Begin(Operation).Dispose();
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Unset);
+    }
+
+    [Fact]
+    public void Tag_BeforeNoteWork_StillLandsOnTheSpanOnceRecorded()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Tag("registrations", "3");
+            scope.NoteWork();
+            scope.Succeeded();
+        }
+
+        probe.Spans.ShouldHaveSingleItem().Tags.ShouldContain(kv => kv.Key == "registrations" && kv.Value == "3");
     }
 
     [Fact]
@@ -103,6 +157,7 @@ public sealed class BackgroundTelemetryTests
         using (var scope = probe.Telemetry.Begin(Operation))
         {
             scope.Tag("projects", "3");
+            scope.NoteWork();
             scope.Succeeded();
         }
 

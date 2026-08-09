@@ -36,10 +36,28 @@ public sealed class WatchHostedServiceTests
     }
 
     [Fact]
-    public async Task Reconcile_EmitsASpanAndADurationForThePass()
+    public async Task Reconcile_NoOpPass_EmitsNoSpan_ButRecordsTheDurationAndCount()
     {
+        // Nothing registered, so nothing starts/stops/unregisters: a poll-loop tick that happens
+        // ~86,400 times a day and is almost always this. Counted, never spanned.
         using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
         var (_, _, _, hosted) = NewStack(probe.Telemetry);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        probe.Spans.ShouldBeEmpty();
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public async Task Reconcile_WhenAWatcherStarts_EmitsASpan()
+    {
+        using var dir = TempDir.New("hosted-span-on-work");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, _, _, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
 
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
@@ -47,6 +65,7 @@ public sealed class WatchHostedServiceTests
         span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
         span.Status.ShouldBe(ActivityStatusCode.Ok);
         probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+        await hosted.StopAsync(CancellationToken.None);
     }
 
     [Fact]

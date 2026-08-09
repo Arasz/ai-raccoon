@@ -287,8 +287,10 @@ public sealed class IdleWatchdogTests
     }
 
     [Fact]
-    public void RunOnce_EmitsASpanAndADurationForTheTick()
+    public void RunOnce_StillWithinTheTimeout_EmitsNoSpan_ButRecordsTheDurationAndCount()
     {
+        // The steady-state tick (as often as every 60s by default): still within the timeout, so
+        // nothing happens. Counted, never spanned.
         using var probe = new BackgroundTelemetryProbe(IdleWatchdog.OperationName);
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
@@ -296,6 +298,23 @@ public sealed class IdleWatchdogTests
             NullLogger<IdleWatchdog>.Instance);
 
         watchdog.RunOnce().ShouldBeFalse();
+
+        probe.Spans.ShouldBeEmpty();
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public void RunOnce_PastTheTimeout_EmitsASpan()
+    {
+        using var probe = new BackgroundTelemetryProbe(IdleWatchdog.OperationName);
+        var time = new FakeTimeProvider(FixedNow);
+        var lifetime = new FakeLifetime();
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime, probe.Telemetry,
+            NullLogger<IdleWatchdog>.Instance);
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        watchdog.RunOnce().ShouldBeTrue();
 
         var span = probe.Spans.ShouldHaveSingleItem();
         span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
