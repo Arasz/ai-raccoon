@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-09T01:40:00Z",
+  "lastUpdated": "2026-08-09T14:45:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "1.5.0-manual-check",
+      "title": "1.5.0 manual check: wait for deployment, verify all tools/traces/promotion queue",
+      "finished": "2026-08-09T14:45:00Z",
+      "pr": "227",
+      "summary": "Waited out NuGet's two-stage propagation lag (flatcontainer index, then the separate search/registration API the dotnet-tool CLI actually resolves against - main package and the osx-arm64 RID shim each propagated on their own schedule), updated the global tool, and restarted the shared :7721 backend with OTLP export pointed at a throwaway capture listener so traces/metrics could be verified on the wire rather than trusting the CLI's self-report. Swept all 22 MCP tools against 1.5.0. Five of the six 1.3.1-sweep defects are fixed (D1/D2/D4/D5/D6); D3 improved (memory_share's leaked exception is now typed unknown-hash). Found one new High defect (D7): memory_share_extract(mode=promote) can throw unknown-hash on a stale queued candidate AFTER already promoting and dequeuing other candidates - confirmed by reading the live bank directly with sqlite3, a manual promote call landed a fully-embedded shared-tier entry while the tool call reported failure. This is a plausible full explanation for the standing symptom found mid-sweep: the promotion queue pinned at the 1000-row global cap with its oldest row 20.5h+ old despite extract mode already being promote - a scheduled background pass hitting this exception every 30 min looks identical to 'promote inert' from the outside. Flipped the global extraction mode back to propose (safe, reversible, no cross-project sharing) as an immediate mitigation; the stale-hash root cause in the promote code path is still open. OTLP verified end-to-end: captured real protobuf /v1/traces and /v1/metrics payloads with correct service.name/resource attributes and System.Runtime GC instruments. Promotion-queue scoring quality is a real improvement over 1.3.1 (197 distinct scores over 249 rows vs 59/288 previously); mid-sentence content still scores at parity rather than being penalized, unchanged from 1.3.1."
+    },
     {
       "id": "integration-maintenance",
       "title": "Integration maintenance: comment/doc cleanup, doc-code sync, MoE hot-spot review, 1.3.1 tool sweep",
