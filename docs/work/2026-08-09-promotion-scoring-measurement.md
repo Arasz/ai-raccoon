@@ -76,16 +76,23 @@ Channel prior vs. the mean score actually observed over the bank:
 | `organic_note` | 2.30 | **1.67** | 159 | refinement removes 0.63 on average |
 | `measurement` | 2.10 | **1.00** | 96 | evidence removes 1.10 — near the -1.60 clamp |
 
-`organic_note` and `measurement` are the two channels whose *content* is most likely to be a
-durable portable fact, and both are being pushed down while `adr` — the channel that floods the
-queue — is pushed up. ADR-0018 already predicted the first half of this: it flagged
-`OrganicRefinement`'s lexicons as owing "a follow-up look" after the organic-only subset fell to
-0.3875 on the 292-row round.
+The evidence layer moves `organic_note` and `measurement` down and `adr` up. ADR-0018 anticipated
+the first of those: it flagged `OrganicRefinement`'s lexicons as owing "a follow-up look" after the
+organic-only subset fell to 0.3875 on the 292-row round.
+
+> **Corrected 2026-08-09, same day.** This section originally read that `organic_note` and
+> `measurement` are "the two channels whose content is most likely to be a durable portable fact"
+> and were therefore being *unfairly* suppressed. Labeled data refutes it: against jury consensus
+> both are **over**scored, `organic_note` by +0.57 and `measurement` by +0.55. A prior-versus-
+> observed-mean gap shows what the evidence layer does; it says nothing about what it should do,
+> and reading a direction of *error* out of it was unsound. Only the labels settle that — see
+> `2026-08-09-promotion-scoring-tournament.md`.
 
 ## 3. Where this leaves the algorithm
 
-The v3 model ranks well *within* the reference set (+0.710) and badly *across* a real bank, for
-two separable reasons:
+The v3 model ranks well *within* the reference set (+0.7156 unrounded; the +0.710 first recorded
+here came from the scorer CLI's 4-decimal output, whose ties perturb the average ranks) and badly
+*across* a real bank, for two separable reasons:
 
 1. **No document-level diversity.** Fixable in selection, independent of any scoring change.
 2. **Provenance prior dominates content for high-prior channels.** An ADR chunk inherits 2.55
