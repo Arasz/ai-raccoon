@@ -64,6 +64,7 @@ public sealed partial class IdleWatchdog : BackgroundService, IActivitySignaler
                 return false;
             }
 
+            pass.NoteWork();
             pass.Tag("idle", "true");
             Log.ShuttingDownIdle(_logger, _timeout);
             _lifetime.StopApplication();

@@ -98,6 +98,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
     private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
+        // Default 30-minute cadence (WP13 span-volume fix): low-volume enough that spanning every
+        // pass costs nothing, so every pass is worth reading rather than distinguishing on candidates.
+        pass.NoteWork();
         var enabled = ExtractionConfigKeys.ParseEnabled(
             await _store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken)
                 .ConfigureAwait(false));

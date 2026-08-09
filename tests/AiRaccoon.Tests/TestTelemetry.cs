@@ -14,6 +14,10 @@ public sealed class TestTelemetry : IOperationTelemetry, IOperationScope
     {
     }
 
+    public void NoteWork()
+    {
+    }
+
     public void Succeeded()
     {
     }

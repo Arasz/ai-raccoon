@@ -6,10 +6,10 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Observability;
 
 /// <summary>
-///     The IOperationTelemetry port over the "AiRaccoon.Background" Meter and ActivitySource:
-///     one span plus one duration and one pass measurement per background pass (WP13,
-///     docs/work/2026-08-09-otlp-fix-plan.md). Creating a Meter starts no thread, so ADR-0009's
-///     zero-threads-when-unconfigured guarantee holds.
+///     The IOperationTelemetry port over the "AiRaccoon.Background" Meter and ActivitySource: one
+///     duration and one pass measurement always, a span only when NoteWork() was called or the
+///     outcome is failure/unknown (WP13 span-volume fix, docs/work/2026-08-09-otlp-fix-plan.md).
+///     Creating a Meter starts no thread, so ADR-0009's zero-threads-when-unconfigured guarantee holds.
 /// </summary>
 public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 {
@@ -80,28 +80,49 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
     {
         private readonly BackgroundTelemetry _owner;
         private readonly string _operation;
-        private readonly Activity? _activity;
         private readonly long _startedAt;
+        private readonly DateTimeOffset _startedAtUtc;
+        private readonly List<KeyValuePair<string, string>> _pendingTags = [];
+        private Activity? _activity;
+        private bool _worthy;
         private bool _recorded;
 
         public Scope(BackgroundTelemetry owner, string operation)
         {
             _owner = owner;
             _operation = operation;
-            _activity = owner.ActivitySource.StartActivity(operation, ActivityKind.Internal);
             _startedAt = Stopwatch.GetTimestamp();
+            _startedAtUtc = DateTimeOffset.UtcNow;
         }
 
-        public void Tag(string key, string value) => _activity?.SetTag(key, value);
+        public void Tag(string key, string value)
+        {
+            if (_activity is { } activity)
+            {
+                activity.SetTag(key, value);
+                return;
+            }
+
+            _pendingTags.Add(new KeyValuePair<string, string>(key, value));
+        }
+
+        public void NoteWork() => _worthy = true;
 
         public void Succeeded()
         {
-            if (Take())
+            if (!Take())
             {
-                _activity?.SetStatus(ActivityStatusCode.Ok);
-                _activity?.SetTag(ResultTag, ResultSuccess);
-                _owner.Record(_operation, Elapsed, ResultSuccess, null);
+                return;
             }
+
+            if (_worthy)
+            {
+                StartSpan();
+            }
+
+            _activity?.SetStatus(ActivityStatusCode.Ok);
+            _activity?.SetTag(ResultTag, ResultSuccess);
+            _owner.Record(_operation, Elapsed, ResultSuccess, null);
         }
 
         public void Failed(Exception exception)
@@ -112,6 +133,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
                 return;
             }
 
+            StartSpan(); // a failure is always worth reading, no-op pass or not
             var errorType = exception.GetType().Name;
             _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
             _activity?.SetTag(ResultTag, ResultError);
@@ -124,6 +146,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         {
             if (Take())
             {
+                StartSpan(); // an abandoned pass is a hole, not a success: always worth reading
                 _activity?.SetTag(ResultTag, ResultUnknown);
                 _owner.Record(_operation, Elapsed, ResultUnknown, null);
             }
@@ -143,6 +166,23 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
             _recorded = true;
             return true;
+        }
+
+        /// <summary>Materializes the span, backdated to when the pass actually started, and
+        /// applies any tags recorded before the pass was known to be worth reading.</summary>
+        private void StartSpan()
+        {
+            _activity = _owner.ActivitySource.StartActivity(_operation, ActivityKind.Internal,
+                default(ActivityContext), null, null, _startedAtUtc);
+            if (_activity is null)
+            {
+                return;
+            }
+
+            foreach (var tag in _pendingTags)
+            {
+                _activity.SetTag(tag.Key, tag.Value);
+            }
         }
     }
 }

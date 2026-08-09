@@ -136,6 +136,9 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
 
     private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
+        // Hourly-or-slower cadence (WP13 span-volume fix): spanning every pass costs nothing here,
+        // so every pass is worth reading rather than distinguishing checkpoint-only from vacuumed.
+        pass.NoteWork();
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         try
         {
