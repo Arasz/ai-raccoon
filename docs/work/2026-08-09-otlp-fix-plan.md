@@ -90,7 +90,7 @@ put the defect in front of the check and watch it fail before fixing it.
 | **WP15** | Hygiene batch (R5) | ActivitySource disposed; cancellation not counted as a server error; `_stopwatch.Reset()` gone | Existing suite + one cancellation test |
 | **WP16** | Doc corrections (C1, C2) | ADR-0009's four false claims fixed; README's `observability otlp` overclaim corrected; `IPromotionQueueMetrics`'s false layering rationale corrected; `Quiet` doc comments rewritten | Doc review |
 | **WP17** | **ADR-0021** (not 0020 — the proxy lane already owns 0020) | Records the non-goal reversal, its provenance, remedy B, the `AppContext` switch, and the `Internal` span-kind ruling; supersedes ADR-0002 §Non-Goals b2 and ADR-0009 §Non-Goals b1; retires ADR-0009's 2026-08-08 sampler block; ADR-0002 → **Superseded** | Doc review |
-| **WP18** | `ServerInfo` reads resolved state (panel) | The CLI verb cannot report "enabled" for an endpoint the exporter refused | New test; this is a **regression WP4 would otherwise introduce** |
+| **WP18** | `ServerInfo` reads resolved state (panel) | The CLI verb reports the endpoint actually in use, and cannot drift from the host's resolved state | New test — see the correction below; **not** the regression this row first claimed |
 | **WP19** | `IMeterFactory` migration | Meters come from the factory; the two `IDisposable`s go | Existing suite — runs **last**, on settled constructors |
 
 ### WP5's seam, located
@@ -157,6 +157,24 @@ owner's, and the plan does not assume them.
 - **D9 — Split `Observability/` into `Emission/`, `Export/`, `Monitoring/`?** The ADR-0008 CLI verb
   is a product feature filed next to exporter plumbing. Lowest-value item here; skip if it reads as
   churn.
+
+### Correction: WP18 is smaller than first recorded
+
+This plan originally claimed WP4 would make `serve observability otlp` report "enabled" for an
+endpoint the exporter had refused, and filed WP18 as fixing a regression WP4 introduced. **Checked
+against the code: that is false.** `ServerInfo.Current()` (`src/AiRaccoon/Observability/ServerInfo.cs:9`)
+calls `OtlpExportState.Resolve()` — the same method WP4 hardened — so after WP4 both the host and the
+CLI verb report `enabled: false` for a malformed endpoint. They agree, and WP4 introduces no
+divergence.
+
+What survives is narrower and still worth doing: `ServerInfo` re-reads the environment rather than
+reading the state the host actually built, so the two can drift if the environment changes after host
+build or if the host was given an explicit state; and for `http/protobuf` it reports the base endpoint
+rather than the `/v1/metrics` URL actually used, which is the same overclaim C1 corrects in the
+README. WP18 stays, at lower priority, on those grounds.
+
+Recorded rather than quietly edited, because the original claim was carried into a committed plan and
+a PR description on a panel's word without being checked against the source.
 
 ## Corrections to our own records
 
