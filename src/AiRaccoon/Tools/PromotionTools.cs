@@ -57,7 +57,7 @@ public sealed class PromotionTools(
 
     [McpServerTool(Name = TnMemoryPromotionDiscard)]
     [Description(
-        "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue.")]
+        "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue. Idempotent: an unknown hash is not an error — it reports discarded=0.")]
     public async Task<ApiEnvelope<PromotionDiscardResult>> Discard(
         [Description("The project id.")] string projectId,
         [Description("The queued hash to drop; omit to clear the project's whole queue.")]

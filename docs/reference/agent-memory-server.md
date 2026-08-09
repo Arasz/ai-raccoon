@@ -148,7 +148,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 ### Unknown-id rule
 
 An id that a tool cannot act on is handled one of two ways, and which way depends on what kind of
-tool it is (see [ADR-0023](../adr/0023-unknown-id-contract.md)):
+tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
 
 - **A removal verb is idempotent and reports a count.** An unknown id is a no-op, not an error —
   `memory_delete`, `memory_delete_context`, and `memory_promotion_discard` return `0` for the
