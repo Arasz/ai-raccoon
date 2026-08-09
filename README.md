@@ -6,8 +6,15 @@ An MCP server that gives AI agents persistent, project-scoped memory. It runs lo
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.6.1)
+## What's new (from 1.2.0 to 1.6.3)
 
+- **Promotion accounting is honest.** `memory_share_extract(mode=promote)` reported every
+  non-skipped claim as promoted, but multi-chunk files coalesce to ONE shared row — so a
+  70-chunk band could report 70 promoted while only 37 shared rows landed. Now `promotedHashes`
+  contains only rows the call actually created, `absorbed` counts chunks folded into an
+  already-represented file (first chunk per source file, in queue order), and the invariant is
+  claimed = promoted + absorbed + skipped + failures. The shared tier's one-row-per-file
+  semantics are documented in the [tool reference](docs/reference/agent-memory-server.md).
 - **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that probes port 7721 and starts the backend itself, so every client on the machine shares one embedding model and one bank instead of paying for its own.
   [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
 - **Upgrading no longer means hunting for a process.** `ai-raccoon serve --restart`

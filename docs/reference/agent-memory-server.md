@@ -34,7 +34,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
-| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], skippedDuplicates, failures: [...]}`                    |
+| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], absorbed, skippedDuplicates, failures: [...]}`         |
 | `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
@@ -78,9 +78,18 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   with `projectId` omitted, and `memory_share_extract` over several ids — report a
   bank-wide count with `capacity` absent. No response names another project.
 - **`memory_share_extract(mode=promote)` result shape:** `candidates` is always `[]` in promote
-  mode (it is only populated by `propose`); `promotedHashes` are the hashes actually shared.
-  `skippedDuplicates` counts queued candidates that matched something already in `shared` by value
-  or path and were dropped without an error. `failures` is a list of `{projectId, hash, reason}`
+  mode (it is only populated by `propose`). `promotedHashes` are the hashes whose share actually
+  CREATED a shared row — never a claim for a row that already existed. The shared tier holds
+  **one row per source file: the first chunk promoted for it, in queue order
+  (`score DESC, created ASC`)** — chunks already promoted or evicted earlier don't participate.
+  That is intent, not a schema guarantee: the path pre-check is per-connection sequential, so
+  concurrent same-path promotes can still create two rows. `absorbed` counts queued chunks that
+  were claimed but folded into a file the tier already represents (or lost an insert race to a
+  concurrent caller) — they are dropped from the queue, not reported promoted. `skippedDuplicates`
+  counts queued candidates whose value (whitespace-normalized) already exists in `shared` — one
+  copy per value, even across different paths — dropped without an error. Invariant per call:
+  claimed = `promotedHashes.length + absorbed + skippedDuplicates + failures.length`; `absorbed`
+  is `0` in propose mode (same result record). `failures` is a list of `{projectId, hash, reason}`
   for candidates claimed off the queue but never shared, where `reason` is a bounded token —
   `stale-hash` (the queued hash no longer resolves in the entries table) or `share-failed` (any
   other per-candidate error) — see `PromoteFailure`/`ShareExtractResult`
