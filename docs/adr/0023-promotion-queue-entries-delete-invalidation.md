@@ -165,18 +165,40 @@ already opened by a pre-fix binary kept the broken guard forever. The "Bump `Cur
 rejection above still holds for the reason given there (ADR-0019's forward-version write guard), so
 the fix does not use the ladder either.
 
-Resolution: `DROP TRIGGER IF EXISTS promotion_queue_entries_ad` immediately before an *unguarded*
-`CREATE TRIGGER` (no `IF NOT EXISTS`), both kept inside the same unconditional `Ddl` script that
-already runs in full on every bank open (`MemorySchema.EnsureAsync` executes it before consulting
-`storedVersion` at all). Dropping something absent is a no-op, so this is idempotent exactly like
-the original `IF NOT EXISTS` form was, and it reaches every existing bank on its very next open —
-no `CurrentVersion` bump, no ladder step, the same no-migration guarantee the original decision
-made, just achieved with DROP+CREATE instead of CREATE-only because this change replaces rather
-than adds.
+**First attempt, tried and rejected: put the DROP+CREATE pair unconditionally inside `Ddl`.** Every
+other statement in that script is `CREATE ... IF NOT EXISTS`, which is a no-op read once the object
+exists — `MemorySchema.EnsureAsync` running the whole script on every open is cheap for exactly that
+reason. An unconditional `DROP TRIGGER` + *unguarded* `CREATE TRIGGER` is not a no-op: it is a real
+schema write, every single open, with no enclosing transaction around `EnsureAsync`'s
+`ExecuteNonQueryAsync` call. Three costs follow, none acceptable on a machine-wide shared backend:
 
-**The general rule going forward:** a trigger body change that is safe to re-run unconditionally on
-every open (no data transform, no dependency on prior state) belongs in the unconditional `Ddl`
-path — via `CREATE ... IF NOT EXISTS` for a genuine addition, or `DROP IF EXISTS` + unguarded
-`CREATE` for a replacement. The version ladder is reserved for changes that need guarded, ordered,
-one-time work (a data backfill, a non-idempotent `ALTER TABLE`) — not for "does this touch a
-trigger" as such.
+1. **Every connection open becomes a schema writer.** `SqliteConnectionFactory` opens unpooled,
+   per-operation connections, and `SweepService` opens one per entry (`GetMetadataAsync`). On a
+   13k-entry bank that is ~13k DROP/CREATE pairs per sweep pass, each taking the write lock and
+   contending with the 1 Hz watch reconcile and every other concurrent session.
+2. **`PRAGMA schema_version` bumps on every open**, forcing every other connection's
+   prepared-statement cache to re-prepare — process-wide churn for a trigger that, after the first
+   corrected open, never needs to change again.
+3. **A correctness window inside the very defect being fixed.** Between the `DROP` and the `CREATE`
+   the trigger does not exist. A concurrent delete on another connection landing in that window
+   leaves exactly the orphan this ADR exists to prevent.
+
+**Resolution: probe first, write only when needed** — the same shape
+`MigrateIngestScopeKeysAsync` already uses in `MemorySchema.cs` ("Probe first: ... an unconditional
+write would take a write lock every time"). `EnsurePromotionQueueTriggerScopeGuardAsync` reads
+`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'` — one
+indexed read — and only runs `DROP TRIGGER IF EXISTS` + the corrected `CREATE TRIGGER` when that row
+is missing or its stored body does not already contain the scope guard. This still runs on every
+open (version or not, same as the settings-key migration next to it), still needs no
+`CurrentVersion` bump and no ladder step, and still reaches every existing bank on its very next
+open — but only the *first* open after this fix ships pays for a write; every open after that is a
+read that changes nothing.
+
+**The general rule going forward:** a trigger body change that must reach every existing bank
+without a version bump belongs beside `MigrateIngestScopeKeysAsync`, not inside the raw `Ddl`
+string — probe `sqlite_master` (or the equivalent state) first, and write only on the branch that
+still needs it. `CREATE ... IF NOT EXISTS` inside `Ddl` remains correct for a genuine *addition*,
+because it is naturally a no-op once the object exists; it is only a body *replacement* that must
+not go through that path unconditionally. The version ladder stays reserved for changes that need
+guarded, ordered, one-time work (a data backfill, a non-idempotent `ALTER TABLE`) — not for "does
+this touch a trigger" as such.
