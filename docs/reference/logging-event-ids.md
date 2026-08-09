@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **100** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **101** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -43,7 +43,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 500-509 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` |
 | 510-516 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` |
-| 520-526 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` |
+| 520-527 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` (527 is H6: skipped for access mode) |
 | 601-603, 605-608 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (604 unused — not a gap to fill; 606-607 are the loopback token, ADR-0020; 608 is the lost-the-port restart, ADR-0022) |
 | 610-612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Observability/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
