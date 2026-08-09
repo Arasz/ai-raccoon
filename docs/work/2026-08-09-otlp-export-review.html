@@ -1,0 +1,723 @@
+<meta charset="utf-8">
+<title>REVIEW TITLE — review</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+      "title": "Eighteen decisions on OTLP export",
+      "subtitle": "OTLP export review · 2026-08-09 · metrics and traces emission",
+      "source": "docs/reviews/2026-08-09-otlp-export-review.md",
+      "outName": "2026-08-09-otlp-export-feedback.md",
+      "expectedDir": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/otlp-export-review/docs/work",
+      "storageKey": "refinement:2026-08-09-otlp-export:v1"
+  };
+
+  // One object per decision. `detail` and `why` accept inline HTML (<code>, <strong>, <em>).
+  // group starts a new section heading; omit it to stay in the current section.
+  var DECISIONS = [
+      {
+          "group": "Defects — the telemetry is wrong or absent",
+          "id": "F1",
+          "claim": "Queue depth and utilization become observable instruments read from the store",
+          "detail": [
+              "<code>ai_raccoon_queue_queued</code> is an <code>UpDownCounter</code> fed <b>deltas since process start</b>, but the queue is persisted in SQLite. Restart with 40 rows queued, discard 5, and the exported depth reads <b>−5</b> — permanently offset for the life of the process.",
+              "<code>ai_raccoon_queue_capacity_utilization</code> returns a <b>cached field</b>, not an observation: it exports <code>0.0</code> (“empty”) from startup until the first propose — on a queue that may be full — and <code>DiscardAsync</code> never updates it, so it stays stale-high after a bulk discard.",
+              "Proposed: <code>CreateObservableUpDownCounter</code> / a computed gauge callback, both reading <code>IPromotionQueueStore</code>. One change fixes all three wrongs."
+          ],
+          "why": "<b>If we don't:</b> the two queue panels an operator would actually look at are quietly lying, and nothing in the system contradicts them.",
+          "placeholder": "Notes — e.g. accept the restart offset as a known limitation instead"
+      },
+      {
+          "group": "Defects — the telemetry is wrong or absent",
+          "id": "F2",
+          "claim": "The bare-launch host path disposes the host, so telemetry flushes at exit",
+          "detail": [
+              "<code>Program.cs:53</code> runs the host and never disposes it. <code>ServeRunner.cs:90-93</code> does it correctly. Provider <b>disposal is the only flush trigger the SDK has</b> — <code>TelemetryHostedService.StopAsync</code> is a hard <code>return Task.CompletedTask</code>, verified in the 1.17.0 assembly.",
+              "So <code>ai-raccoon --transport http</code> loses up to 60 s of metrics and 5 s of spans on <b>every clean exit</b>. One line, mirroring ServeRunner."
+          ],
+          "why": "<b>If we don't:</b> the final export window is dropped on one of the two supported launch paths, and the asymmetry with ServeRunner is invisible.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Defects — the telemetry is wrong or absent",
+          "id": "F3",
+          "claim": "A malformed OTLP endpoint disables export with a warning — it never kills the server",
+          "detail": [
+              "<code>new Uri(rawEnvString)</code> runs inside <code>app.StartAsync</code>. <code>OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:4317</code> (no scheme) throws <code>UriFormatException</code>; the only catch there filters on <code>IsAddressInUse</code>, so it <b>propagates and the MCP server dies at boot</b>. Confirmed by executing it.",
+              "The near-miss is worse: <code>new Uri(\"localhost:4318\")</code> <i>succeeds</i> with <code>Scheme=localhost</code>. The exporter builds, every export fails silently, and <code>serve observability otlp</code> reports “enabled” throughout.",
+              "Proposed: <code>Uri.TryCreate(..., UriKind.Absolute, ...)</code> + scheme check in <code>OtlpExportState.Resolve</code>, downgrading to disabled-with-a-warning."
+          ],
+          "why": "<b>If we don't:</b> an observability opt-in can take down the thing it observes, on a typo.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Defects — the telemetry is wrong or absent",
+          "id": "F4",
+          "claim": "Signal-path composition uses the SDK's own rules instead of the hand-rolled copy",
+          "detail": [
+              "<code>SignalEndpoint</code> doubles the path on two real shapes: <code>…/v1/traces/</code> → <code>…/v1/traces/v1/traces</code>, and <code>…/V1/TRACES</code> → <code>…/V1/TRACES/v1/traces</code>.",
+              "The SDK's <code>AppendPathIfNotPresent</code> handles both (trailing-slash form, <code>OrdinalIgnoreCase</code>). Ours is a strictly weaker copy of a method shipping in the same package.",
+              "Note: the manual append itself is <b>required</b> — setting <code>Endpoint</code> programmatically flips <code>AppendSignalPathToEndpoint</code> to false. Only the matching rules are wrong."
+          ],
+          "why": "<b>If we don't:</b> two plausible operator inputs 404 against the collector with no error surfaced.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Defects — the telemetry is wrong or absent",
+          "id": "F5",
+          "claim": "Exported spans stop being orphans — pick which of the two remedies",
+          "detail": [
+              "Every exported span carries a <code>parent_span_id</code> the collector will never resolve: the tool span inherits ASP.NET Core's <code>HttpRequestIn</code> Activity, whose source is deliberately never registered. Every trace is a one-span fragment with a broken link.",
+              "<b>Option A — root the tool span</b>: start it with an explicit empty parent. Keeps the non-goal, and additionally lets <code>OTEL_TRACES_SAMPLER</code> work again (the <code>AlwaysOnSampler</code> could then go).",
+              "<b>Option B — register the hosting source</b> (see T2): the parent becomes recorded and exported, giving a proper request span with tool spans nested underneath. Reopens the ASP.NET non-goal."
+          ],
+          "why": "<b>Open risk:</b> these are not equivalent — A keeps traces minimal, B gives real request shape. Choosing B makes T2 already decided.",
+          "placeholder": "Notes — name A or B"
+      },
+      {
+          "group": "Naming and conventions",
+          "id": "N1",
+          "claim": "Metric names move to the dotted namespace, and every instrument gets a unit",
+          "detail": [
+              "All 9 instruments use snake_case with embedded units and <code>_total</code> suffixes. In OTel, the <code>.</code>→<code>_</code> rewrite <b>and</b> <code>_total</code> are the Prometheus exporter's job at translation time. E.g. <code>ai_raccoon_queue_evictions_total</code> → <code>ai_raccoon.queue.evictions</code>.",
+              "<b>8 of 9 instruments pass no <code>unit</code> at all</b> — including <code>ai_raccoon_queue_wait_seconds</code>, whose name promises seconds the code never sets, and the invocation counter that ADR-0002 documents as <code>{call}</code>.",
+              "Duration moves <b>ms → s</b> with rescaled buckets: semconv says durations SHOULD use seconds, and this process already exports <code>dotnet.gc.pause.time</code> in seconds, so today the two cannot share an axis.",
+              "Blast radius measured: <b>no dashboard or alert consumes these names</b> — it is ~35 pinned string assertions in the test suite plus 7 documents."
+          ],
+          "why": "<b>Worth knowing:</b> neither ADR contains any naming rationale — verified. snake_case is an unexamined default here, not a defended position.",
+          "placeholder": "Notes — e.g. take the units now and defer the renames"
+      },
+      {
+          "group": "Naming and conventions",
+          "id": "N2",
+          "claim": "Span conventions: error.type, a recorded exception, and ActivityKind.Server",
+          "detail": [
+              "<code>error_type</code> → <b><code>error.type</code></b>, a <i>stable</i> registry attribute. The value shape is already correct and bounded; only the key is wrong, and semconv-aware error panels key on it.",
+              "<code>RecordError</code> drops the exception object — <b>no stack trace anywhere in the trace</b>. <code>Activity.AddException(ex)</code> is in the BCL since .NET 9 and fills <code>exception.type/message/stacktrace</code>.",
+              "<code>ActivityKind.Internal</code> on an inbound RPC. Backends route Server → “requests” and Internal → “dependencies”, so AiRaccoon currently presents as a service with <b>no server surface at all</b>."
+          ],
+          "why": "<b>If we don't:</b> the trace is missing the one thing you open a trace for — where the error came from.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Naming and conventions",
+          "id": "N3",
+          "claim": "Adopt the MCP semantic convention rather than inventing our own shape",
+          "detail": [
+              "An MCP convention now exists (GenAI conventions repo): <code>mcp.method.name</code> (required), <code>gen_ai.tool.name</code>, <code>mcp.session.id</code>, span name <code>{method} {target}</code> → <code>“tools/call memory_search”</code>, and a metric <code>mcp.server.operation.duration</code> (histogram, unit <code>s</code>, prescribed buckets) that is <b>the same measurement</b> as our tool duration histogram.",
+              "Note <code>mcp.tool.name</code> does <b>not</b> exist — tool identity is <code>gen_ai.tool.name</code>.",
+              "Status is <b>Development</b>, not Stable — that is the argument against adopting now."
+          ],
+          "why": "<b>Open risk:</b> Development-stability conventions can change under us; the counter-risk is inventing a private shape we later migrate off anyway.",
+          "placeholder": "Notes — adopt, adopt partially (attributes only), or wait for Stable"
+      },
+      {
+          "group": "Naming and conventions",
+          "id": "N4",
+          "claim": "Resource gets service.version; meters and sources get a version",
+          "detail": [
+              "The resource carries only <code>service.name</code>. <code>1.4.0</code> already sits in the csproj, and <code>AddService</code> takes the version as its third parameter.",
+              "Meters and ActivitySources are constructed with no version, so <code>InstrumentationScope.version</code> is empty on every signal.",
+              "Investigated and <b>refuted</b>: <code>service.instance.id</code> is <i>not</i> missing — <code>AddService</code> auto-generates it per process, so a fleet is already distinguishable."
+          ],
+          "why": "<b>If we don't:</b> “which build regressed” is unanswerable in the collector.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "What else to collect",
+          "id": "T1",
+          "claim": "Adopt System.Net.Http metrics and traces — two lines, no package",
+          "detail": [
+              "<code>AddMeter(\"System.Net.Http\")</code>: how long embedding-endpoint and Azure Blob calls take and how often they fail. One meter covers both, because Blob traffic rides <code>HttpClient</code> underneath.",
+              "<code>AddSource(\"System.Net.Http\")</code>: the same calls as spans <i>nested under the tool span</i> — turns “the tool call was slow” into “the embedding HTTP call was slow”. <b>Self-populating on .NET 10</b>; the instrumentation package is only needed pre-.NET 9.",
+              "No non-goal conflict — this is outbound client telemetry, not ASP.NET auto-instrumentation. Cardinality is a handful of hosts."
+          ],
+          "why": "<b>Recommended first adoption:</b> cheapest, highest-value pair in the whole catalog.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "What else to collect",
+          "id": "T2",
+          "claim": "Reopen the “no ASP.NET/HTTP auto-instrumentation” non-goal?",
+          "detail": [
+              "<code>AddSource(\"Microsoft.AspNetCore.Hosting\")</code> is one line and is <b>also the fix for F5</b> — the unrecorded parent becomes recorded, giving proper request→tool span nesting.",
+              "On .NET 10 the hosting Activity carries <b>no</b> OTel semconv tags by default; either set the <code>SuppressActivityOpenTelemetryData</code> AppContext switch to false (one more line, zero package, what .NET 11 does by default) or take <code>OpenTelemetry.Instrumentation.AspNetCore</code> (a fourth OTel package).",
+              "The metric half (<code>http.server.request.duration</code>) is separable and cheaper: it does <b>not</b> double-count our tool histogram — different window, different tags, and it also covers <code>/observability</code>, which the tool histogram never sees.",
+              "Cost: exactly one span per inbound request, 1:1 with tool-call volume."
+          ],
+          "why": "<b>This is the standing non-goal from ADR-0002 and ADR-0009.</b> Nothing here overrides it — the review only shows the cost is one line and the value is a real defect fix.",
+          "placeholder": "Notes — e.g. take the metric only, keep the span non-goal"
+      },
+      {
+          "group": "Corrections to shipped documents",
+          "id": "C1",
+          "claim": "ADR-0009 gets four corrections and the README one",
+          "detail": [
+              "<b>Per-signal endpoint variables are inert</b>, for two independent reasons: the config delegate runs after options construction and overwrites them, and <code>AddOtlpExporter</code> parses only the <i>generic</i> variables — per-signal ones are read only by <code>UseOtlpExporter()</code>, which we do not use. ADR-0009:171-173 claims otherwise. Same mechanism defeats <code>OTEL_EXPORTER_OTLP_TIMEOUT</code>.",
+              "<b>The timeout baseline is misstated</b>: ADR says we lower it “from the 30s default”, but <code>OtlpExporterOptions.TimeoutMilliseconds</code> defaults to <b>10000</b>. 30000 is a different knob (the batch processor's). The 5 s decision stands; the justification cites the wrong number.",
+              "<b>The instrument accounting is short by one</b> — ADR-0009:50-56 names six of seven; <code>ai_raccoon_queue_evicted_score</code> appears nowhere.",
+              "<b>README overclaims</b>: it says <code>serve observability otlp</code> “reports what the server is actually exporting to”. It reports raw env vars. ADR-0009:162-163 is honest about this; the README should match."
+          ],
+          "why": "<b>If we don't:</b> the ADR is what the next maintainer will trust, and four of its statements are now false.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Corrections to shipped documents",
+          "id": "C2",
+          "claim": "Stop failing silently in the three places where we currently do",
+          "detail": [
+              "<b>stdio + endpoint set</b>: the default transport for every MCP client wires no exporter, and nothing tells the operator their telemetry is being discarded. One warning at <code>CreateAppHost</code>.",
+              "<b>Unknown protocol</b>: anything but <code>http/protobuf</code> silently becomes gRPC — including the spec-valid <code>http/json</code> and any typo. A gRPC client against a 4318 collector gives total silence.",
+              "<b>Defeated env vars</b>: per-signal endpoints and <code>OTEL_EXPORTER_OTLP_TIMEOUT</code> are accepted and ignored (see C1).",
+              "The ADR's “silence is deliberate” posture is about <i>exporter</i> errors and stdout hygiene — it does not cover configuration we accept and discard."
+          ],
+          "why": "<b>If we don't:</b> every one of these looks like working configuration and produces no telemetry.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Accepted decisions, challenged",
+          "id": "R1",
+          "claim": "The promotion-queue histograms get the two tags that cost nothing",
+          "detail": [
+              "<code>_waitSeconds</code> is written by <b>both</b> <code>RecordPromoted</code> and <code>RecordDiscarded</code>. So “how long do rows wait before leaving the queue” cannot distinguish <b>the system working</b> from <b>the agent rejecting everything</b> — the only interesting question about that distribution.",
+              "An <code>outcome=promoted|discarded</code> tag costs <b>two series</b>, so the cardinality reasoning that justifies omitting <code>project_id</code> does not reach it.",
+              "<code>ai_raccoon_queue_evicted_score</code> is untagged while its sibling counter carries <code>project_id</code> <i>and</i> <code>reason</code> — the score cannot be sliced by the dimensions of the event count it accompanies."
+          ],
+          "why": "<b>ADR-0009:52-56</b> accepted these as untagged, but its accounting omitted the score histogram entirely and did not consider the promoted/discarded conflation.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Accepted decisions, challenged",
+          "id": "R2",
+          "claim": "The metric's project_id is set after the access gate, not before",
+          "detail": [
+              "ADR-0009:60-63 records that a rejected call still mints a series under the caller-supplied id, and files the cost under per-series <i>billing</i>.",
+              "The sharper consequence is <b>availability</b>: <code>project_id</code> is a free-form client string and the activity is constructed <i>before</i> <code>gate.RequireAsync</code>. A client looping with a fresh GUID mints a series per rejected call until the SDK's cardinality cap folds everything into the overflow bucket — at which point the counter stops being usable <b>for legitimate projects too</b>.",
+              "Proposed: set the metric project id after the gate passes; the rejection path records a sentinel. The span can keep the raw value — spans are not aggregated and carry no cardinality cost."
+          ],
+          "why": "<b>If we don't:</b> an unauthenticated caller can degrade the metric for everyone, which is a different class of problem from a bigger bill.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Accepted decisions, challenged",
+          "id": "R3",
+          "claim": "Background services get instrumented",
+          "detail": [
+              "The tool surface is <b>complete</b> — 22 tools, 22 instrumented call sites, no gaps.",
+              "But <code>ExtractionHostedService</code>, <code>WatchHostedService</code>, <code>BankMaintenanceHostedService</code> and <code>IdleWatchdog</code> emit <b>no span and no metric of their own</b>: no pass duration, no failure count, no watcher backlog, no embedding throughput, no sync volume. The promotion counters fire only as a side effect of extraction reaching <code>ProposeAsync</code>.",
+              "Scoped out by ADR-0002 (“Wave 0 is the MCP tool layer”) rather than missed. Cheapest closure: a <code>ToolExecutionActivity</code>-shaped helper per pass, reusing the existing instruments."
+          ],
+          "why": "<b>If we don't:</b> a degrading background pass is visible only in serve.log — invisible to the collector this feature exists to feed.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Accepted decisions, challenged",
+          "id": "R4",
+          "claim": "Close the four test gaps the review found",
+          "detail": [
+              "<b>No flush-before-exit test.</b> Both E2E tests call <code>ForceFlush()</code> by hand — precisely the thing production never does. Nothing would have caught F2.",
+              "<b>The path assertion cannot detect F4</b>: <code>path.Contains(\"/v1/metrics\")</code> also passes for <code>/v1/metrics/v1/metrics</code>. Assert equality.",
+              "<b>The SignalEndpoint theory stops one case short of the bug</b> — it omits exactly the two shapes F4 gets wrong, while reading as exhaustive.",
+              "<b>One test passes if the production body is deleted</b> (<code>EndpointSet_DoesNotRegisterAspNetCoreInstrumentation</code>), and two more are <i>named</i> after “the configured exporter” while flushing to an in-memory one.",
+              "Credit where due: the E2E pair genuinely boots the real entry point and asserts against a real collector — better than expected."
+          ],
+          "why": "<b>Project invariant:</b> a check you have not seen fail is not a check.",
+          "placeholder": "Notes"
+      },
+      {
+          "group": "Accepted decisions, challenged",
+          "id": "R5",
+          "claim": "Four pieces of hygiene, batched",
+          "detail": [
+              "<b>Dispose the ActivitySource</b> — only the Meter is disposed. Benign in production; in the test process 42 instances accumulate and every new listener attaches to all of them, which is a latent flake.",
+              "<b>Derive the meter names</b> — they are string literals hand-copied into four places. A third metrics class would compile, emit over EventPipe, and be <b>silently dropped from export</b> — exactly the failure ADR-0009 calls disqualifying. Violates <code>derive-or-delete-the-list</code>.",
+              "<b>Don't count client cancellation as a server error</b> — a disconnect mid-call is recorded <code>result=error</code> and marks the span Error.",
+              "<b>Drop the <code>_stopwatch.Reset()</code></b> — harmless today, but it silently turns the obvious future fix into “every call took 0 ms”."
+          ],
+          "why": "<b>If we don't:</b> the meter-name duplication is the one that bites later, silently, exactly as the ADR predicted.",
+          "placeholder": "Notes — or split: which of the four"
+      }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* The status line is the whole point of the fallback chain: it names the mechanism used and
+     where the bytes went. Never let a save be silent. */
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown (see references/result-template.md) ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory -------------------------------------------------
+     A file:// page cannot discover its own folder, and startIn takes only the
+     WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+     What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+     IndexedDB (which works on file://), and write silently on every later save. Handles
+     survive reload; the permission does not, so it is re-requested inside the click
+     handler, where a user gesture is available. Net effect: one dialog ever, not one per
+     save. Choose the folder holding this HTML file and the picker never returns. */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  /// Writes into a granted directory. Returns false if permission is refused or gone.
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+     Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+     context, but throws SecurityError unless called inside the click handler. Firefox and
+     WebKit do not expose it at all and fall straight through to the download. */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        // 1a) Already granted a folder in a previous session — write with no dialog at all.
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    // 3) clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      // 4) always-visible textarea — the guaranteed way out
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>
