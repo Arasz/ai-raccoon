@@ -72,29 +72,25 @@ public sealed class PromotionCapacityPolicyTests
     }
 
     [Fact]
-    public void CapacityInfo_FlagsBorrowingAndReservations()
+    public void CapacityFor_FlagsBorrowing_WhenUsedExceedsTheReservation()
     {
-        var info = PromotionCapacityPolicy.CapacityInfo(1000, 5,
-            new Dictionary<string, int> { ["acme"] = 250, ["other"] = 100, ["third"] = 0 });
+        PromotionCapacityPolicy.CapacityFor(1000, 5, 250)
+            .ShouldBe(new PromotionCapacityInfo(Reserved: 200, Used: 250, Borrowing: true));
+    }
 
-        info.Count.ShouldBe(3);
-        var acme = info["acme"];
-        acme.Reserved.ShouldBe(200);
-        acme.Used.ShouldBe(250);
-        acme.Borrowing.ShouldBeTrue();
-
-        var other = info["other"];
-        other.Reserved.ShouldBe(200);
-        other.Used.ShouldBe(100);
-        other.Borrowing.ShouldBeFalse();
-
-        info["third"].Borrowing.ShouldBeFalse();
+    [Theory]
+    [InlineData(100, 200, false)]
+    [InlineData(200, 200, false)]
+    public void CapacityFor_UpToTheReservation_IsNotBorrowing(int used, int reserved, bool borrowing)
+    {
+        PromotionCapacityPolicy.CapacityFor(1000, 5, used)
+            .ShouldBe(new PromotionCapacityInfo(reserved, used, borrowing));
     }
 
     [Fact]
-    public void CapacityInfo_EmptyCounts_YieldsEmptyInfo()
+    public void CapacityFor_MoreProjectsThanSlots_ReservesNothing()
     {
-        PromotionCapacityPolicy.CapacityInfo(1000, 5, new Dictionary<string, int>())
-            .ShouldBeEmpty();
+        PromotionCapacityPolicy.CapacityFor(3, 5, 1)
+            .ShouldBe(new PromotionCapacityInfo(Reserved: 0, Used: 1, Borrowing: true));
     }
 }

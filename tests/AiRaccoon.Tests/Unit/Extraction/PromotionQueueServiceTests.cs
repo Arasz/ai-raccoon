@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Core;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
@@ -52,6 +53,37 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     private static QueueCandidate Candidate(string hash, string value, double score) =>
         new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
+
+    private Task<PromotionMeta> MetaFor(string? projectId) =>
+        _service.GetMetaAsync(projectId, TestContext.Current.CancellationToken);
+
+    private static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web);
+
+    private static string Json(PromotionMeta meta) => JsonSerializer.Serialize(meta, WireJson);
+
+    /// <summary>Every property path in the serialized meta — what the envelope costs in wire shape.</summary>
+    private static IReadOnlyList<string> Shape(PromotionMeta meta)
+    {
+        using var document = JsonDocument.Parse(Json(meta));
+        var paths = new List<string>();
+        Collect(document.RootElement, string.Empty, paths);
+        paths.Sort(StringComparer.Ordinal);
+        return paths;
+    }
+
+    private static void Collect(JsonElement element, string prefix, List<string> paths)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            paths.Add(prefix + property.Name);
+            Collect(property.Value, $"{prefix}{property.Name}.", paths);
+        }
+    }
 
     private async Task SetCapAsync(int cap, CancellationToken ct)
     {
@@ -140,8 +172,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(5);
-        (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
-            .WaitingPromotionsCount.ShouldBe(ExtractionConfigKeys.DefaultQueueCapacity);
+        (await MetaFor("acme")).WaitingPromotionsCount.ShouldBe(ExtractionConfigKeys.DefaultQueueCapacity);
     }
 
     [Fact]
@@ -227,20 +258,81 @@ public sealed class PromotionQueueServiceTests : IDisposable
             "otherwise ai_raccoon.queue.discarded ships permanently flat");
     }
 
+    /// <summary>C5: the envelope carries the asking project's queue state only — another project's
+    /// id or counts never ride along on an unrelated tool call.</summary>
+    [Fact]
+    public async Task GetMeta_ReportsTheAskingProjectOnly()
+    {
+        await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0), Candidate("a2", "a2", 2.0)],
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("other",
+            [Candidate("o1", "o1", 1.0), Candidate("o2", "o2", 2.0), Candidate("o3", "o3", 3.0)],
+            TestContext.Current.CancellationToken);
+
+        var meta = await MetaFor("acme");
+
+        meta.WaitingPromotionsCount.ShouldBe(2);
+        Json(meta).ShouldNotContain("other", customMessage: "another project's queue is not this caller's business");
+    }
+
+    /// <summary>C5: the envelope is bounded by construction — one project, always — not by a tuned cap.</summary>
+    [Fact]
+    public async Task GetMeta_ShapeDoesNotGrowWithTheProjectCount()
+    {
+        await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0)],
+            TestContext.Current.CancellationToken);
+        var alone = Shape(await MetaFor("acme"));
+
+        foreach (var other in (string[])["b", "c", "d", "e", "f"])
+        {
+            await _service.ProposeAsync(other, [Candidate($"{other}1", other, 1.0)],
+                TestContext.Current.CancellationToken);
+        }
+
+        Shape(await MetaFor("acme")).ShouldBe(alone);
+    }
+
+    /// <summary>PromotionMeta's contract: zero is informative, never absent.</summary>
+    [Fact]
+    public async Task GetMeta_ReportsZero_WhenTheAskingProjectHasNothingQueued()
+    {
+        await _service.ProposeAsync("other", [Candidate("o1", "o1", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        var meta = await MetaFor("acme");
+
+        meta.WaitingPromotionsCount.ShouldBe(0);
+        Json(meta).ShouldContain("\"waitingPromotionsCount\":0");
+    }
+
+    [Fact]
+    public async Task GetMeta_WaitAges_AreTheAskingProjectsOwn()
+    {
+        await _service.ProposeAsync("other", [Candidate("o1", "stale", 1.0)],
+            TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(30));
+        await _service.ProposeAsync("acme", [Candidate("a1", "fresh", 1.0)],
+            TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        var meta = await MetaFor("acme");
+
+        meta.PromotionsWaitTimeSeconds.ShouldBe(10);
+        meta.OldestWaitSeconds.ShouldBe(10, "another project's 30-day-old row is not this project's wait");
+    }
+
     [Fact]
     public async Task GetMeta_ReflectsTheQueue()
     {
-        (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
-            .ShouldBe(new PromotionMeta(0, null, null));
+        (await MetaFor("acme")).ShouldBe(new PromotionMeta(0, null));
 
         await _service.ProposeAsync("acme", [Candidate("h1", "fact", 1.0)],
             TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromSeconds(30));
 
-        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
+        var meta = await MetaFor("acme");
         meta.WaitingPromotionsCount.ShouldBe(1);
         meta.PromotionsWaitTimeSeconds.ShouldBe(30);
-        meta.WaitingByProject.ShouldBe(new Dictionary<string, int> { ["acme"] = 1 });
     }
 
     /// <summary>B1: nothing drains a propose-only queue, so a stale row needs to be visible even
@@ -254,7 +346,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         await _service.ProposeAsync("acme", [Candidate("fresh", "new fact", 2.0)],
             TestContext.Current.CancellationToken);
 
-        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
+        var meta = await MetaFor("acme");
 
         meta.OldestWaitSeconds.ShouldNotBeNull();
         meta.OldestWaitSeconds!.Value.ShouldBe(TimeSpan.FromDays(30).TotalSeconds, 0.1);
@@ -263,7 +355,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetMeta_SurfacesPerProjectCapacityInfo()
+    public async Task GetMeta_SurfacesTheAskingProjectsCapacity()
     {
         await SetCapAsync(100, TestContext.Current.CancellationToken);
         await _service.ProposeAsync("acme",
@@ -272,18 +364,31 @@ public sealed class PromotionQueueServiceTests : IDisposable
         await _service.ProposeAsync("other",
             [Candidate("o1", "o1", 1.0)], TestContext.Current.CancellationToken);
 
-        var meta = await _service.GetMetaAsync(TestContext.Current.CancellationToken);
-
-        meta.CapacityByProject.ShouldNotBeNull();
-        meta.CapacityByProject!["acme"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 3, Borrowing: false));
-        meta.CapacityByProject["other"].ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 1, Borrowing: false));
+        (await MetaFor("acme")).Capacity
+            .ShouldBe(new PromotionCapacityInfo(Reserved: 50, Used: 3, Borrowing: false),
+                "two projects occupy a cap of 100 — this project's own share, not everyone's");
     }
 
     [Fact]
     public async Task GetMeta_EmptyQueue_HasNoCapacityInfo()
     {
-        (await _service.GetMetaAsync(TestContext.Current.CancellationToken))
-            .CapacityByProject.ShouldBeNull();
+        (await MetaFor("acme")).Capacity.ShouldBeNull();
+    }
+
+    /// <summary>memory_promotion_list may name no project; its meta is the bank-wide count — still a scalar.</summary>
+    [Fact]
+    public async Task GetMeta_Unscoped_CountsTheWholeBank_WithoutNamingProjects()
+    {
+        await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0)],
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("other", [Candidate("o1", "o1", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        var meta = await MetaFor(null);
+
+        meta.WaitingPromotionsCount.ShouldBe(2);
+        meta.Capacity.ShouldBeNull("a reservation belongs to a project, and this call named none");
+        Json(meta).ShouldNotContain("other");
     }
 
     [Fact]

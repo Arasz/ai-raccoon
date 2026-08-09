@@ -44,8 +44,8 @@ common response envelope that surfaces what is waiting.
   exceeds cap ÷ n, and the uniform greatest-count rule always picks that project (or a
   tied one) — a project within its reservation is unreachable as a victim (see #117
   item 5 / `PromotionCapacityPolicyTests.EvictionTarget_NeverPicksAProjectAtOrBelowItsReservation`).
-  `PromotionCapacityPolicy.CapacityInfo` is the reporting surface for this — per-project
-  `Reserved`/`Used`/`Borrowing`, surfaced in `GetMetaAsync`'s `PromotionMeta.CapacityByProject`
+  `PromotionCapacityPolicy.CapacityFor` is the reporting surface for this — the asking
+  project's `Reserved`/`Used`/`Borrowing`, surfaced in `GetMetaAsync`'s `PromotionMeta.Capacity`
   — not an enforcement gate.
 - **Review surface.** `memory_promotion_list` shows the queue; `memory_promotion_discard`
   drops rows or a whole project's queue. The background extraction loop (propose mode)

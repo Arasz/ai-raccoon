@@ -45,7 +45,7 @@ public sealed class ShareTools(
 
             var entry = await store.ShareAsync(projectId, hash, cancellationToken);
             var result = new ShareResult(true, entry.Context);
-            var envelope = await gate.WrapAsync(result, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -101,6 +101,9 @@ public sealed class ShareTools(
                     "confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable");
             }
 
+            // The meta is one project's queue state: scope it when this call named exactly one,
+            // otherwise leave it bank-wide (a scalar count) rather than pick a project arbitrarily.
+            var metaProject = projectIds.Length == 1 ? projectIds[0] : null;
             var promotes = extractMode == ExtractMode.Promote || autoPromote;
             foreach (var projectId in projectIds)
             {
@@ -114,7 +117,7 @@ public sealed class ShareTools(
             {
                 var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
                     .ConfigureAwait(false);
-                var promoteEnvelope = await gate.WrapAsync(new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
+                var promoteEnvelope = await gate.WrapAsync(metaProject, new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
                 activity.RecordInvocation();
                 return promoteEnvelope;
             }
@@ -128,7 +131,7 @@ public sealed class ShareTools(
                     .ConfigureAwait(false));
             }
 
-            var envelope = await gate.WrapAsync(new ShareExtractResult(candidates, []), cancellationToken);
+            var envelope = await gate.WrapAsync(metaProject, new ShareExtractResult(candidates, []), cancellationToken);
 
             activity.RecordInvocation();
             return envelope;

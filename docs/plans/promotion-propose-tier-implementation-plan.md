@@ -3,6 +3,11 @@
 > **Status:** DONE (2026-08-06, shipped as 1.1.0). Implements the `e:` extension to the
 > memory-first-gate task: (1) the propose tier becomes a real persisted queue with fair-share
 > capacity, (2) every MCP response carries a `meta` envelope telling the agent what is waiting.
+>
+> **Superseded on one point (2026-08-09):** the `meta` envelope's per-project dictionaries
+> (`waitingByProject`, `capacityByProject`) were replaced by scalars scoped to the asking
+> project — one project's counts, never a roster. The shape below is the 1.1.0 shape, kept as
+> the record of what was built. See `docs/reference/agent-memory-server.md` for the current one.
 
 **Goal:** `memory_share_extract propose` persists ranked candidates into a per-project
 **propose tier** (the waiting-for-promotion queue). `promote`/`autoPromote` consume **from that

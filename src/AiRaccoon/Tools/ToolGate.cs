@@ -24,7 +24,8 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue)
         await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>The envelope every tool returns: the payload plus what is waiting for review.</summary>
-    public async Task<ApiEnvelope<T>> WrapAsync<T>(T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(cancellationToken).ConfigureAwait(false));
+    /// <summary>The envelope every tool returns: the payload plus what is waiting for the calling
+    /// project — the whole bank only when the call itself named no project.</summary>
+    public async Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
+        new(data, await queue.GetMetaAsync(projectId, cancellationToken).ConfigureAwait(false));
 }
