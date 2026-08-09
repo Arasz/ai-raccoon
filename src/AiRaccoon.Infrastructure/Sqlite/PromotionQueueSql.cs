@@ -54,7 +54,7 @@ internal static class PromotionQueueSql
                                     WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
                                     """;
 
-    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0022): rows whose (project_id, hash) has no backing entries row, grouped per project for the dry-run report.</summary>
+    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row, grouped per project for the dry-run report.</summary>
     public const string OrphanCountsPerProject = """
                                                  SELECT project_id AS ProjectId, count(*) AS Count
                                                  FROM promotion_queue q

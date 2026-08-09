@@ -4,7 +4,7 @@ using Dapper;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>One-shot orphan report for `ai-raccoon extract prune` (ADR-0022): rows PruneOrphansAsync found (and, with apply, removed) per project.</summary>
+/// <summary>One-shot orphan report for `ai-raccoon extract prune` (ADR-0023): rows PruneOrphansAsync found (and, with apply, removed) per project.</summary>
 public sealed record PromotionQueueOrphanReport(int TotalOrphans, IReadOnlyDictionary<string, int> PerProject);
 
 /// <summary>Propose-tier persistence in the memory.db promotion_queue table; never synced (waiting rows are per-machine by design).</summary>
@@ -160,7 +160,7 @@ public sealed class SqlitePromotionQueueStore(
 
     /// <summary>
     ///     Rows whose backing entries row was deleted before the promotion_queue_entries_ad
-    ///     trigger existed (ADR-0022) — the trigger covers everything from here on; this is the
+    ///     trigger existed (ADR-0023) — the trigger covers everything from here on; this is the
     ///     one-shot catch-up for a bank that already accumulated dead rows. Reports without
     ///     deleting unless <paramref name="apply"/> is true; idempotent either way (a second call
     ///     after apply finds nothing left to report).

@@ -116,7 +116,8 @@ proxy already started.
 hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
 disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
 server, `serve` attaches to it and exits 0 (the first process owns the
-watchdog). `/mcp` requires the `X-AiRaccoon-Token` header: before binding,
+watchdog) — pass `--restart` to cycle it instead, which is what an update
+needs (see [Updating](#updating)). `/mcp` requires the `X-AiRaccoon-Token` header: before binding,
 `serve` mints a random token into `<data-root>/mcp-token` (0600) and every
 caller — the proxy included — must present it; `/observability` stays open,
 unauthenticated. Background it and point a client at the URL:
@@ -135,7 +136,30 @@ from `<data-root>/mcp-token`. `serve --port 0` picks a random free port and
 reports it.
 
 A direct `ai-raccoon --transport http` launch (no `serve` verb) stays
-**ungated** — deliberate for now; see [SECURITY.md](SECURITY.md).
+**ungated** — deliberate for now; see [SECURITY.md](SECURITY.md). It also gets
+no `/shutdown` endpoint, so `--restart` cannot cycle it.
+
+### Updating
+
+The backend started by the proxy is long-lived, so `dotnet tool update` alone
+replaces the binary on disk while the *running* server keeps serving the old
+one. Cycle it:
+
+```bash
+dotnet tool update -g ai-raccoon
+ai-raccoon serve --restart > serve.log 2>&1 &
+ai-raccoon serve observability pid   # the new server's PID
+```
+
+`--restart` asks the running server to stop over a token-guarded loopback
+endpoint, waits for the port to free (in-flight calls drain for up to 10s),
+then serves in its place. With nothing listening it is a plain `serve`. It
+never kills a process, and it never falls back to attaching: if the server
+refuses the token (it serves another data root), is too old to have the
+endpoint, will not let go of the port, or another start wins the port first,
+`--restart` says which and exits non-zero. To confirm the update took, ask the
+server what it is running: `curl -s http://127.0.0.1:7721/observability`
+reports its `version` alongside its PID.
 
 ## Embeddings
 

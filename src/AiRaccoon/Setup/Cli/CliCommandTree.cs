@@ -42,6 +42,12 @@ internal static class CliCommandTree
         Description = "Print the MCP client config entry for the bound URL"
     };
 
+    /// <summary>Cycles the server already on the port instead of attaching to it (ADR-0022).</summary>
+    internal static readonly Option<bool> ServeRestartOption = new("--restart")
+    {
+        Description = "Stop the ai-raccoon server already on the port and serve in its place (a plain start when none is)"
+    };
+
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
     /// <summary>observability's own --port, read instance-based like ServePortOption
@@ -257,7 +263,7 @@ internal static class CliCommandTree
             },
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)"),
             new Command("prune",
-                "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0022) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
+                "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
                 { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
         };
         return extract;
@@ -323,6 +329,7 @@ internal static class CliCommandTree
             ServeIdleTimeoutOption,
             ServeMcpEntryOption,
             ServeFormatOption,
+            ServeRestartOption,
             ObservabilityCommand()
         };
         // SetAction exists only because System.CommandLine requires a subcommand unless the

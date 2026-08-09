@@ -122,7 +122,7 @@ reaching a concrete infrastructure type directly instead of routing through a po
   for free from the same mechanism that covers every other deleter — no sync-specific code needed.
 - **Neutral.** `extract prune` is a one-shot catch-up, not a permanent maintenance verb the trigger
   depends on. Once every currently-orphaned row is cleared, the trigger alone keeps the queue clean;
-  `prune` stays available for a bank restored from a pre-ADR-0022 backup or one that skipped an
+  `prune` stays available for a bank restored from a pre-ADR-0023 backup or one that skipped an
   intermediate binary version.
 
 ## Alternatives considered

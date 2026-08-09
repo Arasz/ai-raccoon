@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **84** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **91** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -43,13 +43,15 @@ One block per source file that owns a `Log` class or equivalent:
 | 410-412 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 500-509 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` |
 | 510-516 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` |
-| 601-603, 605-607 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (604 unused — not a gap to fill; 606-607 are the loopback token, ADR-0020) |
+| 601-603, 605-608 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (604 unused — not a gap to fill; 606-607 are the loopback token, ADR-0020; 608 is the lost-the-port restart, ADR-0022) |
 | 610-612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Observability/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Setup/Serve/ProxyRunner.cs` (ADR-0020) |
 | 633-635 | `src/AiRaccoon/Setup/Serve/BackendLauncher.cs` (ADR-0020) |
 | 636-639 | `src/AiRaccoon/Setup/Serve/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
+| 650-654 | `src/AiRaccoon/Setup/Serve/ServerRestart.cs` (ADR-0022) |
+| 660 | `src/AiRaccoon/Setup/Serve/ShutdownEndpoint.cs` (ADR-0022) |
 | 700-706 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 900 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` |

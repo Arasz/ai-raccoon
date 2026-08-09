@@ -13,7 +13,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     promotion_queue_entries_ad (ADR-0022): a queue row is a promise about an entries row that
+///     promotion_queue_entries_ad (ADR-0023): a queue row is a promise about an entries row that
 ///     may no longer exist. This covers every real deletion path, the NOT EXISTS sibling guard,
 ///     and the shared-scope no-op — not just one call site.
 /// </summary>
@@ -92,7 +92,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
     /// <summary>
     ///     uq_entries_committed_bucket permits the same (project, hash) under two context labels.
-    ///     This is the required prove-the-check-fails step for ADR-0022: written first against a
+    ///     This is the required prove-the-check-fails step for ADR-0023: written first against a
     ///     trigger with no NOT EXISTS guard (observed red), then against the guarded trigger (green).
     /// </summary>
     [Fact]

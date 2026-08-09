@@ -393,7 +393,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     /// <summary>
     ///     Sweep degrades committed entries only, never the queue directly — but the
-    ///     promotion_queue_entries_ad trigger (ADR-0022) fires on the entries delete sweep does,
+    ///     promotion_queue_entries_ad trigger (ADR-0023) fires on the entries delete sweep does,
     ///     so a candidate whose entry sweep just removed cannot survive it. A candidate with no
     ///     backing entry, or one backed by a healthy entry sweep never touches, is untouched.
     /// </summary>

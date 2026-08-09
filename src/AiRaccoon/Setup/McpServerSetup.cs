@@ -88,6 +88,9 @@ internal static partial class McpServerSetup
         HostLogging.Configure(builder.Logging, transports, config.Options);
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
+        // Stated rather than inherited (ADR-0022): a restart waits on this port freeing, so how
+        // long a stopping host may drain in-flight requests has to be a number we own.
+        builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = ShutdownEndpoint.DrainWindow);
         if (config.IdleTimeout > TimeSpan.Zero)
         {
             // Three registrations, one instance (docs/plans/2026-08-06-http-serve-mode-plan.md R1):
@@ -129,6 +132,12 @@ internal static partial class McpServerSetup
             {
                 webApplication.MapMcp("/mcp");
                 webApplication.MapObservability();
+                if (config.McpToken is not null)
+                {
+                    // Never on an ungated host: an unauthenticated shutdown is worse than no
+                    // restart at all (ADR-0022).
+                    webApplication.MapShutdown();
+                }
             }
 
             return webApplication;
@@ -156,7 +165,12 @@ internal static partial class McpServerSetup
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
-            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
+            // Order is load-bearing, not registration luck: the first filter added is the outermost,
+            // so telemetry sits inside the refusal mapper and still sees the raw exception type.
+            // Pinned by ToolTelemetryFilterTests.RefusedCall_RecordsTheExceptionType.
+            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f
+                .AddCallToolFilter(ToolRefusals.Filter)
+                .AddCallToolFilter(ToolTelemetry.Filter));
 
             if (selectedTransports.Count == 0)
             {

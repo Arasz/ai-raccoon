@@ -122,7 +122,7 @@ ai-raccoon maintenance vacuum-interval {days}
 ai-raccoon maintenance list
 
 # serve: run the MCP endpoint over HTTP in the foreground (background it: ai-raccoon serve > serve.log 2>&1 &)
-ai-raccoon serve [--port <n>] [--idle-timeout <span>] [--mcp-entry] [--format hermes|claude|all]
+ai-raccoon serve [--port <n>] [--idle-timeout <span>] [--mcp-entry] [--format hermes|claude|all] [--restart]
 ai-raccoon serve observability {counters|trace|otlp|pid} [--port <n>]
 ```
 
@@ -257,7 +257,15 @@ one surviving variable.
   while `/observability` stays open. If the port already hosts an ai-raccoon
   server, `serve` attaches and exits 0 — the owner keeps the watchdog, the
   attached run never touches the bank; a foreign listener on the port fails
-  fast with exit code 3 and a `--port 0` hint. `serve --mcp-entry
+  fast with exit code 3 and a `--port 0` hint. `serve --restart` cycles that
+  server instead of attaching to it — what an update needs, since the running
+  process keeps the old assembly loaded after `dotnet tool update`. It asks the
+  server to stop over a token-guarded `POST /shutdown` (in-flight calls drain
+  for up to 10s), waits for the port to free, then serves in its place; with
+  nothing listening it is a plain `serve`. It kills no process and never falls
+  back to attaching — a refused token, a server too old to have the endpoint, a
+  port that will not free, or another start winning the port each exit 8 with a
+  line saying which. `serve --mcp-entry
   [--format hermes|claude|all]` prints the client config entry for the bound
   URL (keep stderr out: `> entry.json 2> serve.log`); the entry carries the URL
   only, so a client connecting this way must add the token header itself.
