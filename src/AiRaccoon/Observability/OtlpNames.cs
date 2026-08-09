@@ -11,11 +11,18 @@ public static class OtlpNames
     public const string PromotionQueueScope = "AiRaccoon.PromotionQueue";
     public const string RuntimeScope = "System.Runtime";
 
+    /// <summary>ASP.NET Core's own ActivitySource for the per-request hosting Activity (docs/adr/0021):
+    /// registered so the tool span's parent is recorded and exported instead of dangling. This is
+    /// "Microsoft.AspNetCore" — the *ActivitySource* the framework creates HttpRequestIn on
+    /// (dotnet/aspnetcore GenericWebHostBuilder.cs). "Microsoft.AspNetCore.Hosting" is a different
+    /// signal, the hosting *Meter* name (HostingMetrics.cs) — ADR-0021 names the wrong one.</summary>
+    public const string AspNetCoreScope = "Microsoft.AspNetCore";
+
     /// <summary>Every meter the process registers for OTLP export.</summary>
     public static readonly IReadOnlyList<string> Meters = [MemoryToolsScope, PromotionQueueScope, RuntimeScope];
 
     /// <summary>Every ActivitySource the process registers for OTLP export.</summary>
-    public static readonly IReadOnlyList<string> Sources = [MemoryToolsScope];
+    public static readonly IReadOnlyList<string> Sources = [MemoryToolsScope, AspNetCoreScope];
 
     public const string ToolInvocations = "ai_raccoon.tool.invocations";
 

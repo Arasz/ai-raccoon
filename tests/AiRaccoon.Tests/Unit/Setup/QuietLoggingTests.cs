@@ -136,6 +136,30 @@ public sealed class QuietLoggingTests : IDisposable
         entries.ShouldContain(e => e.Contains("app-info-marker", StringComparison.Ordinal));
     }
 
+    /// <summary>J1: HostLogging.Configure's quiet branch returned before the transport floors were
+    /// applied, so a quiet HTTP serve wrote every ASP.NET Core/MCP-server INFO line to the file —
+    /// destination is chosen by quiet, level policy by transport, and both must hold together.</summary>
+    [Fact]
+    public void QuietHttp_QuietsAspNetCoreCategory_ButKeepsAppInfo_InTheFile()
+    {
+        var options = QuietOptions(InstallScope.Project);
+        var config = new ServerConfig(0, McpTransport.Http, options);
+
+        var (stdout, stderr) = CaptureConsole(() =>
+        {
+            using var host = McpServerSetup.CreateServerHost(config);
+            var factory = host.Services.GetRequiredService<ILoggerFactory>();
+            factory.CreateLogger("Microsoft.AspNetCore.Hosting.Diagnostics").LogInformation("quiet-http-aspnet-info-marker");
+            factory.CreateLogger("AiRaccoon.Something").LogInformation("quiet-http-app-info-marker");
+        });
+
+        stdout.ShouldBeEmpty();
+        stderr.ShouldBeEmpty();
+        var fileContent = File.ReadAllText(LogFilePath(options));
+        fileContent.ShouldNotContain("quiet-http-aspnet-info-marker");
+        fileContent.ShouldContain("quiet-http-app-info-marker");
+    }
+
     private InfrastructureOptions QuietOptions(InstallScope scope) => Options(scope, quiet: true);
 
     private InfrastructureOptions LoudOptions(InstallScope scope) => Options(scope, quiet: false);

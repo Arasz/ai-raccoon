@@ -130,6 +130,33 @@ public sealed class OtlpExportTests : IDisposable
         }
     }
 
+    // T4/J1+J4 join: WP4 warns and disables, WP5 routes quiet's destination; neither half was
+    // ever asserted together. This is the one Hermes-spawned backend depends on for a bad
+    // OTEL_EXPORTER_OTLP_ENDPOINT to be diagnosable at all under --quiet.
+    [Fact]
+    public async Task MalformedEndpoint_Quiet_WarningReachesTheLogFile_AndStderrStaysEmpty()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User, Quiet = true };
+        var config = new ServerConfig(FreePort(), McpTransport.Http, options);
+
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        Console.SetError(stderr);
+        try
+        {
+            using var host = McpServerSetup.CreateServerHost(config);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        stderr.ToString().ShouldBeEmpty();
+        File.ReadAllText(QuietLogging.LogFilePath(options)).ShouldContain("ai-raccoon: OTLP export disabled");
+    }
+
     [Fact]
     public async Task EndpointSet_RegistersAllThreeMeters_AndTheActivitySource()
     {
@@ -209,18 +236,21 @@ public sealed class OtlpExportTests : IDisposable
     }
 
     [Fact]
-    public async Task EndpointSet_DoesNotRegisterAspNetCoreInstrumentation()
+    public async Task EndpointSet_RegistersAListenerForTheAspNetCoreRequestSource()
     {
-        // Pins ADR-0002/ADR-0009's standing non-goal: no Kestrel span per request. ASP.NET
-        // Core's own HTTP-request ActivitySource is "Microsoft.AspNetCore" (confirmed in
-        // dotnet/aspnetcore's WebHostBuilder.cs); it must never gain a listener here.
+        // ADR-0021 supersedes ADR-0002/ADR-0009's non-goal: the hosting request span must now be
+        // recorded and exported so the tool span's parent resolves. "Microsoft.AspNetCore" is the
+        // ActivitySource the framework creates HttpRequestIn on (dotnet/aspnetcore
+        // GenericWebHostBuilder.cs), confirmed by OtlpTraceExportE2ETests against a real request —
+        // ADR-0021's own text names "Microsoft.AspNetCore.Hosting", which is the hosting *Meter*
+        // name (HostingMetrics.cs), a different signal.
         var services = new ServiceCollection();
 
         services.AddOtlpExport(TestOptions, Enabled);
         await using var provider = services.BuildServiceProvider();
         provider.GetRequiredService<TracerProvider>();
 
-        new ActivitySource("Microsoft.AspNetCore").HasListeners().ShouldBeFalse();
+        new ActivitySource(OtlpNames.AspNetCoreScope).HasListeners().ShouldBeTrue();
     }
 
     [Fact]

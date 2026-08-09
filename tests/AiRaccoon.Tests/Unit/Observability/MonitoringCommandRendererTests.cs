@@ -16,8 +16,10 @@ public class MonitoringCommandRendererTests
     }
 
     [Fact]
-    public void RenderTrace_ListsOnlyTheMemoryToolsActivitySource()
+    public void RenderTrace_ListsEveryRegisteredActivitySource()
     {
+        // docs/adr/0021: OtlpNames.Sources now also carries the ASP.NET Core request source, so the
+        // rendered command must list it too — derived from the same list, not a second copy.
         MonitoringCommandRenderer.RenderTrace(12345).ShouldBe(
             $"dotnet-trace collect -p 12345 --providers {string.Join(',', OtlpNames.Sources)}");
     }

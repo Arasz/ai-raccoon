@@ -66,6 +66,37 @@ The registry earns its keep only with WP2's guard test.
 **Blast radius, measured:** ~35 string-literal assertions across 11 test files, 7 documents, and
 zero dashboards or alerts — nothing outside the repo consumes these names.
 
+## Status — 2026-08-09, after #215 merged and #217 opened
+
+Kept current deliberately: the integration review found that #215's body understated what remained,
+and a plan that does the same is worse, because it is what the next session reads.
+
+**Done and merged (#215):** WP1 (queue instruments read the store), WP3 (flush on exit), WP4
+(endpoint validation), WP5 (quiet-mode file logging), WP6 (signal-path composition), WP2 (name
+registry, guard, rename, units, `mcp.server.operation.duration`).
+
+**Done, in #217:** the integration review itself; C1 (guard widened to non-public fields — it could
+not see the shape WP13 will use); J1 (quiet no longer bypasses the transport floors); D2 (EventId 640
+in the registry); T4 (the WP4+WP5 join now tested); T1/T2 (a dishonest test name, an unfalsifiable
+assertion); D1 documented; **WP17 → ADR-0021**; and the ADR-0002/0009 corrections.
+
+**In flight:** the documentation package — `SECURITY.md`'s privacy table (it cites a method that no
+longer exists), `quiet.log` being documented nowhere, and four Hermes integration sites including a
+shipped plugin's config schema.
+
+**Not started:** WP7's `AddSource` half (the plan once claimed it "proceeds now"; it did not),
+WP8 (MCP semconv on the span), WP9 (`project_id` after the gate), WP10 (promotion tags), WP11
+(`service.version`), WP12 (`System.Net.Http`), WP13 (background instrumentation), WP15 (hygiene),
+WP18 (`ServerInfo` reads resolved state — lower priority, see the correction below), WP19
+(`IMeterFactory`).
+
+**Held:** WP7's `SetSampler` removal, against the proxy lane's `ForwardedRequests_CarryNoTraceparent`
+going green post-merge. See ADR-0021, which cites that test by name.
+
+**Superseded by owner rulings:** D1 (the `CallToolFilter` seam) changes how WP9 and WP13 get built —
+tool instrumentation moves to one filter registered beside `ToolRefusals.Filter`, on the **backend
+host only**, since a proxy forwards rather than executes.
+
 ## Work packages
 
 Each names its gate. "Red first" means the project's `prove-the-check-fails` invariant applies:

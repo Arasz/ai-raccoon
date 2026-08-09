@@ -74,14 +74,46 @@ public sealed class OtlpNamesRegistryTests : IDisposable
 
         foreach (var property in instance.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.PropertyType == typeof(Meter) && property.GetValue(instance) is Meter meter)
-            {
-                meterNames.Add(meter.Name);
-            }
-            else if (property.PropertyType == typeof(ActivitySource) && property.GetValue(instance) is ActivitySource source)
-            {
-                sourceNames.Add(source.Name);
-            }
+            AddScopeName(property.PropertyType, property.GetValue(instance), meterNames, sourceNames);
         }
+
+        // Non-public fields too: a hosted service's Meter/ActivitySource is ordinarily private
+        // (WP13's shape), and only walking public properties left it invisible to this guard.
+        foreach (var field in instance.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance))
+        {
+            AddScopeName(field.FieldType, field.GetValue(instance), meterNames, sourceNames);
+        }
+    }
+
+    private static void AddScopeName(Type memberType, object? value, ISet<string> meterNames, ISet<string> sourceNames)
+    {
+        if (memberType == typeof(Meter) && value is Meter meter)
+        {
+            meterNames.Add(meter.Name);
+        }
+        else if (memberType == typeof(ActivitySource) && value is ActivitySource source)
+        {
+            sourceNames.Add(source.Name);
+        }
+    }
+
+    /// <summary>C1: a hosted service holding its Meter in a private field (WP13's shape) was
+    /// invisible to a guard that only walked public properties. Direct test of the private
+    /// method, not the DI-driven test above, so it fails on exactly the shape that was blind.</summary>
+    [Fact]
+    public void PrivateFieldMeter_IsDiscoveredByTheGuard()
+    {
+        var meterNames = new HashSet<string>(StringComparer.Ordinal);
+        var sourceNames = new HashSet<string>(StringComparer.Ordinal);
+
+        CollectScopeNames(new PrivateFieldMeterProbe(), meterNames, sourceNames);
+
+        meterNames.ShouldContain(PrivateFieldMeterProbe.MeterName);
+    }
+
+    private sealed class PrivateFieldMeterProbe
+    {
+        public const string MeterName = "AiRaccoon.Probe.PrivateFieldMeter";
+        private readonly Meter _meter = new(MeterName);
     }
 }

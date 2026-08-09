@@ -2,7 +2,12 @@
 
 Date: 2026-08-04
 
-Status: Accepted; partially superseded by ADR 0008 (HTTP endpoint) and ADR 0009 (OTLP export) — 2026-08-07
+Status: **Superseded** — 2026-08-09. Superseded in parts by ADR 0008 (HTTP endpoint), ADR 0009
+(OTLP export) and ADR 0021 (export the ASP.NET request span). After ADR 0021 reversed the
+"No ASP.NET / HTTP auto-instrumentation" non-goal, exactly one of this ADR's positions survives —
+**no Azure Monitor exporter** — and it is restated in ADR 0009 so it need not be inferred from a
+superseded document. The instrument names and units below are historical; the current ones are in
+`OtlpNames` and ADR 0021.
 
 ## Context
 
@@ -40,6 +45,15 @@ A single `Meter` named `"AiRaccoon.MemoryTools"` exposes two instruments:
 | Call counter | `Counter<long>` | `ai_raccoon_tool_invocations` | `{call}` | `tool`, `result`, `error_type`, `project_id` |
 | Call duration | `Histogram<double>` | `ai_raccoon_tool_duration_ms` | `ms` | `tool`, `result`, `error_type` |
 
+> **2026-08-09 — these names and units are historical.** The 2026-08-09 owner gate renamed every
+> instrument onto the OTel dotted convention and supplied the units this table only ever documented:
+> the counter is `ai_raccoon.tool.invocations` and the duration histogram is
+> `mcp.server.operation.duration` in **seconds**, the name the MCP semantic convention gives that
+> exact measurement. Two corrections worth recording rather than silently overwriting: the `{call}`
+> unit above was **documented here but never passed to the instrument** until that pass, and the
+> `error_type` tag is now `error.type`, the stable registry attribute. Current names live in one
+> place, `OtlpNames`, which the exporter and the `dotnet-trace` renderer both derive from.
+
 > **2026-08-08 update.** The counter row gained `project_id`; the histogram
 > row deliberately did not. Microsoft's multi-dimensional-metrics guidance
 > says "likely less than 1000 combinations for one instrument is safe" and
@@ -52,6 +66,13 @@ A single `Meter` named `"AiRaccoon.MemoryTools"` exposes two instruments:
 Custom histogram buckets (milliseconds):
 `1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000`.
 These cover sub-millisecond reads up to 30-second timeouts.
+
+> **2026-08-09 — superseded, and the sentence above was wrong even for its own numbers.** A 1 ms
+> lowest boundary does not cover "sub-millisecond reads"; anything faster than 1 ms falls in the
+> first bucket indistinguishably. The current boundaries are the MCP convention's own, in seconds —
+> `0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60, 120, 300` — read from the convention at
+> implementation time rather than converted from these. So the floor is now 10 ms and the ceiling
+> 5 minutes, which is a deliberate change of range, not a rescale.
 
 The `tool` tag carries the MCP tool name (`"memory_write"`, `"memory_search"`)
 — exactly as surfaced to MCP clients. The `result` tag is `"success"` or

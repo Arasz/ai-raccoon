@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **78** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **80** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
