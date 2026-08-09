@@ -208,7 +208,10 @@ internal sealed class FakeSweepStore : IMemoryStore
             throw new InvalidOperationException($"sweep-fault:{projectId}");
         }
 
-        return Task.FromResult<IReadOnlyList<MemoryEntry>>(Entries.GetValueOrDefault(context) ?? []);
+        // A snapshot, not the live list: SweepService enumerates this result while also calling
+        // DeleteAsync, which mutates the backing list — enumerating the reference itself throws.
+        return Task.FromResult<IReadOnlyList<MemoryEntry>>(
+            Entries.GetValueOrDefault(context)?.ToList() ?? []);
     }
 
     public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
