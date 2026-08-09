@@ -7,18 +7,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
-///     Local-only verification against the real labeled candidate pools from the scoring evaluations
-///     (docs/adr/0018-promotion-scoring-v2.md, v3 section). The fixtures quote private-repo docs, so
-///     they are never committed here — set AIRACCOON_SCORING_EVAL_FIXTURE to one or more local JSON
-///     paths (Path.PathSeparator-delimited) to run this locally; CI has no such file and the test skips.
-///
-///     Gate is picked from the candidate count, not the filename (every reference set's size is fixed
-///     and documented in the round-2 scoreboard): 61 candidates is the v1 set (full-set Spearman >= 0.60);
-///     147 is the v2 set (full-set >= 0.45, id > 1000 organic-subset >= 0.50); 292 is the v3 set
-///     (full-set >= 0.60, AND within ±0.03 of the python prototype's measured +0.665); 42 is the
-///     round-2 secret orchestrator-only holdout (within ±0.03 of the prototype's measured +0.690).
-///     Prototype numbers were measured by running docs/work/promotion-scoring-eval/round2/agentC/scorer.py
-///     against the same fixtures via promotion-scoring-eval/eval.py (see PR for #192).
+///     Local-only verification against real labeled candidate pools (docs/adr/0018-promotion-scoring-v2.md
+///     — gates, candidate-set sizes, and prototype-parity figures are documented there). Fixtures quote
+///     private-repo docs and are never committed; set AIRACCOON_SCORING_EVAL_FIXTURE to one or more local
+///     JSON paths (Path.PathSeparator-delimited) to run locally — CI has no such file and the test skips.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

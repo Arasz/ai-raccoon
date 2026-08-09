@@ -10,7 +10,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     Replace-by-path digest: hash-skip (SHA-256 of normalized path + content), delete-by-source-path,
 ///     re-digest through the existing ingest path, rename = remove old path + digest new path with
-///     overwrite (D2). File gone → chunks removed.
+///     overwrite (docs/plans/file-watcher-implementation.md D2). File gone → chunks removed.
 /// </summary>
 public sealed partial class WatchDigestExecutor(
     IMemoryStore store,
@@ -54,10 +54,9 @@ public sealed partial class WatchDigestExecutor(
     }
 
     /// <summary>
-    ///     Best-effort retry net for rows the inline embed left pending (audit F6 / issue #44):
-    ///     the ingest path embeds only when a provider is configured AND the inline embed
-    ///     succeeds; nothing else retries a row left pending. A failure here is logged and
-    ///     never breaks the digest.
+    ///     Best-effort retry net for rows the inline embed left pending: the ingest path embeds
+    ///     only when a provider is configured and the inline embed succeeds, and nothing else
+    ///     retries a pending row. A failure here is logged and never breaks the digest.
     /// </summary>
     private async Task TryEmbedPendingAsync(string projectId, CancellationToken cancellationToken)
     {
@@ -71,7 +70,7 @@ public sealed partial class WatchDigestExecutor(
         }
     }
 
-    /// <summary>SHA-256 over the normalized path concatenated with the full file content (R5 contract).</summary>
+    /// <summary>SHA-256 over the normalized path concatenated with the full file content (docs/plans/file-watcher-implementation.md R5).</summary>
     public static string ComputeHash(string normalizedPath, string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));
 
     private async Task DeletePathAsync(string projectId, string watchPath, string path,

@@ -5,10 +5,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Maintenance;
 
 /// <summary>
-///     Bank-maintenance settings keys pin the settings-table contract the hosted
-///     service reads: maintenance.checkpoint-interval-minutes.global (default 60)
-///     and maintenance.vacuum-interval-days.global (default 7); bad values fall back
-///     to the defaults, never throw.
+///     Bank-maintenance settings keys pin the settings-table contract the hosted service reads:
+///     checkpoint interval (default 60 min) and vacuum interval (default 7 days); bad values
+///     fall back to the defaults, never throw.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

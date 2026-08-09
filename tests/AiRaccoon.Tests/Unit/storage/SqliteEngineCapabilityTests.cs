@@ -6,11 +6,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     Pins the SQLite engine surface measured in docs/work/2026-08-06-sqlite3mc-feature-surface.md
-///     (probe /tmp/sqlite3mc-features, 2026-08-06): the app depends on the 3.53.0 WAL-reset fix and on
-///     the SQLite3MC temp-in-memory and encryption properties. A future bundle swap that regresses any
-///     of these facts fails here. Floor assertions (>= 3.53.4, 2.4.x) so patch bumps don't churn CI;
-///     a major/minor regression does.
+///     Pins the SQLite engine surface (docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md): the app
+///     depends on the 3.53.0 WAL-reset fix and on SQLite3MC's temp-in-memory and encryption properties.
+///     Floor assertions (>= 3.53.4, 2.4.x) let patch bumps through but fail on a major/minor regression.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

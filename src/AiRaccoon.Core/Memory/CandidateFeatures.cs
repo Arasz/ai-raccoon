@@ -42,6 +42,22 @@ internal static partial class CandidateFeatureExtractor
     private const int StatusOpenerHeadChars = 80;
     private const int DatedFactWindowChars = 120;
 
+    /// <summary>Alternate spellings a project's id is written under in free text — content matching
+    /// is otherwise a bare-substring check that misses e.g. "airaccoon" for "ai-raccoon" (ported from
+    /// agentC/scorer.py's PROJECT_ALIASES, docs/work/promotion-scoring-eval/round2/agentC/scorer.py).</summary>
+    private static readonly IReadOnlyDictionary<string, string[]> ProjectAliases =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["ai-badger"] = ["ai-badger", "ai_badger", "badger_lib", "welcome-ai-badger"],
+            ["ai-raccoon"] = ["ai-raccoon", "airaccoon", "ai_raccoon"],
+            ["jsaa"] = ["jsaa", "job-search-ai-assistant", "jobsearchaiassistant"],
+            ["hermes-default"] = ["hermes"],
+            ["arasz-home-page"] = ["arasz-home-page", "arasz.dev", "home-page"]
+        };
+
+    private static IReadOnlyList<string> AliasesFor(string projectId) =>
+        ProjectAliases.TryGetValue(projectId, out var aliases) ? aliases : [projectId];
+
     internal static CandidateFeatures Extract(string value, string projectId, IReadOnlyList<string> allProjectIds)
     {
         var v = value ?? string.Empty;
@@ -61,7 +77,10 @@ internal static partial class CandidateFeatureExtractor
         var datedWindow = v.Length > DatedFactWindowChars ? v[..DatedFactWindowChars] : v;
 
         var stripped = v.TrimStart();
-        var firstChar = stripped.Length > 0 ? stripped[0] : '\0';
+        // Leading markdown emphasis/quote markup must not hide a lowercase mid-sentence opener
+        // behind it (e.g. "**minscore is measured..." is a fragment, not a sentence start).
+        var midSentenceHead = v.TrimStart('*', '#', '>', '-', '–', ' ', '\t', '\n');
+        var midSentenceChar = midSentenceHead.Length > 0 ? midSentenceHead[0] : '\0';
 
         return new CandidateFeatures(
             RuleDensity: Per100(RuleLanguage().Matches(v).Count, nWords),
@@ -77,10 +96,12 @@ internal static partial class CandidateFeatureExtractor
             Frontmatter: Frontmatter().IsMatch(v.TrimStart()),
             NChars: v.Length,
             NWords: nWords,
-            MidSentence: char.IsLower(firstChar) || firstChar is ')' or ',' or ';',
+            MidSentence: char.IsLower(midSentenceChar) || midSentenceChar is ')' or ',' or ';',
             HeadingStart: stripped.StartsWith('#'),
-            ForeignProjects: others.Count(id => v.Contains(id, StringComparison.OrdinalIgnoreCase)),
-            ForeignSubject: others.Any(id => head.Contains(id, StringComparison.OrdinalIgnoreCase)),
+            ForeignProjects: others.Count(id =>
+                AliasesFor(id).Any(alias => v.Contains(alias, StringComparison.OrdinalIgnoreCase))),
+            ForeignSubject: others.Any(id =>
+                AliasesFor(id).Any(alias => head.Contains(alias, StringComparison.OrdinalIgnoreCase))),
             StatusOpener: StatusOpener().IsMatch(openerHead),
             StatusVocab: StatusVocabulary().Matches(v).Count,
             SecondPerson: SecondPerson().IsMatch(v),

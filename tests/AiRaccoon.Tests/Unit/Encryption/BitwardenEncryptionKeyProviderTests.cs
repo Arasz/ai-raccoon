@@ -9,13 +9,13 @@ namespace AiRaccoon.Tests.Unit.Encryption;
 
 /// <summary>
 ///     BitwardenEncryptionKeyProvider: runs `bws secret get` (no -t, 15 s), parses the secret
-///     with the Core parser, derives the x'…' raw key (plan §5.1/§5.3/§5.4).
+///     with the Core parser, derives the x'…' raw key (docs/plans/encryption-bitwarden-implementation.md §5.1/§5.3/§5.4).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class BitwardenEncryptionKeyProviderTests
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…'
+    // Pinned vector: seed 00 01 … 1e 1f → x'72d2…'
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 

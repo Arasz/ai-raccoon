@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
@@ -16,6 +18,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tools;
+using Dapper;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -29,10 +32,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     #151: a correct refusal (path-outside-scope) must not read as a crash — the SDK logs Error
-///     on every exception escaping a tool, McpException included, so the old catch-and-rethrow
-///     shape produced an Error record for an expected refusal. Drives a real McpServer over the
-///     real HTTP pipeline so the assertion exercises the SDK's own exception handling.
+///     A correct refusal (path-outside-scope) must not read as a crash: the SDK logs Error on
+///     every exception escaping a tool, so the old catch-and-rethrow shape produced an Error
+///     record for an expected refusal.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -49,9 +51,8 @@ public sealed class ToolRefusalsTests : IDisposable
             "path-outside-scope");
 
     /// <summary>
-    ///     #151/e2e-prefix-coverage: only path-outside-scope was ever proven through a real
-    ///     McpServer; access-denied (project set read-only, then a write tool) and
-    ///     unknown-workspace (memory_write against a workspaceId that doesn't exist) now are too.
+    ///     Only path-outside-scope was ever proven through a real McpServer; access-denied (project
+    ///     set read-only, then a write tool) and unknown-workspace (unknown workspaceId) now are too.
     ///     Sync prefixes are skipped here — they need real cloud config, not just a local bank.
     /// </summary>
     public static TheoryData<string, Dictionary<string, object?>, string, string?> RealServerRefusalCases => new()
@@ -67,8 +68,78 @@ public sealed class ToolRefusalsTests : IDisposable
             new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
             "unknown-workspace",
             null
+        },
+        {
+            // D1: 'keep' is documented as accepting the scalar "all", but the schema declares
+            // string[] — the SDK's argument marshaller throws a raw JsonException instead of a
+            // typed refusal (docs/reference/agent-memory-server.md Error shapes).
+            "memory_workspace_consolidate",
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
+            "invalid-argument",
+            null
+        },
+        {
+            "memory_share",
+            new Dictionary<string, object?>
+            {
+                ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+            },
+            "unknown-hash",
+            null
         }
     };
+
+    /// <summary>
+    ///     D7: a bank stamped ahead of CurrentVersion (MemorySchema.cs) is refused by EnsureAsync on
+    ///     open, not an unhandled crash. Written standalone, not via AssertRefusalOverRealServerAsync,
+    ///     because a broken bank's background jobs also fail open and log their own expected errors.
+    /// </summary>
+    [Fact]
+    public async Task ForwardSchemaVersion_ReturnsRefusal_OnTheToolCall()
+    {
+        var dataRoot = TestData.CreateTempRoot("tool-refusals-e2e-schema-version-unsupported");
+        try
+        {
+            await SeedForwardSchemaVersionAsync(dataRoot, TestContext.Current.CancellationToken);
+
+            var port = FreePort();
+            var host = McpServerSetup.CreateServerHost(
+                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+            await host.StartAsync(TestContext.Current.CancellationToken);
+            try
+            {
+                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+                var transport = new HttpClientTransport(
+                    new HttpClientTransportOptions
+                    {
+                        Name = "tool-refusals-test",
+                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
+                        TransportMode = HttpTransportMode.StreamableHttp
+                    },
+                    httpClient,
+                    NullLoggerFactory.Instance,
+                    true);
+                await using var client = await McpClient.CreateAsync(transport,
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                var result = await client.CallToolAsync("memory_write",
+                    new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x" },
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                result.IsError.ShouldBe(true);
+                var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+                text.ShouldStartWith("schema-version-unsupported:");
+            }
+            finally
+            {
+                await host.StopAsync(TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            Directory.Delete(dataRoot, true);
+        }
+    }
 
     [Theory]
     [MemberData(nameof(RealServerRefusalCases))]
@@ -125,7 +196,7 @@ public sealed class ToolRefusalsTests : IDisposable
             var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
             text.ShouldStartWith($"{expectedPrefix}:");
 
-            // The defect #151 names: every fail-level record here is a real crash, none are refusals.
+            // Every fail-level log record here is a real crash, never a refusal.
             var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
             errors.ShouldBeEmpty(string.Join('\n', errors.Select(e => e.Message)));
         }
@@ -146,6 +217,19 @@ public sealed class ToolRefusalsTests : IDisposable
                     [new EnvEncryptionKeyProvider()])),
             TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
+    }
+
+    /// <summary>Opens the bank once (creating and migrating it to CurrentVersion), then stamps user_version one past it.</summary>
+    private static async Task SeedForwardSchemaVersionAsync(string dataRoot, CancellationToken cancellationToken)
+    {
+        var options = TestData.CreateInfrastructureOptions(dataRoot);
+        var factory = new SqliteConnectionFactory(options,
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                [new EnvEncryptionKeyProvider()]));
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"PRAGMA user_version = {MemorySchema.CurrentVersion + 1}", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private static int FreePort()
@@ -169,7 +253,13 @@ public sealed class ToolRefusalsTests : IDisposable
         { new SyncNetworkException("timed out"), "sync-network" },
         { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
         { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
-        { new ValidationException("projectId is required"), "invalid-params" }
+        { new ValidationException("projectId is required"), "invalid-params" },
+        { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
+        { new UnknownHashException("deadbeef", "acme"), "unknown-hash" },
+        {
+            new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
+            "schema-version-unsupported"
+        }
     };
 
     [Theory]
@@ -195,10 +285,9 @@ public sealed class ToolRefusalsTests : IDisposable
         ToolRefusals.LevelFor(prefix).ShouldBe(expectedLevel);
 
     /// <summary>
-    ///     Doc/code drift guard, both directions: every prefix the reference doc's error-shapes
-    ///     table row promises must exist in code, and every code-known prefix (mapped exception
-    ///     types plus the prefixes thrown directly as a bare <see cref="McpException" />) must be
-    ///     documented — no hand-duplicated expectation list on either side.
+    ///     Doc/code drift guard, both directions: every prefix the reference doc's error-shapes table
+    ///     promises must exist in code, and every code-known prefix must be documented — no
+    ///     hand-duplicated expectation list on either side.
     /// </summary>
     [Fact]
     public void DocumentedPrefixes_MatchCodeExactlyInBothDirections()

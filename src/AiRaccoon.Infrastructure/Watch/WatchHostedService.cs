@@ -7,8 +7,8 @@ namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
 ///     Background re-watch loop: on a poll, load registrations; disabled projects keep their
-///     registrations but start no checking (decision §10.3); enabled ones get a watcher + catch-up
-///     scan; removed or disabled-flipped registrations stop their watcher. Restart re-watch starts from persisted state.
+///     registrations but start no checking (docs/plans/file-watcher-implementation.md §10 decision 3);
+///     enabled ones get a watcher + catch-up scan; removed or disabled-flipped ones stop it.
 /// </summary>
 public sealed partial class WatchHostedService : BackgroundService
 {
@@ -36,9 +36,8 @@ public sealed partial class WatchHostedService : BackgroundService
         _catchUp = catchUp;
         _timeProvider = timeProvider;
         _logger = logger;
-        // D-1: any removal — WatchService.RemoveAsync included — drops the key here at the exact
-        // instant it unregisters from the pipeline, so a remove-then-re-add that both land between
-        // two polls is never mistaken for a watch that has been continuously active.
+        // The one removal choke point (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1): every
+        // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
     }
 
@@ -166,8 +165,8 @@ public sealed partial class WatchHostedService : BackgroundService
         foreach (var s in stale)
         {
             _eventSource.Stop(s.ProjectId, s.Path);
-            // Raises WatchPipeline.Unregistered, which drops s from _active/_registered too (D-1) —
-            // the same choke point OnWatchUnregistered handles for an out-of-loop WatchService.RemoveAsync.
+            // Raises WatchPipeline.Unregistered — the same removal choke point (D-1,
+            // docs/plans/2026-08-07-watch-scan-runaway-fix.md) OnWatchUnregistered also handles.
             _pipeline.UnregisterWatch(s.ProjectId, s.Path);
             Log.StaleRegistrationUnregistered(_logger, s.ProjectId, s.Path);
         }

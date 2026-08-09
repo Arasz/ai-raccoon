@@ -59,8 +59,8 @@ public sealed class FtsQueryNormalizerTests
     [Fact]
     public void BuildPlan_MoreThanFourTokens_KeepsProvenOrRecall_NoFallback()
     {
-        // Long queries keep the pre-Wave-1 OR join verbatim: stopword stripping and
-        // bigrams each measurably regress baseline rankings here (A1 measured case).
+        // Long queries keep the pre-Wave-1 OR join verbatim: stopword stripping and bigrams
+        // regress rankings here (docs/work/archive/2026-08-04-comparison-clean.md).
         var plan = FtsQueryNormalizer.BuildPlan("SQLite memory stores project knowledge");
         plan.Expression.ShouldBe("sqlite OR memory OR stores OR project OR knowledge");
         plan.Fallback.ShouldBeNull();
@@ -71,7 +71,7 @@ public sealed class FtsQueryNormalizerTests
     public void BuildPlan_LongQueryOrPrimary_RetainsStopwords()
     {
         // 'was' carries past-tense content in "Why was X chosen?" — dropping it drops the
-        // expected chunk from fused rank 1 to 2 on the baseline corpus (A1 measured case).
+        // expected chunk from fused rank 1 to 2 (docs/work/archive/2026-08-04-comparison-clean.md).
         var plan = FtsQueryNormalizer.BuildPlan("Why was shadcn/ui chosen over gluestack.io?");
         plan.Expression.ShouldBe("why OR was OR shadcn OR ui OR chosen OR over OR gluestack OR io");
         plan.Fallback.ShouldBeNull();
@@ -101,9 +101,9 @@ public sealed class FtsQueryNormalizerTests
     [Fact]
     public void BuildPlan_OrFallback_RetainsQueryStopwords_ForRecall()
     {
-        // The fallback is a recall net: the AND primary is precision-only (stopwords
-        // stripped), but the OR retry keeps the query's stopwords in query order so an
-        // under-matched AND falls back to the proven pre-Wave-1 OR behavior (A6 case).
+        // The fallback is a recall net: the AND primary is precision-only (stopwords stripped),
+        // but the OR retry keeps the query's stopwords in query order, falling back to the
+        // proven pre-Wave-1 OR behavior (docs/work/archive/2026-08-04-comparison-clean.md).
         var plan = FtsQueryNormalizer.BuildPlan("How does the project handle data erasure?");
         plan.Expression.ShouldBe("project AND handle AND data AND erasure");
         plan.Fallback.ShouldBe(
@@ -114,9 +114,9 @@ public sealed class FtsQueryNormalizerTests
     [Fact]
     public void BuildPlan_MixedCaseQuery_LowercasesBeforeFiltering()
     {
-        // Tokens are lowercased before the Reserved/Stopwords membership checks, so
-        // casing never reaches the sets — this is the contract that lets the sets use
-        // Ordinal comparison (SearchValuesVsHashSetBenchmark: 0.60x vs OrdinalIgnoreCase).
+        // Tokens are lowercased before the Reserved/Stopwords membership checks, so casing never
+        // reaches the sets — this is the contract that lets the sets use Ordinal comparison
+        // (docs/work/archive/2026-08-04-searchvalues-vs-hashset.md).
         var plan = FtsQueryNormalizer.BuildPlan("WHAT IS ADR-0070 ABOUT?");
         plan.Expression.ShouldBe("adr AND 0070");
     }

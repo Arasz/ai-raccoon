@@ -2,7 +2,7 @@ using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Rating;
 
-/// <summary>Half-life decay on age plus an access-count multiplier; see spec OQ-6.</summary>
+/// <summary>Half-life decay on age plus an access-count multiplier (docs/work/features-agent-memory/spec-issue-1.md OQ-6).</summary>
 public static class RatingPolicy
 {
     public const double DefaultBaseScore = 0.5;

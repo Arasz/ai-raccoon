@@ -4,10 +4,9 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ports agentC/scorer.py's doc_adjust() (see docs/adr/0018-promotion-scoring-v2.md v3 section).
-/// v3 change: the recency/access-count bonus is gone (agentC's doc_adjust never referenced it) — content
-/// evidence is shape-only now. The doc-index/turn-mirror evidence cap is gone too: those channels are
-/// hard-noise in v3 and never reach Evaluate() at all (see PromotionScorer).</summary>
+/// <summary>Ports agentC/scorer.py's doc_adjust() (docs/adr/0018-promotion-scoring-v2.md, v3): content
+/// evidence is shape-only now (no recency/access-count bonus) and the doc-index/turn-mirror evidence cap
+/// is gone — those channels are hard-noise in v3 and never reach Evaluate() (see PromotionScorer).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionContentEvidenceTests
@@ -92,6 +91,40 @@ public sealed class PromotionContentEvidenceTests
                                     "which keeps memory pressure predictable across long-running sessions.");
 
         midSentence.Reasons.ShouldContain("mid-sentence");
+    }
+
+    /// <summary>A fragment opening with markdown emphasis (e.g. "**minscore is measured...") is still a
+    /// mid-sentence fragment once the leading markup is stripped — the raw first character alone missed it.</summary>
+    [Fact]
+    public void MidSentenceOpener_BehindLeadingMarkup_StillCountsAsMidSentence()
+    {
+        var midSentence = Evaluate("**minscore is measured inert to whatever the caller passes as a filter, " +
+                                    "so it never trims results the way an agent expects it to.");
+
+        midSentence.Reasons.ShouldContain("mid-sentence");
+    }
+
+    /// <summary>The mid-sentence penalty must survive the positive-evidence clamp: a row with enough
+    /// other bonuses to already saturate Hi (before the penalty) must still come out 0.18 lower for
+    /// opening mid-sentence, not have the penalty silently absorbed by the ceiling.</summary>
+    [Fact]
+    public void MidSentenceOpener_StillDemotesAChunkAlreadyAtTheCeiling()
+    {
+        var saturated = new CandidateFeatures(
+            RuleDensity: 5.0, MeasureWords: 4, NumUnit: 4, Ephemera: 0, Superseded: false,
+            FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
+            Frontmatter: false, NChars: 2000, NWords: 300, MidSentence: false, HeadingStart: true,
+            ForeignProjects: 0, ForeignSubject: true, StatusOpener: false, StatusVocab: 0,
+            SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
+            FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+
+        var atCeiling = PromotionContentEvidence.Evaluate(saturated, ProvenanceArchetype.WorkNote);
+        var midSentence = PromotionContentEvidence.Evaluate(
+            saturated with { MidSentence = true, HeadingStart = false }, ProvenanceArchetype.WorkNote);
+
+        atCeiling.Adjustment.ShouldBe(1.30, "the fixture must actually saturate Hi for this test to mean anything");
+        midSentence.Reasons.ShouldContain("mid-sentence");
+        midSentence.Adjustment.ShouldBe(1.30 - 0.18);
     }
 
     [Fact]

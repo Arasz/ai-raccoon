@@ -18,8 +18,8 @@ namespace AiRaccoon.Setup.Serve;
 
 /// <summary>
 ///     Serve-mode composition root (Program.cs): force http, probe-attach to an existing
-///     ai-raccoon server on the port (R14), else bootstrap the web host like the bare
-///     launch path and report the bound URL on stdout. Logs stay on stderr.
+///     ai-raccoon server on the port (docs/plans/2026-08-06-http-serve-mode-plan.md R14), else
+///     bootstrap like the bare launch path, report the bound URL on stdout, and log to stderr.
 /// </summary>
 internal static partial class ServeRunner
 {
@@ -41,9 +41,8 @@ internal static partial class ServeRunner
         };
         WarnOnNonHttpTransport(parsed, stderr, logger);
 
-        // Probe first, before any bank/key/embedding work (R14): attach if the port
-        // already hosts an ai-raccoon server. Attached mode never arms the watchdog and
-        // never touches the bank; --idle-timeout is ignored (the owner decides).
+        // Probe first, before bank/key/embedding work (docs/plans/2026-08-06-http-serve-mode-plan.md R14):
+        // attach mode never arms the watchdog, touches the bank, or honors --idle-timeout.
         var url = $"http://127.0.0.1:{port}/mcp";
         if (await TryProbeAttachAsync(port, cancellationToken))
         {
@@ -96,8 +95,9 @@ internal static partial class ServeRunner
         return ExitCode.Success;
     }
 
-    /// <summary>R7: serve's own --port wins; else the root --port; else 7721. Reads are
-    /// instance-based — name-based GetResult("--port") resolves the root option (R12).</summary>
+    /// <summary>Serve's own --port wins; else the root --port; else 7721. Reads are instance-based
+    /// — name-based GetResult("--port") would resolve the root option
+    /// (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
     private static int ResolvePort(CliParseResult parsed)
     {
         if (parsed.ParseResult.GetResult(CliCommandTree.ServePortOption) is OptionResult { Tokens.Count: > 0 })
@@ -142,8 +142,9 @@ internal static partial class ServeRunner
         stderr.WriteLine($"ai-raccoon: serve ignoring --transport {selected}; serve always uses http");
     }
 
-    /// <summary>R14 probe: POST /mcp with an MCP Accept header and a non-JSON body; recognized
-    /// iff status ∈ {400,405,406} and the body mentions jsonrpc. 2 attempts, 1s timeout each.</summary>
+    /// <summary>R14 probe (docs/plans/2026-08-06-http-serve-mode-plan.md): POST /mcp with an MCP
+    /// Accept header and a non-JSON body; recognized iff status ∈ {400,405,406} and the body
+    /// mentions jsonrpc. 2 attempts, 1s timeout each.</summary>
     private static async Task<bool> TryProbeAttachAsync(int port, CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < 2; attempt++)

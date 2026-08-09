@@ -74,18 +74,15 @@ public sealed class SourceAffinitySweepTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>
-    ///     The Wave 3 gate (see docs/plans/retrieval-improvement-c.md §3 Wave 3): the chosen
-    ///     configuration (the SearchQuery defaults) passes every
-    ///     gate and beats the λ=0 baseline on ADR nDCG@5. The full matrix is emitted to
-    ///     docs/work/2026-08-04-wave3-source-affinity-sweep.md.
+    ///     The Wave 3 gate (docs/plans/retrieval-improvement-c.md §3 Wave 3): the chosen configuration
+    ///     (the SearchQuery defaults) passes every gate and beats the λ=0 baseline on ADR nDCG@5.
     /// </summary>
     [Fact]
     public async Task Sweep_ChosenSourceAffinityConfiguration_PassesAllGates()
     {
-        // The Wave 3 gates (see docs/adr/0005-source-affinity-ranking.md) were measured over
-        // the 11 expected-source queries that existed at sweep time. Wave 5b catalog additions
-        // (A8-A10, S1/S3-S6; see docs/plans/retrieval-improvement-c.md §3 Wave 5b) are scored by
-        // BaselineMetricsTests, not this sweep — otherwise every point's pinned numbers shift.
+        // The Wave 3 gates (docs/adr/0005-source-affinity-ranking.md) were measured over the 11
+        // expected-source queries that existed at sweep time; later catalog additions are scored
+        // by BaselineMetricsTests instead, so this sweep's pinned numbers don't shift.
         var points = GridPoints();
         var queries = LoadQueries()
             .Where(q => q.ExpectedSource is not null && SourceAffinityGateQueryIds.Contains(q.Id))
@@ -101,17 +98,14 @@ public sealed class SourceAffinitySweepTests : IDisposable
             row.Lambda == ChosenLambda && row.Threshold == ChosenThreshold && row.Formula == ChosenFormula);
         var baseline = rows.Single(row => row.Lambda == 0.0 && row.Formula == DocScoreFormula.Max);
 
-        // Gate (b): S2 answers at file level <= 3. Re-pinned 2026-08-06 to the re-pinned corpus
-        // (9397bbef): the exact Decision chunk is outside the top 10 (content-only corpus, no
-        // structure signal — tracked follow-up); the file-level answer is the honest contract.
+        // Gate (b): S2 answers at file level <= 3 — the exact Decision chunk falls outside the top
+        // 10 on the content-only corpus, with no structure signal to lift it.
         chosen.S2FileRank.ShouldNotBeNull("S2 ADR-0011 file must appear in the top 10");
         chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3,
             $"S2 ADR-0011 file must rank <= 3 at the chosen configuration; got {chosen.S2FileRank}");
 
-        // Gate (a): A6 expected-source file and exact chunk within the measured cross-platform
-        // envelope (arm64 <= 6, linux-x64 8, 2026-08-08; see ADR-0015): new erasure ADRs
-        // 0068/0069 outrank 0067 on the re-pinned corpus, and GGUF SIMD paths shift the margin
-        // further per platform.
+        // Gate (a): A6's expected file and exact chunk must stay within the measured cross-platform
+        // envelope (arm64 <= 6, linux-x64 <= 8; ADR-0015) — GGUF SIMD paths shift the margin per platform.
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
         chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(8,
             $"A6 expected file must rank <= 8 (cross-platform envelope); got {chosen.A6FileRank}");
@@ -119,19 +113,16 @@ public sealed class SourceAffinitySweepTests : IDisposable
         chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(8,
             $"A6 exact chunk must rank <= 8 (cross-platform envelope); got {chosen.A6ExactRank}");
 
-        // Gate (c): ADR nDCG@5 improves over the merged dual-vector state (0.650) and does not
-        // fall materially below the λ=0 arm. Re-pinned 2026-08-06: on the re-pinned corpus the
-        // chosen config measures 0.674 vs the λ=0 arm's 0.674 — within 0.001 (the strict-beat
-        // gate became an epsilon tolerance; the exact delta is recorded in the sweep report).
+        // Gate (c): ADR nDCG@5 must exceed the merged dual-vector state (0.650) and stay within
+        // 0.001 of the λ=0 arm — the original strict-beat gate became an epsilon tolerance.
         chosen.AdrNdcg5.ShouldBeGreaterThan(0.650,
             $"ADR nDCG@5 must exceed the Wave 6 merged state 0.650; got {chosen.AdrNdcg5:F3}");
         chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(baseline.AdrNdcg5 - 0.001,
             $"ADR nDCG@5 must stay within 0.001 of the λ=0 baseline ({baseline.AdrNdcg5:F3}); got {chosen.AdrNdcg5:F3}");
 
-        // Gate (d): invariants at their measured re-pinned ranks (2026-08-06): C1 holds hybrid
-        // rank 1; C5 measured 5 (secrets/config ADRs outrank the invariant). C2's hybrid rank
-        // collapsed (no structure signal in the re-pinned corpus) — its FTS-only rank-1 gate
-        // lives in QueryConstructionTests.
+        // Gate (d): C1 holds hybrid rank 1; C5 holds rank <= 5 (secrets/config ADRs outrank it).
+        // C2's hybrid rank collapsed on the re-pinned corpus — its FTS-only rank-1 gate lives in
+        // QueryConstructionTests.
         chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
         chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
         chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");

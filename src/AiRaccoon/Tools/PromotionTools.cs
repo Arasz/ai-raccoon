@@ -22,12 +22,14 @@ public sealed class PromotionTools(
 
     [McpServerTool(Name = TnMemoryPromotionList)]
     [Description(
-        "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard.")]
+        "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard. Values are previews by default; pass includeFullValue=true for the full text.")]
     public async Task<ApiEnvelope<PromotionListResult>> List(
         [Description("The project id; omit to see every project's queue.")]
         string? projectId = null,
         [Description("Maximum rows (default 50).")]
         int limit = 50,
+        [Description("Return each row's full value instead of a preview. Off by default — a full queue can be hundreds of KB.")]
+        bool includeFullValue = false,
         CancellationToken cancellationToken = default)
     {
         using var activity = new ToolExecutionActivity(observability, TnMemoryPromotionList, projectId ?? "all");
@@ -44,7 +46,7 @@ public sealed class PromotionTools(
             }
 
             var rows = await queue.ListAsync(projectId, limit, cancellationToken);
-            var result = new PromotionListResult(rows);
+            var result = new PromotionListResult(rows.Select(r => ToView(r, includeFullValue)).ToList());
             var envelope = await gate.WrapAsync(result, cancellationToken);
             activity.RecordInvocation();
             return envelope;
@@ -55,6 +57,15 @@ public sealed class PromotionTools(
             throw;
         }
     }
+
+    private static PromotionQueueRowView ToView(PromotionQueueRow row, bool includeFullValue) =>
+        new(row.ProjectId, row.Hash, row.Path, includeFullValue ? row.Value : Truncate(row.Value),
+            row.SourceFile, row.Score, row.Reasons, row.CreatedAt, row.UpdatedAt);
+
+    private static string Truncate(string value) =>
+        value.Length <= SharedExtractionService.PreviewLength
+            ? value
+            : value[..(SharedExtractionService.PreviewLength - 1)] + "…";
 
     [McpServerTool(Name = TnMemoryPromotionDiscard)]
     [Description(
@@ -84,7 +95,13 @@ public sealed class PromotionTools(
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRow> Rows);
+    public sealed record PromotionListResult(IReadOnlyList<PromotionQueueRowView> Rows);
+
+    /// <summary>A queued row for review — Value is a preview unless includeFullValue was set.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record PromotionQueueRowView(
+        string ProjectId, string Hash, string Path, string Value, string? SourceFile,
+        double Score, IReadOnlyList<string> Reasons, long CreatedAt, long UpdatedAt);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionDiscardResult(int Discarded);

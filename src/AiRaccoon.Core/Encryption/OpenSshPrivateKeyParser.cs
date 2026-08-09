@@ -4,7 +4,7 @@ namespace AiRaccoon.Core.Encryption;
 
 /// <summary>
 ///     Format decoder for unencrypted ed25519 OpenSSH private keys (RFC 8709 openssh-key-v1):
-///     extracts the 32-byte ed25519 seed. Format decoding only — no crypto (plan §5.1).
+///     extracts the 32-byte ed25519 seed. Format decoding only — no crypto (docs/plans/encryption-bitwarden-implementation.md §5.1).
 /// </summary>
 public static class OpenSshPrivateKeyParser
 {

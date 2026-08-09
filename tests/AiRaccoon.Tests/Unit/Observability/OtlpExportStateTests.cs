@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
-/// <summary>Resolves OTLP export state from OTEL_* environment variables; see ADR 0009.</summary>
+/// <summary>Resolves OTLP export state from OTEL_* environment variables; see ADR-0009.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class OtlpExportStateTests

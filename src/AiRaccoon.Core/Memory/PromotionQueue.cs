@@ -21,11 +21,13 @@ public sealed record PromotionQueueRow(
     long CreatedAt,
     long UpdatedAt);
 
-/// <summary>Queue occupancy and wait — the response-meta source.</summary>
+/// <summary>Queue occupancy and wait — the response-meta source. OldestWaitSeconds is the single
+/// stalest row's age: an average can hide it once enough fresh rows join the same queue.</summary>
 public sealed record PromotionQueueStats(
     int TotalCount,
     double? AvgWaitSeconds,
-    IReadOnlyDictionary<string, int> PerProject);
+    IReadOnlyDictionary<string, int> PerProject,
+    double? OldestWaitSeconds = null);
 
 /// <summary>The row an eviction removed (for logging and the response).</summary>
 public sealed record EvictedRow(string ProjectId, string Hash, double Score, string Reason);

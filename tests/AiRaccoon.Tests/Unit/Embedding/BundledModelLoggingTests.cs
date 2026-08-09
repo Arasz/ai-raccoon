@@ -44,8 +44,7 @@ public sealed class BundledModelLoggingTests
     {
         if (!FindBundledModel())
         {
-            // The bundled ONNX is gitignored — fresh checkouts (CI) never carry it, and this
-            // branch of EnsureAsync cannot run without the real SHA-pinned assets.
+            // The bundled ONNX is gitignored (absent on fresh checkouts/CI); this branch can't run without it.
             Assert.Skip("bundled ONNX model not present (gitignored; absent on CI)");
         }
 

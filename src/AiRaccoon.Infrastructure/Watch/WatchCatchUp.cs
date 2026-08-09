@@ -5,14 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
-///     D1 catch-up: a never-synced watch (watermark 0) gets a full initial scan; otherwise files
-///     with mtime strictly after the watermark are re-queued, plus any file the fingerprint index
-///     has never seen — the watermark advances per digested file, so a scan interrupted mid-walk
-///     must not strand the files it never reached. Also reconciles deletions
-///     that happened while the server was down (see docs/features/file-watcher/file-watcher.feature).
-///     Scans are single-flighted per (projectId, path) via <see cref="WatchScanGuard"/> and
-///     cancellable — removal (<see cref="WatchPipeline.UnregisterWatch"/>) and host shutdown both
-///     stop an in-flight scan instead of letting it run to completion regardless.
+///     Catch-up scan (docs/plans/file-watcher-implementation.md D1): a never-synced watch gets a
+///     full initial scan; otherwise it re-queues files changed since the watermark or never
+///     fingerprinted, reconciles deletions from downtime, and is single-flighted per (projectId, path).
 /// </summary>
 public sealed partial class WatchCatchUp(
     WatchPipeline pipeline,
@@ -36,10 +31,9 @@ public sealed partial class WatchCatchUp(
     /// <summary>Cancels every in-flight scan (host shutdown).</summary>
     public void CancelAllScans() => scanGuard.CancelAll();
 
-    /// <summary>Deterministic core: files under path. A file is due when there is no watermark,
-    /// its mtime is after the watermark, or it was never fingerprinted (missed by an interrupted
-    /// scan). A watched FILE target enumerates itself; a missing target enumerates nothing
-    /// (catch-up reconciliation removes its stale chunks).</summary>
+    /// <summary>Deterministic core: files under path are due when there is no watermark, the mtime is
+    /// after the watermark, or the file was never fingerprinted. A watched FILE target enumerates itself;
+    /// a missing target enumerates nothing (reconciliation removes its stale chunks).</summary>
     internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark,
         IReadOnlySet<string> fingerprinted)
     {

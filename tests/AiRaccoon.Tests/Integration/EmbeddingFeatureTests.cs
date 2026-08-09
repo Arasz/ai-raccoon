@@ -13,10 +13,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Store-level FR-NM-3 (see docs/work/features-native-memory/native-memory.feature) scenarios (pluggable embeddings; bundled in-process ONNX default):
-///     synchronous embed on write when configured, deferred writes without configuration,
-///     embed_pending processing, and full re-embed on engine change — against the real local
-///     engine and a fake OpenAI-compatible endpoint.
+///     Store-level embedding scenarios (docs/work/features-native-memory/native-memory.feature):
+///     pluggable engines, sync/deferred embed on write, embed_pending processing, and re-embed
+///     on engine change — against the real local engine and a fake OpenAI-compatible endpoint.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -195,7 +194,6 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.ConfigureEmbeddingAsync("local", null, null,
             TestContext.Current.CancellationToken);
 
-        // Re-configuring the identical engine must not invalidate or touch existing rows.
         var row = await ReadRowAsync((await _store.ListContextAsync("acme", "project:acme",
             TestContext.Current.CancellationToken)).Single().Hash);
         row.EmbedState.ShouldBe("embedded");
@@ -241,8 +239,9 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             new MemoryWriteRequest("acme", "Just a plain paragraph, no headings anywhere."),
             TestContext.Current.CancellationToken);
 
-        // '' (not NULL) marks "processed, no heading" — NULL is reserved for "not yet processed",
-        // which is what keeps a headingless row from pinning the heal candidate window forever.
+        // '' marks "processed, no heading"; NULL means "not yet processed" and is the heal
+        // candidate predicate. Writing the sentinel is what releases a headingless row from the
+        // window — leaving it NULL would pin the window on that row forever.
         var row = await ReadRowAsync(entry.Hash);
         row.HeadingPath.ShouldBe("");
         row.StructureEmbedding.ShouldBeNull();
@@ -294,8 +293,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
             TestContext.Current.CancellationToken);
 
-        // The heal batch size is 32; the first 32 rows by id are headingless so they pin the
-        // window unless a processed headingless row leaves heading_path IS NULL behind.
+        // The heal batch size is 32 and the first 32 rows by id are headingless, so they would pin
+        // the window if processing left heading_path NULL. The '' sentinel is what advances it.
         for (var i = 0; i < 32; i++)
         {
             await _store.WriteAsync(new MemoryWriteRequest("acme", $"Plain fact number {i}, no headings anywhere."),
@@ -365,6 +364,31 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Embedding_EmbedPending_SmallLimitBoundsTheHealPassToTheRemainingBudget()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
+            TestContext.Current.CancellationToken);
+
+        const int rowCount = 70;
+        for (var i = 0; i < rowCount; i++)
+        {
+            await _store.WriteAsync(
+                new MemoryWriteRequest("acme", $"# Doc {i}\n\n## Section\n\nBody paragraph number {i}."),
+                TestContext.Current.CancellationToken);
+        }
+        await SimulatePreWp5ShapeForProjectAsync("acme");
+        _openAi.Requests.Clear();
+
+        await _store.EmbedPendingAsync("acme", 1, TestContext.Current.CancellationToken);
+
+        _openAi.Requests.Count.ShouldBe(1,
+            "a limit:1 call must bound the heal pass to the remaining budget, not walk the whole backlog");
+        (await CountHealOpenRowsAsync("acme")).ShouldBe(rowCount - 1,
+            "only the budgeted number of heal candidates may be healed by a limit-bounded call");
+    }
+
+    [Fact]
     public async Task Embedding_Delete_RemovesTheVectorRowToo()
     {
         await _store.ConfigureEmbeddingAsync("local", null, null,
@@ -425,7 +449,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 new { projectId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Resets one entry to the pre-WP5 shape (content embedded, no structure) to test the healing pass.</summary>
+    /// <summary>Resets one entry to the pre-structure-writer shape (content embedded, no structure; see
+    ///     docs/plans/2026-08-08-search-knn-perf.md §3.6) to test the healing pass.</summary>
     private async Task SimulatePreWp5ShapeAsync(string hash)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -441,7 +466,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Resets every row in a project to the pre-WP5 shape, for a multi-row healing test.</summary>
+    /// <summary>Resets every row in a project to the pre-structure-writer shape
+    ///     (docs/plans/2026-08-08-search-knn-perf.md §3.6), for a multi-row healing test.</summary>
     private async Task SimulatePreWp5ShapeForProjectAsync(string projectId)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

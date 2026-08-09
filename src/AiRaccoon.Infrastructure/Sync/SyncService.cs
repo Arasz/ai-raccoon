@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -47,8 +48,8 @@ public partial class SyncService(
     private async Task<SyncResult> SyncCycleAsync(string projectId, string objectKey,
         CancellationToken cancellationToken)
     {
-        // F13: the cloud store is resolved per call from the current settings rows —
-        // `sync add/remove` take effect without a restart.
+        // The cloud store is resolved per call from the current settings rows — `sync add/remove`
+        // take effect without a restart.
         var cloud = await resolveCloud(cancellationToken).ConfigureAwait(false);
 
         // Fail fast, before any local VACUUM/read work: an unconfigured sync is guaranteed to
@@ -241,20 +242,34 @@ public partial class SyncService(
 
             try
             {
+                // The read-write open path refuses a bank stamped newer than CurrentVersion
+                // (MemorySchema.EnsureAsync); ATTACH bypasses that guard entirely, so the
+                // attached snapshot's own version is checked here before anything is merged.
+                await using (var versionCheck = conn.CreateCommand())
+                {
+                    versionCheck.CommandText = "PRAGMA remote.user_version";
+                    var remoteVersion = (long)(await versionCheck.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                    if (remoteVersion > MemorySchema.CurrentVersion)
+                    {
+                        throw new UnsupportedSchemaVersionException(
+                            $"remote snapshot schema v{remoteVersion} is newer than this binary supports (v{MemorySchema.CurrentVersion}); update ai-raccoon");
+                    }
+                }
+
                 var received = 0;
 
-                // Merge entries: content-addressed near-union (skip duplicates).
-                // OR IGNORE also absorbs the F3 unique-bucket constraints: a replica pushing a
-                // row the local bank already has (same path/hash bucket) is silently skipped and
-                // converges on the next write (see docs/work/2026-08-06-extraction-followups-plan.md).
+                // Merge entries: content-addressed near-union (skip duplicates). OR IGNORE also
+                // absorbs the unique-bucket constraints: a replica pushing a row the local bank
+                // already has is silently skipped and converges on the next write
+                // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     mergeEntries.CommandText = """
-                                               INSERT OR IGNORE INTO entries (hash, path, value, scope, project_id, context_label,
+                                               INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
                                                                                access_count, last_accessed_at, rating, ttl_days,
                                                                                embed_state, embedding)
-                                               SELECT r.hash, r.path, r.value, r.scope, r.project_id, r.context_label,
+                                               SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, r.project_id, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
                                                       r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
                                                       'pending', NULL
@@ -321,11 +336,9 @@ public partial class SyncService(
                 var reindexed = 0;
                 await using (var reindexCmd = conn.CreateCommand())
                 {
-                    // Nulls structure_embedding/heading_path alongside the content columns (#190):
-                    // vec_structure_pending fires off embed_state, so the trigger alone would drop the
-                    // vec row but leave the entry columns stale — that breaks the invariant that
-                    // vec_structure stays in lockstep with entries.structure_embedding, and a stale,
-                    // non-NULL heading_path would never re-open the row for the structure healing pass.
+                    // Nulls structure_embedding/heading_path alongside the content columns: the
+                    // vec_structure_pending trigger alone would drop the vec row but leave these stale,
+                    // breaking lockstep with entries.structure_embedding and blocking the structure heal pass.
                     reindexCmd.CommandText = """
                                              UPDATE entries
                                              SET embed_state = 'pending', embedding = NULL,
@@ -341,11 +354,9 @@ public partial class SyncService(
                 }
 
                 // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): the
-                // merge's tombstone DELETE above can remove group members; bank-wide is cheap
-                // (56 ms / 4,423 rows measured) and sync is rare, so there is no reason to scope
-                // it to the affected groups. The merge INSERT never needs this — it lands rows
-                // with source_file = NULL (a pre-existing, out-of-scope bug, §1.5) so it can never
-                // join a group.
+                // merge's tombstone DELETE can remove group members and the merge INSERT above
+                // can add new source_file-bearing rows to a group; bank-wide is cheap and sync
+                // is rare, so there is no reason to scope this to the affected groups.
                 await using (var recompute = conn.CreateCommand())
                 {
                     recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWide;

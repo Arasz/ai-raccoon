@@ -8,14 +8,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     FR-NM-5 (see docs/work/features-native-memory/native-memory.feature) parity gate: the managed store (new side) is measured against the vendored
-///     reference golden output (the pinned sqlite-memory 1.3.5 extension, k=10) on the shared
-///     corpus. PASS = the new side does not regress below the reference by more than
-///     NdcgParityDelta at every RRF sweep point, no regression on the degenerate query subset
-///     at the default fusion config, and p95 query latency within budget. The gate is
-///     intentionally one-sided: the observed deltas are favorable (the new side exceeds the
-///     reference), which is the sweep's purpose; every actual number is recorded in
-///     parity-report.md (regenerate with AIRACCOON_HARNESS_WRITE_REPORT=1).
+///     Parity gate: the managed store is measured against the vendored reference golden output on
+///     the shared corpus; PASS requires no nDCG regression beyond NdcgParityDelta at any sweep
+///     point and p95 latency within budget (docs/work/features-native-memory/native-memory.feature).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -230,6 +225,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine(
             $"{$"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | {(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | "}{fixture.Harness.QueryLatenciesMs.Count} |");
 
+        Directory.CreateDirectory(managedDir);
         File.WriteAllText(Path.Combine(managedDir, "parity-report.md"), report.ToString());
         output.WriteLine($"wrote {Path.Combine(managedDir, "parity-report.md")}");
     }
@@ -265,8 +261,8 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
                     worstQueryId = query.Id;
                 }
 
-                // Attribute the loss: single-modality rankings tell us whether the keyword OR
-                // flood or the vector model difference is what drops below the reference.
+                // Attribute the loss: single-modality rankings show whether the keyword or vector
+                // modality accounts for the drop below the reference.
                 var ftsOnly = fixture.Harness.RankAsync(
                     new SweepPoint(60, 1, 0), query, TestContext.Current.CancellationToken).GetAwaiter().GetResult();
                 var vecOnly = fixture.Harness.RankAsync(
@@ -288,10 +284,10 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var assets = Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Retrieval", "assets");
+            var assets = Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Unit", "Retrieval", "assets");
             if (File.Exists(Path.Combine(assets, ReferenceAssets.ManifestFileName)))
             {
-                return Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Retrieval", "Managed");
+                return Path.Combine(dir.FullName, "tests", "AiRaccoon.Tests", "Unit", "Retrieval", "Managed");
             }
         }
 

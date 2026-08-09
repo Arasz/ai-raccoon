@@ -230,6 +230,10 @@ public class McpExceptionPathInstrumentationTests
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task RequireActiveAsync(string projectId, string workspaceId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class FakeWatchService : IWatchService

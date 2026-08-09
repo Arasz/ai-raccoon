@@ -66,9 +66,9 @@ public sealed class EmbeddingMathTests
     }
 
     /// <summary>
-    ///     dim = 384 (production dimension) exercises a full SIMD lane; every other test in this
-    ///     class uses dim = 3, which is entirely vector tail. Mask is active-first at ~60%
-    ///     density, matching OnnxEmbeddingGenerator.RunBatch's layout.
+    ///     dim = 384 exercises a full SIMD lane (other tests use dim = 3, all vector tail). Mask
+    ///     is active-first at ~60% density, matching OnnxEmbeddingGenerator.RunBatch's layout
+    ///     (docs/plans/2026-08-08-embedding-perf.md).
     /// </summary>
     [Fact]
     public void MeanPoolAndNormalize_AtProductionDimension_MatchesNaiveReference()

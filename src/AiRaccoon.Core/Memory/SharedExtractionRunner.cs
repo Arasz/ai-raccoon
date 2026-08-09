@@ -1,10 +1,9 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     The propose round-trip for one project: read its candidate rows, rank them with
-///     <see cref="SharedExtractionService" />, and persist the ranked candidates into the propose
-///     tier. Owned here so the MCP tool and the background loop share one pipeline
-///     (see docs/work/features-agent-memory/spec-issue-1.md §6.1).
+///     The propose round-trip for one project: read candidate rows, rank via
+///     <see cref="SharedExtractionService" />, and persist into the propose tier — shared by the MCP
+///     tool and the background loop (docs/work/features-agent-memory/spec-issue-1.md §6.1).
 /// </summary>
 public sealed class SharedExtractionRunner(
     IMemoryStore store,
@@ -14,7 +13,7 @@ public sealed class SharedExtractionRunner(
 {
     /// <summary>Ranks and queues one project's share-worthy entries; the shared index is a per-pass
     /// input, read once by the caller and reused across projects. Cross-project scoring always
-    /// covers every known project id, fetched here rather than caller-supplied (issue #117 item 3).</summary>
+    /// covers every known project id, fetched here rather than caller-supplied.</summary>
     public async Task<IReadOnlyList<ShareCandidate>> ProposeAsync(
         string projectId,
         SharedIndex sharedIndex,
@@ -29,15 +28,28 @@ public sealed class SharedExtractionRunner(
         var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
             .ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
-        var result = extraction.Run(ExtractMode.Propose, projectId, allProjectIds, rows,
-            sharedIndex.Values, sharedIndex.Paths, includeTtlRows, limit, timeProvider.GetUtcNow());
-        if (result.Candidates.Count > 0)
+        var ranked = extraction.RankAll(projectId, allProjectIds, rows,
+            sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
+        if (ranked.Count > 0)
         {
-            await queue.ProposeAsync(projectId, ToQueueCandidates(rows, result.Candidates), cancellationToken)
-                .ConfigureAwait(false);
+            // Refreshing an already-queued row and enqueueing a new one are different operations:
+            // a queued row is refreshed regardless of rank, but a not-yet-queued row is bounded by
+            // `limit`, so one pass cannot insert the whole eligible pool.
+            var alreadyQueued = (await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
+                    .ConfigureAwait(false))
+                .Select(r => r.Hash)
+                .ToHashSet(StringComparer.Ordinal);
+            var toQueue = ranked.Where(c => alreadyQueued.Contains(c.Hash))
+                .Concat(ranked.Where(c => !alreadyQueued.Contains(c.Hash)).Take(limit))
+                .ToList();
+            if (toQueue.Count > 0)
+            {
+                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue), cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
-        return result.Candidates;
+        return ranked.Take(limit).ToList();
     }
 
     /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only

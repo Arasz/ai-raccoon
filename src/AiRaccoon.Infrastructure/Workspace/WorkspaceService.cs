@@ -27,6 +27,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         return await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
@@ -38,6 +39,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
         var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
@@ -51,21 +53,20 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         foreach (var hash in hashes)
         {
             var entry = byHash[hash];
-            // Promote via memory_add_content(path, value, 'project:<id>') — preserves the
-            // entry's logical path and lands it in the project context (see docs/work/features-agent-memory/spec-issue-1.md §3.2). Using
-            // add_content rather than add_text avoids the global content-hash dedup, which
-            // would skip content that already exists in the workspace context.
+            // Promote via memory_add_content, preserving the entry's logical path
+            // (docs/work/features-agent-memory/spec-issue-1.md §3.2); add_content, not add_text, to skip the global content-hash dedup.
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
             promoted++;
         }
 
-        var discarded = await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken)
-            .ConfigureAwait(false);
+        // Consolidating always clears the whole outbox, kept or not — deletedCount is that row
+        // count, not a "dropped" count. Discarded is entries that were NOT kept.
+        await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
         await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
-        return new ConsolidationResult(promoted, discarded);
+        return new ConsolidationResult(promoted, entries.Count - promoted);
     }
 
     public async Task<int> DiscardAsync(string projectId, string workspaceId,
@@ -73,6 +74,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         var discarded = await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);

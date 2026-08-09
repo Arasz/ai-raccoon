@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Per-project concurrency gates + round-robin admission across watches (feature rule 12).</summary>
+/// <summary>Per-project concurrency gates + round-robin admission across watches.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchSchedulerTests

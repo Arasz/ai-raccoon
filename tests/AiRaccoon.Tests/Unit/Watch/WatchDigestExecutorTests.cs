@@ -28,7 +28,7 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested.ShouldHaveSingleItem();
         stack.Memory.Ingested[0].Path.ShouldBe(file);
         stack.Memory.Ingested[0].Content.ShouldBe("hello");
-        // Best-effort embed retry net fires after a successful ingest (issue #44 / audit F6).
+        // Best-effort embed retry net fires after a successful ingest.
         stack.Memory.EmbedCalls.ShouldContain(Project);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "hello"));

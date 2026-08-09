@@ -33,7 +33,7 @@ public sealed class SnippetLazinessTests
             })
             .ToList();
 
-        var results = SqliteMemoryStore.BuildDualVectorResults(rows);
+        var results = SqliteMemoryStore.BuildDualVectorResults(rows.Select(r => (r, 0.0)).ToList());
 
         results.Count.ShouldBe(25);
         results.ShouldAllBe(r => r.Snippet.Length == 0,
@@ -41,10 +41,9 @@ public sealed class SnippetLazinessTests
     }
 
     /// <summary>
-    ///     Mirrors <see cref="BuildDualVectorResults_LeavesSnippetUncomputed_ForEveryCandidate" /> for the
-    ///     FTS modality (docs/plans/2026-08-08-search-knn-perf.md WP7, issue #198): FTS5's
-    ///     snippet() over the ~300-row candidate window costs ~6.3 ms/query — the same defect
-    ///     PR #176 fixed for the vector modality.
+    ///     Mirrors <see cref="BuildDualVectorResults_LeavesSnippetUncomputed_ForEveryCandidate" /> for
+    ///     the FTS modality: FTS5's snippet() over the ~300-row candidate window costs ~6.3 ms/query
+    ///     (docs/plans/2026-08-08-search-knn-perf.md WP7) — the same defect fixed for the vector modality.
     /// </summary>
     [Fact]
     public void BuildFtsResults_LeavesSnippetUncomputed_ForEveryCandidate()
@@ -70,7 +69,7 @@ public sealed class SnippetLazinessTests
             "snippet computation must be deferred until a candidate survives ranking");
     }
 
-    /// <summary>Mirrors the plan's WP2 grep acceptance criterion: the candidate statement text must not carry the eager snippet() call.</summary>
+    /// <summary>Mirrors the plan's grep acceptance criterion: the candidate statement text must not carry the eager snippet() call.</summary>
     [Fact]
     public void SearchByFilter_DoesNotComputeSnippetEagerly()
     {

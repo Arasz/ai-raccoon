@@ -74,10 +74,11 @@ public sealed class SharedExtractionServiceTests
         result.Candidates[0].Reasons.ShouldNotContain("foreign-subject");
     }
 
-    /// <summary>A bare, low-prior doc chunk (below the ~8-word floor's min(prior, 0.5) rescue, and with
-    /// no rule/measured/foreign evidence) sits below the candidate floor. v3 drops the recency/access-count
-    /// bonus entirely — agentC's doc_adjust never referenced it (docs/adr/0018-promotion-scoring-v2.md
-    /// v3 section) — so this no longer has anything to do with usage.</summary>
+    /// <summary>
+    ///     A bare, low-prior doc chunk with no rule/measured/foreign evidence sits below the
+    ///     candidate floor; v3 drops the recency/access-count bonus entirely (agentC's doc_adjust
+    ///     never referenced it — docs/adr/0018-promotion-scoring-v2.md v3 section).
+    /// </summary>
     [Fact]
     public void Propose_BarePlanChunk_IsBelowTheFloor()
     {

@@ -14,7 +14,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
-///     GET /observability (ADR 0008): server identity + PID + OTLP state, mapped only in
+///     GET /observability (ADR-0008): server identity + PID + OTLP state, mapped only in
 ///     HTTP/serve mode, and never counted as watchdog activity.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -102,7 +102,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
     [Fact]
     public void Get_IsNotMapped_InStdioMode()
     {
-        // Stdio-only runs on a plain app host with no web server at all (ADR 0008): there
+        // Stdio-only runs on a plain app host with no web server at all (ADR-0008): there
         // is no port to map /observability onto, so the absence of IServer proves it.
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
 

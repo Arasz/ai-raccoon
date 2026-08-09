@@ -11,9 +11,8 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
 ///     The wire contract every MCP client binds to: which tools exist, and each tool's parameter
-///     names, JSON types and required-ness. Descriptions are deliberately excluded — editing a
-///     description is not a breaking change, and a snapshot that fails on prose is a snapshot
-///     nobody keeps honest.
+///     names, JSON types and required-ness. Descriptions are excluded — editing one is not a
+///     breaking change.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -36,7 +35,7 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_ingest_file(projectId:string!, path:string!, context:string|null?)
                                             memory_list(projectId:string!)
                                             memory_promotion_discard(projectId:string!, hash:string|null?)
-                                            memory_promotion_list(projectId:string|null?, limit:integer?)
+                                            memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
                                             memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minScore:number?, rrfK:integer?, ftsWeight:integer?, vectorWeight:integer?, contextLabel:string|null?)
                                             memory_share(projectId:string!, hash:string!)
                                             memory_share_extract(projectIds:array!, mode:string?, limit:integer|null?, includeTtlRows:boolean?, autoPromote:boolean?, confirm:boolean?)
@@ -62,10 +61,9 @@ public sealed class McpToolContractTests : IDisposable
     }
 
     /// <summary>
-    ///     No tool opts into structured content, so the SDK declares no outputSchema and the
-    ///     result travels as untyped text. That is the reason a Core-side envelope rename cannot
-    ///     move a declared schema (#118 item 1) — and if a tool ever does opt in, this fails and
-    ///     the envelope's shape becomes a published contract that needs its own snapshot.
+    ///     No tool opts into structured content, so the SDK declares no outputSchema and the result
+    ///     travels as untyped text. If a tool ever opts in, this fails and the envelope's shape
+    ///     becomes a published contract that needs its own snapshot.
     /// </summary>
     [Fact]
     public void NoTool_DeclaresAnOutputSchema()

@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.workspace;
 
-/// <summary>P8 schema and structural-isolation tests: FK + XOR CHECK on entries.workspace_id.</summary>
+/// <summary>Schema and structural-isolation tests: FK + XOR CHECK on entries.workspace_id.</summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class WorkspaceIsolationTests : IDisposable

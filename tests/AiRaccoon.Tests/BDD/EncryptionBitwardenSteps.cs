@@ -10,12 +10,9 @@ using Shouldly;
 namespace AiRaccoon.Tests.BDD;
 
 /// <summary>
-///     Bindings for docs/features/encryption-bitwarden/encryption-bitwarden.feature (15 scenarios).
-///     CLI scenarios run the REAL CLI (CliArgs.Parse + ConfigCommands.RunAsync against the
-///     scenario's resolver-backed store/bank with the fake-bws runner and a StringReader stdin —
-///     the interactive prompts); "the server opens the bank" scenarios drive the real
-///     factory/resolver eager-open path with Program.cs's loud-failure mapping; derivation and
-///     rejection scenarios drive the real parser/derivation/provider against pinned §5.1 vectors.
+///     Bindings for docs/features/encryption-bitwarden/encryption-bitwarden.feature: CLI scenarios
+///     drive the real CLI end-to-end, server-start scenarios drive the real open path, and
+///     derivation/rejection scenarios exercise the real parser, derivation and provider directly.
 /// </summary>
 [Binding]
 public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
@@ -46,7 +43,6 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 
     private EncryptionBitwardenFeatureContext Ctx => _ctx ??= _scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>();
 
-    // ── Rule: The env variable remains the default key source ──
 
     [Given("^no encryption source configured$")]
     public void GivenNoEncryptionSource() =>
@@ -76,7 +72,8 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 
     [Given("^an unencrypted ed25519 private key with seed <seed>$")]
     public void GivenEd25519KeyWithVectorSeed() =>
-        // The literal "<seed>" is the §5.1 vector: the synthetic seed 00 01 … 1e 1f.
+        // The literal "<seed>" is the docs/plans/encryption-bitwarden-implementation.md §5.1
+        // vector: the synthetic seed 00 01 … 1e 1f.
         _pendingPem = Ctx.BuildVectorPem();
 
     [Given("^an encrypted ed25519 private key$")]
@@ -95,7 +92,6 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         _fixtureSecretId = EncryptionBitwardenFeatureContext.RsaSecretId;
     }
 
-    // ── When: CLI + server + provider ──
 
     [When("^the user runs encryption bitwarden$")]
     public Task WhenUserRunsEncryptionBitwarden() => RunCliAsync("\n\n", "encryption", "bitwarden");
@@ -157,7 +153,6 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         }
     }
 
-    // ── Then ──
 
     [Then("^the bank opens with the env passphrase$")]
     public async Task ThenBankOpensWithEnvPassphrase()
@@ -217,9 +212,8 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         _lastCli.Exit.ShouldBe(0);
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
             .ShouldBe("bitwarden");
-        // The fake bws rejects any token other than the known one and logs every argv line —
-        // the log proves the CLI passed -t <token> to the fetch (and only the fetch: the
-        // presence check never takes the token).
+        // The fake bws logs every argv line — this proves the CLI passed -t <token> to the fetch
+        // (and only the fetch; the presence check never takes the token).
         var calls = await File.ReadAllTextAsync(Ctx.CallsLogPath);
         calls.ShouldContain($"secret get {EncryptionBitwardenFeatureContext.SecretId} -t {EncryptionBitwardenFeatureContext.KnownToken}");
         calls.ShouldNotContain($"--version -t");
@@ -327,15 +321,12 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         _lastCli.Exit.ShouldBe(0, $"cli stderr: {_lastCli.Err}");
         _lastCli.Out.ShouldContain("encryption source reset to env");
         File.Exists(Ctx.SidecarPath).ShouldBeFalse();
-        // The settings mirror rows are gone too. After unset the bank stays keyed with whatever
-        // the unset handler left it on (derived key without an ambient env passphrase, the
-        // ambient passphrase when one was set and the rekey-back ran) — open with whichever
-        // works and check the rows directly.
+        // The settings mirror rows are gone; after unset the bank may be keyed on the derived
+        // key, the ambient passphrase, or the rekey-back passphrase — try each and read whichever opens.
         var rows = await ReadEncryptionRowsAsync();
         rows.ShouldBeEmpty();
     }
 
-    // ── Shared machinery ──
 
     private async Task RunCliAsync(string stdin, params string[] args) => _lastCli = await Ctx.RunCliAsync(stdin, args);
 
@@ -349,10 +340,9 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     }
 
     /// <summary>
-    ///     Reads the settings rows under "encryption." from the bank, opening it with the key the
-    ///     unset handler left the bank on: the derived key first (no env passphrase), then the
-    ///     ambient AIRACCOON_DB_PASSPHRASE, then the context's own EnvPassphrase (the rekey-back
-    ///     case, where the handler uses the injected env provider). Never reads the stub otherwise.
+    ///     Reads the settings rows under "encryption." from the bank, trying the derived key, then
+    ///     the ambient passphrase, then the context's own EnvPassphrase — whichever the unset
+    ///     handler left the bank keyed on.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>> ReadEncryptionRowsAsync()
     {

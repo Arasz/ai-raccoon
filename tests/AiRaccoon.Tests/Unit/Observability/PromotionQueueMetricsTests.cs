@@ -83,12 +83,9 @@ public class PromotionQueueMetricsTests
     }
 
     /// <summary>
-    ///     Not a deterministic reproduction of the missing-barrier bug — a reordering/visibility
-    ///     failure on an unsynchronized field is not reliably forceable from a unit test on any
-    ///     one run. This exercises the real concurrent access pattern (writer thread calling
-    ///     RecordUtilization while the exporter thread collects the gauge) and demands that it
-    ///     completes without exception and that the gauge observes a value that was actually
-    ///     written, guarding the code path the Volatile fix touches.
+    ///     Not a deterministic reproduction of a race on an unsynchronized field — exercises
+    ///     concurrent writer/reader access to the gauge and requires it to complete without
+    ///     exception and observe an actually-written value.
     /// </summary>
     [Fact]
     public async Task RecordUtilization_ConcurrentWithGaugeCollection_NeverThrows_AndObservesAWrittenValue()

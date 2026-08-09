@@ -8,4 +8,8 @@ public sealed record PromotionMeta(
 {
     /// <summary>Per-project queue capacity/eviction pressure; present only once at least one project has queued rows.</summary>
     public IReadOnlyDictionary<string, PromotionCapacityInfo>? CapacityByProject { get; init; }
+
+    /// <summary>The single stalest queued row's age — nothing else drains a propose-only queue, and
+    /// an average wait can hide one very old row once enough fresh rows join the same queue.</summary>
+    public double? OldestWaitSeconds { get; init; }
 }

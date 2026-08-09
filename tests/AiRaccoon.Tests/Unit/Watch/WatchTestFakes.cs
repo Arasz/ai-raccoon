@@ -7,7 +7,10 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Shared fakes + stack for the S4 pipeline unit tests (no real SQLite, no FileSystemWatcher).</summary>
+/// <summary>
+///     Shared fakes + stack for the watch pipeline unit tests (docs/plans/file-watcher-implementation.md
+///     Section S4). No real SQLite, no FileSystemWatcher.
+/// </summary>
 internal sealed class WatchTestStack
 {
     public static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);

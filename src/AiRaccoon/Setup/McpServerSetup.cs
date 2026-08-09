@@ -30,11 +30,9 @@ internal static partial class McpServerSetup
     internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport]);
 
     /// <summary>
-    ///     Creates the server host for transport set: stdio-only launches on a plain app
-    ///     host with no web server; any HTTP/S presence uses a web host bound to the
-    ///     configured port (never the ASP.NET default 5000), with stdio attached when both
-    ///     are selected. The optional timeProvider is a test seam for the fake-clock
-    ///     watchdog tests; null keeps TimeProvider.System.
+    ///     Creates the server host for transport set: stdio-only launches a plain app host; any
+    ///     HTTP/S presence uses a web host on the configured port, with stdio attached too when
+    ///     both are selected. timeProvider is a test seam for the watchdog tests; null keeps TimeProvider.System.
     /// </summary>
     internal static IHost CreateServerHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
         TimeProvider? timeProvider = null)
@@ -72,29 +70,21 @@ internal static partial class McpServerSetup
     {
         var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
         builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        // Re-admit OTEL_*-prefixed environment variables only (ADR 0009): the OpenTelemetry SDK
-        // binds its entire OTEL_* parsing surface (headers, compression, resource attributes,
-        // per-signal endpoint/protocol/timeout, mTLS certs, sampler, OTEL_BSP_*, ...) through this
-        // IConfiguration, not through hand-rolled reads — clearing every source above left the SDK
-        // with nothing to bind, so only the handful of variables this file explicitly re-parsed
-        // ever reached it. Restricting the readmission to the OTEL_ prefix keeps Ruling 3 intact:
-        // no other variable re-enters config.
+        // Re-admits OTEL_*-prefixed env vars only (ADR-0009): the OTel SDK reads its entire OTEL_*
+        // surface through IConfiguration, not hand-rolled reads; this keeps Ruling 3 intact otherwise.
         builder.Configuration.AddInMemoryCollection(
             Environment.GetEnvironmentVariables()
                 .Cast<DictionaryEntry>()
                 .Where(e => e.Key.ToString()!.StartsWith("OTEL_", StringComparison.Ordinal))
                 .ToDictionary(e => e.Key.ToString()!, e => (string?)e.Value?.ToString()));
         builder.Services.RegisterMemoryServices(config.Options, transports);
-        // Web host only (ADR 0009): stdio hosts recycle roughly every 5 minutes, too
-        // short-lived to pay the exporter's batch delay / provider shutdown grace.
+        // Web host only (docs/adr/0009-otlp-export.md): stdio hosts recycle too often to pay
+        // the exporter's batch delay / provider shutdown grace.
         builder.Services.AddOtlpExport();
         builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        // Per-request chatter at default level (owner report from a live serve.log): every
-        // /mcp POST produces 4 ASP.NET Core INFO lines plus the MCP server's own handler-called
-        // /completed pair. Neither carries information an operator acts on above Warning, so both
-        // categories are floored here regardless of --quiet, which otherwise silences AiRaccoon's
-        // own Information logs too.
+        // Per-request ASP.NET Core / MCP server INFO chatter carries nothing an operator acts on
+        // above Warning, so both categories are floored here regardless of --quiet.
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
         builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
         if (config.Options.Quiet)
@@ -105,10 +95,8 @@ internal static partial class McpServerSetup
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
         if (config.IdleTimeout > TimeSpan.Zero)
         {
-            // R1: three registrations, one instance — AddHostedService<T> registers only
-            // IHostedService→T, so the middleware's GetRequiredService<IdleWatchdog>()
-            // would throw on the first request without the singleton registrations.
-            // The TimeSpan registration feeds the type-based AddSingleton<IdleWatchdog>().
+            // Three registrations, one instance (docs/plans/2026-08-06-http-serve-mode-plan.md R1):
+            // AddHostedService<T> only registers IHostedService→T, so the middleware's DI lookup would fail otherwise.
             builder.Services.AddSingleton(typeof(TimeSpan), config.IdleTimeout);
             builder.Services.AddSingleton<IdleWatchdog>();
             builder.Services.AddSingleton<IActivitySignaler>(sp => sp.GetRequiredService<IdleWatchdog>());
@@ -130,8 +118,8 @@ internal static partial class McpServerSetup
 
             if (armWatchdog)
             {
-                // Spliced between routing and endpoints (.NET 10): wraps /mcp and
-                // path-checks inside, so 404s on other paths never signal (R4).
+                // Spliced between routing and endpoints (.NET 10): branches on /mcp so 404s on
+                // other paths never signal (docs/plans/2026-08-06-http-serve-mode-plan.md R4).
                 webApplication.UseMiddleware<McpActivityMiddleware>();
             }
 

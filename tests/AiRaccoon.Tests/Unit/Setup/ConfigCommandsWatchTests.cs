@@ -10,11 +10,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Watch-config commands pin the exact settings-key contract the file-watcher branch
-///     reads: watch.enabled.global|{projectId} ("true"/"false"),
-///     ingest.scope.global|{projectId} (JSON array of absolute paths),
-///     watch.concurrency.global|{projectId} (1..16, default 4). Project rows win over
-///     global; paths normalize with Path.GetFullPath semantics (add = dedup + re-sort).
+///     Watch-config commands pin the settings-key contract the file-watcher branch reads:
+///     watch.enabled/ingest.scope/watch.concurrency, each keyed by project or "global", with
+///     project rows winning over global and scope paths normalized via Path.GetFullPath.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -32,7 +30,6 @@ public class ConfigCommandsWatchTests
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    // ── enable / disable ──
 
     [Fact]
     public async Task WatchEnable_WritesTrueRow_ForProject()
@@ -92,7 +89,6 @@ public class ConfigCommandsWatchTests
         store.Settings[WatchConfigKeys.EnabledProject("acme")].ShouldBe("false");
     }
 
-    // ── scope add / remove / list ──
 
     [Fact]
     public async Task WatchScopeAdd_NormalizesToAbsolutePath()
@@ -192,7 +188,6 @@ public class ConfigCommandsWatchTests
         stdout.ShouldBeEmpty();
     }
 
-    // ── concurrency ──
 
     [Fact]
     public async Task WatchConcurrency_WritesRow()
@@ -230,7 +225,6 @@ public class ConfigCommandsWatchTests
         }
     }
 
-    // ── watch list ──
 
     [Fact]
     public async Task WatchList_ShowsResolvedValues_PerTarget()
@@ -323,7 +317,6 @@ public class ConfigCommandsWatchTests
             "target: global  enabled: false  concurrency: 4  scope:\n  /x");
     }
 
-    // ── watch registered ──
 
     [Fact]
     public async Task WatchRegistered_ListsAllRegistrations_SortedByProjectThenPath()
@@ -393,7 +386,6 @@ public class ConfigCommandsWatchTests
         stdout.Trim().ShouldBe("no registered watches");
     }
 
-    // ── watch remove ──
 
     [Fact]
     public async Task WatchRemove_DeletesEnabledScopeAndConcurrencyRows_ForTarget()

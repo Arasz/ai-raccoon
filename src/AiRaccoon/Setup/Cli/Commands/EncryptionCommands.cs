@@ -126,9 +126,8 @@ public sealed partial class EncryptionCommands
                 {
                 }
             }
-            // Post-ADR-0012 a bank that does not open under the resolved key surfaces as
-            // BankKeyMismatchException rather than a bare SqliteException. Both mean the same
-            // thing here — it did not open — and the fallbacks below decide what to do about it.
+            // Post-ADR-0012 a bank that fails to open under the resolved key surfaces as
+            // BankKeyMismatchException, not a bare SqliteException; both mean "did not open" here.
             catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
             {
                 openError = ex;
@@ -170,7 +169,8 @@ public sealed partial class EncryptionCommands
 
     /// <summary>
     ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation. Explicit rather than
-    ///     automatic on open: a rekey needs exclusive access to the bank (plan Decision 3).
+    ///     automatic on open: a rekey needs exclusive access to the bank
+    ///     (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 3).
     /// </summary>
     public async Task<int> MigrateAsync(TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
@@ -323,8 +323,8 @@ public sealed partial class EncryptionCommands
         [LoggerMessage(EventId = 804, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
 
-        // The migration records nothing in the bank or the sidecar (plan Decision 4) — these
-        // events are the whole audit trail.
+        // The migration records nothing in the bank or the sidecar
+        // (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 4) — these events are the whole audit trail.
         [LoggerMessage(EventId = 805, Level = LogLevel.Information, Message = "Checking the bank at {BankPath} for the pre-ADR-0012 key derivation")]
         public static partial void MigratingBank(ILogger logger, string bankPath);
 

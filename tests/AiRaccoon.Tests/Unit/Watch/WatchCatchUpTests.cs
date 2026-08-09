@@ -414,8 +414,7 @@ public sealed class WatchCatchUpTests
     }
 
 
-    /// <summary>R1 in the fix plan: a lease that survives a cancelled scan parks the watch for a
-    /// full TTL, so the release must run on the cancellation path too.</summary>
+    /// <summary>A lease that survives a cancelled scan parks the watch for a full TTL, so the release must run on the cancellation path too.</summary>
     [Fact]
     public async Task ScanCore_WhenTheScanIsCancelled_StillReleasesTheLease()
     {

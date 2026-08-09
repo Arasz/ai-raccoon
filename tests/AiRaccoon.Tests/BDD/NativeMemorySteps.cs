@@ -55,9 +55,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     private static readonly IChunker RealChunker = new TokenizerChunker();
 
-    // The body after a known secret prefix is real key material — contiguous base62/underscore,
-    // never natural-language words joined by hyphens (which is what test-fixture ids like
-    // "sk-hub-history-is-user-data" look like, and must not match).
+    // Real key material is contiguous base62/underscore after a known secret prefix — natural-language
+    // fixture ids like "sk-hub-history-is-user-data" must not match.
     private static readonly Regex SecretValuePattern = new(
         @"AKIA[0-9A-Z]{16}|sk-(proj-|ant-)?[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9]{10,}",
         RegexOptions.Compiled);
@@ -320,9 +319,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [Given(@"project ""(.*)"" has no embedding model configured")]
     public void GivenNoEmbeddingModelConfigured(string projectId)
     {
-        // No-op: a fresh fixture's settings table has no embedding.* rows until
-        // memory_configure is called — the precondition already holds (MemorySchema does
-        // not seed them).
+        // No-op: a fresh fixture's settings table has no embedding.* rows until memory_configure
+        // is called — MemorySchema does not seed them, so the precondition already holds.
     }
 
     [Given(@"project ""(.*)"" has one pending entry")]
@@ -549,7 +547,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenSchemaForbidsBothWorkspaceAndCommitted()
     {
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
-        // Check that the CHECK constraint exists on entries table
         var sql = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries'");
         sql.ShouldNotBeNull();
@@ -904,9 +901,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         "memory_write, memory_search, memory_list, memory_stats, memory_share, memory_delete, memory_delete_context, memory_ingest_file, memory_ingest_directory, memory_configure, memory_embed_pending, memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard, memory_sweep and memory_sync are present")]
     public void ThenAll17ToolsPresent()
     {
-        // memory_configure is deliberately NOT an MCP tool (CLI-only config channel; see
-        // src/AiRaccoon/README.md) — the owning scenario is @ignore'd for that spec/code drift.
-        // This checks the remaining 16 names against the real [McpServerTool] surface.
+        // memory_configure is deliberately not an MCP tool (CLI-only config channel, src/AiRaccoon/README.md);
+        // the owning scenario is @ignore'd for that drift, so this checks the remaining 16 tool names.
         var toolNames = AllToolNames();
         string[] expected =
         [
@@ -1035,9 +1031,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenItsContextIs(string expectedContext)
     {
         var wsId = (string)scenarioContext["WorkspaceId"];
-        // "<workspace-id>" is the placeholder for the id returned by begin: an entry
-        // written into the workspace must land in its bucket and be addressable under
-        // "workspace:<id>".
+        // "<workspace-id>" is the placeholder for the id returned by begin: an entry written into
+        // the workspace must land in its bucket, addressable under "workspace:<id>".
         var expected = expectedContext.Replace("<workspace-id>", wsId);
         var projectId = (string)scenarioContext["ProjectId"];
         var entry = await _store.WriteAsync(
@@ -1156,7 +1151,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None);
     }
 
-    // ── Remaining catch-all bindings ──
     [Given("a note containing a fenced code block")]
     public void GivenFencedCodeBlock() =>
         scenarioContext["FencedNote"] =
@@ -1181,9 +1175,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [Given(@"no mode is configured for project ""(.*)""")]
     public void GivenNoModeConfigured(string projectId)
     {
-        // No-op: a fresh fixture's settings table has no access.mode.* rows until this step's
-        // sibling Givens (GivenProjectMode / GivenGlobalMode*) write one — the precondition
-        // already holds.
+        // No-op: a fresh fixture's settings table has no access.mode.* rows until a sibling Given
+        // (GivenProjectMode / GivenGlobalMode*) writes one — the precondition already holds.
     }
 
     [Given(@"project ""(.*)"" is in mode (.*)")]
@@ -1431,9 +1424,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISearchWithRrfK()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        // A rank-1 (repeated-term, strong FTS match) and a rank-2 (single mention) entry: RRF
-        // normalizes the top hit to 1.0 under any k, so only the rank-2 entry's score moves when
-        // rrf_k changes — that is the observable signal the Then step checks.
+        // A rank-1 (repeated-term, strong match) and rank-2 (single mention) entry: RRF normalizes
+        // the top hit to 1.0 under any k, so only the rank-2 score moves when rrf_k changes.
         await _store.WriteAsync(
             new MemoryWriteRequest(projectId, "rrf fusion weighting rrf fusion weighting rrf fusion weighting"),
             CancellationToken.None);
@@ -1546,7 +1538,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         entries.Count.ShouldBe(0);
     }
 
-    // ── Merged from AgentMemorySteps (unique bindings, now in same class for shared state) ──
     [When("I call memory_write without a project_id")]
     public async Task WhenIWriteWithoutProjectId()
     {
@@ -1826,9 +1817,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenCorrelationThroughCloudOnly()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        // A second, independent install ("a user-scope instance") that shares nothing with this
-        // fixture except the same cloud object — if it can see the shared entry after a pull,
-        // the cloud database is genuinely the correlation point, not some local mechanism.
+        // A second, independent install that shares nothing with this fixture except the same cloud
+        // object — seeing the shared entry after a pull proves the cloud is the correlation point.
         using var secondInstall = new MemoryFeatureContext();
         var sync = new SyncService(CloudStore, secondInstall.Factory.OpenBankAsync, OpenSnapshotAsync,
             OpenReadOnlyAsync, secondInstall.TimeProvider, NullLogger<SyncService>.Instance);

@@ -9,9 +9,9 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Reproduces #181 through the real MCP transport: a genuine "tools/call" JSON-RPC request
-///     over the real HTTP server, exactly the path a live client takes, against a real OTLP
-///     collector stand-in — not a hand-built Activity or an in-memory exporter.
+///     Exercises the OTLP export path through the real MCP transport: a genuine "tools/call"
+///     JSON-RPC request over the real HTTP server, exactly the path a live client takes, against
+///     a real OTLP collector stand-in — not a hand-built Activity or an in-memory exporter.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

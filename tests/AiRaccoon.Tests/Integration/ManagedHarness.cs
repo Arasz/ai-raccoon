@@ -13,10 +13,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     The new side of the FR-NM-5 (see docs/work/features-native-memory/native-memory.feature) parity gate: the managed store (FTS5 + vec0 fused with
-///     RRF) loaded with the shared corpus and queried through the SweepRunner's RankSource
-///     plug point. Same corpus, one project context, the bundled int8 ONNX engine — the
-///     measured counterpart to the vendored sqlite-memory reference oracle.
+///     The managed side of the native-memory parity gate (docs/work/features-native-memory/native-memory.feature):
+///     the FTS5+vec0 store, fused with RRF, queried via SweepRunner's RankSource plug point over the
+///     bundled int8 ONNX engine — the measured counterpart to the vendored sqlite-memory reference oracle.
 /// </summary>
 public sealed class ManagedHarness
 {

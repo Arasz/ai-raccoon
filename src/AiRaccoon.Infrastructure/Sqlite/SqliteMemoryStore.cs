@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     IMemoryStore over the single-file memory.db (see docs/work/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
+///     IMemoryStore over the single-file memory.db (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
 ///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
 public sealed partial class SqliteMemoryStore(
@@ -34,8 +34,8 @@ public sealed partial class SqliteMemoryStore(
     private FileIngestor? _ingestorInstance;
     private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider);
 
-    // The remote API key is a settings row (embedding.apiKey) — the single-channel
-    // ruling (2026-08-04) moved it out of process memory and environment.
+    // The remote API key is a settings row (embedding.apiKey) — the single-channel ruling moved it
+    // out of process memory and environment.
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -90,7 +90,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
 
         // Bucket-key re-read, not last_insert_rowid: a concurrent same-bucket insert may have
-        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids (F3).
+        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids.
         var row = bucket.Scope == "shared"
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
                     Def(MemorySql.SelectSharedEntryByPathAndHash,
@@ -138,36 +138,33 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        // Source-path queries (plan C §3 2c; see docs/plans/retrieval-improvement-c.md): match
-        // the source/section columns with AND semantics so the exact chunk ranks first (see
-        // SourcePathQuery); the OR fallback does not apply — the path expression is exact by
-        // construction.
-        // The source-affinity pass is skipped for path queries — the exact chunk is the
-        // answer by construction and sibling boosts would displace it.
+        // Source-path queries (docs/plans/retrieval-improvement-c.md §3 2c) match source/section
+        // columns with AND semantics so the exact chunk ranks first (see SourcePathQuery); the OR
+        // fallback does not apply. The source-affinity pass is also skipped — the exact chunk is
+        // the answer by construction and sibling boosts would displace it.
         var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
         if (isPathQuery)
         {
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
-        // Dual-vector fusion alpha (see docs/plans/retrieval-improvement-c.md §3 Wave 6): the
-        // fixed blend between the content and structure (heading-path) similarities, read once
-        // per search from settings.
+        // Dual-vector fusion alpha (docs/plans/retrieval-improvement-c.md §3 Wave 6): the fixed
+        // blend between content and structure (heading-path) similarities, read once per search.
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
             alpha = await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false);
         }
 
-        var batches = new List<IReadOnlyList<MemorySearchResult>>();
+        var ftsBatches = new List<IReadOnlyList<MemorySearchResult>>();
+        var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
-        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7, issue #198): records,
-        // per hash an FTS candidate produced, the exact @query text that matched it and its row id
-        // (the FtsSnippetsForSurvivors resolution filters by entries_fts.rowid, not hash — measured
-        // 5-6x faster, see MemorySql.FtsSnippetsForSurvivors). The fallback re-query overwrites
-        // entries for hashes it also returns, which is correct: only the expression that produced
-        // the FINAL ftsResults list for a context should resolve its snippet.
+        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7): records, per hash an
+        // FTS candidate produced, the exact @query text that matched it and its row id — resolution
+        // filters by rowid, not hash. The fallback re-query overwrites entries for hashes it also
+        // returns, which is correct: only the expression that produced the FINAL ftsResults list for
+        // a context should resolve its snippet.
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
 
@@ -207,16 +204,17 @@ public sealed partial class SqliteMemoryStore(
                 : await QueryDualVectorBatchAsync(connection,
                     VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
-            // Per-context modality fusion; minScore/limit belong to the final merger pass.
-            batches.Add(ReciprocalRankFusion.Fuse(
-                [(ftsResults, query.FtsWeight), (vectorResults, query.VectorWeight)],
-                query.RrfK, 0, int.MaxValue));
+            // Per-context modality candidates accumulate here; fused globally after the loop
+            // (see docs/adr/0006-rrf-parameter-optimization.md) so RRF compares each modality's
+            // absolute score instead of per-context rank position.
+            ftsBatches.Add(ftsResults);
+            vectorBatches.Add(vectorResults);
 
             DynamicParameters SearchParameters(string ftsExpression)
             {
                 var parameters = new DynamicParameters();
                 parameters.Add("query", ftsExpression);
-                // Per-modality candidate window (see docs/work/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
+                // Per-modality candidate window (see docs/work/archive/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
                 // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
                 // the caller's limit and minScore still apply in the final merger pass.
                 parameters.Add("limit", limit);
@@ -249,11 +247,15 @@ public sealed partial class SqliteMemoryStore(
             }
         }
 
-        var merged = SearchResultMerger.Merge(batches, query.Limit, query.MinScore, query.RrfK,
+        var fused = ReciprocalRankFusion.Fuse(
+            [(ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
+             (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)],
+            query.RrfK, 0, int.MaxValue);
+        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             cancellationToken).ConfigureAwait(false);
-        await BumpAccessAsync(connection, merged, cancellationToken).ConfigureAwait(false);
+        await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         return merged;
     }
 
@@ -270,8 +272,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         if (source is null)
         {
-            throw new InvalidOperationException(
-                $"No entry with hash '{hash}' in context '{ContextNaming.ProjectContext(projectId)}'.");
+            throw new UnknownHashException(hash, projectId);
         }
 
         // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
@@ -392,10 +393,9 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Removes every committed chunk of one source path and everything under it (a deleted
-    ///     directory cascades to its subtree), plus the per-path watch fingerprints in the same
-    ///     transaction — a delete-then-recreate cycle must not hash-skip its way back to stale chunks.
-    ///     The watch registration survives.
+    ///     Removes every committed chunk of one source path and its subtree (directory delete
+    ///     cascades), plus the per-path watch fingerprints, in the same transaction — a
+    ///     delete-then-recreate cycle must not hash-skip back to stale chunks. Watch registration survives.
     /// </summary>
     public async Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
@@ -445,7 +445,7 @@ public sealed partial class SqliteMemoryStore(
         var pendingCount = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.PendingCount, new { projectId }, cancellationToken)).ConfigureAwait(false);
         var contextList = (await connection.QueryAsync<string>(
-                Def(MemorySql.CommittedContexts, cancellationToken: cancellationToken))
+                Def(MemorySql.CommittedContexts, new { projectId }, cancellationToken))
             .ConfigureAwait(false)).ToList();
 
         return new MemoryStats(entries, pendingCount, contextList);
@@ -699,10 +699,9 @@ public sealed partial class SqliteMemoryStore(
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>
-    ///     Keyword modality: FTS5 candidates without snippet() (perf: deferred, §WP7 issue #198 — see
-    ///     <see cref="BuildFtsResults" />). <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" />
-    ///     and <paramref name="idByHash" /> carry each candidate's raw value, matching @query text and
-    ///     row id out so the caller can resolve its snippet after ranking.
+    ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).
+    ///     <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" /> and <paramref name="idByHash" />
+    ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
         SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
@@ -770,13 +769,9 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha (see
-    ///     docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors
-    ///     degrade to content-only order. Snippet computation is deferred (perf: most candidates
-    ///     never reach the final top-K) — <paramref name="valueByHash" /> carries each survivor's
-    ///     raw value out so the caller can resolve it after ranking. <paramref name="parameters"/>
-    ///     already carries the vec0 partition key (ctx), the candidate window (limit) and the
-    ///     query vector — both statements query their own vec0 table with the same partition.
+    ///     Dual-vector modality: content and structure KNN lists fused by fixed alpha
+    ///     (docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors degrade
+    ///     to content-only order. Snippet computation is deferred; <paramref name="valueByHash" /> carries each survivor's raw value out for resolution after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
         SqliteConnection connection, DynamicParameters parameters, double alpha,
@@ -803,29 +798,31 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        var rows = fused.Select(rank => byHash[rank.Hash]).ToList();
-        foreach (var row in rows)
+        var ranked = fused.Select(rank => (Row: byHash[rank.Hash], rank.Score)).ToList();
+        foreach (var (row, _) in ranked)
         {
             valueByHash[row.Hash] = row.Value;
         }
 
-        return BuildDualVectorResults(rows);
+        return BuildDualVectorResults(ranked);
     }
 
-    /// <summary>Maps ranked vector rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
-    internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(IReadOnlyList<VectorRow> rows) =>
+    /// <summary>
+    ///     Maps ranked vector rows to results carrying the fused cosine score as <see cref="MemorySearchResult.Ranking" />
+    ///     (see docs/adr/0006-rrf-parameter-optimization.md); <see cref="MemorySearchResult.Snippet" /> stays unresolved.
+    /// </summary>
+    internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
+        IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
         [
-            .. rows.Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, 0, row.Path, string.Empty,
-                row.SourceFile, row.ChunkIndex, row.TotalChunks))
+            .. ranked.Select(item => new MemorySearchResult(
+                item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+                item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
         ];
 
     /// <summary>
-    ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder
-    ///     (§WP7, issue #198): an FTS-originated survivor gets the real FTS5 snippet() text (matching
-    ///     the same @query it was matched by); everything else — vector-only survivors, and an
-    ///     FTS-originated one whose snippet() came back empty — falls back to
-    ///     <see cref="SnippetFallback" />, exactly as before deferral.
+    ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder:
+    ///     an FTS-originated survivor gets the real FTS5 snippet() text (matching the @query it was
+    ///     matched by); everything else falls back to <see cref="SnippetFallback" />, as before deferral.
     /// </summary>
     private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
@@ -907,15 +904,17 @@ public sealed partial class SqliteMemoryStore(
             : StructureFusion.DefaultAlpha;
     }
 
-    /// <summary>Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).</summary>
+    /// <summary>Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).
+    /// Scoped to the searching project's own row or the shared tier — a hash collision in another,
+    /// unrelated project must never be aged or rate-bumped by this search.</summary>
     private async Task BumpAccessAsync(SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
-        CancellationToken cancellationToken)
+        string projectId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         foreach (var hash in results.Select(r => r.Hash).Distinct(StringComparer.Ordinal))
         {
             var row = await connection.QueryFirstOrDefaultAsync<RatingRow>(
-                    Def(MemorySql.SelectRatingForBump, new { hash }, cancellationToken))
+                    Def(MemorySql.SelectRatingForBump, new { hash, projectId }, cancellationToken))
                 .ConfigureAwait(false);
             if (row is null)
             {
@@ -926,7 +925,7 @@ public sealed partial class SqliteMemoryStore(
             var rating = RatingPolicy.Rating(
                 RatingPolicy.DefaultBaseScore, row.AccessCount + 1, ageDays, RatingPolicy.DefaultHalfLifeDays);
             await connection.ExecuteAsync(
-                    Def(MemorySql.BumpAccess, new { hash, now, rating }, cancellationToken))
+                    Def(MemorySql.BumpAccess, new { hash, now, rating, projectId }, cancellationToken))
                 .ConfigureAwait(false);
         }
     }

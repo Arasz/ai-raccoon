@@ -16,10 +16,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Real-FS mirror behavior: real temp dirs, real FileSystemWatcher (via WatchEventSource),
-///     real SqliteMemoryStore, FakeTimeProvider for the tick. OS event delivery is bounded by
-///     polling (≤5s per poll loop; R7); per-OS event coalescing is accepted — the catch-up
-///     watermark is the safety net. No embedding provider is configured, so search is FTS-only.
+///     Real-FS mirror: real temp dirs, FileSystemWatcher, SqliteMemoryStore, FakeTimeProvider for
+///     the tick. Event delivery is bounded by ≤5s polling (docs/plans/file-watcher-implementation.md
+///     R7); the catch-up watermark backstops coalesced events. No embedding provider: FTS-only search.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -62,7 +61,6 @@ public sealed class WatchIntegrationTests
         _ = stack.Hosted.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            // Wait for the hosted reconcile to start the watcher + initial scan.
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             while (stack.CatchUp.LastScan is null && DateTime.UtcNow < deadline)
             {
@@ -295,8 +293,8 @@ public sealed class WatchIntegrationTests
         stack.Write("sub/a.md", "zephyrnest one");
         stack.Write("sub/b.md", "zephyrnest two");
         stack.Write("top.md", "zephyrtop root");
-        // The watcher can miss writes into a just-created directory (#147); seed through the
-        // catch-up scan — production's recovery for lost events — instead of event delivery.
+        // The watcher can miss writes into a just-created directory; seed through the catch-up
+        // scan — production's recovery for lost events — instead of event delivery.
         stack.CatchUp.EnqueueInitialScan(Project, stack.WatchDir, TestContext.Current.CancellationToken);
         if (stack.CatchUp.LastScan is { } seeded)
         {
@@ -497,11 +495,7 @@ public sealed class WatchIntegrationTests
             .ShouldBeGreaterThanOrEqualTo(300);
     }
 
-    /// <summary>
-    ///     The incident's own shape: removing a watch cascades its fingerprints away (#94), so the
-    ///     re-add is a full re-ingest. Every file must come back exactly once — a second copy would
-    ///     mean entry-level dedup is broken independently of the watcher.
-    /// </summary>
+    /// <summary>Removing a watch cascades its fingerprints away, so the re-add must fully re-ingest every file exactly once.</summary>
     [Fact]
     public async Task RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries()
     {
@@ -532,7 +526,7 @@ public sealed class WatchIntegrationTests
             .ShouldBe(0, "removal must cascade the fingerprints away");
 
         // Mutate a file on disk while the watch is removed: only a genuine second scan can pick
-        // this up, so a skipped catch-up (defect 1) leaves the new word permanently unsearchable.
+        // this up, so a skipped catch-up would leave the new word permanently unsearchable.
         stack.Write("a.md", "zephyrkappa alpha body edited-while-removed");
 
         await stack.AddWatchAsync(TestContext.Current.CancellationToken);

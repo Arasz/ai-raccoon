@@ -7,10 +7,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Extract-config commands pin the settings-key contract the background extraction
-///     service reads: extract.enabled.global ("true"/"false", default off),
-///     extract.mode.global (propose|promote, default propose),
-///     extract.interval-minutes.global (default 30).
+///     Extract-config commands pin the settings-key contract the background extraction service
+///     reads: extract.enabled.global, extract.mode.global, extract.interval-minutes.global.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

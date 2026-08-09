@@ -47,11 +47,8 @@ public sealed class NoHandRolledCryptoTests
     }
 
     /// <summary>
-    ///     Scoped to DeriveRawKey's own body, not the whole file — a whole-file search would stay
-    ///     green if DeriveRawKey reverted to a hash while DeriveLegacyRawKey (the pre-ADR-0012
-    ///     path, kept only to rekey old banks) still called HKDF.DeriveKey somewhere else in the
-    ///     file. The pinned vectors in SshKeyDerivationTests are the real behavioural guard; this
-    ///     is the source-shape guard that should fail for the same reason they would.
+    ///     Scoped to DeriveRawKey's own body, not the whole file, so a reverted DeriveRawKey can't hide
+    ///     behind DeriveLegacyRawKey's still-correct HKDF.DeriveKey call elsewhere in the file.
     /// </summary>
     [Fact]
     public void BankKeyDerivation_RawKeyMethodSpecifically_UsesThePlatformKdf()

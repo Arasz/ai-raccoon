@@ -1,9 +1,8 @@
 namespace AiRaccoon.Core.Access;
 
 /// <summary>
-///     Mode resolution and requirement checks (FR-NM-2; see docs/work/features-native-memory/native-memory.feature): a per-project setting overrides the
-///     global default; the default when nothing is set is rw. Modes live in the settings table
-///     under the keys below.
+///     Mode resolution (FR-NM-2; docs/work/features-native-memory/native-memory.feature): a per-project
+///     setting overrides the global default (rw); modes live in the settings keys below.
 /// </summary>
 public static class AccessModePolicy
 {

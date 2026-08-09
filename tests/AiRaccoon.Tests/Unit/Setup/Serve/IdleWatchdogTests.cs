@@ -10,8 +10,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
 /// <summary>
-///     Idle watchdog contract: /mcp traffic resets the idle deadline, background passes
-///     never do, and the tick period is min(60s, timeout/4) (R2).
+///     Idle watchdog contract: /mcp traffic resets the idle deadline, background passes never do,
+///     and the tick period is min(60s, timeout/4) (docs/plans/2026-08-06-http-serve-mode-plan.md).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -146,8 +146,8 @@ public sealed class IdleWatchdogTests
     [Fact]
     public async Task ExecuteAsync_PastTimeout_StopsExactlyOnce()
     {
-        // The 60s cap side of R2: with a 4h timeout the deadline lands exactly on a
-        // tick (4h), which is not past it; the first tick strictly past it fires.
+        // The 60s tick cap (docs/plans/2026-08-06-http-serve-mode-plan.md): a 4h timeout's deadline
+        // lands exactly on a tick, which is not past it; the first tick strictly past it fires.
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
         using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime,
@@ -172,10 +172,8 @@ public sealed class IdleWatchdogTests
     [Fact]
     public async Task ExecuteAsync_ShortTimeout_TicksAtQuarterTimeout_NotSixtySeconds()
     {
-        // R2: tick = min(60s, timeout/4); a 2s timeout must tick every 0.5s. The cadence
-        // is observable through the deadline-crossing advance: after the check at 2.0s
-        // the next tick is due at 2.5s, so 2.4s must not fire and 2.5s must — a fixed
-        // 60s tick would not fire until 60s and this test would fail.
+        // R2 (docs/plans/2026-08-06-http-serve-mode-plan.md): tick = min(60s, timeout/4); for a 2s
+        // timeout the tick is 0.5s, so 2.4s must not fire but 2.5s must.
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
         using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime,
@@ -235,9 +233,8 @@ public sealed class IdleWatchdogTests
     [Fact]
     public async Task ExecuteAsync_ExtractionPasses_DoNotResetTheWatchdog()
     {
-        // R10: background passes are not activity. The extraction pass at t0+1min must
-        // leave the deadline at t0+4min: the tick at t0+5min still fires. If extraction
-        // had reset the timer, the deadline would be t0+5min and this tick would not.
+        // R10 (docs/plans/2026-08-06-http-serve-mode-plan.md): background passes are not activity,
+        // so the extraction pass at t0+1min leaves the deadline at t0+4min and the t0+5min tick still fires.
         var time = new FakeTimeProvider(FixedNow);
         var store = new FakeStore();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";

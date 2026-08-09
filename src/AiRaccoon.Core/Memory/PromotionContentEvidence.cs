@@ -62,12 +62,6 @@ internal static class PromotionContentEvidence
             reasons.Add("heading-start");
         }
 
-        if (f.MidSentence)
-        {
-            adj -= 0.18;
-            reasons.Add("mid-sentence");
-        }
-
         var pointer = PointerPenalty(f);
         if (pointer > 0)
         {
@@ -159,7 +153,17 @@ internal static class PromotionContentEvidence
             reasons.Add("thin-content");
         }
 
-        return new ContentEvidence(Clamp(adj, Lo, Hi), reasons);
+        var clamped = Clamp(adj, Lo, Hi);
+        // Applied after the clamp, not folded into adj: a chunk with enough other evidence to
+        // already saturate Hi must still be demoted for opening mid-sentence, not have the
+        // penalty silently absorbed by the ceiling.
+        if (f.MidSentence)
+        {
+            clamped -= 0.18;
+            reasons.Add("mid-sentence");
+        }
+
+        return new ContentEvidence(clamped, reasons);
     }
 
     /// <summary>Curated durable note; still checked for status shape (session dumps mis-filed as notes).</summary>

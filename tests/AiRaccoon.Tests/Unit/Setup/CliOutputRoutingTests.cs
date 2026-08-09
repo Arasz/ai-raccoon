@@ -6,9 +6,8 @@ namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
 ///     Stdout-corruption guard: all CLI text (help, version, parse errors) renders only to
-///     the writer passed to Render — stdout stays reserved for stdio protocol frames.
-///     The redirected-Console tests must not run in parallel with other tests that write
-///     to Console.Out, hence the serial collection.
+///     the writer passed to Render — stdout stays reserved for stdio protocol frames. The
+///     redirected-Console tests run serially since they mutate Console.Out.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -43,9 +42,8 @@ public class CliOutputRoutingTests
     [Fact]
     public void Render_Version_WritesOnlyToErrorWriter()
     {
-        // The rendered string is the entry assembly's version (the test host here), so only
-        // the routing contract is asserted; the tool's own version string is proven by the
-        // VersionContractTests package-metadata gate.
+        // The rendered string is the entry assembly's version (the test host), so only the
+        // routing contract is asserted here; VersionContractTests covers the actual version string.
         CliArgs.TryParse(["--version"], out var parsed);
         var stderr = new StringWriter();
 

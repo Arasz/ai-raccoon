@@ -110,9 +110,8 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         var walBefore = new FileInfo(WalPath).Length;
 
         // A reader with an open snapshot pins the WAL: the checkpoint must defer
-        // (busy>0, Warning 511), never throw, and leave the WAL untruncated. The
-        // maintenance connection's short busy timeout keeps this fast (a stock
-        // busy_timeout would block the checkpoint for its full 5 seconds).
+        // (busy>0, Warning 511), never throw. Contention defers rather than blocks
+        // (ADR-0010): the maintenance connection's short busy_timeout avoids the stock 5s wait.
         await using var reader = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await using (var begin = reader.CreateCommand())
         {
@@ -162,10 +161,8 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         await SeedFreelistAsync(TestContext.Current.CancellationToken);
         await _service.RunOnceAsync(TestContext.Current.CancellationToken); // seeds the clock
 
-        // In WAL mode a reader does not block VACUUM (writers and readers coexist) — only
-        // the single write lock does. Hold one so VACUUM fails with SQLITE_BUSY: the pass
-        // must defer with Warning 516 (never Error 513), leave the clock unseeded-forward
-        // so the next pass retries, and then complete once the writer lets go.
+        // SQLite quirk: a reader alone never blocks VACUUM, only the write lock does —
+        // holding one forces SQLITE_BUSY, so the pass defers (Warning 516) and retries.
         await using var writer = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await using (var begin = writer.CreateCommand())
         {

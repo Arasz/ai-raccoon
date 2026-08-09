@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
 ///     Bank maintenance loop: WAL checkpoint (TRUNCATE) at startup, shutdown and on the
-///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence. See the design doc.
+///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010).
 /// </summary>
 public sealed partial class BankMaintenanceHostedService : BackgroundService
 {

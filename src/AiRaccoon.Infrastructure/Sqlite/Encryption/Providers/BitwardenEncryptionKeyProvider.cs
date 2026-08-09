@@ -7,7 +7,8 @@ namespace AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 
 /// <summary>
 ///     Fetches the bank key from Bitwarden: `bws secret get &lt;secretId&gt;` (no -t, 15 s), parses
-///     the ed25519 secret with the Core parser, derives the x'…' raw key (plan §5.1/§5.3/§5.4).
+///     the ed25519 secret with the Core parser, derives the x'…' raw key
+///     (docs/plans/encryption-bitwarden-implementation.md §5.1/§5.3/§5.4).
 /// </summary>
 public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretManager) : IEncryptionKeyProvider
 {

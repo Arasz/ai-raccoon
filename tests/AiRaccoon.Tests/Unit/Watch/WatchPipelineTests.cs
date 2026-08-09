@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
-/// <summary>Single channel, per-path pending aggregation, 1s tick, drain to scheduler, containment (rules 11-13).</summary>
+/// <summary>Single channel, per-path pending aggregation, 1s tick, drain to scheduler, containment.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchPipelineTests
@@ -275,10 +275,8 @@ public sealed class WatchPipelineTests
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
-        // Backing off: a tick before the backoff elapses must not attempt a digest.
-        // DeletedPaths counts attempts: the executor deletes-then-reingests on every real
-        // attempt, regardless of the injected ingest failure, so it stands in for "an
-        // attempt ran" without needing a dedicated counter.
+        // A tick before the backoff elapses must not attempt a digest. DeletedPaths.Count
+        // stands in for "an attempt ran": the executor deletes-then-reingests on every attempt, regardless of the injected failure.
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Changed));
         stack.Time.Advance(TimeSpan.FromMilliseconds(500));
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);

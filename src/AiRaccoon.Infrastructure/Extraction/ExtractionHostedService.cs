@@ -5,11 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Extraction;
 
 /// <summary>
-///     Background shared-extraction loop: while enabled, every interval it checks each
-///     project's committed memories and extracts the shared-worthy ones — propose mode logs
-///     ranked candidates, promote mode shares them (dedup against the existing shared tier,
-///     idempotent, never a delete). Off by default; mode and interval come from the settings
-///     table (CLI-only config channel). Best-effort: one project's failure never aborts the run.
+///     Background shared-extraction loop: while enabled, every interval it proposes or promotes
+///     each project's committed memories to the shared tier (dedup, idempotent, never delete).
+///     Off by default, settings-driven, and best-effort per project.
 /// </summary>
 public sealed partial class ExtractionHostedService : BackgroundService
 {
@@ -114,10 +112,8 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
 
-                // The loop's review surface: ranked candidates, one log line each (S4). Debug-only
-                // and preview-free — counts belong to metrics, not to a default-level serve.log
-                // (owner: "there is no need to log this info, it should be just counted by metrics"),
-                // and the content preview never belonged in logs at all.
+                // Debug-only, preview-free review surface: candidate counts are metered, not
+                // logged at a default level.
                 for (var i = 0; i < candidates.Count; i++)
                 {
                     var candidate = candidates[i];

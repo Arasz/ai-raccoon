@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     #190: SyncService merge-reindex invalidates the content vector (embed_state -&gt;
+///     SyncService merge-reindex invalidates the content vector (embed_state -&gt;
 ///     'pending', embedding -&gt; NULL) but must also clear the structure vector, or structure
 ///     search returns entries whose content vector was deliberately invalidated.
 /// </summary>
@@ -87,6 +87,45 @@ public sealed class SyncReindexStructureClearTests : IDisposable
             new CommandDefinition("SELECT count(*) FROM entries WHERE structure_embedding IS NOT NULL", cancellationToken: ct));
         vecStructureCount.ShouldBe(structureEmbeddingCount,
             "vec_structure must stay in lockstep with entries.structure_embedding");
+    }
+
+    [Fact]
+    public async Task MarkStructure_AfterAConcurrentReindexClearedTheRow_DoesNotResurrectTheVecStructureRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var id = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state, embedding)
+            VALUES ('row-b', 'b.md', 'content B', 'b.md', 'project', 'acme', @now, @now, 'embedded', @embedding)
+            RETURNING id
+            """, new { now, embedding = EmbeddingBlob.ToBytes(new float[384]) }, cancellationToken: ct));
+
+        // The heal candidate SELECT would have picked this row up here (embedded, heading_path
+        // IS NULL). Simulate a concurrent sync merge-reindex clearing it before the heal write lands.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE entries
+            SET embed_state = 'pending', embedding = NULL, structure_embedding = NULL, heading_path = NULL
+            WHERE id = @id
+            """, new { id }, cancellationToken: ct));
+
+        // The heal pass's write, arriving after the reindex.
+        await connection.ExecuteAsync(new CommandDefinition(
+            MemorySql.MarkStructure,
+            new { id, headingPath = "Guide > Prerequisites", structureEmbedding = EmbeddingBlob.ToBytes(new float[384]) },
+            cancellationToken: ct));
+
+        (await VecRowCount(connection, "vec_structure", id, ct)).ShouldBe(0,
+            "MarkStructure must not resurrect vec_structure for a row the clear-arm already invalidated");
+
+        var row = await connection.QuerySingleAsync<EntryRow>(new CommandDefinition(
+            "SELECT structure_embedding AS StructureEmbedding, heading_path AS HeadingPath FROM entries WHERE id = @id",
+            new { id }, cancellationToken: ct));
+        row.StructureEmbedding.ShouldBeNull();
+        row.HeadingPath.ShouldBeNull();
     }
 
     private static Task<long> VecRowCount(SqliteConnection connection, string table, long id, CancellationToken ct) =>

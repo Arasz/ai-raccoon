@@ -8,7 +8,8 @@ namespace AiRaccoon.Infrastructure.Sqlite.Encryption;
 /// <summary>
 ///     Selects the encryption key provider from the memory.db.source sidecar, read fresh on every
 ///     call (the config commands change it between calls). Absent sidecar or "env" → the env
-///     provider; "bitwarden" → bws fetch + derivation; a corrupt sidecar fails loudly (plan §5.2).
+///     provider; "bitwarden" → bws fetch + derivation; a corrupt sidecar fails loudly
+///     (docs/plans/encryption-bitwarden-implementation.md §5.2).
 /// </summary>
 public sealed class EncryptionKeyResolver(IEncryptionSourceSidecar encryptionState, IReadOnlyCollection<IEncryptionKeyProvider> providers)
     : IEncryptionKeyResolver

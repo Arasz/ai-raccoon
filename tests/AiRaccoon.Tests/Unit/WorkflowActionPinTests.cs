@@ -33,7 +33,6 @@ public sealed class WorkflowActionPinTests
     [Fact]
     public void TheGuardSeesTheWorkflowActions()
     {
-        // Without this the guard passes vacuously the day the workflows move or the regex stops matching.
         ActionRefs().Count.ShouldBeGreaterThan(5);
     }
 

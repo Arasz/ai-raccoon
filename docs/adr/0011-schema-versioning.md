@@ -94,3 +94,12 @@ The bucket-uniqueness indexes moved out of the shared DDL into their own constan
 bank the duplicates have to be deleted before the index can be created, so the DDL cannot
 create them unconditionally — the ladder still owns that path.
 
+> **2026-08-09 update.** `MemorySchema.CurrentVersion` is **3**, not 1 as the addendum above
+> states — two further ladder steps shipped since it was written: v2 (`chunk_index`/
+> `total_chunks` columns plus a vec0 rebuild) and v3 (issue #200's bank-wide
+> `chunk_index`/`total_chunks` recompute, closed by PR #204). PR #204 also added a forward-version
+> write guard — `EnsureAsync` now refuses a write-path open when the stored version is ahead of
+> `CurrentVersion` instead of silently no-oping through it, which is the mechanism #200's drift
+> exploited. That guard is its own architectural decision and has its own record: see
+> [ADR 0019](0019-forward-version-write-guard.md).
+

@@ -27,7 +27,7 @@ internal static class PromotionQueueSql
                                       created_at AS CreatedAt, updated_at AS UpdatedAt
                                FROM promotion_queue
                                WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
-                               ORDER BY score DESC, created_at ASC
+                               ORDER BY score DESC, created_at ASC, id ASC
                                """;
 
     public const string Discard = """
@@ -49,7 +49,7 @@ internal static class PromotionQueueSql
                                       WHERE id = (
                                           SELECT id FROM promotion_queue
                                           WHERE project_id = @ProjectId
-                                          ORDER BY score ASC, created_at ASC
+                                          ORDER BY score ASC, created_at ASC, id ASC
                                           LIMIT 1
                                       )
                                       RETURNING project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,

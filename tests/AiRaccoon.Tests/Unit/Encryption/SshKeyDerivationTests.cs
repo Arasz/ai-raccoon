@@ -17,10 +17,7 @@ public sealed class SshKeyDerivationTests
     private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
 
     // A second, independently-derived synthetic vector — the ASCII bytes of an obviously fake
-    // 32-byte string, not real ssh-keygen output. Distinct from Seed00To1F so the two vectors
-    // don't coincide; determinism is the point, not provenance (see item 6 of the encryption
-    // hardening review — the seed this replaced was genuine ssh-keygen output committed to a
-    // tracked file).
+    // 32-byte string, distinct from Seed00To1F so the two vectors don't coincide.
     private static readonly byte[] SecondSyntheticSeed = "OBVIOUSLY-FAKE-TEST-SEED-32BYTES"u8.ToArray();
 
     [Fact]

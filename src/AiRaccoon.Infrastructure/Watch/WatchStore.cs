@@ -6,7 +6,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>One registered watch row: identity + catch-up watermark (timestamps are Unix epoch seconds).</summary>
 public sealed record WatchRegistration(string ProjectId, string Path, long CreatedAt, long LastChangeTs);
 
-/// <summary>Persistence seam for watches + per-file fingerprints (S4 unit tests fake this).</summary>
+/// <summary>Persistence seam for watches + per-file fingerprints (docs/plans/file-watcher-implementation.md S4 unit tests fake this).</summary>
 public interface IWatchStore
 {
     Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,

@@ -14,10 +14,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Unit.storage;
 
 /// <summary>
-///     Chunking ADOPT (see docs/work/2026-08-03-native-memory-plan.md §8): ingest chunking must respect the embedding engine's token
-///     window — the old 512-token default exceeded the bundled all-MiniLM-L6-v2's 256-token
-///     context, diluting embeddings via truncation. Chunk bounds are pinned by FR-NM-10
-///     (bounds, not sizes; see docs/work/features-native-memory/native-memory.feature), so the defaults may change.
+///     Ingest chunking respects the embedding engine's token window (docs/work/2026-08-03-native-memory-plan.md
+///     §8); bounds, not sizes, are pinned by FR-NM-10 (docs/work/features-native-memory/native-memory.feature).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -79,7 +77,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
     private static string CreateTempRoot() =>
         TestData.CreateTempRoot("airaccoon-store-tests");
 
-    /// <summary>Ingest is deny-by-default since #126; these tests exercise chunking, not containment.</summary>
+    /// <summary>Ingest is deny-by-default; these tests exercise chunking, not containment.</summary>
     private Task AllowIngestScopeAsync(string path) =>
         _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
             TestContext.Current.CancellationToken);

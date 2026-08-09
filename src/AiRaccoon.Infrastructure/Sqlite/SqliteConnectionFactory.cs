@@ -40,10 +40,9 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         await OpenBankWithResolvedKeyAsync(keyResolver.Resolve(), cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation to the HKDF key
-    ///     (ADR-0012). No-op when the bank already opens under the current key. Refuses unless the
-    ///     legacy key both opens the bank and passes quick_check — see
-    ///     docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2.
+    ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation to the HKDF key (ADR-0012).
+    ///     No-op when the bank already opens under the current key; refuses unless the legacy key both
+    ///     opens the bank and passes quick_check (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2).
     /// </summary>
     /// <returns>True when the bank was rekeyed; false when it already opened under the current key.</returns>
     public async Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default)
@@ -85,7 +84,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     /// <summary>
     ///     Opens with an already-resolved key. A bank still under the pre-ADR-0012 derivation is
     ///     reported as such instead of surfacing a bare "file is not a database"; the open path
-    ///     never rekeys (Decision 3).
+    ///     never rekeys (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 3).
     /// </summary>
     public async Task<SqliteConnection> OpenBankWithResolvedKeyAsync(ResolvedKey resolvedKey,
         CancellationToken cancellationToken = default)
@@ -107,10 +106,9 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
 
     /// <summary>
     ///     Rekeys the bank to a new key (raw x'…' or passphrase) on a DELETE-journal connection —
-    ///     rekey in WAL would corrupt the bank on sqlite3mc &lt; 2.4.0; 2.4.0 supports WAL rekey but
-    ///     keeps the previous key salt, and we prefer the fresh-salt DELETE path (plan §3.3) — then
-    ///     verifies by reopening. The current-key pool is drained first; callers must not hold an
-    ///     open bank connection.
+    ///     WAL rekey risks corruption or a stale key salt on this SQLCipher build
+    ///     (docs/plans/encryption-bitwarden-implementation.md) — then verifies by reopening. The
+    ///     current-key pool is drained first; callers must not hold an open bank connection.
     /// </summary>
     public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) =>
         RekeyBankAsync(newKey, keyResolver.Resolve().Passphrase, cancellationToken);
@@ -128,8 +126,8 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
 
         await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))
         {
-            // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password
-            // (plan §5.2, measured F3) — it escapes both raw x'…' keys and passphrases.
+            // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password — it
+            // escapes both raw x'…' keys and passphrases (docs/plans/encryption-bitwarden-implementation.md).
             await using var quoteCommand = connection.CreateCommand();
             quoteCommand.CommandText = "SELECT quote($newKey)";
             quoteCommand.Parameters.AddWithValue("$newKey", newKey);
@@ -164,10 +162,9 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
             openFailure);
 
     /// <summary>
-    ///     True only when the legacy key opens the bank <em>and</em> quick_check reports "ok" —
-    ///     the sole thing that authorises a rekey. Read-only and pool-free, so a refusal leaves the
-    ///     file untouched. Any SQLite failure means "no proof", never "corrupt" specifically:
-    ///     a wrong key and a damaged file are indistinguishable here by design (Decision 2).
+    ///     True only when the legacy key opens the bank <em>and</em> quick_check reports "ok" — the
+    ///     sole thing that authorises a rekey. Read-only and pool-free, so a refusal leaves the file
+    ///     untouched; any SQLite failure means "no proof", never "corrupt" specifically (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2).
     /// </summary>
     private async Task<bool> LegacyKeyOpensHealthyBankAsync(string legacyKey, CancellationToken cancellationToken)
     {

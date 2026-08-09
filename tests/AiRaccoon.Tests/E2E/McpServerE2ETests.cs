@@ -17,11 +17,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client):
-///     the tools, the managed store and the JSON-RPC transport all run together. No sqliteai
-///     native extensions are required since P1 (the bank is our own memory.db). Embedding
-///     round-trips run against the bundled ONNX model (local) and an in-process fake
-///     OpenAI-compatible endpoint (openai).
+///     Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client): the
+///     tools, the managed store and the JSON-RPC transport all run together, embedding through
+///     both the bundled ONNX model (local) and an in-process fake OpenAI-compatible endpoint.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -73,13 +71,12 @@ public class McpServerE2ETests : IAsyncLifetime
             ("content", "workspace secret"),
             ("workspaceId", wsId));
 
-        // The write landed in the workspace outbox...
         var status = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", wsId));
         Text(status).ShouldContain("workspace secret");
 
-        // ...and NOT in the project's committed context: stats counts only committed
-        // project entries, so an un-consolidated workspace write must not appear.
+        // stats counts only committed project entries, so an un-consolidated workspace write
+        // must not appear.
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":0");
     }
@@ -105,12 +102,14 @@ public class McpServerE2ETests : IAsyncLifetime
             ("projectId", "acme"), ("workspaceId", workspaceId), ("keep", new[] { "all" }));
         Text(consolidate).ShouldContain("\"promoted\":1");
 
-        // The promoted fact is now in the project context and the outbox is empty.
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":1");
+
+        // Consolidating removes the workspace, so status must say so rather than report an empty
+        // outbox — an agent polling for completion has to tell "finished" from "never existed".
         var statusAfter = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
-        Text(statusAfter).ShouldContain("\"count\":0");
+        RefusalText(statusAfter).ShouldStartWith("unknown-workspace:");
     }
 
     [Fact]
@@ -128,11 +127,11 @@ public class McpServerE2ETests : IAsyncLifetime
             ("projectId", "acme"), ("workspaceId", workspaceId));
         Text(discard).ShouldContain("\"discarded\":1");
 
+        // Discarding removes the workspace, so status refuses rather than reporting an empty outbox.
         var status = await CallAsync("memory_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
-        Text(status).ShouldContain("\"count\":0");
+        RefusalText(status).ShouldStartWith("unknown-workspace:");
 
-        // Nothing leaked into the project context.
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":0");
     }
@@ -147,7 +146,6 @@ public class McpServerE2ETests : IAsyncLifetime
         var share = await CallAsync("memory_share", ("projectId", "acme"), ("hash", hash));
         Text(share).ShouldContain("shared");
 
-        // The shared context now holds the promoted row; the project row remains.
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         var statsText = Text(stats);
         statsText.ShouldContain("\"entries\":1");
@@ -270,5 +268,12 @@ public class McpServerE2ETests : IAsyncLifetime
         result.IsError.ShouldNotBe(true);
         var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
         return text;
+    }
+
+    /// <summary>The refusal message of a failed call, so a test can assert the typed prefix rather than merely that something went wrong.</summary>
+    private static string RefusalText(CallToolResult result)
+    {
+        result.IsError.ShouldBe(true);
+        return string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
     }
 }

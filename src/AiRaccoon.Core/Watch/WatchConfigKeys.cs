@@ -1,10 +1,9 @@
 namespace AiRaccoon.Core.Watch;
 
 /// <summary>
-///     Settings keys for watch config. The exact strings are a contract with the CLI task's
-///     `watch` commands (enable/concurrency, global + per-project; more specific wins).
-///     The scope allowlist is not here: it bounds every disk-reading surface, not just
-///     watching — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />.
+///     Settings keys for watch config; the exact strings are a contract with the CLI task's
+///     `watch` commands (enable/concurrency, global + per-project; more specific wins). The scope
+///     allowlist is not here — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />.
 /// </summary>
 public static class WatchConfigKeys
 {

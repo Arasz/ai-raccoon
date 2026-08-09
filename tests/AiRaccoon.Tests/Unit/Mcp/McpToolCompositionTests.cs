@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// <summary>
 ///     Every class carrying [McpServerTool] methods must be constructible from the real
 ///     composition root. The tool tests hand-build them, so a dropped registration is
-///     invisible until the first live invocation (#119 item 1).
+///     invisible until the first live invocation.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

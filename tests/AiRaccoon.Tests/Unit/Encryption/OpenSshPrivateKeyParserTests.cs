@@ -7,17 +7,16 @@ using AiRaccoon.Tests.TestHelpers;
 namespace AiRaccoon.Tests.Unit.Encryption;
 
 /// <summary>
-///     RFC 8709 openssh-key-v1 format decoding for unencrypted ed25519 private keys
-///     (plan §5.1): ciphername "none" only, ssh-ed25519 only, checkint pair, 64-byte
-///     private field whose embedded public half matches the public key blob.
+///     RFC 8709 openssh-key-v1 format decoding for unencrypted ed25519 private keys:
+///     ciphername "none" only, ssh-ed25519 only, checkint pair, and a 64-byte private field
+///     whose embedded public half matches the public key blob.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class OpenSshPrivateKeyParserTests
 {
-    // A second, distinct synthetic seed/pub pair — the ASCII bytes of obviously fake strings, not
-    // real ssh-keygen output. Replaces a genuine ed25519 key that was committed here (item 6 of
-    // the encryption hardening review); the point of a pinned vector is determinism, not provenance.
+    // Synthetic bytes, not real ssh-keygen output — replaces a genuine ed25519 key once committed
+    // here; a pinned vector's point is determinism, not provenance.
     private static readonly byte[] SecondSeed = "FAKE-PARSER-TEST-SEED-NOT-REAL00"u8.ToArray();
     private static readonly byte[] SecondPublicKey = "FAKE-PARSER-TEST-PUBKEY-NOTREAL0"u8.ToArray();
 

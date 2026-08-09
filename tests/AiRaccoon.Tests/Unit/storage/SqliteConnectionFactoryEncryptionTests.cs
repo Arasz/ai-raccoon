@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Unit.storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 {
-    // §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…'
+    // docs/plans/encryption-bitwarden-implementation.md §5.1 pinned vector: seed 00 01 … 1e 1f → x'72d2…'
     private const string DerivedHex = "72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485";
     private const string DerivedRawKey = $"x'{DerivedHex}'";
 
@@ -47,12 +47,10 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         await connection.CloseAsync();
 
-        // Verify encryption: file header is not the standard SQLite header
         var header = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
         var headerStr = Encoding.ASCII.GetString(header[..16]);
         headerStr.ShouldNotStartWith("SQLite format 3");
 
-        // Verify the DB can be reopened with the correct passphrase
         await using var reopen = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         reopen.State.ShouldBe(ConnectionState.Open);
     }
@@ -72,12 +70,10 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         await connection.CloseAsync();
 
-        // Verify unencrypted: standard header
         var header = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
         var headerStr = Encoding.ASCII.GetString(header[..16]);
         headerStr.ShouldStartWith("SQLite format 3");
 
-        // Reopening without passphrase must succeed
         await using var reopen = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         reopen.State.ShouldBe(ConnectionState.Open);
     }
@@ -116,9 +112,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        // The bank is in WAL mode (every factory open pins it) — rekey must switch to DELETE
-        // journal mode internally (SQLCipher rekey is unsupported in WAL; plan §3.3).
-        // Pooling=false so the probe closes for real (a pooled connection would hold the lock).
+        // WAL pins every factory open, but SQLCipher rekey is unsupported in WAL, so rekey switches
+        // to DELETE journal mode internally; Pooling=false lets the probe close for real (a pooled connection would hold the lock).
         await using (var probe = new SqliteConnection($"Data Source={factory.BankPath};Password=env-passphrase;Pooling=false"))
         {
             await probe.OpenAsync(TestContext.Current.CancellationToken);
@@ -232,8 +227,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
-        // D4: no cached/offline key copy — the directory holds only the bank and SQLite's own
-        // journal artifacts, and none of them contains the derived key material.
+        // No cached/offline key copy (docs/plans/encryption-bitwarden-implementation.md D4): the
+        // directory holds only the bank and SQLite's own journal artifacts, none containing the derived key material.
         var files = Directory.GetFiles(_dataRoot);
         files.ShouldAllBe(file =>
             file == factory.BankPath
@@ -247,9 +242,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     /// <summary>
     ///     The migrate verb's current-key probe must report "nothing to do" without touching the
-    ///     bank — see docs/plans/2026-08-07-hkdf-rekey-migration.md item 3. A bank with no
-    ///     application schema at all proves InitializeAsync (and its MemorySchema.EnsureAsync) was
-    ///     never invoked on the success path.
+    ///     bank (docs/plans/2026-08-07-hkdf-rekey-migration.md item 3). A bank with no schema
+    ///     proves InitializeAsync's MemorySchema.EnsureAsync never ran on the success path.
     /// </summary>
     [Fact]
     public async Task MigrateLegacyKeyAsync_BankAlreadyOnCurrentKey_CreatesNoSchemaObjects()

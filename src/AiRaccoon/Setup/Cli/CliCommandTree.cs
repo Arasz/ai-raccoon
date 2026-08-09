@@ -15,8 +15,8 @@ internal static class CliCommandTree
 
     internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
-    /// <summary>The root launch --port (shared with the bare launch root); serve reads it
-    /// instance-based as its fallback when serve's own --port is absent (R7/R12).</summary>
+    /// <summary>The root launch --port (shared with the bare launch root); serve reads it instance-based
+    /// as its fallback when serve's own --port is absent (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
         Description = "HTTP port to bind; 0 picks a random free port",
@@ -40,8 +40,9 @@ internal static class CliCommandTree
 
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
-    /// <summary>observability's own --port, read instance-based like ServePortOption (R12):
-    /// unlike serve's --port, 0 is not legal here — there is no "any free port" to dial.</summary>
+    /// <summary>observability's own --port, read instance-based like ServePortOption
+    /// (docs/plans/2026-08-06-http-serve-mode-plan.md R12): unlike serve's --port, 0 is not
+    /// legal here — there is no "any free port" to dial.</summary>
     internal static readonly Option<int> ObservabilityPortOption = CreateObservabilityPortOption();
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
@@ -313,10 +314,8 @@ internal static class CliCommandTree
             ServeFormatOption,
             ObservabilityCommand()
         };
-        // Adding the observability subcommand makes System.CommandLine require one of
-        // serve's subcommands unless serve declares its own action — without this, a bare
-        // "ai-raccoon serve" fails to parse ("Required command was not provided."). Nothing
-        // invokes this action; Program.cs routes on CommandPath. Do not remove.
+        // SetAction exists only because System.CommandLine requires a subcommand unless the
+        // command declares its own action; Program.cs actually routes on CommandPath. Do not remove.
         serve.SetAction(_ => ExitCode.Success);
         return serve;
     }

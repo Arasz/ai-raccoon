@@ -24,9 +24,8 @@ internal static class OtlpExport
             }
 
             services.AddOpenTelemetry()
-                // Fixed product identity (ADR 0009 2026-08-07 update): registered after
-                // CreateDefault()'s environment detector, so it wins the resource merge even
-                // though OTEL_SERVICE_NAME now reaches that detector too.
+                // Fixed product identity (ADR-0009): registered after CreateDefault()'s environment
+                // detector, so it wins the resource merge even though OTEL_SERVICE_NAME reaches it too.
                 .ConfigureResource(r => r.AddService(OtlpExportState.DefaultServiceName))
                 .WithMetrics(m => m
                     .AddMeter("AiRaccoon.MemoryTools")
@@ -34,9 +33,8 @@ internal static class OtlpExport
                     .AddMeter("System.Runtime")
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
-                    // ASP.NET Core's unrecorded per-request Activity becomes the local parent for
-                    // every tool-call span; the SDK's default ParentBased sampler drops those
-                    // (issue #181, ADR 0009 amendment 2026-08-08).
+                    // ASP.NET Core's unrecorded per-request Activity becomes the local parent for every
+                    // tool-call span; the SDK's default ParentBased sampler drops those (ADR-0009).
                     .SetSampler(new AlwaysOnSampler())
                     .AddSource("AiRaccoon.MemoryTools")
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
@@ -45,25 +43,20 @@ internal static class OtlpExport
         }
     }
 
-    /// <summary>Endpoint/protocol/timeout stay explicit even though the SDK now reads OTEL_* from
-    /// config again (ADR 0009 "Configuration channel" 2026-08-07 update): the http/protobuf signal
-    /// path composition (<see cref="SignalEndpoint"/>) and the 5s timeout ceiling are product
-    /// decisions, not values the config channel alone would produce. Headers, compression, resource
-    /// attributes, per-signal overrides, mTLS, and sampler now flow through the SDK's own OTEL_*
-    /// parsing instead.</summary>
+    /// <summary>Endpoint/protocol/timeout stay explicit; other exporter config flows through the SDK's
+    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md).</summary>
     private static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
     {
         options.Endpoint = SignalEndpoint(state, signalPath);
         options.Protocol = IsHttpProtobuf(state.Protocol) ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
-        // Bounds a single unreachable-collector export attempt so a detached serve never
-        // hangs on the SDK's 30s default (ADR 0009: measured against the SDK sources).
+        // Bounds a single unreachable-collector export attempt from hanging a detached serve
+        // (docs/adr/0009-otlp-export.md).
         options.TimeoutMilliseconds = 5_000;
     }
 
     /// <summary>Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the
-    /// base endpoint is used verbatim; http/protobuf requires the signal path per the OTLP spec, and is
-    /// appended idempotently — an endpoint that already carries it, or a trailing slash on the base, is
-    /// handled without doubling. Internal (not private) so it stays directly unit-testable.</summary>
+    /// base endpoint is used verbatim; http/protobuf appends the OTLP spec's signal path idempotently
+    /// (no doubling on a base that already carries it or ends with '/'). Internal, not private, for direct unit testing.</summary>
     internal static Uri SignalEndpoint(OtlpExportState state, string signalPath)
     {
         var endpoint = state.Endpoint!;

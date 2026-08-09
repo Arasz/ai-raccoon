@@ -7,7 +7,7 @@ public enum SyncProvider
     Azure
 }
 
-/// <summary>Parses a sync.provider row; absent or unknown values behave as S3 (ruling R2).</summary>
+/// <summary>Parses a sync.provider row; absent or unknown values behave as S3 (docs/plans/azure-blob-sync-plan.md R2).</summary>
 public static class SyncProviderParser
 {
     public static SyncProvider Parse(string? value) =>

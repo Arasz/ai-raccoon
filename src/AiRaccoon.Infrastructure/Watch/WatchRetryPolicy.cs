@@ -4,7 +4,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
 ///     Per-watch consecutive-failure counter with exponential backoff: after 5 consecutive
-///     failures a watch stops being checked (registration + status are kept, feature rule 14).
+///     failures a watch stops being checked (registration + status kept, docs/features/file-watcher/file-watcher.feature rule 14).
 /// </summary>
 public sealed class WatchRetryPolicy
 {

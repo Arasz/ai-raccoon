@@ -1,16 +1,13 @@
 namespace AiRaccoon.Observability;
 
-/// <summary>OTLP export state read from OTEL_EXPORTER_OTLP_ENDPOINT/_PROTOCOL; see ADR 0009.
-/// Everything else the OpenTelemetry SDK needs (headers, compression, resource attributes,
-/// per-signal overrides, mTLS, sampler, metric export interval/timeout, ...) it now reads
-/// itself from OTEL_*-prefixed environment variables via config (ADR 0009 2026-08-07 update) —
-/// this type only carries what <see cref="OtlpExport"/> sets explicitly and what the
-/// `serve observability otlp` CLI verb reports.</summary>
+/// <summary>OTLP export state read from OTEL_EXPORTER_OTLP_ENDPOINT/_PROTOCOL (ADR-0009). Everything
+/// else the SDK needs it now reads itself from OTEL_*-prefixed environment variables via config;
+/// this type only carries what <see cref="OtlpExport"/> sets explicitly and what the CLI reports.</summary>
 public sealed record OtlpExportState(bool Enabled, string? Endpoint, string? Protocol)
 {
-    /// <summary>Fixed service.name for every export; OTEL_SERVICE_NAME cannot override it
-    /// (ADR 0009 2026-08-07 update). Without it the SDK falls back to
-    /// "unknown_service:&lt;process&gt;", which is what collectors actually displayed.</summary>
+    /// <summary>Fixed service.name for every export; OTEL_SERVICE_NAME cannot override it (ADR-0009).
+    /// Without it the SDK falls back to "unknown_service:&lt;process&gt;", which is what collectors
+    /// actually displayed.</summary>
     public const string DefaultServiceName = "ai-raccoon";
 
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";

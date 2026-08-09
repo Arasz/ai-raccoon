@@ -6,12 +6,8 @@ namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
 ///     Headline acceptance test for docs/adr/0018-promotion-scoring-v2.md: synthetic candidates covering
-///     the archetypes named in the eval report, with invented content (this repo is public; the real
-///     candidate pool quotes private docs). Against the pre-v2 additive scorer this goes red — a plan
-///     chunk that merely mentions a sibling project outranks an organic measurement write, because the
-///     incumbent's `+2 cross-project` and `+2 organic-write` are both flat bare-substring/null-check
-///     bonuses that collapse to the same few values on a multi-project bank (see the eval report's
-///     "why the incumbent fails": 61/61 candidates matched cross-project, 61/61 matched recent).
+///     the archetypes named in the eval report (invented content — this repo is public). Against the
+///     pre-v2 additive scorer this goes red (see the ADR for why the incumbent fails).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -27,8 +23,7 @@ public sealed class SharedExtractionRankingAcceptanceTests
         new(hash, path, value, sourceFile, 0.5, accessCount, Now.AddDays(-5), null);
 
     /// <summary>The candidate pool: one invented chunk per archetype named in docs/adr/0018-promotion-scoring-v2.md,
-    /// plus the two organic edge cases from the second validation round (status dump with test counts,
-    /// one-line dated contract fact).</summary>
+    /// plus two organic edge cases (a status dump with test counts, a one-line dated contract fact).</summary>
     private static IReadOnlyList<ExtractionCandidateRow> Candidates() =>
     [
         Row("organic-measurement", "organic-measurement.md", null,
@@ -152,9 +147,9 @@ public sealed class SharedExtractionRankingAcceptanceTests
         hashes.ShouldNotContain("turn-mirror");
     }
 
-    /// <summary>Second validation round (docs/adr/0018-promotion-scoring-v2.md): the un-refined
-    /// archetype+evidence model alone saturates the organic prior and cannot tell a status/turn-mirror
-    /// dump from a durable fact — test-result counts ("3272 passed... exit 0") read as measurements.</summary>
+    /// <summary>docs/adr/0018-promotion-scoring-v2.md: the un-refined archetype+evidence model alone
+    /// saturates the organic prior and cannot tell a status/turn-mirror dump from a durable fact —
+    /// test-result counts ("3272 passed... exit 0") read as measurements.</summary>
     [Fact]
     public void OrganicStatusDumpWithTestCounts_ScoresBelowTheFloor()
     {

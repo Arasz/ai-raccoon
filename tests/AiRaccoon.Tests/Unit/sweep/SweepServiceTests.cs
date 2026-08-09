@@ -93,7 +93,7 @@ public class SweepServiceTests
         store.Deleted.ShouldBeEmpty();
     }
 
-    /// <summary>Rescued from the deleted extension-host test suite (WI-9/ADR-0016): SweepService deletes
+    /// <summary>Rescued from the deleted extension-host test suite (ADR-0016): SweepService deletes
     /// through IMemoryStore, not around it — the sweep candidate it selects is the same hash the store
     /// records as deleted, with no side channel between selection and deletion.</summary>
     [Fact]
@@ -219,7 +219,7 @@ public class SweepServiceTests
     }
 
     /// <summary>Minimal recording IMemoryStore backing one sweep-eligible entry ("old-low", rating 0.1,
-    /// ttlDays 1), moved from the deleted extension-host test suite (WI-9/ADR-0016).</summary>
+    /// ttlDays 1), moved from the deleted extension-host test suite (ADR-0016).</summary>
     private sealed class SweepableStore : IMemoryStore
     {
         public List<string> Deleted { get; } = [];

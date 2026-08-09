@@ -6,10 +6,8 @@ namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
 ///     Acceptance fixtures for the five channel families v3 adds over v2 (docs/adr/0018-promotion-scoring-v2.md
-///     v3 section; port spec docs/work/2026-08-08-promotion-scoring-round2.md). Invented content only — this
-///     repo is public and the real labeled pool quotes private docs. Run against the pre-v3 scorer these go
-///     red: v2 has no notion of `.remember/` journals, the Claude auto-memory tree, or the turn-mirror
-///     prose-prefix rescue, so it routes all of them through the generic doc-channel evidence path.
+///     v3 section, docs/work/2026-08-08-promotion-scoring-round2.md). Content is invented — this repo is
+///     public and the real labeled pool quotes private docs.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

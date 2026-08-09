@@ -39,10 +39,9 @@ public interface IMemoryStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Sets the bank's embedding provider/model/endpoint, persists them in the settings
-    ///     table, records the engine fingerprint, and re-embeds previously embedded rows
-    ///     (bank-global) when the engine changes. The remote API key is a
-    ///     separate settings row (embedding.apiKey).
+    ///     Sets the bank's embedding provider/model/endpoint, persists them in the settings table,
+    ///     records the engine fingerprint, and re-embeds previously embedded rows (bank-global) when
+    ///     the engine changes; the remote API key is a separate settings row (embedding.apiKey).
     /// </summary>
     Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default);

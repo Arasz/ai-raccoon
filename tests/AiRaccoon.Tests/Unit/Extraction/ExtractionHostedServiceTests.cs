@@ -46,10 +46,9 @@ public sealed class ExtractionHostedServiceTests
     }
 
     /// <summary>
-    ///     Advances until the loop reacts. An advance issued before ExecuteAsync has constructed
-    ///     its PeriodicTimer is simply lost — the timer then waits out a full fresh period — so a
-    ///     single advance cannot be trusted to start the first tick. Re-advancing is safe here
-    ///     because each effective advance yields exactly one tick, and polling stops at the first.
+    ///     Advances until the loop reacts. An advance issued before ExecuteAsync constructs its
+    ///     PeriodicTimer is lost, so re-advances until a pass runs; each effective advance yields
+    ///     exactly one tick, and polling stops at the first.
     /// </summary>
     private static async Task AdvanceUntilAsync(FakeTimeProvider time, TimeSpan period,
         Func<bool> condition, CancellationToken cancellationToken)
@@ -221,7 +220,7 @@ public sealed class ExtractionHostedServiceTests
         // The timer is demonstrably live now, so one advance is one tick.
         time.Advance(TimeSpan.FromMinutes(30));
         await WaitUntilAsync(() => queue.PromoteCalls.Count >= 4, TestContext.Current.CancellationToken);
-        // Second pass proves the loop iterates: 2 passes x 2 projects.
+        // Second pass proves the loop iterates.
         queue.PromoteCalls.Count.ShouldBe(4);
 
         await cts.CancelAsync();
@@ -293,9 +292,8 @@ public sealed class ExtractionHostedServiceTests
 
         var records = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 507).ToList();
         records.Count.ShouldBe(2);
-        // Debug, not Information: "there is no need to log this info, it should be just
-        // counted by metrics" (owner) — the detail survives for local debugging, but a
-        // default-level serve.log no longer carries it.
+        // Debug, not Information: the detail survives for local debugging, but a
+        // default-level serve.log no longer carries it (counted by metrics instead).
         records.ShouldAllBe(r => r.Level == LogLevel.Debug);
         records[0].Message.ShouldContain("#1");
         records[0].Message.ShouldContain("acme");
@@ -306,7 +304,7 @@ public sealed class ExtractionHostedServiceTests
         records[0].Message.ShouldContain("durable-fact-language");
         // The content preview is dropped from the message (a data-leak into logs otherwise).
         records[0].Message.ShouldNotContain("must never drop a message silently");
-        // Rank ordering: #1 before #2 in emission order (the list is pre-sorted by score).
+        // Rank ordering: the pre-sorted-by-score list emits rank one before rank two.
         records[1].Message.ShouldContain("#2");
         // Counts line still emitted alongside the details, also demoted to Debug.
         var passRecords = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 502).ToList();

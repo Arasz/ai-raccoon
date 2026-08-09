@@ -91,9 +91,9 @@ public sealed class SharedExtractionRunnerTests
     }
 
     [Fact]
-    public async Task ProposeAsync_HonoursTheLimit()
+    public async Task ProposeAsync_HonoursTheLimit_ForTheReturnedCandidates()
     {
-        var (store, queue, _, runner) = NewStack();
+        var (store, _, _, runner) = NewStack();
         store.Candidates["acme"] = Enumerable.Range(0, 10)
             .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
             .ToList();
@@ -102,7 +102,50 @@ public sealed class SharedExtractionRunnerTests
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
 
         candidates.Count.ShouldBe(3);
-        queue.LastCandidates!.Count.ShouldBe(3);
+    }
+
+    /// <summary>A brand-new candidate that is not already queued is subject to the display limit —
+    /// otherwise one pass over the whole eligible pool floods the queue toward capacity (the entire
+    /// pool, not just `limit` rows, would be inserted as new).</summary>
+    [Fact]
+    public async Task ProposeAsync_BoundsBrandNewCandidatesToTheDisplayLimit()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = Enumerable.Range(0, 10)
+            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
+            .ToList();
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Count.ShouldBe(3,
+            "candidates not already queued must not exceed the display limit in a single pass");
+    }
+
+    /// <summary>The display limit and the re-score set are not the same thing — a row already
+    /// queued still gets its score refreshed on every pass even when it now ranks outside the top
+    /// `limit`, without that forcing every OTHER eligible row into the queue too (the regression:
+    /// re-scoring the existing queue was conflated with inserting the entire eligible pool).</summary>
+    [Fact]
+    public async Task ProposeAsync_RefreshesAnAlreadyQueuedCandidate_EvenWhenItRanksOutsideTheDisplayLimit()
+    {
+        var (store, queue, _, runner) = NewStack();
+        var rows = Enumerable.Range(0, 10)
+            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
+            .ToList();
+        // Oldest of an otherwise score-tied set (recency is a tie-break only), so RankAll sorts it
+        // last — reliably outside limit: 3.
+        rows[9] = Row("h09", "organic fact 9 about beta", ageDays: 999);
+        store.Candidates["acme"] = rows;
+        queue.Rows = [new PromotionQueueRow("acme", "h09", "h09.md", "stale v1 value", null, 0.1, [], 0, 0)];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Select(c => c.Hash).ShouldContain("h09",
+            "a row already queued must be refreshed even though it now ranks outside the display limit");
+        queue.LastCandidates!.Count.ShouldBe(4,
+            "3 new top-ranked candidates plus the 1 already-queued refresh — not the whole eligible pool");
     }
 
     [Fact]

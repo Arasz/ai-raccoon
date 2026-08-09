@@ -7,16 +7,14 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Parser behavior for the ai-raccoon CLI surface (System.CommandLine 2.0.10 GA):
-///     verb-style config command tree, launch-identity flags, removed-channel rejection,
-///     help/version detection. A verb in the args routes to config commands; no verb
-///     (with or without launch flags) launches the server.
+///     Parser behavior for the ai-raccoon CLI surface (System.CommandLine 2.0.10): verb-style
+///     config commands, launch-identity flags, removed-channel rejection, help/version
+///     detection. A verb routes to config commands; no verb launches the server.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class CliArgsTests
 {
-    // ── Launch identity ──
 
     [Fact]
     public void Parse_ParsesDataRootOption()
@@ -41,9 +39,8 @@ public class CliArgsTests
     [Fact]
     public void CommandTree_RegistersOptionNamesExactlyOncePerCommand()
     {
-        // Regression: PR #70 registered a second root --port next to LaunchPortOption;
-        // System.CommandLine 2.0.10 accepts the tree but symbol lookup then fails for the
-        // whole parse result (~125 tests: 112 Setup + 13 E2E host boot).
+        // A duplicate option name in the tree is accepted at build time, but System.CommandLine
+        // 2.0.10 then fails symbol lookup for the whole parse result.
         var root = CliCommandTree.BuildFullRootCommand();
 
         var duplicates = new List<string>();
@@ -141,7 +138,6 @@ public class CliArgsTests
         parsed.Options.Transport.ShouldBe(McpTransport.Http);
     }
 
-    // ── Removed channels are rejected ──
 
     [Fact]
     public void Parse_RemovedRuntimeFlags_ReturnError()
@@ -183,7 +179,6 @@ public class CliArgsTests
         }
     }
 
-    // ── Verb tree: access ──
 
     [Fact]
     public void Parse_AccessDefaultSet_ParsesCommandPathAndMode()
@@ -243,7 +238,6 @@ public class CliArgsTests
         parsed.CommandPath.ShouldBe(["access", "list"]);
     }
 
-    // ── Verb tree: model ──
 
     [Fact]
     public void Parse_ModelSetLocal_ParsesCommandPath()
@@ -297,7 +291,6 @@ public class CliArgsTests
         CliArgs.TryParse(["model", "show"], out var parsed); parsed.CommandPath.ShouldBe(["model", "show"]);
     }
 
-    // ── Verb tree: retrieval / sweep ──
 
     [Fact]
     public void Parse_RetrievalAlphaSet_ParsesAlpha()
@@ -334,13 +327,12 @@ public class CliArgsTests
     [Fact]
     public void Parse_SweepTtl_IsNotACommand()
     {
-        // Ruling: sweep ttl_days is REMOVED, not moved — no ttl command exists.
+        // sweep ttl_days is REMOVED, not moved — no ttl command exists.
         CliArgs.TryParse(["sweep", "ttl", "set", "30"], out var parsed);
 
         parsed.Errors.ShouldNotBeEmpty();
     }
 
-    // ── Verb tree: sync ──
 
     [Fact]
     public void Parse_SyncAddS3_ParsesUrlAndOptions()
@@ -422,7 +414,6 @@ public class CliArgsTests
         CliArgs.TryParse(["sync", "show"], out var parsed); parsed.CommandPath.ShouldBe(["sync", "show"]);
     }
 
-    // ── Verb tree: watch ──
 
     [Fact]
     public void Parse_WatchEnable_ParsesTargetAndBoolean()
@@ -526,13 +517,12 @@ public class CliArgsTests
         parsed.ParseResult.GetValue<string>("target").ShouldBe("acme");
     }
 
-    // ── Verb tree: serve ──
 
     [Fact]
     public void Parse_BareServe_StillParsesCleanly_AfterObservabilitySubcommandAdded()
     {
-        // Regression guard: giving serve an "observability" subcommand makes
-        // System.CommandLine require one unless serve declares its own action.
+        // An "observability" subcommand under serve makes System.CommandLine require one
+        // unless serve declares its own action.
         CliArgs.TryParse(["serve"], out var parsed);
 
         parsed.Errors.ShouldBeEmpty();
@@ -667,7 +657,6 @@ public class CliArgsTests
         help.ShouldContain("always HTTP");
     }
 
-    // ── Option placement ──
 
     [Fact]
     public void Parse_RootOptionBeforeVerb_ParsesForBankResolution()
@@ -690,7 +679,6 @@ public class CliArgsTests
         parsed.Errors.ShouldNotBeEmpty();
     }
 
-    // ── Core parse behaviors (unchanged from the pre-verb surface) ──
 
     [Fact]
     public void Parse_UnknownOption_ReturnsError()
@@ -771,7 +759,6 @@ public class CliArgsTests
         parsed.Errors.ShouldNotBeEmpty();
     }
 
-    // ── Verb tree: encryption ──
 
     [Fact]
     public void Parse_EncryptionBitwarden_ParsesCommandPath()

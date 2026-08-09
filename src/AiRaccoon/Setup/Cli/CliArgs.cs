@@ -7,9 +7,8 @@ namespace AiRaccoon.Setup.Cli;
 
 /// <summary>
 ///     The only type touching System.CommandLine: builds the verb-style config command tree
-///     plus the launch-identity options, parses args, and renders help/errors/version through
-///     a caller-supplied writer. A verb routes to ConfigCommands; no verb launches the MCP
-///     server. Secrets are never declared as options — the unknown-option parse error is the defense.
+///     plus the launch-identity options, parses args, and renders help/errors/version. A verb
+///     routes to ConfigCommands; no verb launches the MCP server. Secrets are never options.
 /// </summary>
 internal static class CliArgs
 {

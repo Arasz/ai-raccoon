@@ -17,8 +17,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     Access-mode gating at the MCP tool boundary (FR-NM-2 scenarios 1-4, 7-8; see docs/work/features-native-memory/native-memory.feature): reads are
-///     allowed in every mode, writes need rw+, removal needs full.
+///     Access-mode gating at the MCP tool boundary (docs/work/features-native-memory/native-memory.feature):
+///     reads are allowed in every mode, writes need rw+, removal needs full.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -63,7 +63,6 @@ public sealed class MemoryToolsAccessModeTests
         }
     }
 
-    // Scenario 1: default mode is rw.
     [Fact]
     public async Task DefaultMode_WriteSucceeds_AndDeleteIsDenied()
     {
@@ -78,7 +77,6 @@ public sealed class MemoryToolsAccessModeTests
         ex.Message.ShouldContain("memory_delete requires mode full (current rw)");
     }
 
-    // Scenario 2: ro allows reading only.
     [Fact]
     public async Task RoMode_WriteIsDenied_AndSearchStillWorks()
     {
@@ -94,7 +92,6 @@ public sealed class MemoryToolsAccessModeTests
         results.Data!.Results[0].Snippet.ShouldBe("content");
     }
 
-    // Scenario: propose is a read (allowed in ro); promote is a write (denied below rw).
     [Fact]
     public async Task RoMode_ShareExtractProposeAllowed_PromoteDenied()
     {
@@ -112,7 +109,6 @@ public sealed class MemoryToolsAccessModeTests
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    // Scenario 3: full allows removal.
     [Fact]
     public async Task FullMode_DeleteRemovesTheEntry()
     {
@@ -124,7 +120,6 @@ public sealed class MemoryToolsAccessModeTests
         _store.DeletedHashes.ShouldContain("h1");
     }
 
-    // Scenario 4: full allows workspace discard.
     [Fact]
     public async Task FullMode_WorkspaceDiscardRemovesTheWorkspace()
     {
@@ -136,7 +131,6 @@ public sealed class MemoryToolsAccessModeTests
         _store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
 
-    // Scenario 7: the global mode applies to projects without a per-project mode.
     [Fact]
     public async Task GlobalMode_AppliesToProjectWithoutPerProjectOverride()
     {
@@ -147,7 +141,6 @@ public sealed class MemoryToolsAccessModeTests
         result.Data!.ShouldNotBeNull();
     }
 
-    // Scenario 8: the global mode can be tightened to ro.
     [Fact]
     public async Task GlobalModeRo_DeniesWritesForProjectWithoutPerProjectOverride()
     {
@@ -321,9 +314,12 @@ public sealed class MemoryToolsAccessModeTests
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task RequireActiveAsync(string projectId, string workspaceId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
-    // Scenario: the propose tier follows the same read/write gate as every other surface.
     [Fact]
     public async Task RoMode_PromotionListAllowed_AndDiscardDenied()
     {
@@ -337,7 +333,6 @@ public sealed class MemoryToolsAccessModeTests
         ex.Message.ShouldContain("memory_promotion_discard requires mode rw (current ro)");
     }
 
-    // Scenario: a bad limit is an invalid-params answer to the agent, not an internal error.
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -346,7 +341,7 @@ public sealed class MemoryToolsAccessModeTests
         SetMode(perProject: "rw");
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _promotion.List("acme-web", limit, TestContext.Current.CancellationToken));
+            _promotion.List("acme-web", limit, cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldContain("invalid-params: limit must be at least 1");
     }
 }

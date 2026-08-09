@@ -2,14 +2,11 @@ using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>SQL over our memory.db tables (see docs/work/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
+/// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
-    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1): one expression maps
-    // an entries row to its search context, used identically by the vec0 triggers, the v2 migration
-    // backfill and the chunk-column recompute. Length-prefixed (not ':'-joined) because a bare
-    // 'custom:' || project_id || ':' || label collides: (project_id='a:b', label='c') and
-    // (project_id='a', label='b:c') both produce 'custom:a:b:c'.
+    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1). Length-prefixed, not
+    // ':'-joined, because the naive join collides across project id/label boundaries.
     public static string ContextKeyExpression(string prefix) => $"""
                                                                   CASE
                                                                       WHEN {prefix}workspace_id IS NOT NULL
@@ -22,9 +19,8 @@ internal static class MemorySql
 
     /// <summary>
     ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
-    ///     (see SearchContexts/FilterFor) into the same key. Mirrors FilterFor's branches exactly,
-    ///     including its quirks (the project branch reads the project id out of the context string,
-    ///     not the <paramref name="projectId" /> argument) so the two never diverge on a real query.
+    ///     into the same key. Mirrors FilterFor's branches, including reading the project id from the
+    ///     context string rather than <paramref name="projectId" />, so the two never diverge.
     /// </summary>
     public static string ContextKeyFor(string context, string projectId)
     {
@@ -56,11 +52,8 @@ internal static class MemorySql
         return $"custom:{projectId.Length}:{projectId}:{context}";
     }
 
-    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recompute
-    // chunk_index/total_chunks for one (ctx, source_file) group after a write that can change
-    // group membership. Numbered per ctx rather than per raw scope/project/label/workspace
-    // columns — the project-scope asymmetry (a labelled project row ignores its label) only
-    // holds when both the trigger and this recompute key off the same ctx expression.
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputes
+    // chunk_index/total_chunks for one (ctx, source_file) group after a membership-changing write.
     public static readonly string RecomputeChunkColumnsForContext = $"""
                                                                       WITH numbered AS (
                                                                           SELECT id,
@@ -88,10 +81,9 @@ internal static class MemorySql
                                                                      WHERE entries.id IN (SELECT id FROM numbered)
                                                                     """;
 
-    // embed_state defaults to 'pending': every write lands deferred until the embed pipeline runs.
-    // ON CONFLICT DO NOTHING (bare — expression/partial unique indexes cannot be conflict targets)
-    // makes concurrent same-bucket inserts converge: the loser returns the winner's row via the
-    // post-insert bucket-key re-read (F3; see docs/work/2026-08-06-extraction-followups-plan.md).
+    // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
+    // concurrent same-bucket inserts converge; the loser re-reads by bucket key
+    // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                            workspace_id, agent_id, created_at, updated_at)
@@ -157,7 +149,7 @@ internal static class MemorySql
                                                     """;
 
     // The shared tier is cross-project (uq_entries_shared_bucket is global): the loser of a
-    // concurrent cross-project promote must find the winner's row without a project filter (F3).
+    // concurrent cross-project promote must find the winner's row without a project filter.
     public const string SelectSharedEntryByPathAndHash = """
                                                          SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
                                                                 project_id AS ProjectId, context_label AS ContextLabel,
@@ -184,15 +176,12 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
-    // (see docs/plans/retrieval-improvement-c.md §3 2c): the FTS index carries source_file and section as weighted
-    // columns — bm25(entries_fts, 1.0, 8.0, 16.0) gives a source-path match eight times and
-    // a section match sixteen times the signal of a body-text match, so identifier tokens
-    // (ADR-0070) and section tokens (decision) rank the owning chunk above cross-referencing
-    // prose. ChunkIndex/TotalChunks are persisted columns (docs/plans/2026-08-08-search-knn-perf.md
-    // §3.2/§3.3) rather than a per-query window function — the old MATERIALIZED CTE existed only
-    // to keep FTS5's bm25() from sharing a SELECT with a window function. snippet() is deferred
-    // (§WP7, issue #198) — computing it over the ~300-row candidate window cost ~6.3 ms/query for
-    // rows ranking discards; FtsSnippetsForSurvivors resolves it for ranking survivors only.
+    // bm25(entries_fts, 1.0, 8.0, 16.0) weights source_file/section matches 8x/16x a body-text
+    // match, so identifier and section tokens outrank cross-referencing prose
+    // (docs/plans/retrieval-improvement-c.md §3 2c). ChunkIndex/TotalChunks are persisted columns,
+    // not a per-query window function (docs/plans/2026-08-08-search-knn-perf.md §3.2/§3.3).
+    // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
+    // FtsSnippetsForSurvivors resolves it there instead.
     public const string SearchByFilter = """
                                          SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
@@ -205,13 +194,10 @@ internal static class MemorySql
                                          LIMIT @limit
                                          """;
 
-    // Deferred FTS snippet resolution (§WP7, issue #198): re-runs the SAME @query text SearchByFilter
-    // used, restricted to the ranking survivors' rowids, so the highlighting matches what the eager
-    // statement would have produced. Filters by entries_fts.rowid (= entries.id), not e.hash — measured
-    // (session scratchpad, live-bank copy, K=20 survivors): filtering by e.hash forces FTS5 to fall
-    // back to a full MATCH scan of the term across the WHOLE corpus (`SCAN entries_fts VIRTUAL TABLE
-    // INDEX 0:M3`, 7.9-17.7 ms here) because hash isn't a column FTS5 can index; entries_fts.rowid IN
-    // (...) alongside MATCH uses FTS5's rowid lookup (`INDEX 0:=M3`) and drops to 2.9-3.2 ms.
+    // Re-runs the SAME @query text SearchByFilter used, restricted to the ranking survivors' rowids,
+    // so the highlighting matches what the eager statement would have produced. Filters by
+    // entries_fts.rowid rather than e.hash, which is not FTS5-indexable and degrades MATCH to a
+    // full-corpus scan (docs/plans/2026-08-08-search-knn-perf.md §WP7).
     public const string FtsSnippetsForSurvivors = """
                                                   SELECT e.hash AS Hash, snippet(entries_fts, 0, '', '', '…', 12) AS Snippet
                                                   FROM entries_fts
@@ -219,13 +205,11 @@ internal static class MemorySql
                                                   WHERE entries_fts MATCH @query AND entries_fts.rowid IN @ids
                                                   """;
 
-    // vec0 modality: native KNN over the ctx partition (docs/plans/2026-08-08-search-knn-perf.md
-    // §3.4) — replaces `WHERE {filter}` entirely, since the partition already selects exactly the
-    // rows a search context can retrieve (§3.1). Ordered by distance ascending so the row position
-    // is the rank for RRF; `ORDER BY v.distance, e.path` on top of the KNN keeps the existing
-    // distance-tie break (verified: vec0 preserves it). Vector hits carry a fallback snippet built
-    // in C# from the entry value (the FTS list's snippet() payload wins for docs both modalities
-    // retrieve). The content list feeds the dual-vector fusion.
+    // vec0 modality: native KNN over the ctx partition replaces `WHERE {filter}` entirely, since the
+    // partition already selects exactly the rows a search context can retrieve
+    // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
+    // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
+    // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
     public const string VectorSearchByFilter = """
                                                SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
@@ -258,8 +242,7 @@ internal static class MemorySql
         "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
-    // SelectScopeByHashAndProject, before the delete, so the (ctx, source_file) group the row
-    // belonged to can be recomputed afterward.
+    // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
     public const string SelectDeleteRecomputeContext = """
                                                         SELECT scope AS Scope, context_label AS ContextLabel,
                                                                workspace_id AS WorkspaceId, source_file AS SourceFile
@@ -271,10 +254,9 @@ internal static class MemorySql
         "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
         "ON CONFLICT(hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
-    // Mirror delete/rename: committed chunks of the source path AND everything under it
-    // (a deleted directory cascades to its subtree; workspace scratch is transient and
-    // stays), plus the per-path watch fingerprints so a delete-then-recreate cycle cannot
-    // hash-skip its way back to stale chunks. The watch registration survives.
+    // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
+    // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
+    // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
     public const string DeleteBySourcePath = """
                                              DELETE FROM entries
                                              WHERE project_id = @projectId AND workspace_id IS NULL
@@ -309,9 +291,9 @@ internal static class MemorySql
                                         ORDER BY project_id, path
                                         """;
 
-    // WP4 cross-process scan lease (D-2; docs/plans/2026-08-07-watch-scan-runaway-fix.md): the
-    // lease lives on the watches row, not a separate table, so a row delete is lease release.
-    // ExecuteAsync(...) == 1 tells the caller whether the grant/renewal succeeded.
+    // Cross-process scan lease (docs/plans/2026-08-07-watch-scan-runaway-fix.md): the lease lives
+    // on the watches row, not a separate table, so a row delete is lease release. ExecuteAsync(...)
+    // == 1 tells the caller whether the grant/renewal succeeded.
 
     // Grants when unowned, re-entrant for the current owner, or the previous owner's lease expired.
     public const string AcquireWatchScanLease = """
@@ -361,21 +343,22 @@ internal static class MemorySql
         "ORDER BY id LIMIT @limit";
 
     // Sets all four embed-transition columns together (docs/plans/2026-08-08-search-knn-perf.md
-    // §3.6): a chunk with no heading passes heading_path = '' (the vec_structure_au WHEN guard's
-    // "leave it alone" case), never NULL — NULL is reserved for "not yet processed".
+    // §3.6): a chunk with no heading writes heading_path = '' — never NULL, since NULL means "not
+    // yet processed" and the vec_structure_au trigger guards on IS NOT NULL.
     public const string MarkEmbedded =
         "UPDATE entries SET embed_state = 'embedded', embedding = @embedding, " +
         "heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
 
-    // Structure-only counterpart to MarkEmbedded, for the healing pass (§3.6.3): the row is
-    // already embed_state='embedded' with content embedding set, so only the structure columns move.
+    // Structure-only counterpart to MarkEmbedded, for the healing pass: the row is already
+    // embed_state='embedded', so only the structure columns move. The embed_state guard closes a
+    // race with a concurrent sync reindex, which can clear the row back to 'pending' mid-heal.
     public const string MarkStructure =
-        "UPDATE entries SET heading_path = @headingPath, structure_embedding = @structureEmbedding WHERE id = @id";
+        "UPDATE entries SET heading_path = @headingPath, structure_embedding = @structureEmbedding " +
+        "WHERE id = @id AND embed_state = 'embedded'";
 
-    // Healing candidates for a bank embedded before WP5 (or a chunk whose heading never parsed):
-    // embedded content with no structure yet. Bounded per call by @limit; every candidate this
-    // call touches gets heading_path set to a real path or the '' sentinel via MarkStructure, so
-    // it leaves this set for good and the window advances across calls.
+    // Healing candidates: embedded content with no structure yet (a bank embedded before the
+    // structure writer landed, or a chunk whose heading never parsed). Bounded per call by @limit;
+    // MarkStructure sets heading_path on every candidate touched, so it leaves this set for good.
     public const string SelectStructureHealCandidates =
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' AND heading_path IS NULL " +
         "AND structure_embedding IS NULL AND project_id = @projectId ORDER BY id LIMIT @limit";
@@ -390,7 +373,7 @@ internal static class MemorySql
     public const string CommittedContexts = """
                                             SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
                                             FROM entries
-                                            WHERE scope IN ('shared', 'project')
+                                            WHERE scope = 'shared' OR (scope = 'project' AND project_id = @projectId)
                                             ORDER BY CASE WHEN scope = 'shared' THEN 0 ELSE 1 END, context
                                             """;
 
@@ -404,7 +387,8 @@ internal static class MemorySql
                                             """;
 
     public const string SelectRatingForBump =
-        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries WHERE hash = @hash LIMIT 1";
+        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +
+        "WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared') LIMIT 1";
 
     public const string BumpAccess =
         """
@@ -412,7 +396,7 @@ internal static class MemorySql
         SET access_count = access_count + 1,
             last_accessed_at = @now,
             rating = @rating
-        WHERE hash = @hash
+        WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
         """;
 
     public const string UpsertSetting = """"

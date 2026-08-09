@@ -14,8 +14,18 @@ filled with noise this way: 86 entries, ~53 of them Hermes conversation turn-mir
 bulk-shared on 2026-08-07, plus doc chunks promoted for merely mentioning another
 project's name. The owner wiped the tier (backup:
 `~/.ai-raccoon/backups/shared-tier-backup-2026-08-08.json`) and commissioned a 3-agent
-scoring evaluation, landed via PR #179's `docs/work/2026-08-08-promotion-scoring-eval.md`
-and preserved scorers/harness under `docs/work/promotion-scoring-eval/`.
+scoring evaluation, with scorers and harness preserved under
+`docs/work/promotion-scoring-eval/`.
+
+> **Citation correction, 2026-08-09.** This paragraph read "landed via PR #179's
+> `docs/work/2026-08-08-promotion-scoring-eval.md`". That round-1 report is **not on `main`** —
+> it exists only in `3efb97e` on the unmerged branch `task/otlp-research`, so the citation has
+> never resolved for anyone reading this ADR from `main`. The round-**2** tournament that selected
+> the shipped v3 design is committed and is the reachable record:
+> `docs/work/2026-08-08-promotion-scoring-round2.md`. The labeled fixtures cited further down
+> remain deliberately uncommitted (public repo, private-repo doc quotes), which means the parity
+> gate `PromotionScoringRealDataTests` cannot be re-run without them — it skips unless
+> `AIRACCOON_SCORING_EVAL_FIXTURE` is set. That is a known reproducibility gap, not an oversight.
 
 **Measured incumbent failure.** Full-set Spearman **+0.125** against 61 hand-labeled
 candidates (usefulness 0–4). The incumbent's own signals are near-constant on a

@@ -10,8 +10,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     Access-tier gating at the watch tool boundary (D7/D8): add/remove need rw+,
-///     status answers in every tier. Mirrors MemoryToolsAccessModeTests setup.
+///     Access-tier gating at the watch tool boundary (docs/plans/file-watcher-implementation.md
+///     D7/D8): add/remove need rw+, status answers in every tier. Mirrors
+///     MemoryToolsAccessModeTests setup.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

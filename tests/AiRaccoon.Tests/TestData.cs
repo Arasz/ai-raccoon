@@ -93,12 +93,29 @@ public sealed class FakePromotionQueue : IPromotionQueue
         return Task.FromResult(PromoteOutcome);
     }
 
+    public string? LastDiscardProject { get; private set; }
+    public string? LastDiscardHash { get; private set; }
+    public int DiscardResult { get; set; }
+
     public Task<int> DiscardAsync(string projectId, string? hash,
-        CancellationToken cancellationToken = default) => Task.FromResult(0);
+        CancellationToken cancellationToken = default)
+    {
+        LastDiscardProject = projectId;
+        LastDiscardHash = hash;
+        return Task.FromResult(DiscardResult);
+    }
+
+    public IReadOnlyList<PromotionQueueRow> Rows { get; set; } = [];
+    public string? LastListProject { get; private set; }
+    public int? LastListLimit { get; private set; }
 
     public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, int limit,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
+        CancellationToken cancellationToken = default)
+    {
+        LastListProject = projectId;
+        LastListLimit = limit;
+        return Task.FromResult<IReadOnlyList<PromotionQueueRow>>(Rows.Take(limit).ToList());
+    }
 
     public async Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default)
     {

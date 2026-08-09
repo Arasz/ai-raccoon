@@ -6,7 +6,8 @@ namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
 ///     IWatchService impl: add/remove/status with enable + scope + existence validation, per-
-///     (projectId, path) idempotency and normalized identity (D3); the pipeline owns runtime status.
+///     (projectId, path) idempotency and normalized identity (docs/plans/file-watcher-implementation.md D3);
+///     the pipeline owns runtime status.
 /// </summary>
 public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPipeline pipeline, TimeProvider timeProvider)
     : IWatchService
@@ -31,7 +32,8 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan (D1).
+        // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan
+        // (docs/plans/file-watcher-implementation.md D1).
         await store.AddWatchAsync(projectId, normalized, now, 0, cancellationToken)
             .ConfigureAwait(false);
         pipeline.RegisterWatch(projectId, normalized);

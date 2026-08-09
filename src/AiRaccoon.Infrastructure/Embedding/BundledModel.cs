@@ -7,18 +7,17 @@ namespace AiRaccoon.Infrastructure.Embedding;
 public sealed record BundledModelResult(bool AllPresent, IReadOnlyList<string> Errors);
 
 /// <summary>
-///     Locates and bootstraps the bundled int8 all-MiniLM-L6-v2 ONNX model + BERT vocab that
-///     ship inside the tool package (FR-NM-3; see docs/work/features-native-memory/native-memory.feature):
-///     pinned SHA-256, resolved from AppContext.BaseDirectory/Models (or the repo source dir during tests).
-///     A custom model path comes from the embedding.model settings row via 'ai-raccoon model set local'.
+///     Locates and bootstraps the bundled int8 all-MiniLM-L6-v2 ONNX model + BERT vocab that ship
+///     inside the tool package (FR-NM-3; see docs/work/features-native-memory/native-memory.feature),
+///     pinned by SHA-256. A custom model path comes from the embedding.model settings row.
 /// </summary>
 public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClientFactory httpClientFactory) : IBundledModel
 {
     public const string ModelFileName = "model_qint8_arm64.onnx";
     private const string VocabFileName = "vocab.txt";
 
-    // Pinned after the first verified download (2026-08-03) — the script and the gate test
-    // share these so a tampered or drifted model fails loudly instead of degrading retrieval.
+    // Pinned after the first verified download — the script and the gate test share these so a
+    // tampered or drifted model fails loudly instead of degrading retrieval.
     public const string ModelSha256 = "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474";
     public const string VocabSha256 = "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3";
 

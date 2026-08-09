@@ -11,7 +11,6 @@ internal static class TestSqliteInit
     {
         SqliteEncryptionInit.EnsureInitialized();
 
-        // Verify it worked
         try
         {
             var libName = typeof(SQLitePCL.raw).GetMethod("GetNativeLibraryName",

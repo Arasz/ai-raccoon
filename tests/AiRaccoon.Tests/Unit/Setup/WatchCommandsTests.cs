@@ -7,10 +7,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     Direct tests of the extracted WatchCommands component (watch enable/disable, scope,
-///     concurrency, list, registered, remove). The full behavior contract stays in
-///     ConfigCommandsWatchTests through the dispatcher; these pin the component seam and the
-///     ctor-injected IWatchStore shape (the only watch-family dependency).
+///     Direct tests of the extracted WatchCommands component (enable/disable, scope, concurrency,
+///     list, registered, remove). The full behavior contract lives in ConfigCommandsWatchTests;
+///     these pin the component seam and its ctor-injected IWatchStore shape.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

@@ -57,7 +57,7 @@ public static class HeadingPathParser
             }
 
             // Sub-sections do not extend the path: they dilute the identifier signal
-            // (measured: S2 structure sim 0.88 without vs 0.34 with the H3 tail).
+            // (docs/adr/0004-dual-vector-structure-signal.md).
             if (level > 2)
             {
                 continue;
