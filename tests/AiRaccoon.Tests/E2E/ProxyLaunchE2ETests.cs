@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Options;
@@ -17,6 +18,7 @@ namespace AiRaccoon.Tests.E2E;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(E2ETestCollection.Name)]
 public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 {
     private readonly string _backendRoot = TestData.CreateTempRoot("proxy-backend");
@@ -81,6 +83,59 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         // Protocol 2026-07-28 stamps the LOCAL ServerInfo over the relayed one, so this fails
         // unless the proxy adopts the backend's identity as its own.
         JsonSerializer.Serialize(client.ServerInfo).ShouldBe(JsonSerializer.Serialize(direct.ServerInfo));
+    }
+
+    /// <summary>
+    ///     No in-process fallback, ever (ADR-0020): a backend that cannot start ends the process with
+    ///     one actionable line, because a silent fallback would reinstate the fan-out unobserved.
+    /// </summary>
+    [Fact]
+    public async Task WhenTheBackendCannotStart_ItFailsLoudly()
+    {
+        var root = TestData.CreateTempRoot("proxy-no-backend");
+        var port = AiRaccoonProcess.FreePort();
+        try
+        {
+            // The spawned `serve` opens this bank and cannot; nothing is listening on the port either.
+            var bank = SqliteConnectionFactory.BankPathFor(
+                new InfrastructureOptions { DataRoot = root, Scope = InstallScope.User });
+            await File.WriteAllBytesAsync(bank, RandomNumberGenerator.GetBytes(4096),
+                TestContext.Current.CancellationToken);
+
+            var (exit, stderr) = await RunProxyAsync(root, port);
+
+            exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+            stderr.ShouldContain($"http://127.0.0.1:{port}/mcp");
+            stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
+            stderr.ShouldContain("ai-raccoon --transport stdio");
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    private static async Task<(int Exit, string Stderr)> RunProxyAsync(string dataRoot, int port)
+    {
+        var startInfo = new ProcessStartInfo(AiRaccoonProcess.Executable)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("--data-root");
+        startInfo.ArgumentList.Add(dataRoot);
+        startInfo.ArgumentList.Add("--port");
+        startInfo.ArgumentList.Add(port.ToString());
+
+        using var process = Process.Start(startInfo)!;
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        await stdout;
+        return (process.ExitCode, await stderr);
     }
 
     private Task<McpClient> ConnectDirectlyAsync() =>

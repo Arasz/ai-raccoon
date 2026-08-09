@@ -31,7 +31,7 @@ internal static partial class ProxyRunner
         }
         catch (BackendUnavailableException ex)
         {
-            Log.ProxyGaveUp(logger, ex.Message);
+            // Written, not logged: --quiet must not silence the one line that says why memory is gone.
             await stderr.WriteLineAsync(ex.Message);
             return ExitCode.ProxyBackendUnavailable;
         }
@@ -175,8 +175,5 @@ internal static partial class ProxyRunner
     {
         [LoggerMessage(EventId = 630, Level = LogLevel.Debug, Message = "ai-raccoon: proxying stdio to {Url}")]
         public static partial void ProxyReady(ILogger logger, string url);
-
-        [LoggerMessage(EventId = 631, Level = LogLevel.Error, Message = "{Reason}")]
-        public static partial void ProxyGaveUp(ILogger logger, string reason);
     }
 }

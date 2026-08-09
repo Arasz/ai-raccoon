@@ -13,7 +13,15 @@ public class McpServerSetupTests
     [InlineData("HTTP", McpTransport.Http)]
     [InlineData("Http", McpTransport.Http)]
     [InlineData("stdio", McpTransport.Stdio)]
-    [InlineData("", McpTransport.Stdio)]
-    [InlineData(null, McpTransport.Stdio)]
-    public void SelectTransports_ResolvesEnvironmentValue(string? transport, McpTransport expected) => McpServerSetup.SelectTransports(transport).ShouldBe([expected]);
+    [InlineData("proxy", McpTransport.Proxy)]
+    public void SelectTransports_ResolvesTheNamedTransport(string transport, McpTransport expected) =>
+        McpServerSetup.SelectTransports(transport).ShouldBe([expected]);
+
+    /// <summary>One default, not two: an unparseable value lands on the launch default itself.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("nonsense")]
+    public void SelectTransports_UnparseableValue_FallsBackToTheLaunchDefault(string? transport) =>
+        McpServerSetup.SelectTransports(transport).ShouldBe([DefaultOptions.Transport]);
 }

@@ -19,6 +19,7 @@ namespace AiRaccoon.Tests.E2E;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(E2ETestCollection.Name)]
 public sealed class ProxyWireE2ETests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("proxy-wire");
