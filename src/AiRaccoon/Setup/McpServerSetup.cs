@@ -156,7 +156,12 @@ internal static partial class McpServerSetup
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
-            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
+            // Order is load-bearing, not registration luck: the first filter added is the outermost,
+            // so telemetry sits inside the refusal mapper and still sees the raw exception type.
+            // Pinned by ToolTelemetryFilterTests.RefusedCall_RecordsTheExceptionType.
+            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f
+                .AddCallToolFilter(ToolRefusals.Filter)
+                .AddCallToolFilter(ToolTelemetry.Filter));
 
             if (selectedTransports.Count == 0)
             {

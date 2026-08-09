@@ -17,7 +17,10 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
-/// <summary>Verifies that MemoryTools methods emit metrics and traces through ToolCallMetrics.</summary>
+/// <summary>
+///     Verifies that a tool call emits metrics and traces. The emission is the filter's, not the
+///     tool's, so each case runs the tool method inside the filter the server registers.
+/// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ObservabilityCollection.Name)]
@@ -43,9 +46,9 @@ public class MemoryToolsInstrumentationTests
         ActivitySource.AddActivityListener(listener);
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
-        var tools = CreateTools(store, metrics);
+        var tools = CreateTools(store);
 
-        await tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken);
+        await WriteThroughFilterAsync(metrics, tools);
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
@@ -68,10 +71,9 @@ public class MemoryToolsInstrumentationTests
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore { ThrowOnWrite = true };
-        var tools = CreateTools(store, metrics);
+        var tools = CreateTools(store);
 
-        await Should.ThrowAsync<InvalidOperationException>(() =>
-            tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<InvalidOperationException>(() => WriteThroughFilterAsync(metrics, tools));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
@@ -98,10 +100,9 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaError = new InvalidOperationException("meta boom") };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), metrics);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue));
 
-        await Should.ThrowAsync<InvalidOperationException>(() =>
-            tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<InvalidOperationException>(() => WriteThroughFilterAsync(metrics, tools));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
@@ -122,9 +123,9 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), metrics);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue));
 
-        await tools.Write("acme", "content", cancellationToken: TestContext.Current.CancellationToken);
+        await WriteThroughFilterAsync(metrics, tools);
 
         var durations = durationCollector.GetMeasurementSnapshot();
         durations.Count.ShouldBe(1);
@@ -142,10 +143,10 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService { Exception = new SyncNotConfiguredException() },
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
+            new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()));
 
         var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
-            tools.Sync("acme", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_sync", token => tools.Sync("acme", token)));
 
         ex.Message.ShouldContain("not configured");
 
@@ -163,9 +164,10 @@ public class MemoryToolsInstrumentationTests
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore();
-        var tools = CreateTools(store, metrics);
+        var tools = CreateTools(store);
 
-        await tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
+        await ThroughFilterAsync(metrics, "memory_search",
+            token => tools.Search("acme", "query", cancellationToken: token));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
@@ -180,9 +182,9 @@ public class MemoryToolsInstrumentationTests
         using var invocationCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         var store = new SimpleFakeStore();
-        var tools = CreateTools(store, metrics);
+        var tools = CreateTools(store);
 
-        await tools.Stats("acme", TestContext.Current.CancellationToken);
+        await ThroughFilterAsync(metrics, "memory_stats", token => tools.Stats("acme", token));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
@@ -190,12 +192,15 @@ public class MemoryToolsInstrumentationTests
         invocations[0].Tags["result"].ShouldBe("success");
     }
 
-    private static MemoryTools CreateTools(
-        SimpleFakeStore store,
-        ToolCallMetrics metrics)
-    {
-        return new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), metrics);
-    }
+    private static MemoryTools CreateTools(SimpleFakeStore store) =>
+        new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()));
+
+    private static Task WriteThroughFilterAsync(ToolCallMetrics metrics, MemoryTools tools) =>
+        ThroughFilterAsync(metrics, "memory_write", token => tools.Write("acme", "content", cancellationToken: token));
+
+    private static Task ThroughFilterAsync(ToolCallMetrics metrics, string toolName, Func<CancellationToken, Task> call) =>
+        ToolCallRecorder.ThroughFilterAsync(metrics, toolName, ToolCallRecorder.Arguments(("projectId", "acme")),
+            call, TestContext.Current.CancellationToken);
 
     // ── Minimal fake implementations ──
 

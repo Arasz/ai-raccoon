@@ -4,7 +4,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Observability;
 using JetBrains.Annotations;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -17,8 +16,7 @@ namespace AiRaccoon.Tools;
 public sealed class SweepTools(
     SweepService sweeper,
     ForgettingPolicyService knobs,
-    ToolGate gate,
-    ToolCallMetrics observability)
+    ToolGate gate)
 {
     private const string TnMemorySweep = "memory_sweep";
 
@@ -31,23 +29,13 @@ public sealed class SweepTools(
         bool dryRun = true,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemorySweep, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
+        await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
 
-            var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
-            var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
-            var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var threshold = await knobs.GetSweepThresholdAsync(projectId, cancellationToken);
+        var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
+        var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

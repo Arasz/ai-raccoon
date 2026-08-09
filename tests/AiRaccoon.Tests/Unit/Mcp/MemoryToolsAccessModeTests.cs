@@ -38,16 +38,15 @@ public sealed class MemoryToolsAccessModeTests
         var access = new MemoryAccessGuard(_store);
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        var metrics = new ToolCallMetrics();
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(access, queue);
-        _tools = new MemoryTools(_store, gate, metrics);
-        _share = new ShareTools(_store, gate, metrics,
+        _tools = new MemoryTools(_store, gate);
+        _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
                 new FakeTimeProvider(FixedNow)), queue);
-        _workspace = new WorkspaceTools(workspaces, gate, metrics);
-        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate, metrics);
-        _promotion = new PromotionTools(queue, gate, metrics);
+        _workspace = new WorkspaceTools(workspaces, gate);
+        _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate);
+        _promotion = new PromotionTools(queue, gate);
     }
 
     private void SetMode(string? global = null, string? perProject = null)
