@@ -73,6 +73,34 @@ independent subagents in parallel.
 is usually several items that could have run at once. Do the split while planning, and name which
 sections share a file — those serialise, the rest do not.
 
+**Isolate every agent, at every depth.** "Isolated" is exact, and it has two axes:
+
+- **A worktree of its own** — the agent's workspace on disk. One per agent, not one per session.
+- **A workspace id of its own** in every shared store that supports one — the memory bank, the
+  scratch/notes tier, anywhere in-progress state accumulates. Its notes stay in that workspace and
+  are consolidated or discarded when the agent finishes.
+
+This applies to **every** agent in the tree, not just the ones you dispatch directly: an agent that
+dispatches its own agent owes each of them the same two things. Depth does not exempt anyone; a
+sub-agent sharing its parent's tree is the same collision one level down, and harder to see.
+
+**Disjoint files are not isolation.** Agents sharing one tree share its build output, dependency
+cache, and whatever state a build writes beside the source — so one agent compiles against another's
+half-applied edit, and a green or red run then says nothing about its own change. Sharing one
+workspace id has the same shape in the notes store: partial findings from one agent are read as
+another's context. Both failures are quiet — nothing is lost, but agents block on each other and no
+per-agent result can be cited.
+
+Dispatch using the isolation your agent tool provides rather than creating worktrees by hand — a
+manual step before each dispatch is the one that gets skipped when the work feels urgent. Two things
+travel with the worktree and are easy to forget: any per-directory permission or auto-approval mode
+must be armed for the new path too, or the agent stalls waiting for an answer nobody is there to
+give; and **the gate is still re-run on the merged result**, because each per-agent run measured a
+different tree.
+
+Serialising the dispatches also removes the collision — by removing the parallelism. Prefer
+isolation; fall back to sequential only when the work genuinely cannot be split.
+
 **Two levels of dispatch, no more.** You dispatch; those agents may dispatch once; nothing
 deeper. The cap is about the machine rather than the design: every live agent costs memory and a
 share of the CPU, and a tree that widens without bound starves the work already running.
@@ -252,6 +280,12 @@ project's docs against the merged code, fix small drift, and report gaps needing
 - **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.**
   Subagent cache reads depend on a byte-stable prefix (~10× cost); rewrite only between tasks.
 - **Two levels of dispatch, no deeper.** A widening agent tree starves the machine.
+- **"Isolated" means per agent, at every depth, on two axes: its own worktree and its own workspace
+  id.** Being *in* a worktree is not the same as each agent having *its own*, and an agent that
+  dispatches further owes its children the same. Disjoint files still share build output and
+  dependency state, so an agent can block on another's half-applied edit and no per-agent gate
+  result can be trusted; a shared workspace id does the same to in-progress notes. Arm any
+  per-directory approval mode for each new path, and re-run the gate on the merged result.
 
 ## Recovery
 
