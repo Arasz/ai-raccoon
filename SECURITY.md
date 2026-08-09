@@ -68,9 +68,11 @@ it (ADR-0008).
 the running backend by asking it to stop over `POST /shutdown`, so a token holder can shut
 memory down as well as call tools. That is a small addition to an already-large authority:
 the same token already reaches `memory_delete` and `memory_sweep` across the whole bank, and
-the proxy starts a new backend on the next call. The endpoint is POST-only (so no
-cross-origin request from a browser on the machine can trip it), goes through the same
-`FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
+the proxy starts a new backend on the next call. The endpoint is POST-only, and — the part
+that actually keeps a browser out — it requires the `X-AiRaccoon-Token` header: a
+cross-origin `POST` can be a CORS *simple request* and reach the port unpreflighted, but it
+cannot carry a custom header without a preflight, and that preflight fails. It goes through
+the same `FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
 the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
 host with no token — an ungated `--transport http` launch exposes no shutdown.
 

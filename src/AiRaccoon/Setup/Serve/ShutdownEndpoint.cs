@@ -11,8 +11,9 @@ internal static partial class ShutdownEndpoint
 {
     public const string Path = "/shutdown";
 
-    /// <summary>What an in-flight request gets to finish once a shutdown is accepted; also the
-    /// host's StopAsync bound, so a stuck request cannot hold the port open indefinitely.</summary>
+    /// <summary>The host's whole StopAsync budget (HostOptions.ShutdownTimeout), shared by every
+    /// hosted service and by in-flight requests — not a per-request guarantee. 10s, down from the
+    /// 30s framework default (ADR-0022).</summary>
     public static readonly TimeSpan DrainWindow = TimeSpan.FromSeconds(10);
 
     extension(WebApplication webApplication)
