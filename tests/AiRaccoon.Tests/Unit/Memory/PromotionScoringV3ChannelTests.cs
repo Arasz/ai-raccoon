@@ -70,7 +70,10 @@ public sealed class PromotionScoringV3ChannelTests
         var (score, reasons) = PromotionScorer.Score(row, "ai-raccoon", AllProjects);
 
         reasons[0].ShouldBe("auto-memory-note");
-        score.ShouldBeGreaterThanOrEqualTo(3.0);
+        // Round-3 lane-A drops the auto-memory-note prior (2.70 -> 2.06, its labelled mean) and adds
+        // the (here mildly negative) substance ramp for a chunk this short; 2.9 still reads as "near
+        // the top" against the new prior + evidence ceiling (2.06 + 1.4 = 3.46).
+        score.ShouldBeGreaterThanOrEqualTo(2.9);
     }
 
     [Fact]

@@ -4,18 +4,45 @@ namespace AiRaccoon.Core.Memory;
 internal readonly record struct ContentEvidence(double Adjustment, IReadOnlyList<string> Reasons);
 
 /// <summary>Bounded content-shape evidence that moves a doc-channel candidate off its channel prior, plus
-/// the bespoke auto-memory-note evidence (ported from agentC/scorer.py's doc_adjust() and the
-/// auto_memory_note branch of score_candidate(), see docs/adr/0018-promotion-scoring-v2.md v3 section).</summary>
+/// the bespoke auto-memory-note evidence and the three centred terms (substance, durability, portability)
+/// shared with <see cref="OrganicRefinement" /> (ported from scorer.py's doc_adjust(), organic_adjust()'s
+/// shared helpers, and the auto_memory_note branch of score_candidate(), see
+/// docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).</summary>
 internal static class PromotionContentEvidence
 {
     private const double Lo = -1.60;
-    private const double Hi = 1.30;
+    private const double Hi = 1.60;
     private const double PlanRuleCap = 0.45;
-    private const double DefaultRuleCap = 1.10;
+    private const double DefaultRuleCap = 1.00;
+    private const double RuleGain = 0.38;
+    private const double RuleCentre = 0.20;
 
     private const double AutoMemoryNoteLo = -1.8;
-    private const double AutoMemoryNoteHi = 1.2;
+    private const double AutoMemoryNoteHi = 1.4;
+    private const double AutoMemoryNoteRuleGain = 0.20;
     private const double AutoMemoryNoteRuleCap = 0.60;
+
+    // Substance ramp: chunk length is the single strongest content feature on the training set. A
+    // chunk near the corpus median length (119 words) scores 0; fragments are pushed down,
+    // full-bodied chunks up. Replaces the old two cliff penalties at 420 chars / 60 words.
+    private const double SubstancePivot = 110.0;
+    private const double SubstanceSpan = 90.0;
+    private const double SubstanceGain = 0.55;
+
+    // Durability: an impersonal statement of what always/never holds is the shape a portable rule
+    // takes. Centred so the median chunk contributes nothing.
+    private const double ImpRuleGain = 0.30;
+    private const double ImpRuleCap = 0.40;
+    private const double DurabilityCentre = 0.08;
+
+    // Portability: breadth of outside-world technology, less the density of inside-repo
+    // bookkeeping. Centred on the typical document chunk (~2 distinct technologies named), so it
+    // lifts and demotes in equal measure. Applied to considered technical documents only.
+    private const double TechGain = 0.28;
+    private const int TechCap = 5;
+    private const double TechCentre = 0.55;
+    private const double XrefGain = 0.15;
+    private const double XrefCap = 0.45;
 
     internal static ContentEvidence Evaluate(
         string value, ProvenanceArchetype archetype, string projectId, IReadOnlyList<string> allProjectIds) =>
@@ -27,10 +54,10 @@ internal static class PromotionContentEvidence
         var adj = 0.0;
 
         var ruleCap = archetype == ProvenanceArchetype.Plan ? PlanRuleCap : DefaultRuleCap;
-        var ruleBonus = Clamp(0.38 * f.RuleDensity, 0.0, ruleCap);
-        if (ruleBonus > 0)
+        var ruleBonus = Clamp(RuleGain * f.RuleDensity - RuleCentre, -RuleCentre, ruleCap);
+        adj += ruleBonus;
+        if (f.RuleDensity > 0)
         {
-            adj += ruleBonus;
             reasons.Add("rule-language");
         }
 
@@ -41,22 +68,30 @@ internal static class PromotionContentEvidence
             reasons.Add("measured-values");
         }
 
+        if (ProvenanceArchetypeClassifier.DocFamily.Contains(archetype))
+        {
+            adj += Portability(f);
+            reasons.Add("portability");
+        }
+
+        adj += Durability(f);
+        if (f.ImpRuleDensity > 0)
+        {
+            reasons.Add("durable-rule-language");
+        }
+
+        adj += Substance(f);
+
         if (f.ForeignSubject)
         {
-            adj += 0.25;
+            adj += 0.15;
             reasons.Add("foreign-subject");
         }
 
-        if (f.ForeignProjects >= 2)
+        if (f.MidSentence)
         {
-            adj += 0.10;
-            reasons.Add("many-foreign-projects");
-        }
-
-        if (f.HeadingStart)
-        {
-            adj += 0.10;
-            reasons.Add("heading-start");
+            adj += 0.15;
+            reasons.Add("mid-sentence");
         }
 
         var pointer = PointerPenalty(f);
@@ -132,35 +167,7 @@ internal static class PromotionContentEvidence
             reasons.Add("frontmatter-only");
         }
 
-        var thin = false;
-        if (f.NChars < 420)
-        {
-            adj -= 0.35;
-            thin = true;
-        }
-
-        if (f.NWords < 60)
-        {
-            adj -= 0.25;
-            thin = true;
-        }
-
-        if (thin)
-        {
-            reasons.Add("thin-content");
-        }
-
-        var clamped = Clamp(adj, Lo, Hi);
-        // Applied after the clamp: a saturated-Hi chunk must still be demoted for opening
-        // mid-sentence. Doc-channel only, by decision — wiring into OrganicNote/AutoMemoryNote
-        // would be an unmeasured weight change; revisit only with calibration fixtures (ADR-0018).
-        if (f.MidSentence)
-        {
-            clamped -= 0.18;
-            reasons.Add("mid-sentence");
-        }
-
-        return new ContentEvidence(clamped, reasons);
+        return new ContentEvidence(Clamp(adj, Lo, Hi), reasons);
     }
 
     /// <summary>Curated durable note; still checked for status shape (session dumps mis-filed as notes).</summary>
@@ -173,7 +180,7 @@ internal static class PromotionContentEvidence
         var reasons = new List<string>();
         var adj = 0.0;
 
-        var ruleBonus = Clamp(0.20 * f.RuleDensity, 0.0, AutoMemoryNoteRuleCap);
+        var ruleBonus = Clamp(AutoMemoryNoteRuleGain * f.RuleDensity, 0.0, AutoMemoryNoteRuleCap);
         if (ruleBonus > 0)
         {
             adj += ruleBonus;
@@ -190,6 +197,13 @@ internal static class PromotionContentEvidence
         {
             adj += 0.25;
             reasons.Add("foreign-subject");
+        }
+
+        adj += Substance(f);
+        adj += Durability(f);
+        if (f.ImpRuleDensity > 0)
+        {
+            reasons.Add("durable-rule-language");
         }
 
         var statusPenalty = Math.Min(1.2, 0.12 * f.StatusVocab);
@@ -212,6 +226,25 @@ internal static class PromotionContentEvidence
         }
 
         return new ContentEvidence(Clamp(adj, AutoMemoryNoteLo, AutoMemoryNoteHi), reasons);
+    }
+
+    /// <summary>Chunk-length ramp shared by every non-hard-noise branch (ported from scorer.py's
+    /// substance()).</summary>
+    internal static double Substance(CandidateFeatures f) =>
+        SubstanceGain * Clamp((f.NWords - SubstancePivot) / SubstanceSpan, -1.0, 1.0);
+
+    /// <summary>Impersonal-rule-language term shared by every non-hard-noise branch (ported from
+    /// scorer.py's durability()).</summary>
+    internal static double Durability(CandidateFeatures f) =>
+        Clamp(ImpRuleGain * f.ImpRuleDensity, 0.0, ImpRuleCap) - DurabilityCentre;
+
+    /// <summary>Breadth of outside-world technology minus density of inside-repo bookkeeping;
+    /// applied to considered technical documents only (ported from scorer.py's portability()).</summary>
+    private static double Portability(CandidateFeatures f)
+    {
+        var lift = TechGain * Math.Min(f.TechBreadth, TechCap) - TechCentre;
+        var drag = Clamp(XrefGain * f.XrefDensity, 0.0, XrefCap);
+        return lift - drag;
     }
 
     private static double MeasuredBonus(CandidateFeatures f)
@@ -250,5 +283,5 @@ internal static class PromotionContentEvidence
         return Clamp(pointer, 0.0, 1.00);
     }
 
-    private static double Clamp(double x, double lo, double hi) => x < lo ? lo : x > hi ? hi : x;
+    internal static double Clamp(double x, double lo, double hi) => x < lo ? lo : x > hi ? hi : x;
 }

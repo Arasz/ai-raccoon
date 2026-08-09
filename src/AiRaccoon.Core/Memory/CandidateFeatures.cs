@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>Shape-level evidence extracted once per candidate and shared by every scoring branch
-/// (ported from agentC/scorer.py's features(), see docs/adr/0018-promotion-scoring-v2.md v3 section).</summary>
+/// (ported from scorer.py's features(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).</summary>
 internal readonly record struct CandidateFeatures(
     double RuleDensity,
     int MeasureWords,
@@ -19,8 +19,9 @@ internal readonly record struct CandidateFeatures(
     int NChars,
     int NWords,
     bool MidSentence,
-    bool HeadingStart,
-    int ForeignProjects,
+    int TechBreadth,
+    double XrefDensity,
+    double ImpRuleDensity,
     bool ForeignSubject,
     bool StatusOpener,
     int StatusVocab,
@@ -44,7 +45,7 @@ internal static partial class CandidateFeatureExtractor
 
     /// <summary>Alternate spellings a project's id is written under in free text — content matching
     /// is otherwise a bare-substring check that misses e.g. "airaccoon" for "ai-raccoon" (ported from
-    /// agentC/scorer.py's PROJECT_ALIASES, docs/work/promotion-scoring-eval/round2/agentC/scorer.py).</summary>
+    /// scorer.py's PROJECT_ALIASES).</summary>
     private static readonly IReadOnlyDictionary<string, string[]> ProjectAliases =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -67,12 +68,8 @@ internal static partial class CandidateFeatureExtractor
 
         var tableRowCount = lines.Count(l => TableRow().IsMatch(l));
         var others = allProjectIds.Where(id => !string.Equals(id, projectId, StringComparison.Ordinal)).ToList();
-        // An id mentioned only inside a bracketed enumeration is not the subject of the chunk;
-        // strip bracketed spans before taking the subject-detection head window.
-        var subjectScanText = BracketedSpan().Replace(v, string.Empty);
-        var head = subjectScanText.Length > ForeignSubjectHeadChars
-            ? subjectScanText[..ForeignSubjectHeadChars]
-            : subjectScanText;
+        var lowered = v.ToLowerInvariant();
+        var head = lowered.Length > ForeignSubjectHeadChars ? lowered[..ForeignSubjectHeadChars] : lowered;
 
         var openerHead = v.TrimStart('*', '#', '>', '-', '–', ' ', '\t', '\n');
         openerHead = openerHead.Length > StatusOpenerHeadChars ? openerHead[..StatusOpenerHeadChars] : openerHead;
@@ -81,11 +78,10 @@ internal static partial class CandidateFeatureExtractor
 
         var datedWindow = v.Length > DatedFactWindowChars ? v[..DatedFactWindowChars] : v;
 
+        // Whitespace-only strip, matching scorer.py's v.lstrip() exactly — no markdown-decoration
+        // stripping here.
         var stripped = v.TrimStart();
-        // Leading markdown emphasis/quote markup must not hide a lowercase mid-sentence opener
-        // behind it (e.g. "**minscore is measured..." is a fragment, not a sentence start).
-        var midSentenceHead = v.TrimStart('*', '#', '>', '-', '–', ' ', '\t', '\n');
-        var midSentenceChar = midSentenceHead.Length > 0 ? midSentenceHead[0] : '\0';
+        var firstChar = stripped.Length > 0 ? stripped[0] : '\0';
 
         return new CandidateFeatures(
             RuleDensity: Per100(RuleLanguage().Matches(v).Count, nWords),
@@ -101,12 +97,12 @@ internal static partial class CandidateFeatureExtractor
             Frontmatter: Frontmatter().IsMatch(v.TrimStart()),
             NChars: v.Length,
             NWords: nWords,
-            MidSentence: char.IsLower(midSentenceChar) || midSentenceChar is ')' or ',' or ';',
-            HeadingStart: stripped.StartsWith('#'),
-            ForeignProjects: others.Count(id =>
-                AliasesFor(id).Any(alias => v.Contains(alias, StringComparison.OrdinalIgnoreCase))),
+            MidSentence: char.IsLower(firstChar) || firstChar is ')' or ',' or ';',
+            TechBreadth: TechVocabulary().Matches(v).Select(m => m.Value.ToLowerInvariant()).Distinct().Count(),
+            XrefDensity: Per100(CrossReference().Matches(v).Count, nWords),
+            ImpRuleDensity: Per100(ImpersonalRule().Matches(v).Count, nWords),
             ForeignSubject: others.Any(id =>
-                AliasesFor(id).Any(alias => head.Contains(alias, StringComparison.OrdinalIgnoreCase))),
+                AliasesFor(id).Any(alias => head.Contains(alias, StringComparison.Ordinal))),
             StatusOpener: StatusOpener().IsMatch(openerHead),
             StatusVocab: StatusVocabulary().Matches(v).Count,
             SecondPerson: SecondPerson().IsMatch(v),
@@ -127,9 +123,6 @@ internal static partial class CandidateFeatureExtractor
     [GeneratedRegex(@"[A-Za-z][A-Za-z0-9_\-']*")]
     private static partial Regex Words();
 
-    [GeneratedRegex(@"\([^)]*\)|\[[^\]]*\]")]
-    private static partial Regex BracketedSpan();
-
     [GeneratedRegex(
         """\bnever\b|\balways\b|\bmust (?:still |be |not |name|make|raise|treat|come|already|exist)|\bdo not\b|\bdon't\b|\bdoes not apply\b|(?<!\bI )(?<!we )\bcannot\b|\bprefer\b|\binvariant\b|\btraps?\b|\bgotchas?\b|\bbeware\b|\bmitigations?\b|\bworkarounds?\b|\brule\b|\bcontract\b|\bsemantics\b|\bprecedence\b|\bby design\b|\bdeliberate(?:ly)?\b|\bon purpose\b|\bsilently\b|\bfails? open\b|\bworse than\b|\bREGRESSION\b|\broot cause\b|\baccepted, not a defect\b|\bnot a defect\b|\bexempt\b|\bso nobody\b|\brecorded here\b|\bfuture (?:session|audit|reader|maintainer)|\binvisible to\b|\bhides?\b(?=[^.]{0,60}\b(?:from|rows|content|search))""",
         RegexOptions.IgnoreCase)]
@@ -146,7 +139,7 @@ internal static partial class CandidateFeatureExtractor
     private static partial Regex NumberWithUnit();
 
     [GeneratedRegex(
-        """\bAC:|\bGate(?:s)?:|\bacceptance criteria\b|\beffort:|\bimpact:|\bevidence:\s*(?:MEASURED|INFERRED)|\bworktree\b|\bwave \d|\bsub-?agents?:|\bpersona\s*/\s*model|\bcloses:|\bdispatch(?:ed|ing)?\b|\bTDD: (?:yes|no)\b|\bowner (?:ruling|action|requirement)\b|\brisk if deferred\b|\breviewer lane\b|\blens (?:a\d|of)\b|\bthis lens\b|\bread-only (?:review|audit)\b|\bout of scope for\b|\bfollow-?ups? §|\bstatus:\s*(?:executed|open|verified)\b|\bPR #\d+|\bissue #\d+|\bPRs? #\d+|\b#\d{3,}\b""",
+        """\bAC:|\bGate(?:s)?:|\bacceptance criteria\b|\beffort:|\bimpact:|\bevidence:\s*(?:MEASURED|INFERRED)|\bworktree\b|\bwave \d|\bsub-?agents?:|\bpersona\s*/\s*model|\bcloses:|\bdispatch(?:ed|ing)?\b|\bTDD: (?:yes|no)\b|\bowner (?:ruling|action|requirement)\b|\brisk if deferred\b|\breviewer lane\b|\blens (?:a\d|of)\b|\bthis lens\b|\bread-only (?:review|audit)\b|\bout of scope for\b|\bfollow-?ups? §|\bstatus:\s*(?:executed|open|verified)\b""",
         RegexOptions.IgnoreCase)]
     private static partial Regex Ephemera();
 
@@ -172,6 +165,25 @@ internal static partial class CandidateFeatureExtractor
 
     [GeneratedRegex(@"^\s*\|\s*\d+\.\d+", RegexOptions.Multiline)]
     private static partial Regex VersionRow();
+
+    /// <summary>Named third-party technology: the vocabulary of things that exist outside any one
+    /// repo (ported from scorer.py's TECH_RE). Breadth here is the portability signal.</summary>
+    [GeneratedRegex(
+        """\b(sqlite|sqlite-vec|vec0|wal|pragma|vacuum|fts5?|bm25|hnsw|cosine|embedding|dotnet|\.net|c#|msbuild|nuget|roslyn|xunit|nunit|mstest|asp\.net|kestrel|entity ?framework|ef core|aspire|serilog|opentelemetry|otel|azure|cosmos ?db|blob storage|application insights|launchd|systemd|angular|typescript|javascript|node\.?js|npm|bun|vite|eslint|prettier|lighthouse|python|pytest|pip|jsonschema|regex|ruff|mypy|git|github|gitlab|github actions|dependabot|lefthook|husky|semver|cron|crontab|docker|kubernetes|terraform|linux|macos|windows|bash|zsh|posix|json|yaml|toml|markdown|http|https|rest|grpc|websocket|sse|oauth|jwt|tls|ssh|hkdf|sha-?256|aes|argon2|gmail|slack|discord|telegram|whatsapp|imap|smtp|graph api|mcp|model context protocol|openai|anthropic|claude|llm|token(?:iser|izer)|stryker|mutation testing|playwright|selenium|wiremock|testcontainers)\b""",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex TechVocabulary();
+
+    /// <summary>Intra-repo bookkeeping: pointers to this project's own decisions, issues and
+    /// sections (ported from scorer.py's XREF_RE) — the mirror image of tech breadth.</summary>
+    [GeneratedRegex(@"\bADR-?\d|§|\bissues? #\d|\bPRs? #\d|\b#\d{2,}\b|\bNFR-[A-Z]|\bWave \d|\bD\d\b")]
+    private static partial Regex CrossReference();
+
+    /// <summary>An impersonal statement of what always/never holds — a rule, not a report (ported
+    /// from scorer.py's IMPERSONAL_RULE_RE).</summary>
+    [GeneratedRegex(
+        """\b(?:is|are|means|implies|requires|holds|applies)\b[^.\n]{0,50}\b(?:never|always|only|not)\b""",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ImpersonalRule();
 
     [GeneratedRegex(
         """^\s*(Done\b|Fixed\b|Verified\b|Merged\b|Pinned\b|Recorded\b|Rendered\b|All confirmed|Status\b|Prep done|Shell ready|Task closed|Cleanup complete|Amended\b|Locked in|Draft PR|Fresh verification|No code has changed|f: |Implementation in flight|Extension complete|Rollout complete|Ad-hoc verification|Render(?:\s|ing)|Plan written|Software MoE|Here.s the current|PR[- #]|\*\*1\.|All verification|Verification (?:confirmed|complete)|[A-Z][\w' -]{0,30}\b(?:complete|done|closed|finished|delivered)\b\s*[.:!—–-])""",

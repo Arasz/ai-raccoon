@@ -5,8 +5,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
-///     Ports agentC/scorer.py's organic_adjust() and the organic-note branch of score_candidate()
-///     (docs/adr/0018-promotion-scoring-v2.md, v3 section).
+///     Ports scorer.py's organic_adjust() and the organic-note branch of score_candidate()
+///     (docs/adr/0018-promotion-scoring-v2.md, round-3 lane-A section).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -136,7 +136,25 @@ public sealed class OrganicRefinementTests
 
         withForeign.Reasons.ShouldContain("foreign-subject");
         withoutForeign.Reasons.ShouldNotContain("foreign-subject");
-        withForeign.Score.ShouldBe(withoutForeign.Score + 0.20, 0.0001);
+        // Tolerance widened from the exact-diff check: the "proj-beta's" prefix adds a word, which
+        // also nudges the (now-shared) substance ramp by a fraction of a point.
+        withForeign.Score.ShouldBe(withoutForeign.Score + 0.20, 0.01);
+    }
+
+    /// <summary>Round-3 lane-A addition: three or more distinct named technologies is a small
+    /// positive, shared with the document-family portability term.</summary>
+    [Fact]
+    public void ThreeOrMoreDistinctTechnologies_AreRewarded()
+    {
+        var withoutTech = Apply(1.0,
+            "The retry queue caps concurrent workers at one per partition, a limit that has held " +
+            "since it was first introduced and needed no change across any release that shipped since.");
+        var withTech = Apply(1.0,
+            "The retry queue built on sqlite over WAL mode integrates with GitHub Actions and dotnet " +
+            "build so every release that ships through the pipeline exercises the same code path.");
+
+        withTech.Reasons.ShouldContain("tech-breadth");
+        withoutTech.Reasons.ShouldNotContain("tech-breadth");
     }
 
     /// <summary>The mid-sentence penalty is doc-channel-only by decision (pending calibration
@@ -147,8 +165,9 @@ public sealed class OrganicRefinementTests
         var baseline = new CandidateFeatures(
             RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
             FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
-            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false, HeadingStart: false,
-            ForeignProjects: 0, ForeignSubject: false, StatusOpener: false, StatusVocab: 0,
+            Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false,
+            TechBreadth: 0, XrefDensity: 0, ImpRuleDensity: 0,
+            ForeignSubject: false, StatusOpener: false, StatusVocab: 0,
             SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 1, DatedFact: false,
             FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
 
@@ -225,7 +244,7 @@ public sealed class OrganicRefinementTests
             "Done. Merged. Pushed to origin/main. Your branch passed, exit 0, CI checks green. " +
             "as instructed, per your request, waiting on the gate chain, in flight, worktree. ", 10)));
 
-        // Delta clamps to [-2.2, 1.6]; base (2.30) + -2.2 = 0.10 at worst, before the final [0,4] clamp.
+        // Delta clamps to [-1.6, 2.0]; base (2.30) + -1.6 = 0.70 at worst, before the final [0,4] clamp.
         veryNegative.Score.ShouldBeGreaterThanOrEqualTo(0.0);
     }
 }

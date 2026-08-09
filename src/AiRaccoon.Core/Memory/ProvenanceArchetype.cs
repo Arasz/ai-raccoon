@@ -20,40 +20,58 @@ internal enum ProvenanceArchetype
     Review,
     DocIndex,
     TurnMirror,
+    Transcript,
     RememberLog,
     AutoMemorySession,
     AutoMemoryIndex,
     AutoMemoryNote
 }
 
-/// <summary>Classifies a candidate's provenance channel from its path/source-file shape (ported from
-/// agentC/scorer.py's channel(), see docs/adr/0018-promotion-scoring-v2.md v3 section). First-match-wins
-/// ordering.</summary>
+/// <summary>Classifies a candidate's provenance channel from its path/`source_file` shape (ported from
+/// scorer.py's channel(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).
+/// First-match-wins ordering.</summary>
 internal static partial class ProvenanceArchetypeClassifier
 {
+    /// <summary>Priors are fitted, not hand-set — each channel's labelled mean, shrunk toward the
+    /// corpus mean and corrected by the evidence layer's own mean adjustment inside that channel
+    /// (see METHOD.md for the derivation). The six structural-noise channels below the 0.4 promotion
+    /// floor are hand-set instead: every labelled row in them is a 0.</summary>
     private static readonly IReadOnlyDictionary<ProvenanceArchetype, double> Priors =
         new Dictionary<ProvenanceArchetype, double>
         {
-            [ProvenanceArchetype.TurnMirror] = 0.35,
+            [ProvenanceArchetype.Transcript] = 0.15,
+            [ProvenanceArchetype.TurnMirror] = 0.25,
             [ProvenanceArchetype.RememberLog] = 0.30,
             [ProvenanceArchetype.AutoMemorySession] = 0.30,
-            [ProvenanceArchetype.AutoMemoryIndex] = 0.55,
-            [ProvenanceArchetype.AutoMemoryNote] = 2.70,
-            [ProvenanceArchetype.OrganicNote] = 2.30,
-            [ProvenanceArchetype.DocIndex] = 0.35,
-            [ProvenanceArchetype.Adr] = 2.55,
-            [ProvenanceArchetype.Charter] = 2.30,
-            [ProvenanceArchetype.Explanation] = 2.15,
-            [ProvenanceArchetype.Measurement] = 2.10,
-            [ProvenanceArchetype.ResearchSynthesis] = 1.75,
-            [ProvenanceArchetype.Reference] = 1.45,
-            [ProvenanceArchetype.ChangelogEntry] = 1.05,
-            [ProvenanceArchetype.WorkNote] = 1.30,
-            [ProvenanceArchetype.Plan] = 0.70,
-            [ProvenanceArchetype.Review] = 0.95,
-            [ProvenanceArchetype.CatalogPage] = 1.05,
-            [ProvenanceArchetype.OtherDoc] = 1.10
+            [ProvenanceArchetype.AutoMemoryIndex] = 0.35,
+            [ProvenanceArchetype.DocIndex] = 0.30,
+            [ProvenanceArchetype.AutoMemoryNote] = 2.06,
+            [ProvenanceArchetype.OrganicNote] = 2.00,
+            [ProvenanceArchetype.Adr] = 1.42,
+            [ProvenanceArchetype.Charter] = 1.70,
+            [ProvenanceArchetype.Explanation] = 1.61,
+            [ProvenanceArchetype.Measurement] = 1.03,
+            [ProvenanceArchetype.ResearchSynthesis] = 1.48,
+            [ProvenanceArchetype.Reference] = 1.47,
+            [ProvenanceArchetype.ChangelogEntry] = 1.37,
+            [ProvenanceArchetype.WorkNote] = 1.44,
+            [ProvenanceArchetype.Plan] = 1.20,
+            [ProvenanceArchetype.Review] = 1.27,
+            [ProvenanceArchetype.CatalogPage] = 1.26,
+            [ProvenanceArchetype.OtherDoc] = 1.17
         };
+
+    /// <summary>Channels whose payload is a considered technical document. The portability layer
+    /// only applies here: elsewhere a technology name is incidental.</summary>
+    internal static readonly HashSet<ProvenanceArchetype> DocFamily =
+    [
+        ProvenanceArchetype.Adr,
+        ProvenanceArchetype.Charter,
+        ProvenanceArchetype.Explanation,
+        ProvenanceArchetype.Measurement,
+        ProvenanceArchetype.ResearchSynthesis,
+        ProvenanceArchetype.Reference
+    ];
 
     internal static double Prior(ProvenanceArchetype archetype) => Priors[archetype];
 
@@ -75,6 +93,7 @@ internal static partial class ProvenanceArchetypeClassifier
         ProvenanceArchetype.Review => "review",
         ProvenanceArchetype.DocIndex => "doc-index",
         ProvenanceArchetype.TurnMirror => "turn-mirror",
+        ProvenanceArchetype.Transcript => "transcript",
         ProvenanceArchetype.RememberLog => "remember-log",
         ProvenanceArchetype.AutoMemorySession => "auto-memory-session",
         ProvenanceArchetype.AutoMemoryIndex => "auto-memory-index",
@@ -90,8 +109,23 @@ internal static partial class ProvenanceArchetypeClassifier
             return ProvenanceArchetype.TurnMirror;
         }
 
+        var src = sourceFile ?? string.Empty;
+        if (TranscriptSource().IsMatch(src))
+        {
+            return ProvenanceArchetype.Transcript;
+        }
+
+        // The store mints a hex filename for every agent write, so a hex `path` means "organic
+        // write", not "document chunk" — checked before any source_file-shaped routing, since
+        // source_file on such a row is a citation, not a provenance (METHOD.md §7).
         var rawPath = path ?? string.Empty;
-        var p = EffectivePath(rawPath, sourceFile).ToLowerInvariant();
+        if (string.IsNullOrEmpty(sourceFile) || HexName().IsMatch(Basename(rawPath.ToLowerInvariant())))
+        {
+            return ProvenanceArchetype.OrganicNote;
+        }
+
+        // Past this point source_file is a real path and the only provenance worth reading.
+        var p = src.ToLowerInvariant();
         var basename = Basename(p);
 
         if (p.Contains("/.remember/", StringComparison.Ordinal) || p.StartsWith(".remember/", StringComparison.Ordinal))
@@ -114,11 +148,6 @@ internal static partial class ProvenanceArchetypeClassifier
             }
 
             return ProvenanceArchetype.AutoMemoryNote;
-        }
-
-        if (string.IsNullOrEmpty(sourceFile) || HexName().IsMatch(Basename(rawPath.ToLowerInvariant())))
-        {
-            return ProvenanceArchetype.OrganicNote;
         }
 
         if (basename is "readme.md" or "changelog.md" or "index.md")
@@ -206,25 +235,19 @@ internal static partial class ProvenanceArchetypeClassifier
         return ProvenanceArchetype.WorkNote;
     }
 
-    /// <summary>The most informative provenance path: the ingest source, else the stored path with any
-    /// shared/ promotion prefix stripped.</summary>
-    private static string EffectivePath(string path, string? sourceFile)
-    {
-        if (!string.IsNullOrEmpty(sourceFile))
-        {
-            return sourceFile;
-        }
-
-        return path.StartsWith("shared/", StringComparison.Ordinal) ? path["shared/".Length..] : path;
-    }
-
     private static string Basename(string path)
     {
         var idx = path.LastIndexOf('/');
         return idx >= 0 ? path[(idx + 1)..] : path;
     }
 
-    [GeneratedRegex(@"^[0-9a-f]{32,}\.md$", RegexOptions.IgnoreCase)]
+    /// <summary>A Hermes conversation id used as a source, e.g. `hermes/20260809_125502_0d3cd9` — the
+    /// one case where `source_file` on a hex-path (organic) row carries real, negative information
+    /// (METHOD.md §7): a chat dump, whatever it looks like.</summary>
+    [GeneratedRegex(@"(^|/)hermes/\d{6,}[_-]", RegexOptions.IgnoreCase)]
+    private static partial Regex TranscriptSource();
+
+    [GeneratedRegex(@"^[0-9a-f]{32,}(?:\.md)?$", RegexOptions.IgnoreCase)]
     private static partial Regex HexName();
 
     [GeneratedRegex(@"^\d{4}-")]

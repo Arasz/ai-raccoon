@@ -4,15 +4,17 @@ namespace AiRaccoon.Core.Memory;
 internal readonly record struct OrganicRefinementResult(double Score, IReadOnlyList<string> Reasons);
 
 /// <summary>Refines the channel prior for organic-note candidates: without it the model cannot tell a
-/// status/turn-mirror dump from a durable fact (docs/adr/0018-promotion-scoring-v2.md v3 section).
+/// status/turn-mirror dump from a durable fact (docs/adr/0018-promotion-scoring-v2.md round-3 lane-A
+/// section, ported from scorer.py's organic_adjust() and the organic-note branch of score_candidate()).
 /// Only called for the organic-note channel; routing lives in ProvenanceArchetypeClassifier.</summary>
 internal static class OrganicRefinement
 {
-    private const double DeltaLo = -2.2;
-    private const double DeltaHi = 1.6;
+    private const double DeltaLo = -1.6;
+    private const double DeltaHi = 2.0;
     private const double ShortDefinitionalFloor = 2.4;
     private const int ShortDefinitionalMaxWords = 45;
     private const int VeryShortMaxWords = 15;
+    private const int TechBreadthBonusThreshold = 3;
 
     internal static OrganicRefinementResult Apply(
         double baseScore, string value, string projectId, IReadOnlyList<string> allProjectIds) =>
@@ -69,6 +71,18 @@ internal static class OrganicRefinement
         {
             delta += 0.20;
             reasons.Add("foreign-subject");
+        }
+
+        if (f.TechBreadth >= TechBreadthBonusThreshold)
+        {
+            delta += 0.25;
+            reasons.Add("tech-breadth");
+        }
+
+        delta += PromotionContentEvidence.Durability(f);
+        if (f.ImpRuleDensity > 0)
+        {
+            reasons.Add("durable-rule-language");
         }
 
         // Pointer-shaped organic writes are still pointers, even in the organic-note channel.
@@ -131,6 +145,8 @@ internal static class OrganicRefinement
             delta -= 0.40;
             reasons.Add("superseded");
         }
+
+        delta += PromotionContentEvidence.Substance(f);
 
         // One-breath durable rule: a short definitional fact keeps a floor so it survives.
         if (f.NWords < ShortDefinitionalMaxWords && f.DurableLoose >= 1 && f.StatusVocab <= 1 && !f.StatusOpener)
