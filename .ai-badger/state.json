@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-09T16:52:00Z",
+  "lastUpdated": "2026-08-09T20:06:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "mem-test",
+      "title": "Memory server live test: all tools, metrics, db, watches, promotion queue",
+      "finished": "2026-08-09T20:06:00Z",
+      "pr": "-",
+      "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
+    },
     {
       "id": "otlp-fix",
       "title": "OTLP export: review, owner gates, and the fixes",
