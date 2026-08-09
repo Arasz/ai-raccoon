@@ -151,7 +151,7 @@ public class McpExceptionPathInstrumentationTests
 
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry(hash, "p.md", "shared", "c", 1));
+        public Task<AddContentResult> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new AddContentResult(new MemoryEntry(hash, "p.md", "shared", "c", 1), true));
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
@@ -173,8 +173,8 @@ public class McpExceptionPathInstrumentationTests
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context, string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry("h", path, context ?? "project:test", content, 1));
+        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context, string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AddContentResult(new MemoryEntry("h", path, context ?? "project:test", content, 1), true));
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
 

@@ -75,7 +75,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        shared.Context.ShouldBe(ContextNaming.SharedContext);
+        shared.Entry.Context.ShouldBe(ContextNaming.SharedContext);
         var sharedEntries = await _store.ListContextAsync("acme", ContextNaming.SharedContext,
             TestContext.Current.CancellationToken);
         sharedEntries.ShouldContain(e => e.Value == "cross project convention");

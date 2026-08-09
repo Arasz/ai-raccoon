@@ -83,7 +83,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
         var customEntry = await _store.AddContentAsync(
             ProjectId, projectEntry.Path, "sweepable doc note", "docs:api",
             cancellationToken: TestContext.Current.CancellationToken);
-        customEntry.Hash.ShouldBe(projectEntry.Hash,
+        customEntry.Entry.Hash.ShouldBe(projectEntry.Hash,
             "the fixture this test needs: identical content, two scopes, one hash");
         await _store.SetEntryTtlAsync(ProjectId, projectEntry.Hash, 7, TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromDays(30));

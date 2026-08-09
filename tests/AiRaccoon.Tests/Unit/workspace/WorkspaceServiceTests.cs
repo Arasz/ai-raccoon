@@ -289,12 +289,12 @@ public class WorkspaceServiceTests
             Task.FromResult(new MemoryEntry("new-hash", request.Content,
                 request.Context ?? ContextNaming.ProjectContext(request.ProjectId), request.Content, 1));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default)
         {
             PromotedContent.Add((path, content, context ?? ContextNaming.ProjectContext(projectId)));
-            return Task.FromResult(new MemoryEntry("new-hash", path, context ?? ContextNaming.ProjectContext(projectId),
-                content, 1));
+            return Task.FromResult(new AddContentResult(new MemoryEntry("new-hash", path, context ?? ContextNaming.ProjectContext(projectId),
+                content, 1), true));
         }
 
         public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
@@ -329,7 +329,7 @@ public class WorkspaceServiceTests
 
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+        public Task<AddContentResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -454,7 +454,7 @@ public class WorkspaceServiceTests
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+        public Task<AddContentResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -476,7 +476,7 @@ public class WorkspaceServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 

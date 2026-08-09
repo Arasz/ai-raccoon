@@ -59,7 +59,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
 
         var results = await VectorOnlySearchAsync("quokkas", SearchScope.Shared);
 
-        results.Select(r => r.Hash).ShouldBe([shared.Hash]);
+        results.Select(r => r.Hash).ShouldBe([shared.Entry.Hash]);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
                 MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
-        results.Select(r => r.Hash).ShouldBe([workspace.Hash]);
+        results.Select(r => r.Hash).ShouldBe([workspace.Entry.Hash]);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
                 Limit: 10, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
-        results.Select(r => r.Hash).ShouldBe([labelled.Hash]);
+        results.Select(r => r.Hash).ShouldBe([labelled.Entry.Hash]);
     }
 
     [Fact]

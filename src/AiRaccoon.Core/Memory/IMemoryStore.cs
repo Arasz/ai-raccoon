@@ -25,7 +25,7 @@ public interface IMemoryStore
     Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default);
 
     /// <summary>Promotes the content behind hash into the flat shared context; the source project row may stay (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.21).</summary>
-    Task<MemoryEntry> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default);
+    Task<AddContentResult> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
     /// <summary>Committed project-scoped rows eligible for shared-extraction (scope='project', embedded; TTL rows only when opted in).</summary>
     Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId, bool includeTtlRows,
@@ -62,9 +62,9 @@ public interface IMemoryStore
 
     /// <summary>
     ///     Indexes caller-provided file content under an explicit logical path and context (memory_add_content;
-    ///     consolidation, share).
+    ///     consolidation, share). Created tells the caller whether the row was actually inserted.
     /// </summary>
-    Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+    Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
         string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default);
 
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>

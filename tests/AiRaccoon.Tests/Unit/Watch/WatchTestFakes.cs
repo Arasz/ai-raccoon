@@ -346,7 +346,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+    public Task<AddContentResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
@@ -376,7 +376,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.FromResult(new EmbedPendingResult(0, 0));
     }
 
-    public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+    public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
         string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 

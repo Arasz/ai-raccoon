@@ -76,7 +76,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
         var customEntry = await _store.AddContentAsync(
             ProjectId, projectEntry.Path, "the same doc note", "docs:api",
             cancellationToken: TestContext.Current.CancellationToken);
-        customEntry.Hash.ShouldBe(projectEntry.Hash,
+        customEntry.Entry.Hash.ShouldBe(projectEntry.Hash,
             "the fixture this test needs: identical content, two scopes, one hash");
 
         var affected = await _store.SetEntryTtlAsync(ProjectId, projectEntry.Hash, 7,

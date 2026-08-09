@@ -70,7 +70,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         var shared = await _store.ShareAsync("acme", middleChunk.Hash, TestContext.Current.CancellationToken);
 
         var sharedRows = await ChunkRowsForAsync(ContextNaming.SharedContext, "acme", file);
-        var sharedRow = sharedRows.Single(r => r.Hash == shared.Hash);
+        var sharedRow = sharedRows.Single(r => r.Hash == shared.Entry.Hash);
         (sharedRow.ChunkIndex, sharedRow.TotalChunks).ShouldBe((0, 1), "the shared row is alone in its own context");
 
         var projectRowsAfter = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);

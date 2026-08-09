@@ -60,7 +60,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var sharedEntry = await _store.ShareAsync("beta", (await _store.WriteAsync(
             new MemoryWriteRequest("beta", "promoted to shared"),
             TestContext.Current.CancellationToken)).Hash, TestContext.Current.CancellationToken);
-        sharedEntry.Context.ShouldBe(ContextNaming.SharedContext);
+        sharedEntry.Entry.Context.ShouldBe(ContextNaming.SharedContext);
 
         await EnsureWorkspaceAsync("ws-1");
 
@@ -262,8 +262,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        shared.Context.ShouldBe(ContextNaming.SharedContext);
-        shared.Path.ShouldStartWith("shared/");
+        shared.Entry.Context.ShouldBe(ContextNaming.SharedContext);
+        shared.Entry.Path.ShouldStartWith("shared/");
         (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
             .ShouldContain(e => e.Value == "cross project convention");
         (await _store.ListContextAsync("acme", "project:acme", TestContext.Current.CancellationToken))
@@ -385,7 +385,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var second = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
             cancellationToken: TestContext.Current.CancellationToken);
 
-        second.Hash.ShouldBe(first.Hash);
+        second.Entry.Hash.ShouldBe(first.Entry.Hash);
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
@@ -410,11 +410,11 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        shared.Context.ShouldBe(ContextNaming.SharedContext);
-        shared.Path.ShouldBe($"shared/{entry.Path}");
-        shared.Value.ShouldBe(entry.Value);
-        shared.Hash.ShouldNotBe(entry.Hash);
-        shared.Hash.ShouldBe(ContentHash.Of($"shared/{entry.Path}", entry.Value));
+        shared.Entry.Context.ShouldBe(ContextNaming.SharedContext);
+        shared.Entry.Path.ShouldBe($"shared/{entry.Path}");
+        shared.Entry.Value.ShouldBe(entry.Value);
+        shared.Entry.Hash.ShouldNotBe(entry.Hash);
+        shared.Entry.Hash.ShouldBe(ContentHash.Of($"shared/{entry.Path}", entry.Value));
         // The source row stays in the project scope: both rows exist after sharing.
         (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
             .Count(e => e.Value == "cross project fact").ShouldBe(1);
@@ -434,9 +434,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var committed = await _store.AddContentAsync("acme", "docs/note.md", "workspace draft",
             ContextNaming.ProjectContext("acme"), cancellationToken: TestContext.Current.CancellationToken);
 
-        committed.Context.ShouldBe("project:acme");
-        committed.Path.ShouldBe("docs/note.md");
-        committed.Hash.ShouldBe(ContentHash.Of("docs/note.md", "workspace draft"));
+        committed.Entry.Context.ShouldBe("project:acme");
+        committed.Entry.Path.ShouldBe("docs/note.md");
+        committed.Entry.Hash.ShouldBe(ContentHash.Of("docs/note.md", "workspace draft"));
     }
 
     [Fact]
@@ -693,9 +693,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new SearchQuery("acme", query, SearchScope.All, Limit: 25, MinScore: 0.0),
             TestContext.Current.CancellationToken);
 
-        results[0].Path.ShouldBe(bestMatch.Path,
+        results[0].Path.ShouldBe(bestMatch.Entry.Path,
             "the genuinely relevant project entry must rank first, not an unrelated single-entry shared tier");
-        var sharedResult = results.Single(r => r.Hash == shared.Hash);
+        var sharedResult = results.Single(r => r.Hash == shared.Entry.Hash);
         sharedResult.Ranking.ShouldBeLessThan(results[0].Ranking,
             "a single promoted entry in the shared tier must not tie the project tier's real top match");
     }

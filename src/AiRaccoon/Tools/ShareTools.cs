@@ -33,7 +33,7 @@ public sealed class ShareTools(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.ShareAsync(projectId, hash, cancellationToken);
-        var result = new ShareResult(true, entry.Context);
+        var result = new ShareResult(true, entry.Entry.Context);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
@@ -97,7 +97,8 @@ public sealed class ShareTools(
                 .ConfigureAwait(false);
             var promoteResult = new ShareExtractResult([], outcome.PromotedHashes)
             {
-                SkippedDuplicates = outcome.SkippedDuplicates, Failures = outcome.Failures
+                SkippedDuplicates = outcome.SkippedDuplicates, Absorbed = outcome.Absorbed,
+                Failures = outcome.Failures
             };
             var promoteEnvelope = await gate.WrapAsync(metaProject, promoteResult, cancellationToken);
             return promoteEnvelope;

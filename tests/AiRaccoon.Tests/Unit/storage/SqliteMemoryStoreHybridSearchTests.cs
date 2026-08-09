@@ -194,7 +194,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         // distance 0 (identical text) must rank first; the distance value never becomes a score.
-        results.Select(r => r.Hash).ShouldBe([identical.Hash, unrelated.Hash]);
+        results.Select(r => r.Hash).ShouldBe([identical.Entry.Hash, unrelated.Entry.Hash]);
         results[0].Ranking.ShouldBe(1.0);
         results.ShouldAllBe(r => r.Ranking >= 0.0 && r.Ranking <= 1.0);
     }
@@ -226,9 +226,9 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // x is rank 2 in both lists: with K = max(1*3, 100) = 100 both lists carry it and
         // 1/62 + 1/62 beats the per-modality rank-1 docs' 1/61 each; a limit-1 query returns it.
         var hit = results.ShouldHaveSingleItem();
-        hit.Hash.ShouldBe(x.Hash);
-        hit.Hash.ShouldNotBe(a.Hash);
-        hit.Hash.ShouldNotBe(c.Hash);
+        hit.Hash.ShouldBe(x.Entry.Hash);
+        hit.Hash.ShouldNotBe(a.Entry.Hash);
+        hit.Hash.ShouldNotBe(c.Entry.Hash);
     }
 
     [Fact]

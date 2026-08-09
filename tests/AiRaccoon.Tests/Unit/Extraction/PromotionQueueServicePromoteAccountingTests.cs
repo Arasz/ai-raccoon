@@ -1,4 +1,7 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -55,20 +58,20 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         CancellationToken ct)
     {
         await using var connection = await _factory.OpenBankAsync(ct);
-        await connection.ExecuteAsync(
+        await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
             VALUES (@hash, @path, @value, 'project', @projectId, NULL, 1, 1, 'embedded')
             """,
-            new { hash, path, value, projectId });
+            new { hash, path, value, projectId }, cancellationToken: ct));
     }
 
     private async Task<long> SharedRowCountAsync(string sharedPath, CancellationToken ct)
     {
         await using var connection = await _factory.OpenBankAsync(ct);
-        return await connection.ExecuteScalarAsync<long>(
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT count(*) FROM entries WHERE scope = 'shared' AND path = @path",
-            new { path = sharedPath }, ct);
+            new { path = sharedPath }, cancellationToken: ct));
     }
 
     private static QueueCandidate Candidate(string hash, string path, string value, double score) =>
@@ -297,6 +300,12 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public void RecordPromoted(string projectId, double waitSeconds) { }
         public void RecordDiscarded(string projectId, double waitSeconds) { }
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
+    }
+
+    private sealed class StubChunker : IChunker
+    {
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
+            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
     private sealed class RecordingMetrics : IPromotionQueueMetrics
