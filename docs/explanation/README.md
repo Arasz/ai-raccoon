@@ -9,6 +9,6 @@ layers relate. Filenames are noun phrases, optionally `why-` prefixed.
   and search flows, sync cycle, workspace lifecycle, access modes, and all algorithms
   (RRF, content hashing, rating, degradation, chunking, FTS5 normalisation).
 - [`agent-memory-architecture.md`](agent-memory-architecture.md) — why the memory bank is
-  per install scope, why writes default to the project, why the workspace is a context
-  rather than a flag, why sync goes through one cloud object, and how the extension
-  pipeline keeps the server open.
+  per install scope, why writes default to the project, why proposals wait in a propose
+  tier, why the workspace is a context rather than a flag, why sync goes through one
+  cloud object, and what the shape costs.

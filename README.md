@@ -35,10 +35,12 @@ ai-raccoon --transport stdio  # complete in-process server, no backend, no autos
 ai-raccoon --transport http   # Streamable HTTP at /mcp
 ```
 
-The proxy is the zero-config path (`.mcp.json` never changes): the first tool
-call from any client probes `http://127.0.0.1:7721/mcp`, spawns `ai-raccoon
-serve` if nothing answers, and relays every JSON-RPC message to it. It opens
-no bank, holds no encryption key, and loads no embedding model itself — see
+The proxy is the zero-config path (`.mcp.json` never changes): on startup —
+before it serves any message — it probes `http://127.0.0.1:7721/mcp`, spawns
+`ai-raccoon serve` if nothing answers, and relays every JSON-RPC message to
+it. Connecting a client is enough to start the backend; no tool call is
+needed. It opens no bank, holds no encryption key, and loads no embedding
+model itself — see
 [Serve mode](#serve-mode-http) below and
 [ADR 0020](docs/adr/0020-always-on-http-stdio-proxy.md). If the backend can
 neither be reached nor started, the proxy exits loudly naming the URL and the
@@ -105,8 +107,8 @@ the proxy too, which relays JSON-RPC frames without adding output of its own.
 ### Serve mode (HTTP)
 
 Bare `ai-raccoon` (the default `proxy` transport) starts `ai-raccoon serve`
-for you the first time any client touches memory — you normally never run
-`serve` by hand. This section covers the manual path: connecting an
+for you whenever a client launches it and nothing is already listening — you
+normally never run `serve` by hand. This section covers the manual path: connecting an
 HTTP-native client straight to a long-lived server, or attaching to one the
 proxy already started.
 

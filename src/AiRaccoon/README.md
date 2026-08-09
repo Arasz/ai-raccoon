@@ -52,7 +52,8 @@ CLI-only) with the three watch tools above (registration and status).
 Runtime configuration lives in the settings table of the install's `memory.db` and is changed only through the
 `ai-raccoon` verb commands (one-shot processes against the bank; the running server hot-reloads the rows). Bare
 `ai-raccoon` (with optional launch flags)
-runs the server; a verb runs a config command:
+runs the server — by default as a proxy onto one shared HTTP backend, see Transports below; a verb runs a config
+command:
 
 ```bash
 # access: who may do what per project
@@ -179,18 +180,20 @@ above.
 The server parses its own arguments (System.CommandLine 2.0.10) before the host builds. Launch-identity flags
 (startup-scoped only):
 
-| Option               | Values                                     | Default         |
-|----------------------|--------------------------------------------|-----------------|
-| `--transport`        | `stdio`, `http`, `https` (https → warning) | `stdio`         |
-| `--data-root <path>` | any (`~` expanded)                         | `~/.ai-raccoon` |
-| `--install-scope`    | `user`, `project`                          | `user`          |
+| Option               | Values                                                                                      | Default         |
+|----------------------|---------------------------------------------------------------------------------------------|-----------------|
+| `--transport`        | `proxy`, `stdio`, `http`, `https` (https → warning)                                          | `proxy`         |
+| `--data-root <path>` | any (`~` expanded)                                                                            | `~/.ai-raccoon` |
+| `--install-scope`    | `user`, `project`                                                                             | `user`          |
+| `--port <n>`         | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721`          |
+| `--quiet`            | flag — a server host's logs go to `quiet.log` beside the bank instead of stdout/stderr        | off             |
 
 Launch flags must precede a config verb: `ai-raccoon --data-root /x access list`.
 `--help`/`--version` and parse errors print to **stderr** (exit 0 / exit 1); stdout carries only MCP protocol frames.
 Generic host flags (`--environment`,
 `--contentRoot`, `--applicationName`) are accepted hidden and ignored.
 
-Zero-config `.mcp.json` entry (defaults: stdio, `~/.ai-raccoon`, user scope, rw):
+Zero-config `.mcp.json` entry (defaults: proxy, `~/.ai-raccoon`, user scope, rw, port 7721):
 
 ```json
 {
@@ -208,14 +211,18 @@ Explicit equivalent (identical behavior, spelled out):
     "ai-raccoon": {
       "command": "ai-raccoon",
       "args": [
-        "--transport", "stdio",
+        "--transport", "proxy",
         "--data-root", "~/.ai-raccoon",
-        "--install-scope", "user"
+        "--install-scope", "user",
+        "--port", "7721"
       ]
     }
   }
 }
 ```
+
+Swapping `proxy` for `stdio` is **not** equivalent: it runs the complete server
+in this process instead of relaying to a shared backend. See Transports below.
 
 Encrypted-bank setups set `AIRACCOON_DB_PASSPHRASE` in the client's user-scoped config (e.g. Claude Code
 `~/.claude.json` `env`), never in a shared/tracked `.mcp.json`.
@@ -225,18 +232,35 @@ one surviving variable.
 
 ## Transports
 
-- `stdio` (default) — MCP clients launch the server as a subprocess.
+- `proxy` (default) — MCP clients launch it as a subprocess, but it is a thin
+  stdio front end, not a server ([ADR 0020](https://github.com/Arasz/ai-raccoon/blob/main/docs/adr/0020-always-on-http-stdio-proxy.md)).
+  On startup it probes `http://127.0.0.1:7721/mcp`, spawns `ai-raccoon serve`
+  when nothing answers, and forwards every JSON-RPC message to that one
+  backend. It opens no bank, resolves no encryption key and loads no embedding
+  model of its own, so N clients share one process holding the bank instead of
+  N peers. If the backend can neither be reached nor started within its 30s
+  budget it exits 6 with one stderr line naming the URL and the
+  `--transport stdio` escape hatch — there is no silent in-process fallback.
+- `stdio` — the escape hatch: a complete in-process server, no backend, no
+  autostart. This is how bare `ai-raccoon` behaved before `proxy` became the
+  default; it opens the bank and loads the embedding model in this process.
 - `http` — Streamable HTTP at `/mcp`, selected via `--transport http`
-  (stateless per the 2026-07-28 spec revision).
-- `serve` — the HTTP mode as a verb: `ai-raccoon serve` forces http, arms a 4h
+  (stateless per the 2026-07-28 spec revision). Started this way the endpoint
+  is **not** token-gated.
+- `serve` — the HTTP mode as a verb, and what the proxy autostarts:
+  `ai-raccoon serve` forces http, arms a 4h
   idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0` disables), prints the bound
   URL to stdout, and stays in the foreground (`ai-raccoon serve > serve.log
-  2>&1 &` to background, POSIX). If the port already hosts an ai-raccoon
+  2>&1 &` to background, POSIX). Before binding it mints a random token into
+  `<data-root>/mcp-token` (0600) and requires it as the `X-AiRaccoon-Token`
+  header on `/mcp`; the proxy reads the file and presents it automatically,
+  while `/observability` stays open. If the port already hosts an ai-raccoon
   server, `serve` attaches and exits 0 — the owner keeps the watchdog, the
   attached run never touches the bank; a foreign listener on the port fails
   fast with exit code 3 and a `--port 0` hint. `serve --mcp-entry
   [--format hermes|claude|all]` prints the client config entry for the bound
-  URL (keep stderr out: `> entry.json 2> serve.log`).
+  URL (keep stderr out: `> entry.json 2> serve.log`); the entry carries the URL
+  only, so a client connecting this way must add the token header itself.
 
 All diagnostics go to stderr; stdout carries only MCP protocol messages.
 

@@ -547,8 +547,12 @@ engine's maximum input tokens:
 ```
 src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
   Tools/MemoryTools.cs      9 [McpServerTool] methods, no business logic
+                            (22 tools in all, across the seven Tools/*.cs classes)
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
+  Setup/Serve/              proxy (the default) and serve: ProxyRunner, ProxyForwarder,
+                            BackendLauncher, ServerProbe, McpTokenFile/Gate, ServeRunner,
+                            IdleWatchdog (ADR-0020)
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming

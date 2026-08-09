@@ -250,24 +250,32 @@ started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 proxy, no autostart — exactly how the server behaved before `proxy` became
 the default.
 
-`--quiet` sends every log level to a file beside the bank instead of stdout/stderr —
-`~/.ai-raccoon/quiet.log` at the default user scope, or `<data-root>/.ai-raccoon/quiet.log`
-at project scope: the same directory `memory.db` lives in
-(`QuietLogging.LogFilePath`, `SqliteConnectionFactory.BankPathFor`). Nothing, not even a
-warning, reaches stdout or stderr in this mode, so a `--quiet` process that fails to start
-or misbehaves (e.g. an invalid `OTEL_EXPORTER_OTLP_ENDPOINT`) leaves no trace on the
+`--quiet` sends every log level of a *server host* — the in-process `--transport stdio`
+server, `--transport http`, and `serve` — to a file beside the bank instead of
+stdout/stderr: `~/.ai-raccoon/quiet.log` at the default user scope, or
+`<data-root>/.ai-raccoon/quiet.log` at project scope, the same directory `memory.db` lives
+in (`HostLogging.Configure`, `QuietLogging.LogFilePath`,
+`SqliteConnectionFactory.BankPathFor`). Nothing from those hosts, not even a warning,
+reaches stdout or stderr in this mode, so a `--quiet` server that fails to start or
+misbehaves (e.g. an invalid `OTEL_EXPORTER_OTLP_ENDPOINT`) leaves no trace on the
 console — check `quiet.log` first. The file is append-only and never rotated; it
 accumulates for the life of the installation.
 
-Under `--quiet` the proxy's own failure line goes to `quiet.log` with everything else, so a
-backend that will not start leaves the console silent — check that file before concluding the
-proxy did nothing.
+The proxy is deliberately exempt. It builds its own logger factory
+(`ProxyRunner.CreateLoggerFactory`) with no file destination, so under `--quiet` it still
+logs to stderr at `Warning` and above; and the one line that says the backend could neither
+be reached nor started is *written* to stderr rather than logged, so `--quiet` cannot
+silence it. A proxy that cannot get a backend says so on the console either way. The
+`serve` backend it spawns does inherit `--quiet`, so the backend's own logs land in
+`quiet.log`.
 
 ### Serve mode
 
 Since ADR-0020, `serve` is not only a manual verb — it is autostarted by the
-default `proxy` transport the first time any client touches memory. This
-section describes `serve` itself, whether started by the proxy or run by hand.
+default `proxy` transport, at proxy startup, whenever nothing already answers on
+the port. A client that connects and never calls a tool still leaves a backend
+running. This section describes `serve` itself, whether started by the proxy or
+run by hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
