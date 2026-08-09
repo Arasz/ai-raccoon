@@ -115,6 +115,21 @@ the same list, and its tests derive the expected string the same way — that ha
 **C2 — a four-line provenance comment** in `OtlpExport.cs:28-30` where `minimal-comments` asks for
 1-3 stating the contract. nit.
 
+> **Correction, 2026-08-09 — the "known-false comment" in this review was a misreading.**
+> This document, and the briefs and plan entries that followed it, claimed the doc comment on
+> `IPromotionQueueMetrics` falsely asserts that Core cannot reference the BCL metrics types. It does
+> not. It reads: *"Implemented in the server project (Observability/) — Core and Infrastructure
+> cannot reference **it**"*, and the antecedent of "it" is **the server project**, which they
+> genuinely cannot reference. The comment then already gives testability as the reason ("so the port
+> keeps the queue service testable with a recording fake") — exactly the rationale this review
+> proposed replacing it with.
+>
+> The underlying layering fact stands and was re-verified: zero `OpenTelemetry` references in
+> `AiRaccoon.Core` or `AiRaccoon.Infrastructure`; Core's only packages are FluentValidation,
+> CommunityToolkit.Diagnostics and System.Numerics.Tensors. Only the accusation against the comment
+> was wrong. Caught by the WP13 lane, which was told to treat the comment as false and read it
+> instead.
+
 **Layering clean.** The port takes a Core type; the port change did not leak
 `System.Diagnostics.Metrics` into Core. The known-false rationale on `IPromotionQueueMetrics` is
 still **only** a comment problem — the design it purports to justify is right on independent
