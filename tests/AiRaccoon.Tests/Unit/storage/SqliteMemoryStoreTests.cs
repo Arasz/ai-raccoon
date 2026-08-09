@@ -338,6 +338,18 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteContext_WithAnUnknownContext_ReturnsZero()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteContextAsync("acme", "workspace:does-not-exist",
+            TestContext.Current.CancellationToken);
+
+        deleted.ShouldBe(0);
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Stats_CountsCommittedEntries_AndPendingFromEmbedState()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);

@@ -40,4 +40,31 @@ public sealed class CandidateFeatureExtractorTests
 
         features.ForeignSubject.ShouldBeTrue();
     }
+
+    /// <summary>Verified live false positive: the promotion queue's top-scored ai-raccoon candidate
+    /// tripped foreign-subject purely on a parenthetical enumeration of other project ids.</summary>
+    [Fact]
+    public void ForeignProjectIdInAParenthetical_IsNotTheSubject()
+    {
+        var features = CandidateFeatureExtractor.Extract(
+            "[facts] AiRaccoon deployment (2026-08-06): one bank per install — ~/.ai-raccoon/memory.db " +
+            "holds all projects (project ids: ai-raccoon, job-search-ai-assistant, ai-badger).",
+            "ai-raccoon", ["ai-raccoon", "ai-badger", "jsaa"]);
+
+        features.ForeignSubject.ShouldBeFalse();
+        features.ForeignProjects.ShouldBeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public void ForeignProjectIdInProse_IsStillTheSubject()
+    {
+        // A bracketed span appears before the mention, guarding against over-stripping: only the
+        // bracketed content itself should be removed, not the prose id that follows it.
+        var features = CandidateFeatureExtractor.Extract(
+            "(2026-08-06) ai-badger's scaffolding step rewrote the delegation map for every agent in " +
+            "the repo without any manual edits required from the team reviewing the change.",
+            "ai-raccoon", ["ai-raccoon", "ai-badger"]);
+
+        features.ForeignSubject.ShouldBeTrue();
+    }
 }

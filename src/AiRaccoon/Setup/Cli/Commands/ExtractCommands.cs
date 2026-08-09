@@ -1,10 +1,12 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>One-shot extract-config verb handlers: enable, mode, list — the CLI-only channel for the background extraction service.</summary>
-public sealed class ExtractCommands
+/// <summary>One-shot extract-config verb handlers: enable, mode, list, prune — the CLI-only channel for the background extraction service.</summary>
+public sealed class ExtractCommands(SqlitePromotionQueueStore? promotionQueueStore = null)
 {
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store, TextWriter stdout,
         CancellationToken cancellationToken)
@@ -150,6 +152,29 @@ public sealed class ExtractCommands
             await stdout.WriteLineAsync(prefix);
         }
 
+        return 0;
+    }
+
+    public async Task<int> PruneAsync(ParseResult parseResult, TextWriter stdout,
+        CancellationToken cancellationToken)
+    {
+        Guard.IsNotNull(promotionQueueStore);
+        var apply = parseResult.GetValue<bool>("apply");
+        var report = await promotionQueueStore.PruneOrphansAsync(apply, cancellationToken);
+
+        if (report.TotalOrphans == 0)
+        {
+            await stdout.WriteLineAsync("promotion queue: no orphaned candidates found");
+            return 0;
+        }
+
+        var verb = apply ? "removed" : "found (dry run; pass --apply to remove)";
+        foreach (var (projectId, count) in report.PerProject.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            await stdout.WriteLineAsync($"{projectId}: {count} orphaned candidate(s) {verb}");
+        }
+
+        await stdout.WriteLineAsync($"total: {report.TotalOrphans} orphaned candidate(s) {verb}");
         return 0;
     }
 }
