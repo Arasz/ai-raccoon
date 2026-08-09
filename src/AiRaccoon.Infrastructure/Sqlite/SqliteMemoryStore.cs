@@ -646,7 +646,11 @@ public sealed partial class SqliteMemoryStore(
 
         var hash = ContentHash.Of(path, content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        await connection.ExecuteAsync(
+        // Created from the ACTUAL insert outcome: Dapper's ExecuteAsync returns SQLite's change
+        // count, so the ON CONFLICT DO NOTHING loser (a concurrent same-(path,hash) writer) gets
+        // affected == 0 and reports Created=false — the only formula that keeps "promoted"
+        // honest for racing callers.
+        var affected = await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
                     new
                     {
@@ -690,7 +694,7 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
-        return new AddContentResult(ToEntry(inserted), Created: true);
+        return new AddContentResult(ToEntry(inserted), Created: affected == 1);
     }
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
