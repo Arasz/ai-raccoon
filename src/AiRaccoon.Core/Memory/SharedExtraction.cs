@@ -33,12 +33,14 @@ public sealed record ShareCandidate(
     IReadOnlyList<string> Reasons,
     string? SourceFile);
 
-/// <summary>Extraction outcome: ranked candidates; in promote mode the hashes actually promoted.</summary>
+/// <summary>Extraction outcome: ranked candidates; in promote mode the hashes actually created
+/// (promoted), chunks folded into already-represented files (absorbed), and value twins skipped.</summary>
 public sealed record ShareExtractResult(
     IReadOnlyList<ShareCandidate> Candidates,
     IReadOnlyList<string> PromotedHashes)
 {
     public int SkippedDuplicates { get; init; }
+    public int Absorbed { get; init; }
     public IReadOnlyList<PromoteFailure> Failures { get; init; } = [];
 }
 

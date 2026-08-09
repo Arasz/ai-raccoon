@@ -540,11 +540,11 @@ public class MemoryToolsTests
 
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(Stats);
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             Shared = (projectId, hash);
-            return Task.FromResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1));
+            return Task.FromResult(new MemoryEntryResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1), true));
         }
 
         public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
@@ -575,9 +575,9 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1));
+            Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1), true));
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>

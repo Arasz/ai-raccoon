@@ -33,6 +33,12 @@ common response envelope that surfaces what is waiting.
   promote mode share the top queued candidates and drain them; already-shared values are
   skipped and drained too (dedup normalizes whitespace on both sides). The old flow —
   promote re-extracting fresh candidates — is gone.
+  **One row per chunk value (1.6.3):** the queue holds one row per chunk and every promoted
+  chunk gets its own shared row, value-addressed (`shared/<sha256(value)>.md`). Identical chunk
+  content from different paths dedupes to one row by construction; whitespace-normalized value
+  twins are skipped at the pre-check. `absorbed` counts claimed chunks whose identical value was
+  already shared (or an insert-race loss); the accounting invariant is
+  claimed = promoted + absorbed + skipped + failures.
 - **Capacity.** Total cap `extract.queue-capacity.global` (default 1000, guarded parse).
   `PromotionCapacityPolicy` splits it into per-project reservations (cap ÷ project
   count); `IEvictionPolicy`/`UniformCountEvictionPolicy` pick the victim project (the

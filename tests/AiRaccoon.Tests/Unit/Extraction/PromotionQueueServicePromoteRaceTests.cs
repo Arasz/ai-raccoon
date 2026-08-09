@@ -169,7 +169,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new SharedIndex([], []));
 
-        public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             if (FailingHashes.TryGetValue(hash, out var exception))
@@ -178,7 +178,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
             }
 
             SharedHashes.Add(hash);
-            return Task.FromResult(new MemoryEntry(hash, $"{hash}.md", "shared", "value", 0));
+            return Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, $"{hash}.md", "shared", "value", 0), true));
         }
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
@@ -221,7 +221,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

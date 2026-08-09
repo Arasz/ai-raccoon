@@ -143,9 +143,10 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                         .ConfigureAwait(false);
                     promotedTotal += outcome.PromotedHashes.Count;
-                    var candidateCount = outcome.PromotedHashes.Count + outcome.SkippedDuplicates
-                        + outcome.Failures.Count;
-                    Log.Pass(_logger, projectId, mode, candidateCount, outcome.PromotedHashes.Count);
+                    var candidateCount = outcome.PromotedHashes.Count + outcome.Absorbed
+                        + outcome.SkippedDuplicates + outcome.Failures.Count;
+                    Log.Pass(_logger, projectId, mode, candidateCount, outcome.PromotedHashes.Count,
+                        outcome.Absorbed);
                     if (outcome.Failures.Count > 0)
                     {
                         Log.PromoteFailures(_logger, projectId, outcome.Failures.Count);
@@ -171,7 +172,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         string.Join(", ", candidate.Reasons));
                 }
 
-                Log.Pass(_logger, projectId, mode, candidates.Count, 0);
+                Log.Pass(_logger, projectId, mode, candidates.Count, 0, 0);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -208,9 +209,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
         public static partial void NoProjects(ILogger logger);
 
         [LoggerMessage(EventId = 502, Level = LogLevel.Debug,
-            Message = "Extraction pass for {ProjectId} ({Mode}): {Candidates} candidates, {Promoted} promoted")]
+            Message = "Extraction pass for {ProjectId} ({Mode}): {Candidates} claimed, {Promoted} promoted, {Absorbed} absorbed")]
         public static partial void Pass(ILogger logger, string projectId, ExtractMode mode, int candidates,
-            int promoted);
+            int promoted, int absorbed);
 
         [LoggerMessage(EventId = 503, Level = LogLevel.Warning,
             Message = "Extraction pass failed for {ProjectId}")]

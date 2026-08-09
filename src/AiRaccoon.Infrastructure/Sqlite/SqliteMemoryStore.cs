@@ -265,7 +265,7 @@ public sealed partial class SqliteMemoryStore(
         return merged;
     }
 
-    public async Task<MemoryEntry> ShareAsync(string projectId, string hash,
+    public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -281,11 +281,14 @@ public sealed partial class SqliteMemoryStore(
             throw new UnknownHashException(hash, projectId);
         }
 
-        // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
-        // (FR-NM-7; see docs/work/features-native-memory/native-memory.feature) differs from the source row's by construction. AddContentAsync is idempotent:
-        // re-sharing finds the existing shared row.
-        return await AddContentAsync(projectId, $"shared/{source.Path}", source.Value,
-                ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
+        // Promotion creates a REAL shared-scope row under a VALUE-addressed path
+        // shared/<sha256(value)>.md: every promoted chunk gets its own row, and identical chunk
+        // content from different sources (e.g. the same section mirrored in two repos) dedupes to
+        // one row by construction — uq_entries_shared_bucket is on (path, hash). Provenance
+        // travels in source_file/section. AddContentAsync is idempotent: re-sharing finds the
+        // existing shared row.
+        return await AddContentAsync(projectId, $"shared/{ContentHash.OfValue(source.Value)}.md",
+                source.Value, ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -622,7 +625,7 @@ public sealed partial class SqliteMemoryStore(
         return new EmbedPendingResult(processed, remaining);
     }
 
-    public async Task<MemoryEntry> AddContentAsync(
+    public async Task<MemoryEntryResult> AddContentAsync(
         string projectId, string path, string content, string? context, string? sourceFile = null,
         string? section = null, CancellationToken cancellationToken = default)
     {
@@ -641,12 +644,16 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         if (existing is not null)
         {
-            return ToEntry(existing);
+            return new MemoryEntryResult(ToEntry(existing), Created: false);
         }
 
         var hash = ContentHash.Of(path, content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        await connection.ExecuteAsync(
+        // Created from the ACTUAL insert outcome: Dapper's ExecuteAsync returns SQLite's change
+        // count, so the ON CONFLICT DO NOTHING loser (a concurrent same-(path,hash) writer) gets
+        // affected == 0 and reports Created=false — the only formula that keeps "promoted"
+        // honest for racing callers.
+        var affected = await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
                     new
                     {
@@ -690,7 +697,7 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
-        return ToEntry(inserted);
+        return new MemoryEntryResult(ToEntry(inserted), Created: affected == 1);
     }
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,

@@ -51,11 +51,14 @@ public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evic
 /// <summary>One candidate that could not be promoted: claimed from the queue but never shared.</summary>
 public sealed record PromoteFailure(string ProjectId, string Hash, string Reason);
 
-/// <summary>Outcome of promoting from the queue: shared hashes, duplicates skipped, what still waits.</summary>
+/// <summary>Outcome of promoting from the queue: shared hashes, duplicates skipped, chunks absorbed
+/// into already-represented files (or lost insert races), what still waits. Invariant: claimed =
+/// PromotedHashes.Count + Absorbed + SkippedDuplicates + Failures.Count.</summary>
 public sealed record PromoteOutcome(
     IReadOnlyList<string> PromotedHashes,
     int SkippedDuplicates,
-    IReadOnlyDictionary<string, int> RemainingByProject)
+    IReadOnlyDictionary<string, int> RemainingByProject,
+    int Absorbed = 0)
 {
     public IReadOnlyList<PromoteFailure> Failures { get; init; } = [];
 }

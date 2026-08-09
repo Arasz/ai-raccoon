@@ -61,6 +61,8 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Consolidate counts per KEPT HASH, not per row created: the created/existing
+            // distinction belongs to promotion accounting (PromoteAsync), not this loop.
             promoted++;
         }
 

@@ -35,7 +35,7 @@ internal sealed class FakeConfigStore : IMemoryStore
 
     public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
-    public Task<MemoryEntry> ShareAsync(string projectId, string hash,
+    public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
@@ -85,7 +85,7 @@ internal sealed class FakeConfigStore : IMemoryStore
     public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-    public Task<MemoryEntry> AddContentAsync(string projectId, string path, string content, string? context,
+    public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
         string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,

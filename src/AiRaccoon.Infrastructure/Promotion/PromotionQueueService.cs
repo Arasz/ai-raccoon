@@ -61,9 +61,17 @@ public sealed partial class PromotionQueueService(
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        // Mutable in-batch copies of the shared index in EXACTLY the formats the classifier uses
+        // (whitespace-stripped values, full "shared/<sha256(value)>.md" strings), refreshed after
+        // every created share so later rows in this batch classify against what THIS call just wrote.
+        var sharedValues = new HashSet<string>(
+            sharedIndex.Values.Select(v => string.Concat(v.Where(c => !char.IsWhiteSpace(c)))),
+            StringComparer.Ordinal);
+        var sharedPaths = new HashSet<string>(sharedIndex.Paths, StringComparer.Ordinal);
         var promoted = new List<string>();
         var failures = new List<PromoteFailure>();
         var skipped = 0;
+        var absorbed = 0;
         foreach (var projectId in projectIds)
         {
             var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
@@ -81,16 +89,38 @@ public sealed partial class PromotionQueueService(
                         continue;
                     }
 
-                    if (IsDuplicate(row, sharedIndex))
+                    var valueKey = string.Concat(row.Value.Where(c => !char.IsWhiteSpace(c)));
+                    var sharedPath = $"shared/{ContentHash.OfValue(row.Value)}.md";
+                    if (sharedValues.Contains(valueKey))
                     {
+                        // Value twin — checked FIRST: one copy of a value in the shared tier,
+                        // even when a same-batch row carries it under another path.
                         skipped++;
+                    }
+                    else if (sharedPaths.Contains(sharedPath))
+                    {
+                        // Identical chunk value already shared under its value-addressed path
+                        // (idempotent re-share; the exact-value twin of a whitespace-variant row).
+                        absorbed++;
                     }
                     else
                     {
-                        await store.ShareAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
-                        promoted.Add(row.Hash);
-                        var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
-                        metrics.RecordPromoted(projectId, wait);
+                        var shared = await store.ShareAsync(projectId, row.Hash, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (shared.Created)
+                        {
+                            promoted.Add(row.Hash);
+                            sharedValues.Add(valueKey);
+                            sharedPaths.Add(sharedPath);
+                            var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
+                            metrics.RecordPromoted(projectId, wait);
+                        }
+                        else
+                        {
+                            // Lost the insert race to a concurrent caller (affected == 0):
+                            // the row exists, so this claim is absorbed, not a promotion.
+                            absorbed++;
+                        }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -114,8 +144,8 @@ public sealed partial class PromotionQueueService(
 
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
-        Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, skipped);
-        return new PromoteOutcome(promoted, skipped, remaining.PerProject) { Failures = failures };
+        Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, absorbed, skipped);
+        return new PromoteOutcome(promoted, skipped, remaining.PerProject, absorbed) { Failures = failures };
     }
 
     public async Task<int> DiscardAsync(string projectId, string? hash,
@@ -200,14 +230,6 @@ public sealed partial class PromotionQueueService(
         }
     }
 
-    private static bool IsDuplicate(PromotionQueueRow row, SharedIndex sharedIndex)
-    {
-        var value = string.Concat(row.Value.Where(c => !char.IsWhiteSpace(c)));
-        var sharedValues = sharedIndex.Values
-            .Select(v => string.Concat(v.Where(c => !char.IsWhiteSpace(c))));
-        return sharedValues.Contains(value) || sharedIndex.Paths.Contains($"shared/{row.Path}");
-    }
-
     private static partial class Log
     {
         [LoggerMessage(EventId = 700, Level = LogLevel.Debug,
@@ -220,8 +242,9 @@ public sealed partial class PromotionQueueService(
             string reason);
 
         [LoggerMessage(EventId = 702, Level = LogLevel.Information,
-            Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Skipped} duplicate-skipped")]
-        public static partial void Promoted(ILogger logger, string projectIds, int promoted, int skipped);
+            Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Absorbed} absorbed (already shared), {Skipped} duplicate-skipped")]
+        public static partial void Promoted(ILogger logger, string projectIds, int promoted, int absorbed,
+            int skipped);
 
         [LoggerMessage(EventId = 703, Level = LogLevel.Information,
             Message = "Discarded {Count} queued row(s) for {ProjectId}")]
