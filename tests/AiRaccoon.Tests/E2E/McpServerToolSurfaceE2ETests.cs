@@ -18,7 +18,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 22 tools,
+///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 23 tools,
 ///     and every tool not already round-tripped by <see cref="McpServerE2ETests"/> answers a
 ///     minimal call over the wire.
 /// </summary>
@@ -47,6 +47,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         "memory_workspace_consolidate",
         "memory_workspace_discard",
         "memory_sweep",
+        "memory_set_ttl",
         "memory_sync",
         "memory_promotion_list",
         "memory_promotion_discard",
@@ -75,7 +76,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ToolsList_SurfacesAllTwentyTwoTools()
+    public async Task ToolsList_SurfacesAllTwentyThreeTools()
     {
         var tools = await _client.ListToolsAsync((RequestOptions?)null, TestContext.Current.CancellationToken);
         var names = tools.Select(t => t.Name).ToArray();

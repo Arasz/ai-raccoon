@@ -170,7 +170,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheirDefault()
     {
         var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow));
-        var workspace = await workspaceService.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var workspace = await workspaceService.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "scratch note", WorkspaceId: workspace.Id),
             TestContext.Current.CancellationToken);

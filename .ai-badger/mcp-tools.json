@@ -1498,6 +1498,14 @@
           "intent": "Remove old, low-rated project entries; shared entries are exempt.",
           "origin": "catalog"
         },
+        "memory_set_ttl": {
+          "tags": [
+            "write",
+            "unsafe"
+          ],
+          "intent": "Set or clear one entry's TTL, the age gate memory_sweep needs before it can delete it.",
+          "origin": "catalog"
+        },
         "memory_sync": {
           "tags": [
             "run"

@@ -38,7 +38,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     private async Task EnsureWorkspaceAsync(string workspaceId, string projectId = "acme")
     {
         var workspaceStore = new SqliteWorkspaceStore(_factory);
-        await workspaceStore.BeginAsync(projectId, workspaceId, FixedNow, TestContext.Current.CancellationToken);
+        await workspaceStore.BeginAsync(new Workspace(workspaceId, projectId), FixedNow, TestContext.Current.CancellationToken);
     }
 
     [Fact]

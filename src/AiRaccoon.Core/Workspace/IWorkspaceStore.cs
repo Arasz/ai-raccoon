@@ -7,12 +7,12 @@ namespace AiRaccoon.Core.Workspace;
 /// </summary>
 public interface IWorkspaceStore
 {
-    Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
-        CancellationToken cancellationToken = default);
+    Task BeginAsync(Workspace workspace, DateTimeOffset startedAt, CancellationToken cancellationToken = default);
 
     Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Throws <see cref="UnknownWorkspaceException" /> unless the workspace is Active for the project.</summary>
-    Task RequireActiveAsync(string projectId, string workspaceId, CancellationToken cancellationToken = default);
+    /// <summary>Returns the row, or throws <see cref="UnknownWorkspaceException" /> unless it is Active for the project.</summary>
+    Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
+        CancellationToken cancellationToken = default);
 }

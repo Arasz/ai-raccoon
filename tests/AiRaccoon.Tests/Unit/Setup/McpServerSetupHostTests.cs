@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
@@ -126,6 +127,34 @@ public class McpServerSetupHostTests : IDisposable
     }
 
     [Fact]
+    public void StdioOnlyHost_DoesNotRegisterTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldNotContain(service => service is SweepHostedService);
+    }
+
+    [Fact]
+    public void HttpHost_RegistersTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is SweepHostedService);
+    }
+
+    [Fact]
+    public void BothTransportsHost_RegistersTheSweepHostedService()
+    {
+        var host = McpServerSetup.CreateServerHost(
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is SweepHostedService);
+    }
+
+    [Fact]
     public void StdioOnlyHost_RegistersTheBankMaintenanceHostedService()
     {
         // Bank maintenance is registered in ALL modes: a stdio process is session-bound,
@@ -197,7 +226,7 @@ public class McpServerSetupHostTests : IDisposable
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
             .Select(t => t.ProtocolTool.Name).ToList();
 
-        toolNames.Count.ShouldBe(22);
+        toolNames.Count.ShouldBe(23);
         toolNames.ShouldContain("memory_share_extract");
         toolNames.ShouldContain("memory_watch_add");
         toolNames.ShouldContain("memory_watch_status");

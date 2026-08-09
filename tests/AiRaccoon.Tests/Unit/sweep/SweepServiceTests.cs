@@ -217,9 +217,9 @@ public class SweepServiceTests
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
     }
 
     /// <summary>Minimal recording IMemoryStore backing one sweep-eligible entry ("old-low", rating 0.1,
@@ -318,7 +318,7 @@ public class SweepServiceTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
     }

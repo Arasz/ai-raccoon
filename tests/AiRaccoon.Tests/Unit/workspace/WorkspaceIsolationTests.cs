@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -164,7 +165,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
 
         // Create the workspace record first — FK requires it.
         var workspaceStore = new SqliteWorkspaceStore(_factory);
-        await workspaceStore.BeginAsync("acme", "ws-1", FixedNow, TestContext.Current.CancellationToken);
+        await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
         var entry = await store.WriteAsync(
             new MemoryWriteRequest("acme", "draft finding", WorkspaceId: "ws-1"),
@@ -212,7 +213,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         var workspaceStore = new SqliteWorkspaceStore(_factory);
 
         // Create the workspace record first — FK requires it.
-        await workspaceStore.BeginAsync("acme", "ws-1", FixedNow, TestContext.Current.CancellationToken);
+        await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
         var service = new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow));
 
@@ -249,7 +250,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
 
         // Create the workspace record first — FK requires it.
         var workspaceStore = new SqliteWorkspaceStore(_factory);
-        await workspaceStore.BeginAsync("acme", "ws-1", FixedNow, TestContext.Current.CancellationToken);
+        await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
         await store.WriteAsync(
             new MemoryWriteRequest("acme", "committed fact"),

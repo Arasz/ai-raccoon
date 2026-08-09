@@ -446,6 +446,13 @@ internal static class MemorySql
         SELECT status FROM workspaces WHERE id = @workspaceId AND project_id = @projectId LIMIT 1
         """;
 
+    /// <summary>The status guard's row plus its provenance, so an active-check reads it back for free.</summary>
+    public const string SelectWorkspace =
+        """
+        SELECT status AS Status, agent_id AS AgentId, name AS Name
+        FROM workspaces WHERE id = @workspaceId AND project_id = @projectId LIMIT 1
+        """;
+
     public const string SelectSettingsByPrefix =
         """
         SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key

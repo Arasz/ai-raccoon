@@ -106,7 +106,7 @@ public sealed class AccessModeGuardTests
     {
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
-        public Dictionary<string, double> TtlByHash { get; } = [];
+        public Dictionary<string, int?> TtlByHash { get; } = [];
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 
@@ -122,17 +122,17 @@ public sealed class AccessModeGuardTests
             throw new NotImplementedException();
 
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default)
         {
             TtlByHash[hash] = ttlDays;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(TtlByHash.TryGetValue(hash, out var ttl)
-                ? new EntryMetadata(0.5, (int)ttl)
+                ? new EntryMetadata(0.5, ttl)
                 : null);
 
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry("h", "p.md", "project:acme", "v", 1));

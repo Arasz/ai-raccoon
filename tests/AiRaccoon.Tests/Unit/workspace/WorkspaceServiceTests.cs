@@ -25,7 +25,7 @@ public class WorkspaceServiceTests
         var store = new FakeStore();
         var service = Service(store, out _);
 
-        var workspace = await service.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var workspace = await service.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         workspace.ProjectId.ShouldBe("acme");
         workspace.Status.ShouldBe(WorkspaceStatus.Active);
@@ -39,13 +39,46 @@ public class WorkspaceServiceTests
         var store = new FakeStore();
         var service = Service(store, out var workspaceStore);
 
-        var workspace = await service.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var workspace = await service.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         var record = workspaceStore.Begun.ShouldHaveSingleItem();
-        record.ProjectId.ShouldBe("acme");
-        record.WorkspaceId.ShouldBe(workspace.Id);
-        record.Status.ShouldBe(WorkspaceStatus.Active);
+        record.Workspace.ProjectId.ShouldBe("acme");
+        record.Workspace.Id.ShouldBe(workspace.Id);
+        record.Workspace.Status.ShouldBe(WorkspaceStatus.Active);
         record.StartedAt.ShouldNotBe(default);
+    }
+
+    [Fact]
+    public async Task BeginAsync_PassesProvenanceToTheStore()
+    {
+        var store = new FakeStore();
+        var service = Service(store, out var workspaceStore);
+
+        await service.BeginAsync("acme", "agent-a", "refactor the parser", TestContext.Current.CancellationToken);
+
+        var record = workspaceStore.Begun.ShouldHaveSingleItem();
+        record.Workspace.AgentId.ShouldBe("agent-a");
+        record.Workspace.Name.ShouldBe("refactor the parser");
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_ReturnsTheWorkspaceProvenance()
+    {
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "draft", 1)]
+            }
+        };
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.Active = new Workspace("ws-1", "acme", agentId: "agent-a", name: "refactor the parser");
+
+        var outbox = await service.GetStatusAsync("acme", "ws-1", TestContext.Current.CancellationToken);
+
+        outbox.Workspace.AgentId.ShouldBe("agent-a");
+        outbox.Workspace.Name.ShouldBe("refactor the parser");
+        outbox.Entries.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -60,9 +93,9 @@ public class WorkspaceServiceTests
         };
         var service = Service(store, out _);
 
-        var entries = await service.GetStatusAsync("acme", "ws-1", TestContext.Current.CancellationToken);
+        var outbox = await service.GetStatusAsync("acme", "ws-1", TestContext.Current.CancellationToken);
 
-        entries.Count.ShouldBe(1);
+        outbox.Entries.Count.ShouldBe(1);
         store.LastListedContext.ShouldBe("workspace:ws-1");
     }
 
@@ -171,7 +204,28 @@ public class WorkspaceServiceTests
         var closed = workspaceStore.Closed.ShouldHaveSingleItem();
         closed.ProjectId.ShouldBe("acme");
         closed.WorkspaceId.ShouldBe("ws-1");
-        closed.Status.ShouldBe(WorkspaceStatus.Closed);
+        closed.Status.ShouldBe(WorkspaceStatus.Discarded);
+    }
+
+    /// <summary>The record must say which trigger ended the workspace, not just that it ended.</summary>
+    [Fact]
+    public async Task ConsolidateAndDiscard_LandInDistinguishableTerminalStates()
+    {
+        var consolidateStore = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)]
+            }
+        };
+        var consolidating = Service(consolidateStore, out var consolidated);
+        var discarding = Service(new FakeStore(), out var discarded);
+
+        await consolidating.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
+        await discarding.DiscardAsync("acme", "ws-2", TestContext.Current.CancellationToken);
+
+        consolidated.Closed.ShouldHaveSingleItem().Status
+            .ShouldNotBe(discarded.Closed.ShouldHaveSingleItem().Status);
     }
 
     [Fact]
@@ -319,24 +373,27 @@ public class WorkspaceServiceTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore
     {
-        public List<(string ProjectId, string WorkspaceId, WorkspaceStatus Status, DateTimeOffset StartedAt)> Begun { get; } = [];
+        public List<(Workspace Workspace, DateTimeOffset StartedAt)> Begun { get; } = [];
 
         public List<(string ProjectId, string WorkspaceId, WorkspaceStatus Status, DateTimeOffset ClosedAt)> Closed { get; } = [];
 
         /// <summary>When set, RequireActiveAsync throws this instead of succeeding.</summary>
         public UnknownWorkspaceException? MissingWorkspace { get; set; }
 
-        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+        /// <summary>What RequireActiveAsync hands back; defaults to a bare Active record.</summary>
+        public Workspace? Active { get; set; }
+
+        public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
             CancellationToken cancellationToken = default)
         {
-            Begun.Add((projectId, workspaceId, WorkspaceStatus.Active, startedAt));
+            Begun.Add((workspace, startedAt));
             return Task.CompletedTask;
         }
 
@@ -347,9 +404,11 @@ public class WorkspaceServiceTests
             return Task.CompletedTask;
         }
 
-        public Task RequireActiveAsync(string projectId, string workspaceId,
+        public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
             CancellationToken cancellationToken = default) =>
-            MissingWorkspace is not null ? throw MissingWorkspace : Task.CompletedTask;
+            MissingWorkspace is not null
+                ? throw MissingWorkspace
+                : Task.FromResult(Active ?? new Workspace(workspaceId, projectId));
     }
 
     /// <summary>Minimal recording IMemoryStore backing one workspace entry, moved from the deleted
@@ -440,7 +499,7 @@ public class WorkspaceServiceTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
     }

@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (22)
+## Tools (23)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
@@ -44,10 +44,11 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
 | `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
 | `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
-| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count}`                                                                                 |
+| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count, agentId, name}`                                                                  |
 | `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
 | `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
 | `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
+| `memory_set_ttl`               | `projectId`, `hash`, `ttlDays?`                                                                                                                             | `{hash, ttlDays, rating, threshold, canEverExpire}`                                                |
 | `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
 | `memory_promotion_list`        | `projectId?`, `limit=50`                                                                                                                                    | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
@@ -115,12 +116,31 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
 - **Workspace lifecycle record:** `memory_workspace_begin` inserts an `Active` row into
-  the `workspaces` table inside `memory.db` (no separate meta DB); consolidate and
-  discard mark it `Closed` with `closed_at`. A workspace begun but never finished stays
-  traceable after a crash.
+  the `workspaces` table inside `memory.db` (no separate meta DB), carrying the `agentId`
+  and `name` it was given as provenance; consolidate marks it `Closed` and discard marks
+  it `Discarded`, both with `closed_at`, so the record says which trigger ended it. A
+  workspace begun but never finished stays traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
-  to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
-  age exceeds 30 days. `shared` entries are never swept.
+  to delete. An entry is a candidate only when it carries a per-entry TTL, its retrieval
+  rating is below the sweep threshold (default 0.3) *and* its age exceeds that TTL.
+  `shared` entries are never swept.
+- **Background reaper:** the same sweep also runs unattended on HTTP/S hosts, and it is
+  **ON by default** — every 24 h it sweeps each project and *deletes* (never a dry run).
+  It is the one background service that destroys data, so it has a kill switch:
+  `ai-raccoon sweep disable`. `ai-raccoon sweep show` reports the whole policy —
+  `enabled: True  interval: 24 h  threshold: 0.3` — and `sweep interval-hours {1..8760}`
+  retunes the cadence live, no server restart needed. The kill switch fails safe: any
+  casing of `false` in `sweep.enabled.global` disarms it, and only an explicit `false`
+  does — an absent or unreadable row leaves the reaper armed. Nothing without a per-entry
+  TTL is ever a candidate, so a bank that has never called `memory_set_ttl` has nothing
+  to lose.
+- **`memory_set_ttl`:** the only way to give an entry a TTL — without one it can never be
+  swept. `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
+  but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
+  `ttlDays=7` does not expire an entry at age 30. The returned `canEverExpire` reports
+  whether the rating gate is already met. An unknown hash — or one owned by another
+  project — is refused as `unknown-hash`. Side effect: an entry carrying a TTL leaves
+  `memory_share_extract`'s candidate set unless that call passes `includeTtlRows`.
 - **File watching:** watching is enabled per project (or `*`) with
   `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
   allowlist (`ingest scope add|remove|list`) and a concurrency cap (`watch concurrency
@@ -489,7 +509,13 @@ ai-raccoon model show
 ai-raccoon retrieval alpha set {0..1}
 ai-raccoon retrieval alpha show
 
-# sweep: degradation cutoff
+# sweep: the background reaper — ON by default, deletes expired entries on its
+# cadence (default every 24 h). 'sweep disable' is the kill switch; 'sweep show'
+# reports the whole policy (enabled, interval, threshold). Interval changes apply
+# live, no server restart needed.
+ai-raccoon sweep enable
+ai-raccoon sweep disable
+ai-raccoon sweep interval-hours {1..8760}
 ai-raccoon sweep threshold set {0..1}
 ai-raccoon sweep show
 

@@ -200,7 +200,7 @@ public sealed class FakeExtractionStore : IMemoryStore
 
     public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(Index);
 
-    public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 

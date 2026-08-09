@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Rating;
 
 namespace AiRaccoon.Access;
 
@@ -33,12 +34,25 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
             .ConfigureAwait(false);
     }
 
-    public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    /// <summary>Sets or clears one entry's TTL, then reports it next to the rating gate a sweep also checks.</summary>
+    public async Task<TtlResult> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
     {
         await access.EnsureAsync(projectId, AccessRequirement.Destructive, "memory_set_ttl",
                 cancellationToken)
             .ConfigureAwait(false);
-        await store.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false);
+        EntryTtl.EnsureValid(ttlDays);
+
+        // Wrong project and unknown hash are the same refusal here — one project must not learn another's hashes.
+        if (!await store.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false))
+        {
+            throw new UnknownHashException(hash, projectId);
+        }
+
+        var threshold = await GetSweepThresholdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var metadata = await store.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+        var rating = metadata?.Rating ?? RatingPolicy.DefaultBaseScore;
+        return new TtlResult(hash, metadata?.TtlDays, rating, threshold,
+            DegradationPolicy.CanEverExpire(rating, threshold, metadata?.TtlDays));
     }
 }

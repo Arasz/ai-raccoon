@@ -388,7 +388,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 }

@@ -73,7 +73,7 @@ public static partial class Dependencies
 
             services.RegisterWatchServices();
 
-            services.RegisterExtractionBackgroundService(mcpTransport);
+            services.RegisterLongLivedBackgroundServices(mcpTransport);
             services.RegisterWatchSyncBackgroundService();
             services.AddHostedService<BankMaintenanceHostedService>();
             return;
@@ -113,12 +113,16 @@ public static partial class Dependencies
             }
         }
 
-        private void RegisterExtractionBackgroundService(IReadOnlyCollection<McpTransport> mcpTransport)
+        /// <summary>Loops that only pay off in a long-lived host; a pure-stdio process is per-connection and recycled.</summary>
+        private void RegisterLongLivedBackgroundServices(IReadOnlyCollection<McpTransport> mcpTransport)
         {
-            if (mcpTransport.Contains(McpTransport.Http) || mcpTransport.Contains(McpTransport.Https))
+            if (!IsLongLivedHost(mcpTransport))
             {
-                services.AddHostedService<ExtractionHostedService>();
+                return;
             }
+
+            services.AddHostedService<ExtractionHostedService>();
+            services.AddHostedService<SweepHostedService>();
         }
 
         private void RegisterWatchServices()
@@ -156,6 +160,10 @@ public static partial class Dependencies
             services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
         }
     }
+
+    /// <summary>A transport that keeps the process alive past one client connection (HTTP/S).</summary>
+    private static bool IsLongLivedHost(IReadOnlyCollection<McpTransport> mcpTransport) =>
+        mcpTransport.Contains(McpTransport.Http) || mcpTransport.Contains(McpTransport.Https);
 
     private static partial class Log
     {
