@@ -137,7 +137,8 @@ public sealed class SharedExtractionRunnerTests
         // last — reliably outside limit: 3.
         rows[9] = Row("h09", "organic fact 9 about beta", ageDays: 999);
         store.Candidates["acme"] = rows;
-        queue.Rows = [new PromotionQueueRow("acme", "h09", "h09.md", "stale v1 value", null, 0.1, [], 0, 0)];
+        queue.Rows =
+            [new PromotionQueueRow("acme", "h09", "h09.md", "queued value", null, 0.1, [], 0, 0, PromotionScorer.Version)];
 
         await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
@@ -173,9 +174,9 @@ public sealed class SharedExtractionRunnerTests
         var (store, queue, _, runner) = NewStack();
         queue.Rows =
         [
-            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0),
-            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0),
-            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0)
+            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version),
+            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version),
+            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version)
         ];
         store.Candidates["acme"] = [Row("new1", "organic fact about beta", sourceFile: "doc.md")];
 
@@ -201,9 +202,9 @@ public sealed class SharedExtractionRunnerTests
         ];
         queue.Rows =
         [
-            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0),
-            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0),
-            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0)
+            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version),
+            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version),
+            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version)
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
@@ -224,6 +225,100 @@ public sealed class SharedExtractionRunnerTests
 
         candidates.ShouldBeEmpty();
         queue.LastProject.ShouldBeNull();
+    }
+
+    // ------------------------------------------------------------------ scorer-version auto-clear (ADR-0018)
+    /// <summary>The defect this fixes: rows scored by a retired scorer version outrank correctly-scored
+    /// current rows on the eviction floor and never age out on their own. ClearStaleAsync runs before
+    /// ranking on every pass — a row on an old version is gone; a row already on the current one is not.</summary>
+    [Fact]
+    public async Task ProposeAsync_ClearsQueuedRows_WithAnOlderScorerVersion_ButKeepsTheCurrentOne()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [];
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "old", "old.md", "v1-scored value", null, 2.5,
+                ["cross-project", "recent"], 0, 0, ScorerVersion: 0),
+            new PromotionQueueRow("acme", "current", "current.md", "current value", null, 1.0,
+                [], 0, 0, ScorerVersion: PromotionScorer.Version)
+        ];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.Rows.Select(r => r.Hash).ShouldBe(["current"],
+            "the row on a retired scorer version is cleared; the row already on the current version stays");
+    }
+
+    /// <summary>Deleting rather than re-scoring in place is deliberate: the normal propose path
+    /// re-admits anything still eligible on merit in the very same pass — a clear must not
+    /// permanently drop a candidate that is still good.</summary>
+    [Fact]
+    public async Task ProposeAsync_ReAdmitsAClearedStaleRow_WhenItIsStillAnEligibleCandidate_InTheSamePass()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "h1", "h1.md", "stale v1 value", null, 2.5,
+                ["cross-project", "recent"], 0, 0, ScorerVersion: 0)
+        ];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Select(c => c.Hash).ShouldContain("h1",
+            "h1 is still eligible on merit, so the propose path re-admits it in the same pass after the stale clear");
+    }
+
+    /// <summary>The other side of re-admission: a stale row that is no longer an eligible candidate
+    /// (e.g. it would now score below the floor) must not come back just because it used to be queued.</summary>
+    [Fact]
+    public async Task ProposeAsync_AStaleRowNoLongerEligible_IsGone_AndDoesNotComeBack()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [];
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "gone", "gone.md", "stale v1 value", null, 2.5,
+                ["cross-project", "recent"], 0, 0, ScorerVersion: 0)
+        ];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.Rows.ShouldBeEmpty("the stale row was cleared, and nothing in this pass re-admits it");
+        queue.LastProject.ShouldBeNull("no candidate was eligible to (re-)queue");
+    }
+
+    [Fact]
+    public async Task ProposeAsync_QueuesNewCandidates_WithTheCurrentScorerVersion()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Single().ScorerVersion.ShouldBe(PromotionScorer.Version);
+    }
+
+    [Fact]
+    public async Task ProposeAsync_RefreshingAnAlreadyQueuedCandidate_StampsTheCurrentScorerVersion()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "h1", "h1.md", "old value", null, 0.1, [], 0, 0,
+                ScorerVersion: PromotionScorer.Version)
+        ];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Single(c => c.Hash == "h1").ScorerVersion.ShouldBe(PromotionScorer.Version);
     }
 
     [Theory]
