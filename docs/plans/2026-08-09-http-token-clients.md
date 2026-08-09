@@ -533,3 +533,118 @@ Filled in by §E. Each row: command, observed output, verdict.
 | 4 | `claude mcp add` route 3 | | |
 | 5 | plugin `transport: http` | | |
 | 6 | bare `ai-raccoon` proxy regression | | |
+
+---
+
+## Amendment 2026-08-09 — rulings from the pre-implementation review
+
+The plan above was reviewed before any code was written. Five defects had to be settled first; the
+rulings below override the sections they name. Two facts the plan carried as gates are now measured.
+
+### Measured since the plan was written
+
+**Claude Code does expand `${VAR}` in `.mcp.json` `headers`.** Verified against the installed CLI,
+not the docs alone: expansion covers exactly `command`, `args`, `env`, `url`, `headers`;
+`${VAR:-default}` works; `claude mcp add --header` stores the literal placeholder rather than
+resolving at add time. An **unset** variable is not a hard failure — `claude mcp list` prints a
+warning naming the variable, but the connection still fires and sends the literal
+`${AIRACCOON_MCP_TOKEN}` string as the header value. So §D4's placeholder shape stands, and our own
+401 is the backstop rather than Claude Code's validation.
+
+**A shell-quoting footgun sits in the exact copy-paste path we are about to recommend.** A user who
+types `--header "X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}"` in double quotes has their own shell
+expand it before the CLI sees it, storing an empty or corrupted value. Every incantation §D prints
+uses single quotes or an escaped `$`, and says why.
+
+### Rulings
+
+**R1 (M1) — §A's message-text dependency is the wrong file.**
+`JsonRpcErrorHandlerTests.cs:72` is a hand-written literal fed to `CannedHandler`; its only
+assertion is the status code, so rewording the gate cannot make it fail. Remove it from §A's
+ownership. The file that does consume the live message is
+`tests/AiRaccoon.Tests/E2E/ProxyTokenRefusedE2ETests.cs:70-73`, which asserts the proxy's stderr
+carries the token path and `McpTokenGate.HeaderName` — reaching stderr through
+`ProxyRunner.cs:200-204`. **Constraint on the reworded message: it must still contain the literal
+header name and the token file path.** §A criterion 7's attribution is likewise wrong —
+`ServerProbe.cs:43-50` discriminates on status ∈ {400,401,405,406} plus `jsonrpc` in the body, and
+never reads the path.
+
+**R2 (M2) — §C criterion 7's RED recipe cannot fire.**
+`test_http_transport_smoke` (`test_integration.py:125`) builds `HttpClient(url)` with no
+`token_file`, so under D1 it falls back to `~/.ai-raccoon/mcp-token` — a file present on every
+machine that has ever run `ai-raccoon`. The mutation would never trigger. Pass `token_file`
+explicitly in that test so it stops depending on the developer's home directory, and point the RED
+mutation at a nonexistent path.
+
+**R3 (M3) — the header attaches only to loopback.**
+`create_client` passes an arbitrary `url` straight through (`client.py:199`). An unconditional
+default `token_file` therefore ships `~/.ai-raccoon/mcp-token` to whatever host is configured —
+inert for the smoke test, a cleartext secret on the wire for anyone who points `url:` at a remote
+host. **Attach the token header only when the URL host is `127.0.0.1`, `::1` or `localhost`**, and
+say so in the `token_file` schema description. This is also what made R2 invisible.
+
+**R4 (M4) — the 401 must distinguish present-but-wrong from absent.**
+`McpTokenGate.cs:50` deliberately renders one message for absent, wrong-length and mismatched
+alike. D4 now ships a `${VAR}` placeholder into user configs; when it does not expand, the failure
+is *header present, value is a literal placeholder*, and the current message tells the user to do
+what they just did. Distinguishing the two leaks nothing — the caller already knows what it sent,
+and the body already names the token path. **New §A criterion: a `/mcp` request presenting a
+non-matching credential in either envelope gets a message saying the presented value does not match
+the token in `<path>`.** For the user D4 creates this is the highest-value line in the change.
+
+**R5 (M5) — `SECURITY.md:39` becomes false.**
+Its `serve` row asserts "the proxy supplies it, so no client config carries a secret". Route 3
+writes a literal token into `~/.claude.json`. §D scopes that clause to the proxy path, exactly as it
+already does for the token-flow doc.
+
+**R6 (S1) — D3 stays, its reasoning does not.**
+D3 claimed that without the Bearer branch "the only route is a hand-written `headers` block". D4
+falsifies that: route 2 pastes our printed entry plus one `.env` line. The honest smaller version is
+**§B + §C + §D without D3** — it fixes all three named surfaces with no security-relevant code
+change at all. D3 is kept anyway, on the one argument that survives: `hermes mcp add --url` — the
+command in the user's complaint and in our own README — prompts for authentication **by default**
+for every URL server, and can only produce Bearer. Without the branch our documentation has to tell
+readers to decline their client's own auth prompt and hand-edit a config file instead. That is the
+same class of defect this change exists to remove. Secondarily, Bearer is what every other MCP
+client's auth UI emits, and route 1 keeps the secret in `.env` rather than `config.yaml` for free.
+**Land D3 as its own commit** so it reverts independently of the three fixes nobody disputes.
+
+**R7 (S2) — §B criterion 5 is redundant and unfalsifiable.**
+Criterion 1 deep-equals the whole document, so a token cannot appear without failing it first, and
+the proposed mutation requires giving `RenderHermes(int port)` a token parameter it does not have.
+Restate B5 as **"the renderer takes no token parameter"** — an arch check that can fail — and leave
+the repo-wide grep to §D criterion 2.
+
+**R8 (S3) — §A needs the symmetric criterion.**
+The natural edit (`if (custom present) return compare(custom);`) turns a *wrong* custom header plus
+a *correct* Bearer into a 401, contradicting "either envelope suffices". Criterion 5 pins only the
+mirror case. Add: wrong `X-AiRaccoon-Token` + correct `Authorization: Bearer` → authorized.
+
+**R9 (S4) — the EventId warning is wrong.**
+`LoggerMessageEventIdTests.cs:35-49` compares per-owner `[Min,Max]` ranges. Measured ranges:
+ServeRunner [601,607], IdleWatchdog [610,612], ProxyRunner [630,630], BackendLauncher [633,635]. A
+new owner at [631,632] overlaps nothing, and 608-609 on ServeRunner extends it to [601,609] and
+still clears IdleWatchdog. The 604 / 650-659 advice stands. Still expected: no new EventId.
+Corrected offsets: `mcp_config.py` interpolation `:254-276`, auth prompt `:514-534`;
+`ServerProbe.cs:43-50`.
+
+**R10 (N3) — the Claude Code half ships the placeholder plus the export line.**
+The review recommended an obviously-unfilled slot *because expansion was unconfirmed*. It is now
+confirmed, so §D keeps `${AIRACCOON_MCP_TOKEN}` **and** documents
+`export AIRACCOON_MCP_TOKEN=$(cat ~/.ai-raccoon/mcp-token)` beside route 3 — without it the printed
+document has no documented way to work. R4's message is what catches the user who skips it.
+
+### Folded in without argument
+
+- **N5** — `create_client` needs `config.get("token_file", DEFAULT_TOKEN_FILE)` or §C criterion 1 is
+  unreachable. `__init__.py:383-398` `save_config` dumps the whole plugin config into `config.yaml`,
+  which turns D1's rejection of a `token:` key from a rhetorical argument into a mechanical one.
+- **N6** — `mcp_config.py:519-534` only prompts when the `.env` key is empty; a user who ran route 1
+  against a different data root gets a silent 401 with no prompt on the retry. One sentence in §D.
+- **N4** — no `CHANGELOG.md` exists; `--mcp-entry`'s output shape is a user-visible contract change
+  and gets a line in the PR body.
+- **N2** — the Bearer branch adds no exposure, on five checks: no request-logging middleware or
+  ASP.NET OTel instrumentation anywhere in `src/`, `McpActivityMiddleware.cs:13-21` reads only
+  `Request.Path`, no CORS, no output/response caching, and the only intermediary is `ProxyForwarder`
+  on loopback. Noted so it is not rediscovered: `mcp_config.py:159-171` silently strips a leading
+  `bearer ` from a pasted token.
