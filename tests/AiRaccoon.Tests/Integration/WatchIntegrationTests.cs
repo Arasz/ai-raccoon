@@ -122,6 +122,47 @@ public sealed class WatchIntegrationTests
     }
 
     [Fact]
+    public async Task ChangedFile_LeavesManualRowsCitingItAsSourceFileAlone()
+    {
+        using var stack = new Stack();
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        stack.Write("a.md", "zephyrciteorigin alone");
+        (await stack.StepUntilAsync(
+                async () => (await stack.SearchAsync("zephyrciteorigin", TestContext.Current.CancellationToken))
+                    .Any(r => r.SourceFile == stack.File("a.md")), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the watched file's mirror row did not become searchable");
+
+        // A manual write citing the watched file: its path column is <sha256>.md, its
+        // source_file is the watched file — the digest's replace-by-path delete must not own it.
+        await stack.Memory.WriteAsync(
+            new MemoryWriteRequest(Project, "zephyrnote manual fact", SourceFile: stack.File("a.md")),
+            TestContext.Current.CancellationToken);
+        (await stack.SearchAsync("zephyrnote", TestContext.Current.CancellationToken)).Any()
+            .ShouldBeTrue("the manual row did not land");
+
+        stack.Write("a.md", "zephyrciterevised now");
+
+        (await stack.StepUntilAsync(
+                async () => (await stack.SearchAsync("zephyrciterevised", TestContext.Current.CancellationToken))
+                    .Any(r => r.SourceFile == stack.File("a.md")), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the digest did not replace the file's chunks");
+        (await stack.SearchAsync("zephyrciteorigin", TestContext.Current.CancellationToken)).Count
+            .ShouldBe(0, "mirror semantics: the old chunk must be gone after the replace");
+        (await stack.SearchAsync("zephyrnote", TestContext.Current.CancellationToken)).Any()
+            .ShouldBeTrue("a manual row citing the watched file as sourceFile must survive the digest");
+        (await stack.CountEntriesAsync(stack.File("a.md"), "zephyrnote", TestContext.Current.CancellationToken))
+            .ShouldBe(1, "the manual row must still exist under its source_file identity");
+    }
+
+    [Fact]
     public async Task DeletedFile_RemovesItsChunks()
     {
         using var stack = new Stack();

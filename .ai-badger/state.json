@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-09T20:06:00Z",
+  "lastUpdated": "2026-08-09T20:54:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "fix-watch-source-file-delete",
+      "title": "Watch replace-by-path deletes manual rows citing watched source_file",
+      "finished": "2026-08-09T20:53:00Z",
+      "pr": "254",
+      "summary": "Data-loss bug found in the mem-test (2/2 manual writes citing a watched file died when the file changed). Root cause: DeleteBySourcePath (MemorySql.cs:264) matched source_file, not path. Fix: match path (mirror/ingest rows carry the real path; manual rows carry hash filenames), preserving the directory-cascade + watch_files fingerprint cascade and workspace_id guard. TDD RED->GREEN, full suite (only the base-verified OTLP env flake), scratch-bank manual live test (manual row survives digest, mirror chunk replaced). 1.6.2 bump incl. the VersionContractTests ExpectedVersion pin the 1.6.1 bump had missed. Plan+review+impl+QA run by delegated lane (deleg_e7267619)."
+    },
     {
       "id": "mem-test",
       "title": "Memory server live test: all tools, metrics, db, watches, promotion queue",
