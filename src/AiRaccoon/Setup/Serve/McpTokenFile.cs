@@ -14,45 +14,100 @@ internal sealed class McpTokenFile
 {
     public const string FileName = "mcp-token";
 
+    /// <summary>How long an empty file is given to fill in before it counts as debris. Well inside
+    /// BackendLauncher's acquire budget, so the heal rescues the start that hit the problem.</summary>
+    public static readonly TimeSpan HealAfter = TimeSpan.FromSeconds(5);
+
     private const int TokenBytes = 32;
-    private const int Attempts = 20;
 
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
-    public McpTokenFile(string dataRoot)
+    private readonly TimeSpan _healAfter;
+    private readonly TimeProvider _timeProvider;
+
+    public McpTokenFile(string dataRoot, TimeProvider? timeProvider = null, TimeSpan? healAfter = null)
     {
         Guard.IsNotNullOrWhiteSpace(dataRoot);
         Path = System.IO.Path.Combine(dataRoot, FileName);
+        _timeProvider = timeProvider ?? TimeProvider.System; // test seam: fake clock for the wait
+        _healAfter = healAfter ?? HealAfter;
+        Guard.IsGreaterThan(_healAfter, TimeSpan.Zero);
     }
 
     /// <summary>Absolute path of the token file — the one thing an operator has to look at.</summary>
     public string Path { get; }
 
-    /// <summary>The existing token, or a freshly minted one. Racing callers converge on one secret.</summary>
-    public async Task<string> EnsureAsync(CancellationToken cancellationToken)
+    /// <summary>The token, or null when it can be neither read nor minted. Racing callers converge
+    /// on one secret, and debris left by a crash is healed rather than wedging every later start.</summary>
+    public async Task<string?> EnsureAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
 
-        for (var attempt = 0; attempt < Attempts; attempt++)
+        if (await AcquireAsync(cancellationToken) is { } token)
         {
-            if (Read() is { } existing)
-            {
-                return existing;
-            }
-
-            if (await TryMintAsync(cancellationToken) is { } minted)
-            {
-                return minted;
-            }
-
-            // Lost the exclusive create, or the winner has not finished writing: re-read.
-            await Task.Delay(RetryDelay, cancellationToken);
+            return token;
         }
 
-        // Reached only when the file exists yet holds no token for a full second — a crash between
-        // create and write. Rotation is manual by design: delete it and start serve again.
-        return Read() ?? ThrowHelper.ThrowInvalidOperationException<string>(
-            $"ai-raccoon: {Path} exists but holds no token — delete it and start serve again");
+        // The file held nothing for the whole wait, so whoever created it died between the
+        // exclusive create and the write. Remove it and mint through that same exclusive create —
+        // never by writing over the file — so concurrent healers converge as concurrent minters do.
+        TryDeleteWhileEmpty();
+        return await AcquireAsync(cancellationToken);
+    }
+
+    /// <summary>Reads or mints, retrying until the heal wait expires.</summary>
+    private async Task<string?> AcquireAsync(CancellationToken cancellationToken)
+    {
+        using var waited = new CancellationTokenSource(_healAfter, _timeProvider);
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, waited.Token);
+        using var timer = new PeriodicTimer(PollInterval, _timeProvider);
+        try
+        {
+            do
+            {
+                if (Read() is { } existing)
+                {
+                    return existing;
+                }
+
+                if (await TryMintAsync(cancellationToken) is { } minted)
+                {
+                    return minted;
+                }
+            }
+            // Lost the exclusive create, or the winner has not finished writing: re-read.
+            while (await timer.WaitForNextTickAsync(waiting.Token));
+        }
+        catch (OperationCanceledException) when (waited.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // The wait expired, not the caller's token: report the miss rather than throwing.
+        }
+
+        return null;
+    }
+
+    /// <summary>Deletes the file only while it is genuinely empty; a live writer or a filled file wins.</summary>
+    internal bool TryDeleteWhileEmpty()
+    {
+        try
+        {
+            // FileShare.None, not Read(): a mint in flight holds the file exclusively, and Read()
+            // reports that as absent — which would delete the token the winner is still writing.
+            using (var held = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                if (held.Length > 0)
+                {
+                    return false;
+                }
+            }
+
+            File.Delete(Path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>The stored token, or null when the file is missing, empty or unreadable.</summary>

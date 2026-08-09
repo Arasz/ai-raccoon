@@ -100,6 +100,24 @@ public sealed class ServeRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task UnusableTokenPath_ReportsMcpTokenUnavailable_WithThePathAndNoStackTrace()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        var port = FreePort();
+        // A directory where the token file belongs: unreadable, uncreatable and undeletable.
+        var tokenPath = Path.Combine(_dataRoot, McpTokenFile.FileName);
+        Directory.CreateDirectory(tokenPath);
+
+        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ExitCode.McpTokenUnavailable);
+        run.Stdout.ToString().ShouldBeEmpty();
+        run.Stderr.ToString().ShouldContain(tokenPath);
+        run.Stderr.ToString().ShouldNotContain("   at ");
+    }
+
+    [Fact]
     public async Task BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
