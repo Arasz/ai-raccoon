@@ -3,8 +3,9 @@ using System.Reflection;
 namespace AiRaccoon.Observability;
 
 /// <summary>Wire contract for GET /observability (ADR 0008): server identity, binary version,
-/// PID, and OTLP export state. The version is what tells one build's server from another (ADR 0022).</summary>
-public sealed record ServerInfo(string Name, string Version, int Pid, OtlpInfo Otlp)
+/// PID, and OTLP export state. The version is what tells one build's server from another (ADR 0022);
+/// it is null when read back from a server predating that ADR, which reports no version at all.</summary>
+public sealed record ServerInfo(string Name, string? Version, int Pid, OtlpInfo Otlp)
 {
     private const string ServerName = "ai-raccoon";
 

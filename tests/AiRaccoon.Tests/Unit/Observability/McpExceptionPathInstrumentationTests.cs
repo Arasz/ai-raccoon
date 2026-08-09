@@ -20,8 +20,8 @@ namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
 ///     Every tool call must record an invocation metric, including paths that throw McpException
-///     (invalid-params, access-denied) — the ADR-0002 contract is "every call emits", not "every
-///     non-McpException call emits". These pin the previously-unrecorded escape paths.
+///     (invalid-params, access-denied) — the contract is "every call emits", not "every
+///     non-McpException call emits". The filter is what emits, so each case runs through it.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -33,10 +33,10 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
-            tools.Add("", "/repo", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_watch_add", "", token => tools.Add("", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
@@ -49,10 +49,10 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
-            tools.Status("", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_watch_status", "", token => tools.Status("", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
@@ -65,10 +65,10 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
-            tools.Remove("", "/repo", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_watch_remove", "", token => tools.Remove("", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
@@ -81,10 +81,10 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()), metrics);
+        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
-            tools.Add("proj-a", "/repo", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_watch_add", "proj-a", token => tools.Add("proj-a", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
@@ -100,10 +100,10 @@ public class McpExceptionPathInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService(),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()), metrics);
+            new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
-            tools.Sync("proj-a", TestContext.Current.CancellationToken));
+            ThroughFilterAsync(metrics, "memory_sync", "proj-a", token => tools.Sync("proj-a", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
@@ -111,10 +111,10 @@ public class McpExceptionPathInstrumentationTests
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 
-    private static MemoryTools CreateMemoryTools(SimpleFakeStore store, ToolCallMetrics metrics, IMemoryAccessGuard guard)
-    {
-        return new MemoryTools(store, new ToolGate(guard, new FakePromotionQueue()), metrics);
-    }
+    private static Task ThroughFilterAsync(ToolCallMetrics metrics, string toolName, string projectId,
+        Func<CancellationToken, Task> call) =>
+        ToolCallRecorder.ThroughFilterAsync(metrics, toolName, ToolCallRecorder.Arguments(("projectId", projectId)),
+            call, TestContext.Current.CancellationToken);
 
     private sealed class AllowAllGuard : IMemoryAccessGuard
     {

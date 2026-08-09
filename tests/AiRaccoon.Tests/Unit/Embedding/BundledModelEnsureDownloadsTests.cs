@@ -11,6 +11,9 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class BundledModelEnsureDownloadsTests : IDisposable
 {
+    /// <summary>SHA-256 of zero bytes — what hashing a failed download produces.</summary>
+    private const string EmptyStringSha256 = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855";
+
     private readonly string _root = TestData.CreateTempRoot("airaccoon-embedding-download-tests");
 
     public void Dispose()
@@ -50,6 +53,25 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
 
         result.AllPresent.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.Contains("sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task EnsureDownloadsAsync_WithAnEmptyBody_ReportsTheEmptyDownload_NotTheHashOfNothing()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent([])
+        });
+        using var http = new HttpClient(handler);
+
+        var result = await new BundledModel(NullLogger<BundledModel>.Instance, new StubHttpClientFactory(http)).EnsureDownloadsAsync(DownloadDir(), TestContext.Current.CancellationToken);
+
+        result.AllPresent.ShouldBeFalse();
+        result.Errors.ShouldNotContain(
+            e => e.Contains(EmptyStringSha256, StringComparison.OrdinalIgnoreCase),
+            "a zero-byte body must be reported where it happened, not as the sha256 of nothing");
+        result.Errors.ShouldContain(e => e.Contains("0 bytes", StringComparison.Ordinal));
+        result.Errors.ShouldContain(e => e.Contains("huggingface.co", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -114,7 +114,10 @@ internal static partial class McpServerSetup
                 Log.HttpsTransportNotSupported(webApplication.Logger);
             }
 
-            if (config.McpToken is { } mcpToken)
+            // One read, two branches: /shutdown is mapped iff the gate is installed, and that has
+            // to stay one condition — an unauthenticated shutdown is worse than no restart (ADR-0022).
+            var gated = config.McpToken;
+            if (gated is { } mcpToken)
             {
                 // Ahead of the watchdog: an unauthorized caller must not keep the daemon alive
                 // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
@@ -132,10 +135,8 @@ internal static partial class McpServerSetup
             {
                 webApplication.MapMcp("/mcp");
                 webApplication.MapObservability();
-                if (config.McpToken is not null)
+                if (gated is not null)
                 {
-                    // Never on an ungated host: an unauthenticated shutdown is worse than no
-                    // restart at all (ADR-0022).
                     webApplication.MapShutdown();
                 }
             }
@@ -165,7 +166,12 @@ internal static partial class McpServerSetup
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
-            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f.AddCallToolFilter(ToolRefusals.Filter));
+            // Order is load-bearing, not registration luck: the first filter added is the outermost,
+            // so telemetry sits inside the refusal mapper and still sees the raw exception type.
+            // Pinned by ToolTelemetryFilterTests.RefusedCall_RecordsTheExceptionType.
+            mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f
+                .AddCallToolFilter(ToolRefusals.Filter)
+                .AddCallToolFilter(ToolTelemetry.Filter));
 
             if (selectedTransports.Count == 0)
             {

@@ -52,8 +52,8 @@ internal static partial class ServeRunner
             var restart = await new ServerRestart(Probe, logger).CycleAsync(port, tokenFile, cancellationToken);
             if (RestartRefusal(restart, port, tokenFile.Path) is { } refusal)
             {
-                await stderr.WriteLineAsync(refusal);
-                return ExitCode.RestartFailed;
+                await stderr.WriteLineAsync(refusal.Message);
+                return refusal.Code;
             }
         }
 
@@ -192,20 +192,27 @@ internal static partial class ServeRunner
         return exception.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>The operator line for a restart that cannot go ahead, or null when `serve` may bind:
-    /// nothing was listening, it stopped, or the listener is not ours and the bind will say so.</summary>
-    private static string? RestartRefusal(RestartResult restart, int port, string tokenPath) =>
+    /// <summary>The operator line and exit code for a restart that cannot go ahead, or null when
+    /// `serve` may bind: nothing was listening, or the server stopped and freed the port.</summary>
+    private static (string Message, int Code)? RestartRefusal(RestartResult restart, int port, string tokenPath) =>
         restart.Outcome switch
         {
-            RestartOutcome.Nothing or RestartOutcome.Stopped or RestartOutcome.Foreign => null,
-            RestartOutcome.NoToken =>
+            RestartOutcome.Nothing or RestartOutcome.Stopped => null,
+            RestartOutcome.Foreign => (
+                $"ai-raccoon: port {port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
+                ExitCode.PortInUse),
+            RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {port}: {tokenPath} holds no token, so it cannot be asked to stop — it may serve another data root; stop it yourself, or serve on another port",
-            RestartOutcome.Refused =>
+                ExitCode.RestartFailed),
+            RestartOutcome.Refused => (
                 $"ai-raccoon: cannot restart the server on port {port}: it refused the token in {tokenPath} — it serves another data root; stop it yourself, or serve on another port",
-            RestartOutcome.Unsupported =>
-                $"ai-raccoon: cannot restart the server on port {port}: the ai-raccoon {restart.Version} serving it (pid {restart.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
-            _ =>
-                $"ai-raccoon: restart on port {port} timed out: the server (pid {restart.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again"
+                ExitCode.RestartFailed),
+            RestartOutcome.Unsupported => (
+                $"ai-raccoon: cannot restart the server on port {port}: the ai-raccoon {restart.Version ?? ServerRestart.UnknownVersion} serving it (pid {restart.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
+                ExitCode.RestartFailed),
+            _ => (
+                $"ai-raccoon: restart on port {port} timed out: the server (pid {restart.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again",
+                ExitCode.RestartFailed)
         };
 
     private static async Task<int> ReportAttachedAsync(string url, CliParseResult parsed, TextWriter stdout,

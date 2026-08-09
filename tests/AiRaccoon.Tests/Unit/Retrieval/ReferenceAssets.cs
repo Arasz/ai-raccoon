@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
+using AiRaccoon.Infrastructure.Assets;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
@@ -113,7 +114,7 @@ public sealed class ReferenceAssets
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            var bytes = await http.GetByteArrayAsync(asset.Url, cancellationToken).ConfigureAwait(false);
+            var bytes = await new AssetDownloader(http).GetAsync(asset.Url, cancellationToken).ConfigureAwait(false);
             if (asset.IsArchive)
             {
                 ExtractModule(bytes, asset, target);
@@ -125,7 +126,7 @@ public sealed class ReferenceAssets
 
             return $"download:{asset.Url}";
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or EmptyDownloadException)
         {
             return $"failed({ex.GetType().Name}: {ex.Message})";
         }

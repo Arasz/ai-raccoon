@@ -121,6 +121,45 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     [Fact]
+    public async Task AListenerThatWillNotIdentify_ReportsPortInUse_WithoutAskingItToStop()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        var port = FreePort();
+        (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        // Speaks JSON-RPC on /mcp, so the probe recognizes it, but /observability names someone else.
+        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
+            TestContext.Current.CancellationToken, name: "not-a-raccoon");
+        var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+
+        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        // Nothing took the port: the same listener held it throughout.
+        run.Stderr.ToString().ShouldContain("does not identify as an ai-raccoon");
+        run.Stderr.ToString().ShouldNotContain("took the port");
+        exit.ShouldBe(ExitCode.PortInUse);
+        fake.ShutdownRequests.ShouldBe(0);
+        run.Stdout.ToString().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task AServerThatReportsNoVersion_IsStillNamedInTheRefusal()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        var port = FreePort();
+        (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        // A pre-ADR-0022 server: identifies as an ai-raccoon, reports no version, has no /shutdown.
+        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
+            TestContext.Current.CancellationToken, version: null);
+        var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+
+        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ExitCode.RestartFailed);
+        run.Stderr.ToString().ShouldContain("(version not reported)");
+        run.Stderr.ToString().ShouldNotContain("the ai-raccoon  ");
+    }
+
+    [Fact]
     public async Task AForeignListener_StillReportsPortInUse()
     {
         using var env = await AcquireCleanEnvAsync();

@@ -2,7 +2,6 @@ using System.ComponentModel;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Observability;
 using JetBrains.Annotations;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -15,18 +14,11 @@ namespace AiRaccoon.Tools;
 public sealed class ShareTools(
     IMemoryStore store,
     ToolGate gate,
-    ToolCallMetrics observability,
     SharedExtractionRunner extraction,
     IPromotionQueue queue)
 {
     private const string TnMemoryShare = "memory_share";
     private const string TnMemoryShareExtract = "memory_share_extract";
-
-    /// <summary>Counter tag for share_extract: the span keeps the full project id composite, the counter is bounded to avoid unbounded cardinality (see ADR 0002).</summary>
-    private const string MultiProjectMetricTag = "multi";
-
-    /// <summary>The activity tag is built before validation, and the protocol layer can still hand us a null array.</summary>
-    private static string JoinProjectIds(string[]? projectIds) => projectIds is null ? string.Empty : string.Join(",", projectIds);
 
     [McpServerTool(Name = TnMemoryShare)]
     [Description(
@@ -37,23 +29,13 @@ public sealed class ShareTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryShare, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
-            ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
-            var entry = await store.ShareAsync(projectId, hash, cancellationToken);
-            var result = new ShareResult(true, entry.Context);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var entry = await store.ShareAsync(projectId, hash, cancellationToken);
+        var result = new ShareResult(true, entry.Context);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [McpServerTool(Name = TnMemoryShareExtract)]
@@ -74,73 +56,61 @@ public sealed class ShareTools(
         bool confirm = false,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryShareExtract,
-            JoinProjectIds(projectIds), MultiProjectMetricTag);
-        try
+        if (projectIds is null || projectIds.Length == 0 || projectIds.Length > 8)
         {
-            if (projectIds is null || projectIds.Length == 0 || projectIds.Length > 8)
-            {
-                throw new McpException("invalid-params: projectIds must contain 1..8 project ids");
-            }
-
-            var extractMode = mode switch
-            {
-                "propose" => ExtractMode.Propose,
-                "promote" => ExtractMode.Promote,
-                _ => throw new McpException("invalid-params: mode must be 'propose' or 'promote'")
-            };
-            var resolvedLimit = limit ?? SharedExtractionService.DefaultCandidateLimit;
-            if (resolvedLimit is < 1 or > 50)
-            {
-                throw new McpException("invalid-params: limit must be between 1 and 50");
-            }
-
-            if (autoPromote && !confirm)
-            {
-                throw new McpException(
-                    "confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable");
-            }
-
-            // The meta is one project's queue state: scope it when this call named exactly one,
-            // otherwise leave it bank-wide (a scalar count) rather than pick a project arbitrarily.
-            var metaProject = projectIds.Length == 1 ? projectIds[0] : null;
-            var promotes = extractMode == ExtractMode.Promote || autoPromote;
-            foreach (var projectId in projectIds)
-            {
-                await gate.RequireAsync(projectId,
-                        promotes ? AccessRequirement.Write : AccessRequirement.Read,
-                        TnMemoryShareExtract, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            if (promotes)
-            {
-                var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
-                    .ConfigureAwait(false);
-                var promoteEnvelope = await gate.WrapAsync(metaProject, new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
-                activity.RecordInvocation();
-                return promoteEnvelope;
-            }
-
-            var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
-            var candidates = new List<ShareCandidate>();
-            foreach (var projectId in projectIds)
-            {
-                candidates.AddRange(await extraction.ProposeAsync(projectId, sharedIndex,
-                        includeTtlRows, resolvedLimit, cancellationToken)
-                    .ConfigureAwait(false));
-            }
-
-            var envelope = await gate.WrapAsync(metaProject, new ShareExtractResult(candidates, []), cancellationToken);
-
-            activity.RecordInvocation();
-            return envelope;
+            throw new McpException("invalid-params: projectIds must contain 1..8 project ids");
         }
-        catch (Exception ex)
+
+        var extractMode = mode switch
         {
-            activity.RecordError(ex);
-            throw;
+            "propose" => ExtractMode.Propose,
+            "promote" => ExtractMode.Promote,
+            _ => throw new McpException("invalid-params: mode must be 'propose' or 'promote'")
+        };
+        var resolvedLimit = limit ?? SharedExtractionService.DefaultCandidateLimit;
+        if (resolvedLimit is < 1 or > 50)
+        {
+            throw new McpException("invalid-params: limit must be between 1 and 50");
         }
+
+        if (autoPromote && !confirm)
+        {
+            throw new McpException(
+                "confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable");
+        }
+
+        // The meta is one project's queue state: scope it when this call named exactly one,
+        // otherwise leave it bank-wide (a scalar count) rather than pick a project arbitrarily.
+        var metaProject = projectIds.Length == 1 ? projectIds[0] : null;
+        var promotes = extractMode == ExtractMode.Promote || autoPromote;
+        foreach (var projectId in projectIds)
+        {
+            await gate.RequireAsync(projectId,
+                    promotes ? AccessRequirement.Write : AccessRequirement.Read,
+                    TnMemoryShareExtract, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (promotes)
+        {
+            var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
+                .ConfigureAwait(false);
+            var promoteEnvelope = await gate.WrapAsync(metaProject, new ShareExtractResult([], outcome.PromotedHashes), cancellationToken);
+            return promoteEnvelope;
+        }
+
+        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        var candidates = new List<ShareCandidate>();
+        foreach (var projectId in projectIds)
+        {
+            candidates.AddRange(await extraction.ProposeAsync(projectId, sharedIndex,
+                    includeTtlRows, resolvedLimit, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        var envelope = await gate.WrapAsync(metaProject, new ShareExtractResult(candidates, []), cancellationToken);
+
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

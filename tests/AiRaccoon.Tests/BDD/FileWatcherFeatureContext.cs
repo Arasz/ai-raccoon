@@ -46,7 +46,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     /// <summary>Adapter-level error events collected by the event source callback (DI wires these to the logger).</summary>
     public List<WatchEventError> Errors { get; } = [];
 
-    private ToolCallMetrics? Metrics { get; set; }
 
     /// <summary>Maps a feature-file path ("/repo", "/repo/docs", "/other") to a real path under this scenario's DataRoot.</summary>
     public string MapPath(string virtualPath)
@@ -68,7 +67,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public void StopWatchStack()
     {
         EventSource.StopAll();
-        Metrics?.Dispose();
     }
 
     /// <summary>
@@ -211,9 +209,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider);
-        Metrics?.Dispose();
-        var metrics = new ToolCallMetrics();
-        Metrics = metrics;
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue()), metrics);
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue()));
     }
 }

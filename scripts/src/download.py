@@ -10,6 +10,10 @@ class Sha256MismatchError(Exception):
     """Downloaded file did not match the expected SHA-256."""
 
 
+class EmptyDownloadError(Exception):
+    """Download completed but produced no bytes to verify."""
+
+
 def sha256_file(path):
     """Return the lowercase hex SHA-256 of the file at path."""
     digest = hashlib.sha256()
@@ -45,6 +49,9 @@ def fetch_verified(name, url, expected_sha, target_dir):
     finally:
         sys.stdout.write("\n")
         sys.stdout.flush()
+    if part.stat().st_size == 0:
+        part.unlink(missing_ok=True)
+        raise EmptyDownloadError("%s returned 0 bytes; nothing was downloaded to verify" % url)
     part.replace(target)
     actual = sha256_file(target)
     if actual != expected_sha:
