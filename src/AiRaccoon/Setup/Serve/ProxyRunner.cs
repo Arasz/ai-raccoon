@@ -44,7 +44,7 @@ internal static partial class ProxyRunner
         options.Filters.Message.IncomingFilters.Add(
             ProxyForwarder.Create(backend, async ct => await backends.OpenAsync(ct), logger));
 
-        Log.ProxyReady(logger, backends.Url!);
+        Log.ProxyReady(logger, backends.Url);
         await using var server = McpServer.Create(
             new StdioServerTransport(options, loggerFactory), options, loggerFactory, null);
         await server.RunAsync(cancellationToken);
@@ -121,8 +121,8 @@ internal static partial class ProxyRunner
         private readonly BackendLauncher _launcher = new(ServerProbe.ForLoopback(), logger);
         private readonly List<McpClient> _sessions = [];
 
-        /// <summary>The endpoint the last successful acquire returned.</summary>
-        public string? Url { get; private set; }
+        /// <summary>The endpoint the last successful acquire returned; empty until one succeeds.</summary>
+        public string Url { get; private set; } = string.Empty;
 
         public async ValueTask DisposeAsync()
         {
