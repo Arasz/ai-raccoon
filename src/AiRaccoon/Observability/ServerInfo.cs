@@ -9,7 +9,9 @@ public sealed record ServerInfo(string Name, string? Version, int Pid, OtlpInfo 
 {
     private const string ServerName = "ai-raccoon";
 
-    private static readonly string BinaryVersion =
+    /// <summary>Read once; also feeds OtlpExport's resource and every Meter/ActivitySource's scope
+    /// version (docs/work/2026-08-09-otlp-fix-plan.md WP11).</summary>
+    internal static readonly string BinaryVersion =
         typeof(ServerInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
         ?? typeof(ServerInfo).Assembly.GetName().Version?.ToString()
         ?? "unknown";
