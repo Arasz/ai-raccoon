@@ -234,6 +234,16 @@ runs the server.
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | any port; `0` = random free port | `7721` |
+| `--quiet` | flag | off |
+
+`--quiet` sends every log level to a file beside the bank instead of stdout/stderr —
+`~/.ai-raccoon/quiet.log` at the default user scope, or `<data-root>/.ai-raccoon/quiet.log`
+at project scope: the same directory `memory.db` lives in
+(`QuietLogging.LogFilePath`, `SqliteConnectionFactory.BankPathFor`). Nothing, not even a
+warning, reaches stdout or stderr in this mode, so a `--quiet` process that fails to start
+or misbehaves (e.g. an invalid `OTEL_EXPORTER_OTLP_ENDPOINT`) leaves no trace on the
+console — check `quiet.log` first. The file is append-only and never rotated; it
+accumulates for the life of the installation.
 
 ### Serve mode
 
