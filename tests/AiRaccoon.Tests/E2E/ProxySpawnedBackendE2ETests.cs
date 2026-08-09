@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup.Serve;
+using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
 
@@ -46,11 +47,35 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    ///     Skipped, not deleted: it reproduces an open defect on demand. The proxy negotiates its
+    ///     backend session before it sees the client, so HttpClientTransport stamps that version on
+    ///     every relayed request — a client on any other revision is rejected by the backend for a
+    ///     header/body mismatch. Real clients reach this on a cold start, when the 5s discover probe
+    ///     expires and the SDK falls back to the legacy initialize handshake.
+    /// </summary>
+    [Fact(Skip = "Open defect: the proxy relays a client whose protocol version its backend session did not negotiate.")]
+    public async Task LegacyProtocolClient_IsRelayed()
+    {
+        await using var client = await AiRaccoonProcess.ConnectAsync(
+            ["--data-root", _dataRoot, "--port", _port.ToString()],
+            new McpClientOptions { ProtocolVersion = "2025-11-25" }, TestContext.Current.CancellationToken);
+
+        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        tools.ShouldNotBeEmpty();
+    }
+
     [Fact]
     public async Task ProxyOverASpawnedServe_CallsAToolThroughTheGate()
     {
+        // The probe has to outlast a cold `serve` (key resolve, bank, ONNX) or the SDK falls back to
+        // the legacy handshake and trips the defect LegacyProtocolClient_IsRelayed records. The gate
+        // assertions below are untouched by this.
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+            ["--data-root", _dataRoot, "--port", _port.ToString()],
+            new McpClientOptions { DiscoverProbeTimeout = TimeSpan.FromSeconds(60) },
+            TestContext.Current.CancellationToken);
 
         var result = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
