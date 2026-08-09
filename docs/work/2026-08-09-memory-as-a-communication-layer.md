@@ -343,6 +343,24 @@ servers into one. Three consequences for this plan:
 
 C4 is struck. D3, D5 and D6 are decisions not to build, and need no work beyond this record.
 
+### Follow-ups surfaced while implementing C5
+
+- **`GetMetaAsync` still has no cache.** Scoping helped — a project with nothing queued now costs
+  one connection open and one query instead of two opens plus a settings read — but the remaining
+  per-call open is still paid by all 23 tool call sites. A short TTL cache keyed by project id
+  would remove it, and needs an invalidation story on propose/discard/promote. Its own change.
+- **`PromotionQueueStats.AvgWaitSeconds` and `.OldestWaitSeconds` are now dead in production** —
+  only `SqlitePromotionQueueStoreTests` reads them, and they cost two extra scalar queries on
+  every propose and discard. This is the same declared-but-unwired shape as the six above, except
+  this instance was *created* by C5 rather than found. Left in place to keep that diff narrow;
+  it should be removed or rewired, not left to become instance seven by neglect.
+
+Two corrections to this document's own numbers, from implementing it: there are **23** envelope
+call sites, not 22 (`ShareTools` builds a second one in its promote branch), and two tools have no
+single project id — `memory_promotion_list` takes an optional one and `memory_share_extract` takes
+up to eight. Both report a bank-wide count with `capacity` absent, so no response names another
+project.
+
 Items 3–5 all touch files ADR-0020 is rewriting. Starting them now would mean resolving conflicts
 against a moving target, which is the same mistake incident 6 in the source note describes.
 
