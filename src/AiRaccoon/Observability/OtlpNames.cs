@@ -9,6 +9,11 @@ public static class OtlpNames
 {
     public const string MemoryToolsScope = "AiRaccoon.MemoryTools";
     public const string PromotionQueueScope = "AiRaccoon.PromotionQueue";
+
+    /// <summary>Background passes (WP13). Separate from the tool scope so `dotnet-trace --providers
+    /// AiRaccoon.MemoryTools` keeps meaning "tool calls" and nothing else.</summary>
+    public const string BackgroundScope = "AiRaccoon.Background";
+
     public const string RuntimeScope = "System.Runtime";
 
     /// <summary>ASP.NET Core's own ActivitySource for the per-request hosting Activity (docs/adr/0021):
@@ -24,10 +29,12 @@ public static class OtlpNames
     public const string HttpScope = "System.Net.Http";
 
     /// <summary>Every meter the process registers for OTLP export.</summary>
-    public static readonly IReadOnlyList<string> Meters = [MemoryToolsScope, PromotionQueueScope, RuntimeScope, HttpScope];
+    public static readonly IReadOnlyList<string> Meters =
+        [MemoryToolsScope, PromotionQueueScope, BackgroundScope, RuntimeScope, HttpScope];
 
     /// <summary>Every ActivitySource the process registers for OTLP export.</summary>
-    public static readonly IReadOnlyList<string> Sources = [MemoryToolsScope, AspNetCoreScope, HttpScope];
+    public static readonly IReadOnlyList<string> Sources =
+        [MemoryToolsScope, BackgroundScope, AspNetCoreScope, HttpScope];
 
     public const string ToolInvocations = "ai_raccoon.tool.invocations";
 
@@ -41,4 +48,7 @@ public static class OtlpNames
     public const string QueuePromoted = "ai_raccoon.queue.promoted";
     public const string QueueDiscarded = "ai_raccoon.queue.discarded";
     public const string QueueCapacityUtilization = "ai_raccoon.queue.capacity.utilization";
+
+    public const string BackgroundPasses = "ai_raccoon.background.passes";
+    public const string BackgroundPassDuration = "ai_raccoon.background.pass.duration";
 }

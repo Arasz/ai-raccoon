@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly WatchEventSource _eventSource;
     private readonly WatchCatchUp _catchUp;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationTelemetry _telemetry;
     private readonly ILogger<WatchHostedService> _logger;
     private readonly Lock _activeGate = new();
     private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
@@ -25,9 +27,12 @@ public sealed partial class WatchHostedService : BackgroundService
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>Span name and `operation` tag of one reconcile pass.</summary>
+    internal const string OperationName = "watch.reconcile";
+
     public WatchHostedService(IMemoryStore memory, IWatchStore store, WatchPipeline pipeline,
         WatchEventSource eventSource, WatchCatchUp catchUp, TimeProvider timeProvider,
-        ILogger<WatchHostedService> logger)
+        IOperationTelemetry telemetry, ILogger<WatchHostedService> logger)
     {
         _memory = memory;
         _store = store;
@@ -35,6 +40,7 @@ public sealed partial class WatchHostedService : BackgroundService
         _eventSource = eventSource;
         _catchUp = catchUp;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
         _logger = logger;
         // The one removal choke point (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1): every
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
@@ -105,7 +111,27 @@ public sealed partial class WatchHostedService : BackgroundService
     /// </summary>
     internal async Task ReconcileAsync(CancellationToken cancellationToken = default)
     {
+        using var pass = _telemetry.Begin(OperationName);
+        try
+        {
+            await ReconcilePassAsync(pass, cancellationToken).ConfigureAwait(false);
+            pass.Succeeded();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // shutdown cut the pass short: abandoned, not failed
+        }
+        catch (Exception ex)
+        {
+            pass.Failed(ex);
+            throw;
+        }
+    }
+
+    private async Task ReconcilePassAsync(IOperationScope pass, CancellationToken cancellationToken)
+    {
         var registrations = await _store.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        pass.Tag("registrations", registrations.Count.ToString());
         var seen = new HashSet<(string ProjectId, string Path)>(WatchKeyComparer.Instance);
         foreach (var registration in registrations)
         {

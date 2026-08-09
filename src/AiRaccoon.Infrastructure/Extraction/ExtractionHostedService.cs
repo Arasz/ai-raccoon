@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -15,15 +16,21 @@ public sealed partial class ExtractionHostedService : BackgroundService
     private readonly SharedExtractionRunner _extraction;
     private readonly IPromotionQueue _queue;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationTelemetry _telemetry;
     private readonly ILogger<ExtractionHostedService> _logger;
 
+    /// <summary>Span name and `operation` tag of one extraction pass.</summary>
+    internal const string OperationName = "extraction.pass";
+
     public ExtractionHostedService(IMemoryStore store, SharedExtractionRunner extraction,
-        IPromotionQueue queue, TimeProvider timeProvider, ILogger<ExtractionHostedService> logger)
+        IPromotionQueue queue, TimeProvider timeProvider, IOperationTelemetry telemetry,
+        ILogger<ExtractionHostedService> logger)
     {
         _store = store;
         _extraction = extraction;
         _queue = queue;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
         _logger = logger;
     }
 
@@ -71,6 +78,25 @@ public sealed partial class ExtractionHostedService : BackgroundService
 
     /// <summary>One extraction pass: enabled check, per-project propose/promote. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
+    {
+        using var pass = _telemetry.Begin(OperationName);
+        try
+        {
+            await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            pass.Succeeded();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // shutdown cut the pass short: abandoned, not failed
+        }
+        catch (Exception ex)
+        {
+            pass.Failed(ex);
+            throw;
+        }
+    }
+
+    private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         var enabled = ExtractionConfigKeys.ParseEnabled(
             await _store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken)
@@ -144,6 +170,8 @@ public sealed partial class ExtractionHostedService : BackgroundService
             }
         }
 
+        pass.Tag("projects", projects.Count.ToString());
+        pass.Tag("promoted", promotedTotal.ToString());
         Log.RunCompleted(_logger, projects.Count, promotedTotal);
     }
 

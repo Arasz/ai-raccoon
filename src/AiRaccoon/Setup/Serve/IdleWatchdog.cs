@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Observability;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -12,15 +13,20 @@ public sealed partial class IdleWatchdog : BackgroundService, IActivitySignaler
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _timeout;
     private readonly IHostApplicationLifetime _lifetime;
+    private readonly IOperationTelemetry _telemetry;
     private readonly ILogger<IdleWatchdog> _logger;
     private long _lastActivityTicks;
 
+    /// <summary>Span name and `operation` tag of one idle check.</summary>
+    internal const string OperationName = "idle.check";
+
     public IdleWatchdog(TimeProvider timeProvider, TimeSpan timeout, IHostApplicationLifetime lifetime,
-        ILogger<IdleWatchdog> logger)
+        IOperationTelemetry telemetry, ILogger<IdleWatchdog> logger)
     {
         _timeProvider = timeProvider;
         _timeout = timeout;
         _lifetime = lifetime;
+        _telemetry = telemetry;
         _logger = logger;
         // Baseline: a fresh server lives a full timeout even with zero requests.
         _lastActivityTicks = timeProvider.GetUtcNow().UtcTicks;
@@ -39,19 +45,37 @@ public sealed partial class IdleWatchdog : BackgroundService, IActivitySignaler
         using var timer = new PeriodicTimer(tick, _timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            try
+            if (RunOnce())
             {
-                if (_timeProvider.GetUtcNow().UtcTicks - Interlocked.Read(ref _lastActivityTicks) > _timeout.Ticks)
-                {
-                    Log.ShuttingDownIdle(_logger, _timeout);
-                    _lifetime.StopApplication();
-                    return;
-                }
+                return;
             }
-            catch (Exception ex)
+        }
+    }
+
+    /// <summary>One idle check; true once the host has been asked to stop. Test seam.</summary>
+    internal bool RunOnce()
+    {
+        using var pass = _telemetry.Begin(OperationName);
+        try
+        {
+            if (_timeProvider.GetUtcNow().UtcTicks - Interlocked.Read(ref _lastActivityTicks) <= _timeout.Ticks)
             {
-                Log.TickFailed(_logger, ex);
+                pass.Succeeded();
+                return false;
             }
+
+            pass.Tag("idle", "true");
+            Log.ShuttingDownIdle(_logger, _timeout);
+            _lifetime.StopApplication();
+            pass.Succeeded();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // The loop survives a failed tick, as it always has — the failure is now metered too.
+            pass.Failed(ex);
+            Log.TickFailed(_logger, ex);
+            return false;
         }
     }
 

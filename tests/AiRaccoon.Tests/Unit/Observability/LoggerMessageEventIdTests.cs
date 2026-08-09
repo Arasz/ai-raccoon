@@ -1,5 +1,4 @@
 using System.Reflection;
-using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
@@ -53,7 +52,7 @@ public class LoggerMessageEventIdTests
     [Fact]
     public void TheGuard_CoversEveryProductAssembly()
     {
-        var names = ProductAssemblies().Select(a => a.GetName().Name).ToList();
+        var names = ProductAssemblies.All().Select(a => a.GetName().Name).ToList();
 
         names.ShouldContain("AiRaccoon");
         names.ShouldContain("AiRaccoon.Core");
@@ -62,7 +61,7 @@ public class LoggerMessageEventIdTests
 
     /// <summary>Every [LoggerMessage] in the product assemblies, with the type that owns its id block.</summary>
     private static List<(int EventId, string Owner, string Location)> Entries() =>
-        ProductAssemblies()
+        ProductAssemblies.All()
             .SelectMany(a => a.GetTypes())
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
                                           BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
@@ -81,29 +80,5 @@ public class LoggerMessageEventIdTests
         }
 
         return type?.FullName ?? "<unknown>";
-    }
-
-    /// <summary>Walks the reference graph rather than a hardcoded array: a new AiRaccoon assembly joins the guard by existing.</summary>
-    private static List<Assembly> ProductAssemblies()
-    {
-        var found = new Dictionary<string, Assembly>(StringComparer.Ordinal);
-        var pending = new Queue<Assembly>([typeof(MemoryTools).Assembly]);
-        while (pending.Count > 0)
-        {
-            var assembly = pending.Dequeue();
-            var name = assembly.GetName().Name;
-            if (name is null || !name.StartsWith("AiRaccoon", StringComparison.Ordinal) || !found.TryAdd(name, assembly))
-            {
-                continue;
-            }
-
-            foreach (var reference in assembly.GetReferencedAssemblies()
-                         .Where(r => r.Name?.StartsWith("AiRaccoon", StringComparison.Ordinal) == true))
-            {
-                pending.Enqueue(Assembly.Load(reference));
-            }
-        }
-
-        return [.. found.Values];
     }
 }

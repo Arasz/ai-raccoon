@@ -41,7 +41,7 @@ public sealed class ShareExtractScoringScopeTests
             cancellationToken: TestContext.Current.CancellationToken);
         var scoreViaTool = toolResult.Data!.Candidates.Single(c => c.Hash == "h1").Score;
 
-        var hostedService = new ExtractionHostedService(store, runner, queue, time,
+        var hostedService = new ExtractionHostedService(store, runner, queue, time, TestTelemetry.None,
             NullLogger<ExtractionHostedService>.Instance);
         await hostedService.RunOnceAsync(TestContext.Current.CancellationToken);
         var scoreViaLoop = queue.LastCandidates!.Single(c => c.Hash == "h1").Score;

@@ -207,7 +207,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance);
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
-            NullLogger<WatchHostedService>.Instance);
+            TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider);
         Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue()));
     }

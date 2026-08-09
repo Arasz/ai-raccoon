@@ -1,0 +1,112 @@
+using System.Diagnostics;
+using AiRaccoon.Observability;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Unit.Observability;
+
+/// <summary>
+///     The AiRaccoon.Background adapter's contract: one span and exactly one duration + pass
+///     measurement per scope, tagged with the operation and its result.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class BackgroundTelemetryTests
+{
+    private const string Operation = "probe.pass";
+
+    [Fact]
+    public void Begin_StartsASpanOnTheBackgroundSource_NamedForTheOperation()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Succeeded();
+        }
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
+        span.OperationName.ShouldBe(Operation);
+        span.Kind.ShouldBe(ActivityKind.Internal);
+        span.Status.ShouldBe(ActivityStatusCode.Ok);
+    }
+
+    [Fact]
+    public void Succeeded_RecordsOneDurationAndOnePass_TaggedSuccess()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Succeeded();
+        }
+
+        var duration = probe.Durations.ShouldHaveSingleItem();
+        duration.Value.ShouldBeGreaterThanOrEqualTo(0);
+        duration.Tags["operation"].ShouldBe(Operation);
+        duration.Tags["result"].ShouldBe("success");
+
+        var pass = probe.Passes.ShouldHaveSingleItem();
+        pass.Value.ShouldBe(1);
+        pass.Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public void Failed_TagsTheSpanAndTheMeasurementsWithTheErrorType()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Failed(new InvalidOperationException("zephyrone"));
+        }
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Status.ShouldBe(ActivityStatusCode.Error);
+        span.Tags.ShouldContain(kv => kv.Key == "error.type" && kv.Value == nameof(InvalidOperationException));
+
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("error");
+        probe.Passes.ShouldHaveSingleItem().Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
+    }
+
+    [Fact]
+    public void Dispose_WithoutAnOutcome_RecordsResultUnknown()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        probe.Telemetry.Begin(Operation).Dispose();
+
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("unknown");
+    }
+
+    [Fact]
+    public void Succeeded_ThenDispose_RecordsExactlyOneMeasurement()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        var scope = probe.Telemetry.Begin(Operation);
+        scope.Succeeded();
+        scope.Succeeded();
+        scope.Dispose();
+
+        probe.Durations.Count.ShouldBe(1);
+        probe.Passes.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Tag_LandsOnTheSpan_AndNotOnTheMeasurements()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Tag("projects", "3");
+            scope.Succeeded();
+        }
+
+        probe.Spans.ShouldHaveSingleItem().Tags.ShouldContain(kv => kv.Key == "projects" && kv.Value == "3");
+        probe.Durations.ShouldHaveSingleItem().Tags.ShouldNotContainKey("projects");
+    }
+}

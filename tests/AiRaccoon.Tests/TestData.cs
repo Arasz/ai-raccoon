@@ -157,12 +157,18 @@ public sealed class FakeExtractionStore : IMemoryStore
 
     public Exception? IntervalReadError { get; set; }
 
+    /// <summary>Fails the whole pass rather than one project — the loop's own failure path.</summary>
+    public Exception? ProjectListError { get; set; }
+
     /// <summary>Interval reads seen — the loop reads it once before creating its timer.</summary>
     public int IntervalReads => _intervalReads;
 
     private int _intervalReads;
 
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(Projects);
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        ProjectListError is not null
+            ? throw ProjectListError
+            : Task.FromResult<IReadOnlyList<string>>(Projects);
 
     public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
         bool includeTtlRows, CancellationToken cancellationToken = default)

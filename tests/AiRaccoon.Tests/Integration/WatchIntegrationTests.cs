@@ -584,7 +584,7 @@ public sealed class WatchIntegrationTests
             CatchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
                 new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance);
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
-                NullLogger<WatchHostedService>.Instance);
+                TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
             Service = new WatchService(WatchStore, Memory, Pipeline, Time);
         }
 

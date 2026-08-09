@@ -1,5 +1,9 @@
+using System.Diagnostics;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Observability;
+using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
@@ -20,13 +24,15 @@ public sealed class ExtractionHostedServiceTests
         NewStack(NullLogger<ExtractionHostedService>.Instance);
 
     private static (FakeExtractionStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
-        FakePromotionQueue Queue) NewStack(ILogger<ExtractionHostedService> logger)
+        FakePromotionQueue Queue) NewStack(ILogger<ExtractionHostedService> logger,
+        IOperationTelemetry? telemetry = null)
     {
         var store = new FakeExtractionStore();
         var time = new FakeTimeProvider(FixedNow);
         var queue = new FakePromotionQueue();
         var service = new ExtractionHostedService(store,
-            new SharedExtractionRunner(store, new SharedExtractionService(), queue, time), queue, time, logger);
+            new SharedExtractionRunner(store, new SharedExtractionService(), queue, time), queue, time,
+            telemetry ?? TestTelemetry.None, logger);
         return (store, time, service, queue);
     }
 
@@ -371,5 +377,37 @@ public sealed class ExtractionHostedServiceTests
 
         logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 502); // pass ran
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 507); // no candidate details
+    }
+
+    [Fact]
+    public async Task RunOnce_EmitsASpanAndADurationForThePass()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var (store, _, service, _) = NewStack(NullLogger<ExtractionHostedService>.Instance, probe.Telemetry);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
+        span.Status.ShouldBe(ActivityStatusCode.Ok);
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public async Task RunOnce_WhenThePassThrows_RecordsTheFailure()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var (store, _, service, _) = NewStack(NullLogger<ExtractionHostedService>.Instance, probe.Telemetry);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.ProjectListError = new InvalidOperationException("zephyrone");
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => service.RunOnceAsync(TestContext.Current.CancellationToken));
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
+        var duration = probe.Durations.ShouldHaveSingleItem();
+        duration.Tags["result"].ShouldBe("error");
+        duration.Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
     }
 }
