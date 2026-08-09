@@ -18,17 +18,22 @@ internal sealed partial class BackendLauncher
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Bounds the re-probe that follows an exited backend, which the spent budget cannot.</summary>
+    private static readonly TimeSpan LastChanceBudget = TimeSpan.FromSeconds(5);
+
     private readonly TimeSpan _budget;
     private readonly ILogger _logger;
     private readonly ServerProbe _probe;
+    private readonly TimeProvider _timeProvider;
 
-    public BackendLauncher(ServerProbe probe, ILogger logger, TimeSpan? budget = null)
+    public BackendLauncher(ServerProbe probe, ILogger logger, TimeSpan? budget = null, TimeProvider? timeProvider = null)
     {
         Guard.IsNotNull(probe);
         Guard.IsNotNull(logger);
         _probe = probe;
         _logger = logger;
         _budget = budget ?? DefaultBudget;
+        _timeProvider = timeProvider ?? TimeProvider.System; // test seam: fake clock for the budget and the poll tick
         Guard.IsGreaterThan(_budget, TimeSpan.Zero);
     }
 
@@ -51,28 +56,44 @@ internal sealed partial class BackendLauncher
 
         // A cold start pays the encryption-key resolve, the bank decrypt probe and the ONNX model
         // load, so a first probe miss is expected: poll until it answers or the budget expires.
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < _budget)
+        using var budget = new CancellationTokenSource(_budget, _timeProvider);
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, budget.Token);
+        using var timer = new PeriodicTimer(PollInterval, _timeProvider);
+        var exited = false;
+        try
         {
-            if (await _probe.RespondsAsync(port, cancellationToken))
+            while (await timer.WaitForNextTickAsync(waiting.Token))
             {
-                Log.BackendLive(_logger, url);
-                return new BackendResult(url, null);
-            }
-
-            if (backend.HasExited)
-            {
-                // One last probe: another starter may have won the port between the two.
-                if (await _probe.RespondsAsync(port, cancellationToken))
+                if (await _probe.RespondsAsync(port, waiting.Token))
                 {
                     Log.BackendLive(_logger, url);
                     return new BackendResult(url, null);
                 }
 
-                return GaveUp(url, backend.ExitCode);
+                if (backend.HasExited)
+                {
+                    exited = true;
+                    break;
+                }
             }
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // The budget expired, not the caller's token: report the failure rather than throwing.
+        }
 
-            await Task.Delay(PollInterval, cancellationToken);
+        if (exited)
+        {
+            // One last probe: another starter may have won the port between the two. It gets its own
+            // bound, because the budget token may already be spent.
+            cancellationToken.ThrowIfCancellationRequested();
+            using var lastChanceBudget = new CancellationTokenSource(LastChanceBudget, _timeProvider);
+            using var lastChance = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lastChanceBudget.Token);
+            if (await _probe.RespondsAsync(port, lastChance.Token))
+            {
+                Log.BackendLive(_logger, url);
+                return new BackendResult(url, null);
+            }
         }
 
         return GaveUp(url, backend.HasExited ? backend.ExitCode : null);

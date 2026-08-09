@@ -7,6 +7,7 @@ using System.Text;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
@@ -115,25 +116,49 @@ public sealed class BackendLauncherTests : IDisposable
 
         result.Url.ShouldBeNull();
         result.ServeExitCode.ShouldBe(ExitCode.PortInUse);
-        stopwatch.Elapsed.ShouldBeLessThan(BackendLauncher.DefaultBudget);
+        // Well inside the budget: this is the HasExited fast path, not budget expiry.
+        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(20));
     }
 
     [Fact]
     public async Task Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget()
     {
         var port = FreePort();
-        var budget = TimeSpan.FromSeconds(2);
-        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance, budget);
+        var clock = new FakeTimeProvider();
+        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
+            BackendLauncher.DefaultBudget, clock);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
-        var result = await launcher.AcquireAsync(port, "sleep", ["20"], TestContext.Current.CancellationToken);
+        var acquire = launcher.AcquireAsync(port, "sleep", ["10"], TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        acquire.IsCompleted.ShouldBeFalse();
+
+        clock.Advance(BackendLauncher.DefaultBudget);
+        var result = await acquire.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         stopwatch.Stop();
 
         result.Url.ShouldBeNull();
         result.ServeExitCode.ShouldBeNull();
-        stopwatch.Elapsed.ShouldBeGreaterThanOrEqualTo(budget);
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15));
+        // The budget expired on the fake clock, so no wall-clock time was spent waiting it out.
+        stopwatch.Elapsed.ShouldBeLessThan(BackendLauncher.DefaultBudget);
+    }
+
+    [Fact]
+    public async Task Acquire_WhenTheCallerCancels_PropagatesInsteadOfReportingFailure()
+    {
+        var port = FreePort();
+        var clock = new FakeTimeProvider();
+        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
+            BackendLauncher.DefaultBudget, clock);
+        using var caller = new CancellationTokenSource();
+
+        var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
+        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        await caller.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => acquire.WaitAsync(TimeSpan.FromSeconds(10),
+            TestContext.Current.CancellationToken));
     }
 
     private static BackendLauncher Launcher() => new(ServerProbe.ForLoopback(), NullLogger.Instance);
