@@ -141,8 +141,8 @@ stays unauthenticated by design: it proves "an ai-raccoon server is here", never
 | Token file missing when the proxy needs it | Proxy fails before forwarding | One stderr line naming the file path and `ai-raccoon --transport stdio` |
 | Proxy's token does not match the server's — a `serve` started against a different data root owns the port | Every forward 401s | JSON-RPC error naming both the file and the port, so the data-root mismatch is diagnosable rather than looking like a dead server |
 | Another local user's process calls `/mcp` | 401 | Nothing; that is the feature |
-| File exists but is empty or unreadable, proxy side | Treated as absent — fail, never mint a second token | Same as missing |
-| File exists but is empty, `serve` side | Given `HealAfter` (5 s) to fill in; still empty means its creator died, so it is deleted and re-minted through the same exclusive create | Nothing; the start that hit it is the one rescued |
+| File exists but is unreadable, or holds anything other than a token, proxy side | Treated as absent — fail, never mint a second token | Same as missing |
+| File exists but holds no token — empty, or a write cut short — `serve` side | Given `HealAfter` (5 s) to fill in; still no token means its creator died, so it is deleted and re-minted through the same exclusive create | Nothing; the start that hit it is the one rescued |
 | File unreadable or undeletable, `serve` side | `ExitCode.McpTokenUnavailable` before the bind | One stderr line naming the path |
 | Backend restarts mid-session | Token unchanged, reconnect succeeds | Nothing |
 
@@ -167,11 +167,12 @@ not a regression, and gating it would require the E2E `McpServerFactory` to read
 a real hole for anyone who runs that command, and it is named in `SECURITY.md` rather than left
 for a reader to discover.
 
-**3. An empty token file wedged `serve`; it now heals.** If a process dies between the exclusive
-create and the write, the file exists and holds nothing, and no later start could get past it.
+**3. A token file holding no token wedged `serve`; it now heals.** If a process dies between the
+exclusive create and the write, the file exists and holds nothing — or a prefix of the secret, if
+the write had started — and no later start could get past it.
 **Owner ruling, 2026-08-09: self-heal rather than wedge.** The file gets `HealAfter` (5 s) to fill
-in; if it is still empty its creator is dead, so it is deleted and minted again through the same
-exclusive create. Three things this design turns on:
+in; if it still holds no token its creator is dead, so it is deleted and minted again through the
+same exclusive create. Four things this design turns on:
 
 - **Never write over the file.** Overwriting is worse than the wedge: one healer's token reaches
   the file while another's reaches the serving process, so every caller 401s forever against a
@@ -182,6 +183,13 @@ exclusive create. Three things this design turns on:
   Caught by `TwoProcessesHealingConcurrently_ConvergeOnOneToken`: 9 distinct secrets across 16
   healers. A residual window remains between the check and the delete, unreachable without the
   cross-process lock this design refuses.
+- **"Holds a token" is a length check, and the length comes from the mint.** Only the mint writes
+  this file, and it always writes `TokenBytes` base64url-encoded, so anything of another length is
+  a truncated write rather than a weaker secret — accepting it would lower the entropy silently.
+  The length is computed from `TokenBytes` rather than written down, so a change to the key size
+  cannot leave a stale literal behind. The alphabet is deliberately not checked: a full-length
+  string off the alphabet carries the same entropy floor as one on it, so the check would buy
+  nothing while widening what the heal's delete is willing to destroy.
 - **5 s, not the 2 minutes first proposed.** `BackendLauncher`'s acquire budget is 30 s, so a
   longer wait heals for nobody — the proxy gives up before it finishes. The window only has to
   outlast a live writer, and a live writer writes microseconds after it creates. Worst case is

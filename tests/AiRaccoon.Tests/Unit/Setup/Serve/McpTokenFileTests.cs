@@ -109,9 +109,36 @@ public sealed class McpTokenFileTests : IDisposable
     public async Task Read_TrimsTheTrailingNewlineAnEditorMayLeave()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
-        await File.WriteAllTextAsync(tokenFile.Path, $"s3cret{Environment.NewLine}", TestContext.Current.CancellationToken);
+        var stored = await MintElsewhereAsync();
+        await File.WriteAllTextAsync(tokenFile.Path, $"{stored}{Environment.NewLine}", TestContext.Current.CancellationToken);
 
-        tokenFile.Read().ShouldBe("s3cret");
+        tokenFile.Read().ShouldBe(stored);
+    }
+
+    [Fact]
+    public async Task AMalformedTokenFile_IsTreatedAsAbsent()
+    {
+        // A write cut short leaves a prefix of the secret: fewer bits than minted, and accepting it
+        // would be the same silent entropy loss whether the file is short by one character or forty.
+        var tokenFile = new McpTokenFile(_dataRoot);
+        var truncated = (await MintElsewhereAsync())[..10];
+        await File.WriteAllTextAsync(tokenFile.Path, truncated, TestContext.Current.CancellationToken);
+
+        tokenFile.Read().ShouldBeNull();
+        (await File.ReadAllTextAsync(tokenFile.Path, TestContext.Current.CancellationToken)).ShouldBe(truncated);
+    }
+
+    /// <summary>The length the reader demands is the mint's own output length, not a copy of it.</summary>
+    [Fact]
+    public async Task TheAcceptedLength_FollowsWhatTheMintProduces()
+    {
+        var tokenFile = new McpTokenFile(_dataRoot);
+        var minted = (await tokenFile.EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+
+        tokenFile.Read().ShouldBe(minted);
+
+        await File.WriteAllTextAsync(tokenFile.Path, minted[..^1], TestContext.Current.CancellationToken);
+        tokenFile.Read().ShouldBeNull(); // one character short of a mint is not a token
     }
 
     [Fact]
@@ -135,34 +162,57 @@ public sealed class McpTokenFileTests : IDisposable
     }
 
     [Fact]
+    public async Task AMalformedTokenFile_IsHealed()
+    {
+        // A write cut short by a crash leaves a prefix of the secret behind. Serving on it lowers
+        // the entropy silently, and wedging every later start on it is no better than for an empty
+        // file: it gets the same wait, then the same delete-and-re-mint.
+        var time = new FakeTimeProvider();
+        var tokenFile = new McpTokenFile(_dataRoot, time);
+        var truncated = (await MintElsewhereAsync())[..10];
+        await File.WriteAllTextAsync(tokenFile.Path, truncated, TestContext.Current.CancellationToken);
+
+        var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        healing.IsCompleted.ShouldBeFalse(); // still waiting out a possibly-live writer
+
+        time.Advance(McpTokenFile.HealAfter);
+        var healed = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        healed.ShouldNotBeNull().ShouldNotBe(truncated);
+        tokenFile.Read().ShouldBe(healed);
+    }
+
+    [Fact]
     public async Task AnEmptyFileThatFillsIn_IsNotOverwritten()
     {
         // The creator was alive after all. Clobbering it here is worse than the wedge: the writer
         // goes on to serve with its own secret while the file holds ours, so every caller 401s.
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
+        var writers = await MintElsewhereAsync();
         await File.WriteAllTextAsync(tokenFile.Path, string.Empty, TestContext.Current.CancellationToken);
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
-        await File.WriteAllTextAsync(tokenFile.Path, "the-writers-token", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(tokenFile.Path, writers, TestContext.Current.CancellationToken);
         time.Advance(McpTokenFile.HealAfter);
 
         var acquired = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
-        acquired.ShouldBe("the-writers-token");
-        tokenFile.Read().ShouldBe("the-writers-token");
+        acquired.ShouldBe(writers);
+        tokenFile.Read().ShouldBe(writers);
     }
 
     /// <summary>The clobber guard without the timing: the heal's delete only fires while the file
-    /// is still empty.</summary>
+    /// holds no token.</summary>
     [Fact]
-    public async Task TheHealDelete_LeavesAFilledFileAlone()
+    public async Task TheHealDelete_LeavesAStoredTokenAlone()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
         var existing = await tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
 
-        tokenFile.TryDeleteWhileEmpty().ShouldBeFalse();
+        tokenFile.TryDeleteDebris().ShouldBeFalse();
 
         File.Exists(tokenFile.Path).ShouldBeTrue();
         tokenFile.Read().ShouldBe(existing);
@@ -197,6 +247,14 @@ public sealed class McpTokenFileTests : IDisposable
         var token = await tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
 
         token.ShouldBeNull();
+    }
+
+    /// <summary>A well-formed token from a mint of its own — what a live writer leaves behind, and
+    /// the only honest source of the shape the reader accepts.</summary>
+    private async Task<string> MintElsewhereAsync()
+    {
+        var elsewhere = Path.Combine(_dataRoot, Guid.NewGuid().ToString("N"));
+        return (await new McpTokenFile(elsewhere).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
     }
 
     /// <summary>Runs the action on dedicated threads released together by a barrier.</summary>

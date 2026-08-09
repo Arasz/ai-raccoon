@@ -8,17 +8,20 @@ namespace AiRaccoon.Setup.Serve;
 /// <summary>
 ///     The loopback secret guarding /mcp, kept in a 0600 file under the data root
 ///     (docs/plans/2026-08-09-mcp-loopback-token-flow.md). Minted by `serve` before it binds;
-///     read — never minted — by the proxy.
+///     read — never minted — by the proxy. Only content the mint could have written counts as a token.
 /// </summary>
 internal sealed class McpTokenFile
 {
     public const string FileName = "mcp-token";
 
-    /// <summary>How long an empty file is given to fill in before it counts as debris. Well inside
-    /// BackendLauncher's acquire budget, so the heal rescues the start that hit the problem.</summary>
+    /// <summary>How long a file holding no token is given to fill in before it counts as debris. Well
+    /// inside BackendLauncher's acquire budget, so the heal rescues the start that hit the problem.</summary>
     public static readonly TimeSpan HealAfter = TimeSpan.FromSeconds(5);
 
     private const int TokenBytes = 32;
+
+    /// <summary>What the mint produces, so a truncated write can never pass as a token.</summary>
+    private static readonly int TokenLength = Base64Url.EncodeToString(new byte[TokenBytes]).Length;
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
@@ -48,10 +51,10 @@ internal sealed class McpTokenFile
             return token;
         }
 
-        // The file held nothing for the whole wait, so whoever created it died between the
+        // The file held no token for the whole wait, so whoever created it died between the
         // exclusive create and the write. Remove it and mint through that same exclusive create —
         // never by writing over the file — so concurrent healers converge as concurrent minters do.
-        TryDeleteWhileEmpty();
+        TryDeleteDebris();
         return await AcquireAsync(cancellationToken);
     }
 
@@ -86,8 +89,8 @@ internal sealed class McpTokenFile
         return null;
     }
 
-    /// <summary>Deletes the file only while it is genuinely empty; a live writer or a filled file wins.</summary>
-    internal bool TryDeleteWhileEmpty()
+    /// <summary>Deletes the file only while it holds no token; a live writer or a stored token wins.</summary>
+    internal bool TryDeleteDebris()
     {
         try
         {
@@ -95,7 +98,8 @@ internal sealed class McpTokenFile
             // reports that as absent — which would delete the token the winner is still writing.
             using (var held = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.None))
             {
-                if (held.Length > 0)
+                using var reader = new StreamReader(held, Encoding.UTF8);
+                if (Parse(reader.ReadToEnd()) is not null)
                 {
                     return false;
                 }
@@ -110,18 +114,25 @@ internal sealed class McpTokenFile
         }
     }
 
-    /// <summary>The stored token, or null when the file is missing, empty or unreadable.</summary>
+    /// <summary>The stored token, or null when the file is missing, unreadable, or holds anything
+    /// other than a token — a truncated write is debris, not a weaker secret.</summary>
     public string? Read()
     {
         try
         {
-            var token = File.ReadAllText(Path).Trim();
-            return token.Length == 0 ? null : token;
+            return Parse(File.ReadAllText(Path));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
         }
+    }
+
+    /// <summary>The token in <paramref name="content"/>, or null when the mint could not have written it.</summary>
+    private static string? Parse(string content)
+    {
+        var token = content.Trim();
+        return token.Length == TokenLength ? token : null;
     }
 
     /// <summary>A newly minted token, or null when the file already exists or cannot be created.</summary>

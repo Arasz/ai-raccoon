@@ -31,9 +31,10 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         _port = AiRaccoonProcess.FreePort();
         _backend = StartGatedServe();
         await WaitForBackendAsync();
-        // Deliberately not the backend's: the proxy reads this root, the gate compares the other.
-        await File.WriteAllTextAsync(Path.Combine(_proxyRoot, McpTokenFile.FileName), "not-the-backends-token",
-            TestContext.Current.CancellationToken);
+        // A well-formed token that is deliberately not the backend's: the proxy reads this root,
+        // the gate compares the other. Minted rather than written, so the refusal is the gate's
+        // verdict on a real token and not the reader rejecting the file's shape.
+        await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 
     public ValueTask DisposeAsync()
