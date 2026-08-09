@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-09T18:05:00Z",
+  "lastUpdated": "2026-08-09T18:50:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "after-check-fix",
+      "title": "Fix every issue found in the 1.5.0 manual testing sweep",
+      "finished": "2026-08-09T18:50:00Z",
+      "pr": "232, 237",
+      "summary": "Reviewed the sweep findings against the code before planning, which upgraded the headline defect: PromoteAsync dequeued each candidate before sharing it (separate connections, no transaction, no try/catch), so a queued hash whose entry had been re-ingested was PERMANENTLY LOST, not merely mis-reported. Root cause: nothing invalidated promotion_queue when the entries rows it referenced were deleted or re-chunked - asserted as intended in a then-green test (Sweep_NeverTouchesTheQueue). Live: 19 orphaned rows, ai-raccoon's rank-1 candidate among them, so every 30-minute pass destroyed the top candidate and promoted nothing. Fixes (#232): AFTER DELETE ON entries trigger with a NOT EXISTS sibling guard (additive DDL, no schema-version bump) + ai-raccoon extract prune; per-candidate isolation in PromoteAsync with PromoteOutcome.Failures and ShareExtractResult.{SkippedDuplicates,Failures}; typed invalid-argument refusals across all 22 tools; foreign-subject detector no longer fires on ids inside brackets, many-foreign-projects tag split out, mid-sentence channel boundary pinned by tests; ADR-0023 and ADR-0024; sweep-doc and reference corrections; 1.6.0 bump and a README 'What's new (from 1.2.0 to 1.6.0)' section. NO scoring weight, prior or clamp changed - the calibration fixture (AIRACCOON_SCORING_EVAL_FIXTURE) is deliberately uncommitted, so a weight change is unmeasurable; gated on committing a labeled fixture. The quality gate then found two defects the packages' own tests missed, fixed in #237: extract prune crashed on every invocation (GetValue read 'apply' for an option declared '--apply'; the store-level test never touched argv), and the new trigger destroyed candidates for UNCHANGED chunks on a watched-file re-ingest (content-derived hashes return identical, but nothing backs them at delete time) - now handled by capturing and restoring the affected queue rows across ReplaceFileAsync's transaction. Refusals also narrowed to exact types so ArgumentOutOfRangeException (our own index bugs) is not laundered into a caller-facing invalid-argument at Information level. Live restore run with a locally built 1.6.0: 30 orphans -> 0, prune idempotent, queue 970. Extraction deliberately left on 'propose' - the background service runs inside the installed 1.5.0 backend, so flipping to 'promote' would still execute the old dequeue-before-share code. Next: tag/publish 1.6.0, dotnet tool update, serve --restart, then flip extract.mode.global back to promote."
+    },
     {
       "id": "hermes-regresion",
       "title": "Direct-HTTP clients can present the loopback token again",
