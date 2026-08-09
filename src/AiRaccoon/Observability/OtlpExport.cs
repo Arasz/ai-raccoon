@@ -25,9 +25,8 @@ internal static partial class OtlpExport
             {
                 if (state.InvalidEndpointReason is not null)
                 {
-                    // No DI logger yet (AddOtlpExport runs before builder.Build()): the shared
-                    // pre-host seam (same one ServeRunner/ObservabilityRunner use) routes this
-                    // through quiet's file destination instead of stderr when quiet is set.
+                    // No DI logger yet (AddOtlpExport runs before builder.Build()) — PreHostLogging
+                    // routes this through the same quiet/transport rules as the built host's own logger.
                     using var log = PreHostLogging.CreateLogger("OtlpExport", options);
                     Log.InvalidEndpoint(log.Logger, state.InvalidEndpointReason);
                 }

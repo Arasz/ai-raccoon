@@ -167,7 +167,7 @@ already exposes (endpoint, protocol, headers, timeout, per-signal overrides,
 > environment variable starting with `OTEL_` is copied into an in-memory
 > configuration source, nothing else. This restores the SDK's entire
 > `OTEL_*` parsing surface in one place (headers, compression, resource
-> attributes, per-signal endpoint/protocol/timeout, mTLS certificates,
+> attributes, ~~per-signal endpoint/protocol/timeout~~ [see correction below], mTLS certificates,
 > `OTEL_TRACES_SAMPLER`/`_ARG`, `OTEL_BSP_*`, metrics temporality) while
 > Ruling 3 stays exactly as strict as before: no non-`OTEL_` variable
 > re-enters config, so the settings table remains the only runtime channel
@@ -332,7 +332,7 @@ such rather than guessed:
   to roughly 5s per provider to process exit.
 
 **Consequence of this posture.** We lower the per-export timeout from the
-30s default so the worst case per export is bounded, and we accept silent
+~~30s~~ **10s** default (see correction below) so the worst case per export is bounded, and we accept silent
 failure as the deliberate trade for a CLI that stays silent when idle. The
 `observability otlp` verb reports live exporter state on request, and
 `OTEL_DIAGNOSTICS.json` is documented as the escape hatch when someone
@@ -456,3 +456,37 @@ duplicates `System.Runtime`'s instruments under different names was not
 checked in this research pass. Per "ask if a simpler shape would do," the
 simpler, already-covering, zero-package shape is taken; the fourth package
 is revisited only if a real gap shows up.
+
+## Corrections — 2026-08-09
+
+Found by the four-lane review in `docs/reviews/2026-08-09-otlp-export-review.md`, verified against
+the decompiled pinned `opentelemetry-dotnet` 1.17.0 assemblies. Recorded here rather than edited
+away, because this ADR is what the next maintainer will trust.
+
+1. **Per-signal endpoint variables never worked.** The 2026-08-07 update above claims the restored
+   `OTEL_*` channel gives the SDK "per-signal endpoint/protocol/timeout". False, for two independent
+   reasons: the `AddOtlpExporter(o => …)` delegate runs *after* options construction, so anything it
+   assigns wins over env-derived values; and `AddOtlpExporter` uses configuration type `Default`,
+   which parses only the **generic** variables — the per-signal ones are read solely by the
+   cross-signal `UseOtlpExporter()` API, which this code does not use. The .NET exporter's own README
+   lists them as "Not supported" for this registration style. The OTLP spec says per-signal endpoints
+   MUST be used as-is; here they are ignored, silently.
+2. **`OTEL_EXPORTER_OTLP_TIMEOUT` is likewise defeated**, same mechanism — and the baseline is
+   misstated. `OtlpExporterOptions.TimeoutMilliseconds` defaults to **10000**, not 30000. The 30s
+   figure is `BatchExportProcessor.ExporterTimeoutMilliseconds`, a different knob. Lowering to 5s
+   remains defensible; the justification cited the wrong number.
+3. **The instrument accounting is short by one.** The paragraph above names four tagged and two
+   untagged instruments — six of seven. The seventh, `ai_raccoon_queue_evicted_score`, appears
+   nowhere, and its sibling counter *is* tagged with `project_id` **and** `reason`, so the score
+   distribution cannot be sliced by the dimensions of the event count it accompanies.
+4. **Instrument names throughout this document are historical.** The 2026-08-09 owner gate renamed
+   every instrument onto the OTel dotted convention with units supplied, and moved the duration
+   histogram to `mcp.server.operation.duration` in seconds. `ai_raccoon_tool_invocations` →
+   `ai_raccoon.tool.invocations`; `ai_raccoon_tool_duration_ms` → `mcp.server.operation.duration`;
+   the queue instruments lose their `_total` suffixes and gain units. Current names live in
+   `OtlpNames`. Neither this ADR nor ADR 0002 ever recorded a naming rationale — the snake_case was
+   an unexamined default, not a defended position, which is why it changed without superseding
+   anything.
+5. **The `AlwaysOnSampler` decision (2026-08-08 update) is superseded by ADR 0021**, which exports
+   the ASP.NET request span so the unrecorded-parent condition the override exists for stops
+   existing. Its removal is held against a named test in the proxy lane — see ADR 0021.
