@@ -508,8 +508,29 @@ contributes nothing — a result is scored by whichever modality retrieved it.
 rating = baseScore × 0.5^(ageDays / halfLifeDays) × (1 + accessCount × multiplier)
 ```
 
-Defaults: `baseScore = 0.5`, `halfLifeDays = 30`, `multiplier = 0.1`. The rating
-is recalculated each time a search returns the entry (via `BumpAccessAsync`).
+Defaults: `baseScore = 0.5`, `halfLifeDays = 30`, `multiplier = 0.1`. `ageDays` is
+measured from **creation**, not from last use.
+
+Two properties of this follow from *where* the formula is called, and both surprise
+people, so they are worth stating plainly:
+
+- **The stored `rating` is written only by `BumpAccessAsync`, on a search hit.** An entry
+  no search ever returns keeps the schema default `0.5` — above the `0.3` threshold —
+  indefinitely. Never being used does not decay an entry; it preserves it.
+- **A search hit recomputes the value from creation age rather than nudging it up.**
+  Because the half-life is 30 days, the recomputed rating for an entry older than roughly
+  26 days lands *below* the threshold. So searching an old entry is what makes it
+  sweepable, and the access multiplier is far too small to offset the decay term — at a
+  year old it would take tens of thousands of accesses to climb back over `0.3`.
+
+`rating` also does not take part in retrieval ranking. It is read in exactly two places:
+the degradation gate below, and `memory_set_ttl`'s `canEverExpire` response.
+
+> This is a known gap rather than a design position: the intended model is that disuse
+> should decay a memory and use should protect it. See
+> `docs/plans/2026-08-09-memory-decay-implementation-plan.md` for the rulings and the
+> staged plan. **Nothing in that plan is implemented yet** — this section describes what
+> the code does today.
 
 **Degradation** (`memory_sweep`) evaluates each entry against its per-entry TTL
 and the sweep threshold:
@@ -519,9 +540,14 @@ ShouldDegrade = ttlDays IS SET AND rating < threshold AND ageDays > ttlDays
 ```
 
 There is no global TTL knob: an entry without a `ttl_days` value set by
-`memory_set_ttl` is never a candidate. Entries also have to be rated low
-enough — a frequently accessed entry stays even past its TTL. `shared` entries
-are never swept.
+`memory_set_ttl` is never a candidate — so a bank that has never called that tool has
+nothing to sweep. `shared` entries are never swept.
+
+The sweep deletes only within the scope it enumerated (`project`), so a same-hash sibling
+in an active workspace or a custom context is left alone; `hash` does not encode scope, so
+`(project_id, hash)` is not a row identity. The background reaper additionally honours the
+per-project access mode that `memory_sweep` enforces at the tool boundary: a project not
+in `full` mode is skipped rather than reaped ([ADR-0025](../adr/0025-the-sweep-reaper.md)).
 
 > **Evidence:** `src/AiRaccoon.Core/Rating/RatingPolicy.cs:12-24` (rating),
 > `src/AiRaccoon.Core/Degradation/DegradationPolicy.cs:6-7` (degradation),
