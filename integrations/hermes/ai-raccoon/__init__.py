@@ -15,6 +15,7 @@ official mcp SDK.
 Config in $HERMES_HOME/config.yaml (profile-scoped), under plugins.ai-raccoon:
   transport: stdio | http
   url: http://127.0.0.1:7721/mcp        # http mode
+  token_file: ~/.ai-raccoon/mcp-token    # http mode; read at connect, never written to config.yaml
   binary: ai-raccoon                     # stdio mode (PATH lookup)
   project_id: ""                         # empty -> derived hermes-<profile>
   search_limit: 5
@@ -370,6 +371,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         return [
             {"key": "transport", "description": "stdio spawns the ai-raccoon binary; http connects to a running server", "default": "stdio", "choices": ["stdio", "http"]},
             {"key": "url", "description": "Streamable HTTP endpoint (http mode)", "default": "http://127.0.0.1:7721/mcp"},
+            {"key": "token_file", "description": "Loopback auth token file (http mode); read at connect and sent as X-AiRaccoon-Token when url is 127.0.0.1/::1/localhost, never copied into config.yaml", "default": "~/.ai-raccoon/mcp-token"},
             {"key": "binary", "description": "ai-raccoon binary to spawn (stdio mode)", "default": "ai-raccoon"},
             {"key": "binary_args", "description": "Extra args for the spawned binary, e.g. ['--data-root', '/tmp/bank'] (stdio mode)", "default": ""},
             {"key": "quiet", "description": "Spawn the server with --quiet (all logs go to a file beside its bank, none on stdout/stderr; the provider emits status cues)", "default": True, "choices": ["true", "false"]},
