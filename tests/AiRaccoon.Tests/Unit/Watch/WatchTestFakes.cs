@@ -17,6 +17,11 @@ internal sealed class WatchTestStack
 
     public WatchTestStack()
     {
+        // The real store keeps the fingerprint inside the replace transaction; the fakes are wired
+        // together here so the same re-check/write happens against the fake watch store.
+        Memory.ReadFingerprint = Store.PeekFingerprint;
+        Memory.WriteFingerprint = (projectId, path, hash) =>
+            Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
         Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), Memory, Time, ScanGuard,
@@ -144,9 +149,17 @@ internal sealed class FakeWatchStore : IWatchStore
     public Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default)
     {
+        SetFingerprint(projectId, path, fileHash, updatedAt);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Synchronous fingerprint read/write — the fake memory store's replace transaction uses these.</summary>
+    public string? PeekFingerprint(string projectId, string path) => FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null;
+
+    public void SetFingerprint(string projectId, string path, string fileHash, long updatedAt)
+    {
         FileHashes[Key(projectId, path)] = (fileHash, updatedAt);
         UpsertFileHashCalls++;
-        return Task.CompletedTask;
     }
 
     public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
@@ -251,6 +264,26 @@ internal sealed class FakeMemoryStore : IMemoryStore
         }
 
         return 1;
+    }
+
+    /// <summary>Fingerprint re-check/write hooks — the fake's stand-in for the real replace transaction.</summary>
+    public Func<string, string, string?>? ReadFingerprint { get; set; }
+
+    public Action<string, string, string>? WriteFingerprint { get; set; }
+
+    /// <summary>Mirrors the real transaction: re-check the fingerprint, then delete, ingest and store it.</summary>
+    public async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.Equals(ReadFingerprint?.Invoke(projectId, path), fileHash, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        await DeleteSourcePathAsync(projectId, path, cancellationToken);
+        await IngestFileAsync(projectId, path, null, cancellationToken);
+        WriteFingerprint?.Invoke(projectId, path, fileHash);
+        return true;
     }
 
     public Task<int> DeleteSourcePathAsync(string projectId, string path,

@@ -132,6 +132,10 @@ public sealed class WatchToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
