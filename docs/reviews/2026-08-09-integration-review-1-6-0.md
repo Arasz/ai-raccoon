@@ -46,11 +46,13 @@ release makes that is false.
 | 1 | **High** | Promotion | The ADR-0023 trigger's `NOT EXISTS` guard is **scope-blind** while `ShareAsync` requires `scope='project'`. A queue row whose hash survives only as a `custom`- or workspace-scoped sibling is kept by the trigger, is unpromotable, and is destroyed as `stale-hash` on the next pass. This is the exact D7 loss the ADR claims is gone. Reachable with no unusual action via `memory_delete_context` and via sync tombstones. |
 | 2 | **High** | Promotion | `extract prune` uses the same scope-blind predicate, so the one maintenance verb that exists cannot see or clean the orphan class the trigger newly creates. |
 | 3 | **High** | Sweep | The reaper never consults per-project access mode. `memory_sweep(dryRun:false)` is `Destructive`, which the tool surface grants only in `full` mode — default is `rw`. The operation the tool refuses on a default install now runs unattended, including against projects explicitly pinned to `ro`. |
-| 4 | **High** | Sweep | The sweep selects **project-scope** rows but deletes by `(hash, project_id)` with no scope predicate, so it also destroys same-hash rows in an **active workspace** and in custom/label contexts. `memory_set_ttl` has the same blindness on the write side: it stamps the TTL on every sibling. One `set_ttl` plus one tick can take out an in-flight workspace note. |
+| 4 | **High** | Sweep *(live-proven)* | The sweep selects **project-scope** rows but deletes by `(hash, project_id)` with no scope predicate, so it also destroys same-hash rows in an **active workspace**. `memory_set_ttl` is blind the same way on the write side. **Both halves reproduced live** — see "The workspace-sibling repro" below. An agent's live, unconsolidated workspace note was destroyed by a pass whose own report said it deleted one entry. |
+| 4b | **High** | Workspace *(live)* | **A workspace write silently lands in committed project scope** when identical content already exists there. `memory_write(projectId, workspaceId, content)` returns `"context": "project:sib"` — not the workspace the caller named — `workspace_status` stays at 0, and the note is immediately committed. The sandbox the agent asked for did not hold it, and `memory_workspace_discard` would not take it back. |
 | 5 | **High** | Observability | `sweep.reaper` never calls `NoteWork()`, and the span filter defaults to suppress. **No successful sweep pass ever emits a span — including one that permanently deletes rows.** The only destructive background pass is the only one invisible in traces. |
 | 6 | **High** | Observability | A pass in which *every project threw* records `result=success`. The failure-rate signal stays at 0% while nothing works. Affects extraction and sweep. |
 | 7 | **High** | Core | `rating` decays only when an entry is returned by a search — it is written solely by `BumpAccessAsync`. An entry nobody searches sits at the `DEFAULT 0.5`, above the 0.3 threshold, forever. So a TTL on an unread entry **never fires**, which is precisely the population the reaper exists to collect. The tool description tells the agent decay is a matter of time; it is a matter of access. |
 | 8 | **High** | Architecture | The largest behavioural change in the release — a default-on, unattended, cross-project deleter on a machine-wide shared backend — shipped with **no ADR**, while a no-behaviour-change restatement of an existing contract got ADR-0024. |
+| 8b | **High** | Encryption *(live)* | `encryption bitwarden -t <token>` passes the access token as a **child-process argv element** (`ArgumentList.Add("-t"); ArgumentList.Add(token)`), so it is visible in plain `ps` output to any same-user process for the life of the `bws` call. Proven live with a slowed stand-in `bws`: `ps aux` showed `bws secret get <id> -t FAKE-PS-VISIBLE-TOKEN-XYZ123`. The default path already passes `BWS_ACCESS_TOKEN` by environment; `-t` should do the same. |
 | 9 | Med-High | Sweep | `sweep.threshold` is a single **global** key, but `SetSweepThresholdAsync(projectId, …)` gates access on `projectId` and then writes it. An agent holding `full` on project A moves a knob the reaper applies to project B. `GetSweepThresholdAsync` takes a `projectId` it never uses. |
 | 10 | **Med** | Observability *(live)* | Every typed refusal exports `exception.stacktrace` over OTLP, including **absolute source paths of the build machine**. Measured: 30 stack frames, 52,968 bytes — **36% of all exported trace volume** — in a 7.5-minute window. Refusals are normal control flow here (unknown hash, invalid params, out-of-scope path), so this is the steady state, and for a hosted collector those paths leave the machine. |
 | 11 | **Med** | Tools *(live)* | `memory_ingest_file` and `memory_ingest_directory` still leak an **untyped** `"An error occurred invoking '<tool>'."` when the path does not exist. This is the 1.5.0 sweep's D3 class, on two more tools; ADR-0024's rollout did not reach the IO exception classes. |
@@ -105,6 +107,47 @@ nobody had checked on the wire.
   an unscoped project refuses every ingest.
 - **`memory_sync` refuses cleanly** when unconfigured, naming the command that would configure it.
 - **The tool inventory is 23 on the wire**, matching every documented count.
+
+## The workspace-sibling repro
+
+Two lanes disagreed here, so it was settled by experiment rather than by preferring one report.
+A code-reading lane claimed the sweep's `DELETE ... WHERE hash = @hash AND project_id = @projectId`
+takes same-hash siblings with it; the live reaper lane reported workspace rows surviving — but its
+workspace rows held *different content*, so it never built a sibling. Building one settles it.
+
+Write identical content into an active workspace and then commit it to project scope. Both rows
+share one hash, because `ContentHash.Of(path, value)` does not include scope:
+
+```
+after building the sibling: [(1, workspace 019fe7a4…, 89d6b20f4bc1, ttl=None),
+                             (2, project,             89d6b20f4bc1, ttl=None)]
+```
+
+`memory_set_ttl` on the **project** hash stamps both rows — the write side is scope-blind:
+
+```
+after set_ttl: [(1, workspace …, 89d6b20f4bc1, ttl=7),
+                (2, project,     89d6b20f4bc1, ttl=7)]
+-> TTL landed on 2 of 2 rows
+```
+
+Then one destructive pass, which reports deleting **one** candidate:
+
+```
+workspace_status BEFORE sweep: 1 entry
+sweep -> {"candidates":[{"hash":"89d6b20f…","rating":5.3e-05,"ageDays":400}],
+          "deleted":["89d6b20f…"]}
+after sweep: []
+workspace_status AFTER sweep: 0 entries
+```
+
+Both rows are gone. An agent's live, unconsolidated workspace note was destroyed by a background
+job acting on a different row, and the pass's own report accounts for one deletion. Note that
+finding 5 compounds this exactly: that pass emits no span, so there is no trace of it either.
+
+Reversing the order surfaces finding 4b. Write to project scope first, then write the same content
+into a workspace: the second call returns `"context": "project:sib"`, no workspace row is created,
+and `workspace_status` reports 0 — the write the agent scoped to a sandbox was committed instead.
 
 ## Every prior defect, re-tested against the candidate
 
