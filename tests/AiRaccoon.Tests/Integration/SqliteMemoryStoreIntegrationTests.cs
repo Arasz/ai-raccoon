@@ -57,7 +57,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     [Fact]
     public async Task Write_WithWorkspaceId_LandsInWorkspaceContext()
     {
-        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "draft finding", WorkspaceId: ws.Id),
@@ -200,7 +200,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     [Fact]
     public async Task WorkspaceConsolidate_PromotesKeptHash_ThenEmptiesWorkspace()
     {
-        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "workspace durable fact", WorkspaceId: ws.Id),
@@ -290,7 +290,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     [Fact]
     public async Task DeleteSourcePath_LeavesWorkspaceScratchRowsForThePathAlone()
     {
-        var ws = await _workspaces.BeginAsync("acme", TestContext.Current.CancellationToken);
+        var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
         var file = Path.Combine(_dataRoot, "scratch.md");
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "magnetostrictive workspace scratch",

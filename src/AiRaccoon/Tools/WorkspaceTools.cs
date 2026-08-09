@@ -34,7 +34,7 @@ public sealed class WorkspaceTools(
     {
         await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
 
-        var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
+        var workspace = await workspaces.BeginAsync(projectId, agentId, name, cancellationToken);
         var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
@@ -50,8 +50,9 @@ public sealed class WorkspaceTools(
         await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-        var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
-        var result = new WorkspaceStatusResult(entries, entries.Count);
+        var outbox = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
+        var result = new WorkspaceStatusResult(outbox.Entries, outbox.Entries.Count,
+            outbox.Workspace.AgentId, outbox.Workspace.Name);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
@@ -96,7 +97,8 @@ public sealed class WorkspaceTools(
     public sealed record WorkspaceBeginResult(string WorkspaceId, string Context);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record WorkspaceStatusResult(IReadOnlyList<MemoryEntry> Entries, int Count);
+    public sealed record WorkspaceStatusResult(IReadOnlyList<MemoryEntry> Entries, int Count, string? AgentId,
+        string? Name);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ConsolidationToolResult(int Promoted, int Discarded);

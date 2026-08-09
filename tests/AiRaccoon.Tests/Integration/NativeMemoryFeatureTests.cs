@@ -42,7 +42,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
 
         // A workspace lifecycle write must also stay inside memory.db.
         await new SqliteWorkspaceStore(_factory).BeginAsync(
-            "acme", "ws-1", new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero),
+            new Workspace("ws-1", "acme"), new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero),
             TestContext.Current.CancellationToken);
 
         var dbFiles = Directory.EnumerateFiles(_dataRoot, "*.db").Select(Path.GetFileName).ToList();
@@ -96,7 +96,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         var workspaceStore = new SqliteWorkspaceStore(_factory);
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-        await workspaceStore.BeginAsync("acme", "ws-1", startedAt, TestContext.Current.CancellationToken);
+        await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var row = await connection.QueryFirstOrDefaultAsync<WorkspaceRow>(

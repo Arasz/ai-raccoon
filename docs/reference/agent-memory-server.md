@@ -44,7 +44,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
 | `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
 | `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
-| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count}`                                                                                 |
+| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count, agentId, name}`                                                                  |
 | `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
 | `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
 | `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
@@ -116,9 +116,10 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
 - **Workspace lifecycle record:** `memory_workspace_begin` inserts an `Active` row into
-  the `workspaces` table inside `memory.db` (no separate meta DB); consolidate and
-  discard mark it `Closed` with `closed_at`. A workspace begun but never finished stays
-  traceable after a crash.
+  the `workspaces` table inside `memory.db` (no separate meta DB), carrying the `agentId`
+  and `name` it was given as provenance; consolidate marks it `Closed` and discard marks
+  it `Discarded`, both with `closed_at`, so the record says which trigger ended it. A
+  workspace begun but never finished stays traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate only when it carries a per-entry TTL, its retrieval
   rating is below the sweep threshold (default 0.3) *and* its age exceeds that TTL.

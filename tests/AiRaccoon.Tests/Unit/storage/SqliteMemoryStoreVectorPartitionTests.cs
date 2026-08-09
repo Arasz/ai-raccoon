@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -76,7 +77,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
     [Fact]
     public async Task Search_VectorOnly_FindsWorkspaceScopedContent()
     {
-        await _workspaces.BeginAsync("acme", "ws-1", FixedNow, TestContext.Current.CancellationToken);
+        await _workspaces.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
         var workspace = await _store.AddContentAsync("acme", "w.md",
             "distinctive workspace content about narwhals", ContextNaming.WorkspaceContext("ws-1"),
             cancellationToken: TestContext.Current.CancellationToken);

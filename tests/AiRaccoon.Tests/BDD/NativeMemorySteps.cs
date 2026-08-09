@@ -6,6 +6,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
@@ -272,8 +273,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenIWorkspaceBegin(string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, "ws-1", MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
+        await ws.BeginAsync(new Workspace("ws-1", projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         scenarioContext["WorkspaceId"] = "ws-1";
     }
 
@@ -282,7 +282,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         // The agent label is part of the tool contract; begin itself returns a generated id.
         var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory), _ctx.TimeProvider)
-            .BeginAsync(projectId, CancellationToken.None);
+            .BeginAsync(projectId, cancellationToken: CancellationToken.None);
         scenarioContext["WorkspaceId"] = workspace.Id;
     }
 
@@ -505,8 +505,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenWorkspaceExists(string wsId, string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
     }
 
@@ -514,8 +513,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenWorkspaceContainsEntries(string wsId, string projectId, string h1, string h2)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
 
         // Write entries into the workspace context; the feature's "h1"/"h2" labels are the
         // scenario keys the consolidate step resolves to the real hashes.
@@ -614,7 +612,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var status = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT status FROM workspaces WHERE id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
-        status.ShouldBe("Closed");
+        status.ShouldBe("Discarded");
         var entries = await conn.QueryFirstOrDefaultAsync<int>(
             "SELECT COUNT(*) FROM entries WHERE workspace_id = @id", new { id = (string)scenarioContext["WorkspaceId"] });
         entries.ShouldBe(0);
@@ -694,8 +692,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}",
             cancellationToken: CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
@@ -1072,8 +1069,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow,
-            CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         await _store.WriteAsync(
             new MemoryWriteRequest(projectId, content, WorkspaceId: wsId),
             CancellationToken.None);
@@ -1494,7 +1490,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         var e1 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e1", WorkspaceId: wsId), CancellationToken.None);
         var e2 = await _store.WriteAsync(new MemoryWriteRequest(projectId, "e2", WorkspaceId: wsId), CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
@@ -1691,7 +1687,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenWorkspaceForProjectContainsEntry(string wsId, string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         await _store.WriteAsync(new MemoryWriteRequest(projectId, "entry-content", WorkspaceId: wsId), CancellationToken.None);
     }
 
@@ -1700,7 +1696,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         await _store.WriteAsync(new MemoryWriteRequest(projectId, "workspace entry", WorkspaceId: wsId),
             CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
@@ -1710,7 +1706,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenAWorkspaceExistsForProject(string wsId, string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory);
-        await ws.BeginAsync(projectId, wsId, MemoryFeatureContext.FixedNow, CancellationToken.None);
+        await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
     }
 
