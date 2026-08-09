@@ -27,8 +27,9 @@
 
     <ItemGroup>
         <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/"/>
+        <None Include="README.md" Pack="true" PackagePath="/"/>
     </ItemGroup>
-    
+
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
         <None Include="Models/*.onnx" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
