@@ -10,6 +10,10 @@ public sealed record OtlpExportState(bool Enabled, string? Endpoint, string? Pro
     /// actually displayed.</summary>
     public const string DefaultServiceName = "ai-raccoon";
 
+    /// <summary>Per-export timeout ceiling: bounds a single unreachable-collector export attempt
+    /// from hanging a detached serve (ADR-0009).</summary>
+    public const int ExportTimeoutMilliseconds = 5_000;
+
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string DefaultProtocol = "grpc";
