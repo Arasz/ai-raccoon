@@ -94,8 +94,6 @@ public sealed class PromotionQueueServiceGuardTests
 
     private sealed class UnreachableMetrics : IPromotionQueueMetrics
     {
-        public void RecordQueued(string projectId, int delta) => throw new NotSupportedException();
-
         public void RecordEviction(string projectId, double victimScore, string reason) =>
             throw new NotSupportedException();
 
@@ -103,6 +101,6 @@ public sealed class PromotionQueueServiceGuardTests
 
         public void RecordDiscarded(string projectId, double waitSeconds) => throw new NotSupportedException();
 
-        public void RecordUtilization(double ratio) => throw new NotSupportedException();
+        public void RecordSnapshot(PromotionQueueStats stats, int capacity) => throw new NotSupportedException();
     }
 }

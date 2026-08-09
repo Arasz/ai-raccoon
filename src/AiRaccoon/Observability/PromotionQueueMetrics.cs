@@ -11,20 +11,16 @@ namespace AiRaccoon.Observability;
 /// </summary>
 public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 {
-    private readonly UpDownCounter<long> _queued;
     private readonly Counter<long> _evictions;
     private readonly Histogram<double> _evictedScore;
     private readonly Histogram<double> _waitSeconds;
     private readonly Counter<long> _promoted;
     private readonly Counter<long> _discarded;
-    private double _utilization;
+    private QueueSnapshot _snapshot = QueueSnapshot.Empty;
 
     public PromotionQueueMetrics()
     {
         Meter = new Meter("AiRaccoon.PromotionQueue");
-        _queued = Meter.CreateUpDownCounter<long>(
-            "ai_raccoon_queue_queued",
-            description: "Queued promotions per project (delta)");
         _evictions = Meter.CreateCounter<long>(
             "ai_raccoon_queue_evictions_total",
             description: "Propose-tier evictions (reason tag: capacity)");
@@ -40,17 +36,18 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         _discarded = Meter.CreateCounter<long>(
             "ai_raccoon_queue_discarded_total",
             description: "Rows discarded from the queue by the agent");
+        Meter.CreateObservableUpDownCounter(
+            "ai_raccoon_queue_queued",
+            ObserveQueued,
+            description: "Queued promotions per project, read from the store's current state");
         Meter.CreateObservableGauge(
             "ai_raccoon_queue_capacity_utilization",
-            () => Volatile.Read(ref _utilization),
+            ObserveUtilization,
             description: "Queue occupancy against the cap (1.0 = full)");
     }
 
     /// <summary>Meter named "AiRaccoon.PromotionQueue" — discoverable by dotnet-counters via EventPipe.</summary>
     public Meter Meter { get; }
-
-    public void RecordQueued(string projectId, int delta) =>
-        _queued.Add(delta, new TagList { { "project_id", projectId } });
 
     public void RecordEviction(string projectId, double victimScore, string reason)
     {
@@ -70,7 +67,24 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         _waitSeconds.Record(waitSeconds);
     }
 
-    public void RecordUtilization(double ratio) => Volatile.Write(ref _utilization, ratio);
+    public void RecordSnapshot(PromotionQueueStats stats, int capacity) =>
+        Volatile.Write(ref _snapshot, QueueSnapshot.From(stats, capacity));
+
+    private IEnumerable<Measurement<long>> ObserveQueued() =>
+        Volatile.Read(ref _snapshot).PerProject
+            .Select(p => new Measurement<long>(p.Value, new TagList { { "project_id", p.Key } }));
+
+    private double ObserveUtilization() => Volatile.Read(ref _snapshot).Utilization;
 
     public void Dispose() => Meter.Dispose();
+
+    /// <summary>Immutable, so a single Volatile field swap is enough to publish it (ADR-0009's
+    /// zero-background-threads guarantee — no timer, the writers publish on the request path).</summary>
+    private sealed record QueueSnapshot(IReadOnlyDictionary<string, int> PerProject, double Utilization)
+    {
+        public static readonly QueueSnapshot Empty = new(new Dictionary<string, int>(), 0.0);
+
+        public static QueueSnapshot From(PromotionQueueStats stats, int capacity) =>
+            new(stats.PerProject, stats.TotalCount / (double)Math.Max(1, capacity));
+    }
 }

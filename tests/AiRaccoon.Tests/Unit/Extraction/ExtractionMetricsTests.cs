@@ -49,6 +49,7 @@ public sealed class ExtractionMetricsTests
         using var collector = new MetricCollector<long>(metrics.Meter, "ai_raccoon_queue_queued");
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
+        collector.RecordObservableInstruments();
 
         var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
         measurement.Value.ShouldBe(1);
