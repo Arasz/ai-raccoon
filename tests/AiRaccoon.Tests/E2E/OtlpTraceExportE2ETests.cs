@@ -54,7 +54,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             _factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
             await _collector.WaitForRequestAsync("/v1/traces", TimeSpan.FromSeconds(5));
 
-            _collector.RequestedPaths.ShouldContain(path => path.Contains("/v1/traces", StringComparison.Ordinal));
+            _collector.RequestedPaths.ShouldContain(path => path == "/v1/traces");
         }
         finally
         {

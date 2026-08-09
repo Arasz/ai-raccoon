@@ -332,6 +332,31 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
     }
 
+    // A6: the endpoint already carries the signal path AND a trailing slash — the SDK's own
+    // AppendPathIfNotPresent checks the "path + /" form too; the hand-rolled EndsWith guard didn't,
+    // so this doubled to ".../v1/traces/v1/traces".
+    [Fact]
+    public void HttpProtobuf_SignalPathWithTrailingSlash_IsNotDoubled()
+    {
+        var state = new OtlpExportState(true, "http://host:4318/v1/traces/", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("http://host:4318/v1/traces/"));
+    }
+
+    // A6: the SDK's own guard uses OrdinalIgnoreCase; the hand-rolled one used Ordinal, so an
+    // upper-cased endpoint doubled to ".../V1/TRACES/v1/traces".
+    [Fact]
+    public void HttpProtobuf_CaseVariedSignalPath_IsNotDoubled()
+    {
+        var state = new OtlpExportState(true, "HTTP://HOST:4318/V1/TRACES", "http/protobuf");
+
+        var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
+
+        endpoint.ShouldBe(new Uri("HTTP://HOST:4318/V1/TRACES"));
+    }
+
     [Fact]
     public void Grpc_EndpointIsUsedVerbatim()
     {

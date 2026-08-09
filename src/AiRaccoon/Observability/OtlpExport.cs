@@ -70,13 +70,19 @@ internal static partial class OtlpExport
     internal static Uri SignalEndpoint(OtlpExportState state, string signalPath)
     {
         var endpoint = state.Endpoint!;
-        if (!IsHttpProtobuf(state.Protocol) || endpoint.EndsWith(signalPath, StringComparison.Ordinal))
+        if (!IsHttpProtobuf(state.Protocol) || HasSignalPath(endpoint, signalPath))
         {
             return new Uri(endpoint);
         }
 
         return new Uri(endpoint.TrimEnd('/') + signalPath);
     }
+
+    /// <summary>Matches the SDK's own AppendPathIfNotPresent: the path form or the path-plus-slash
+    /// form, case-insensitively.</summary>
+    private static bool HasSignalPath(string endpoint, string signalPath) =>
+        endpoint.EndsWith(signalPath, StringComparison.OrdinalIgnoreCase) ||
+        endpoint.EndsWith(signalPath + "/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsHttpProtobuf(string? protocol) =>
         string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
