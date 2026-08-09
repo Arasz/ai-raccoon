@@ -13,6 +13,15 @@ internal static class HostLogging
     internal static void Configure(ILoggingBuilder loggingBuilder, IReadOnlyCollection<McpTransport> transports,
         InfrastructureOptions options)
     {
+        if (transports.Contains(McpTransport.Http) || transports.Contains(McpTransport.Https))
+        {
+            // Per-request ASP.NET Core / MCP server INFO chatter carries nothing an operator acts
+            // on above Warning; both floors only exist where those categories run. Applies
+            // regardless of destination — quiet only changes where logs go, not this policy.
+            loggingBuilder.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+            loggingBuilder.AddFilter("ModelContextProtocol", LogLevel.Warning);
+        }
+
         if (options.Quiet)
         {
             QuietLogging.Configure(loggingBuilder, options);
@@ -20,12 +29,5 @@ internal static class HostLogging
         }
 
         loggingBuilder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        if (transports.Contains(McpTransport.Http) || transports.Contains(McpTransport.Https))
-        {
-            // Per-request ASP.NET Core / MCP server INFO chatter carries nothing an operator acts
-            // on above Warning; both floors only exist where those categories run.
-            loggingBuilder.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
-            loggingBuilder.AddFilter("ModelContextProtocol", LogLevel.Warning);
-        }
     }
 }
