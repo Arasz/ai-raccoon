@@ -47,8 +47,23 @@ spans under it.
 
 ### What gets exported
 
-`Microsoft.AspNetCore.Hosting` joins the tracing registration, alongside the existing
-`AiRaccoon.MemoryTools` source. One span per inbound HTTP request — 1:1 with tool-call volume, since
+**`Microsoft.AspNetCore`** joins the tracing registration, alongside the existing
+`AiRaccoon.MemoryTools` source.
+
+> **Correction, 2026-08-09 — this ADR originally said `Microsoft.AspNetCore.Hosting`, and that is
+> the wrong name.** `Microsoft.AspNetCore.Hosting` is the hosting **Meter** (metrics); the tracing
+> **ActivitySource** the framework creates `HttpRequestIn` on is `Microsoft.AspNetCore`
+> (`GenericWebHostBuilder` constructs `new ActivitySource("Microsoft.AspNetCore")`). Registering the
+> `.Hosting` name subscribes to a source nothing ever writes to, so the orphan is not fixed and no
+> request span appears — caught by an E2E test that went red with the wrong name and green with the
+> right one, against a real request.
+>
+> Worth recording how it survived: the error started in the telemetry catalog, was carried into the
+> review, into this ADR, and then into the implementation brief — which additionally asserted that
+> the pre-existing non-goal test `EndpointSet_DoesNotRegisterAspNetCoreInstrumentation` "was never
+> watching the right source". **That test had it right all along.** Four documents repeated one
+> mistake because each trusted the previous rather than the framework's own source. The metrics half
+> of the same confusion is *not* an error: `AddMeter("Microsoft.AspNetCore.Hosting")` is correct. One span per inbound HTTP request — 1:1 with tool-call volume, since
 each Streamable HTTP POST carries one JSON-RPC call — plus the `/observability` GET from ADR 0008.
 
 Both names live in `OtlpNames`, the derived registry, so the exporter and the `dotnet-trace` command
