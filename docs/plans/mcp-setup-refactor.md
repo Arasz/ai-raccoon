@@ -2,6 +2,16 @@
 
 Status: proposed · Task: ai-raccoon-mcp-setup-refactor · Plan review: APPROVE-WITH-NITS (architect/opus, deleg_56247e3e) — findings F1-F9 folded in below.
 
+> **Partially superseded by [ADR-0020](../adr/0020-always-on-http-stdio-proxy.md).** The
+> "two/three host paths" shape below (stdio-only plain host, HTTP/S web host, combined
+> web host) still describes `McpServerSetup.CreateServerHost` accurately for the
+> `stdio`/`http`/`https` transports. ADR-0020 adds a fourth, structurally different path
+> for the new `proxy` transport (now the default): `ProxyRunner` runs before any `IHost`
+> is built at all — no `CreateServerHost` call, no bank, no key, no embedding model. It
+> is not a fourth branch inside this plan's host factory; it is a pre-branch in
+> `Program.cs` that bypasses the factory entirely. Kept as-is below as the design record
+> for the three paths that do still go through `CreateServerHost`.
+
 ## Scope (user spec + e: extension)
 
 1. **Two host paths** in `McpServerSetup`:

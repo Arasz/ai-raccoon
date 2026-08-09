@@ -13,13 +13,17 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
+    /// <summary>Derived from McpTransport so a new transport cannot leave the help name stale.</summary>
+    internal static readonly string TransportHelpName =
+        string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
+
     internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>The root launch --port (shared with the bare launch root); serve reads it instance-based
     /// as its fallback when serve's own --port is absent (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
-        Description = "HTTP port to bind; 0 picks a random free port",
+        Description = "HTTP backend port the proxy dials or starts (1-65535); 0 is serve-only",
         HelpName = "port",
         DefaultValueFactory = _ => 7721
     };
@@ -75,7 +79,11 @@ internal static class CliCommandTree
 
     private static void AddLaunchOptions(RootCommand root)
     {
-        root.Add(new Option<McpTransport>("--transport") { Description = "MCP transport; https unsupported", HelpName = "stdio|http|https" });
+        root.Add(new Option<McpTransport>("--transport")
+        {
+            Description = "MCP transport; proxy (default) relays to one HTTP backend, https unsupported",
+            HelpName = TransportHelpName
+        });
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
         root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: every log level goes to a file beside the bank, nothing reaches stdout/stderr" });

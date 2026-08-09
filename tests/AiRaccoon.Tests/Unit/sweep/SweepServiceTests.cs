@@ -137,6 +137,10 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
@@ -238,6 +242,10 @@ public class SweepServiceTests
         }
 
         public Task<int> DeleteContextAsync(string projectId, string context,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 

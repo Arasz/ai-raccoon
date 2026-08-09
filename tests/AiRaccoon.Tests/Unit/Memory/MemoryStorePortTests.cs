@@ -258,6 +258,10 @@ public class MemoryStorePortTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
 
+        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default)
         {

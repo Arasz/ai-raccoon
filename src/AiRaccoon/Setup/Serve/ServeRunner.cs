@@ -1,9 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Sockets;
-using System.Text;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup.Cli;
@@ -23,8 +20,7 @@ namespace AiRaccoon.Setup.Serve;
 /// </summary>
 internal static partial class ServeRunner
 {
-    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(1);
-    private static readonly HttpClient ProbeClient = new() { Timeout = ProbeTimeout };
+    private static readonly ServerProbe Probe = ServerProbe.ForLoopback();
 
     public static async Task<int> RunAsync(CliParseResult parsed, ServerConfig config, TextWriter stdout,
         TextWriter stderr, CancellationToken cancellationToken = default)
@@ -44,12 +40,24 @@ internal static partial class ServeRunner
         // Probe first, before bank/key/embedding work (docs/plans/2026-08-06-http-serve-mode-plan.md R14):
         // attach mode never arms the watchdog, touches the bank, or honors --idle-timeout.
         var url = $"http://127.0.0.1:{port}/mcp";
-        if (await TryProbeAttachAsync(port, cancellationToken))
+        if (await Probe.RespondsAsync(port, cancellationToken))
         {
             return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
         }
 
-        var app = McpServerSetup.CreateServerHost(serveConfig);
+        // Minted strictly before the Kestrel bind: once the port answers, the token file is on
+        // disk, so the proxy never has to poll for it (ADR-0020).
+        var tokenFile = new McpTokenFile(config.Options.DataRoot);
+        if (await tokenFile.EnsureAsync(cancellationToken) is not { } mcpToken)
+        {
+            Log.McpTokenUnavailable(logger, tokenFile.Path);
+            await stderr.WriteLineAsync(
+                $"ai-raccoon: cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again");
+            return ExitCode.McpTokenUnavailable;
+        }
+
+        Log.McpTokenReady(logger, tokenFile.Path);
+        var app = McpServerSetup.CreateServerHost(serveConfig with { McpToken = mcpToken });
         try
         {
             if (!TryResolveEncryptionKey(logger, app.Services.GetRequiredService<IEncryptionKeyResolver>(), out var encryptionKey))
@@ -70,7 +78,7 @@ internal static partial class ServeRunner
         {
             // Concurrent-start bind race: re-probe once, then attach or fail with the
             // actionable PortInUse line. Never auto-fallback to a random port.
-            if (await TryProbeAttachAsync(port, cancellationToken))
+            if (await Probe.RespondsAsync(port, cancellationToken))
             {
                 return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
             }
@@ -140,41 +148,6 @@ internal static partial class ServeRunner
 
         Log.IgnoringTransport(logger, selected);
         stderr.WriteLine($"ai-raccoon: serve ignoring --transport {selected}; serve always uses http");
-    }
-
-    /// <summary>R14 probe (docs/plans/2026-08-06-http-serve-mode-plan.md): POST /mcp with an MCP
-    /// Accept header and a non-JSON body; recognized iff status ∈ {400,405,406} and the body
-    /// mentions jsonrpc. 2 attempts, 1s timeout each.</summary>
-    private static async Task<bool> TryProbeAttachAsync(int port, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            try
-            {
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/mcp")
-                {
-                    // JSON content type with a non-JSON body: the MCP endpoint answers 400
-                    // with a JSON-RPC error body (415 only when the content type is wrong).
-                    Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
-                };
-                request.Headers.Accept.ParseAdd("application/json, text/event-stream");
-                using var response = await ProbeClient.SendAsync(request, cancellationToken);
-                if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotAcceptable)
-                {
-                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                    if (body.Contains("jsonrpc", StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
-            {
-                // Connection refused or probe timeout: not an ai-raccoon server.
-            }
-        }
-
-        return false;
     }
 
     /// <summary>True when the exception chain marks the bind failure as address-in-use
@@ -269,5 +242,12 @@ internal static partial class ServeRunner
 
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url}")]
         public static partial void AttachedToExistingServer(ILogger logger, string url);
+
+        [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
+        public static partial void McpTokenReady(ILogger logger, string tokenPath);
+
+        [LoggerMessage(EventId = 607, Level = LogLevel.Error,
+            Message = "ai-raccoon: cannot read or create the MCP token at {TokenPath} — check its permissions, or remove it and start serve again")]
+        public static partial void McpTokenUnavailable(ILogger logger, string tokenPath);
     }
 }

@@ -811,4 +811,22 @@ public class CliArgsTests
         exit.ShouldBe(0);
         writer.ToString().ShouldContain("encryption");
     }
+
+    /// <summary>
+    ///     The --transport help name is derived from McpTransport, not hand-written: a transport
+    ///     the enum gains but the help name never mentions fails here rather than shipping a lie.
+    /// </summary>
+    [Fact]
+    public void Render_Help_ListsTheProxyTransport()
+    {
+        var writer = new StringWriter();
+
+        CliArgs.TryParse(["--help"], out var parsed);
+        var exit = parsed.RenderTo(writer);
+
+        exit.ShouldBe(0);
+        var help = writer.ToString();
+        help.ShouldContain("proxy");
+        help.ShouldContain(string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant())));
+    }
 }

@@ -20,7 +20,7 @@ public class ServerConfigTests
     {
         var config = Cli().ToServerConfig();
 
-        config.Transport.ShouldBe(McpTransport.Stdio);
+        config.Transport.ShouldBe(McpTransport.Proxy);
         config.Options.DataRoot.ShouldBe(DefaultOptions.DataRoot);
         config.Options.Scope.ShouldBe(InstallScope.User);
         config.Port.ShouldBe(DefaultOptions.Port);
@@ -31,7 +31,29 @@ public class ServerConfigTests
     {
         Cli(transport: "http").ToServerConfig().Transport.ShouldBe(McpTransport.Http);
         Cli(transport: "https").ToServerConfig().Transport.ShouldBe(McpTransport.Https);
-        Cli().ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
+        Cli(transport: "stdio").ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
+        Cli().ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
+    }
+
+    /// <summary>
+    ///     The only lever that reaches installed clients (ADR-0020): every declaration invokes the
+    ///     binary bare, so the bare parse — not an opt-in flag — has to select the proxy.
+    /// </summary>
+    [Fact]
+    public void BareLaunch_SelectsTheProxyTransport()
+    {
+        CliArgs.TryParse([], out var parsed).ShouldBeTrue();
+
+        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
+    }
+
+    /// <summary>The escape hatch of ADR-0020: --transport stdio keeps the complete in-process server.</summary>
+    [Fact]
+    public void ExplicitStdio_StaysStdio()
+    {
+        CliArgs.TryParse(["--transport", "stdio"], out var parsed).ShouldBeTrue();
+
+        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
     }
 
     [Fact]
@@ -100,6 +122,25 @@ public class ServerConfigTests
 
     [Fact]
     public void DefaultOptions_IdleTimeout_IsFourHours() => DefaultOptions.IdleTimeout.ShouldBe(TimeSpan.FromHours(4));
+
+    /// <summary>
+    ///     A record's synthesised ToString prints every property, and for `serve` stderr is where all
+    ///     logging goes — so one interpolated config in a log line or exception would put the loopback
+    ///     secret on disk (ADR-0020).
+    /// </summary>
+    [Fact]
+    public void ToString_DoesNotPrintTheMcpToken()
+    {
+        const string token = "loopback-secret-that-must-not-be-printed";
+        var config = new ServerConfig(7721, McpTransport.Proxy,
+            new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User }) { McpToken = token };
+
+        var printed = config.ToString();
+
+        printed.ShouldNotContain(token);
+        // Still a useful line: the launch identity an operator would read it for survives.
+        printed.ShouldContain("7721");
+    }
 
     private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
         int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>

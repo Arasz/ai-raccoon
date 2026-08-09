@@ -61,6 +61,7 @@ public sealed class ServeRunnerTests : IDisposable
         url.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp$");
 
         using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, new McpTokenFile(_dataRoot).Read());
         var transport = new HttpClientTransport(
             new HttpClientTransportOptions
             {
@@ -99,6 +100,24 @@ public sealed class ServeRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task UnusableTokenPath_ReportsMcpTokenUnavailable_WithThePathAndNoStackTrace()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        var port = FreePort();
+        // A directory where the token file belongs: unreadable, uncreatable and undeletable.
+        var tokenPath = Path.Combine(_dataRoot, McpTokenFile.FileName);
+        Directory.CreateDirectory(tokenPath);
+
+        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ExitCode.McpTokenUnavailable);
+        run.Stdout.ToString().ShouldBeEmpty();
+        run.Stderr.ToString().ShouldContain(tokenPath);
+        run.Stderr.ToString().ShouldNotContain("   at ");
+    }
+
+    [Fact]
     public async Task BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -120,7 +139,8 @@ public sealed class ServeRunnerTests : IDisposable
             second.Stderr.ToString().ShouldNotContain("   at ");
 
 
-            var response = await HttpClient.GetAsync(firstUrl, TestContext.Current.CancellationToken);
+            // The OWNER's token: /mcp is gated, so an unauthorized GET would 401 before routing.
+            var response = await GetMcpAsync(firstUrl, _dataRoot, TestContext.Current.CancellationToken);
             response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
         }
         finally
@@ -295,11 +315,19 @@ public sealed class ServeRunnerTests : IDisposable
         await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         run.Exit.IsCompleted.ShouldBeFalse();
 
-        var response = await HttpClient.GetAsync(url, TestContext.Current.CancellationToken);
+        var response = await GetMcpAsync(url, _dataRoot, TestContext.Current.CancellationToken);
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
         var exit = await StopAsync(run);
         exit.ShouldBe(ExitCode.Success);
+    }
+
+    /// <summary>A /mcp request carrying the token minted under the given data root.</summary>
+    private static async Task<HttpResponseMessage> GetMcpAsync(string url, string dataRoot, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add(McpTokenGate.HeaderName, new McpTokenFile(dataRoot).Read());
+        return await HttpClient.SendAsync(request, cancellationToken);
     }
 
     private static ServeRun StartServe(string[] args) => StartServeAsync(args).GetAwaiter().GetResult();

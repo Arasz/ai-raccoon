@@ -15,21 +15,10 @@ namespace AiRaccoon.Setup;
 /// </summary>
 internal static partial class McpServerSetup
 {
-    private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [McpTransport.Stdio];
-
     /// <summary>Flips ASP.NET Core 10's default off so the hosting request Activity carries OTel
     /// HTTP semconv tags — what ASP.NET Core 11 does by default (docs/adr/0021).</summary>
     private const string AspNetCoreHostingOpenTelemetryDataSwitch =
         "Microsoft.AspNetCore.Hosting.SuppressActivityOpenTelemetryData";
-
-    /// <summary>
-    ///     Resolves the --transport value to the transports to enable; anything other than
-    ///     "http" (case-insensitive) runs stdio.
-    /// </summary>
-    internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport) =>
-        Enum.TryParse<McpTransport>(transport, true, out var mcpTransport)
-            ? [mcpTransport]
-            : DefaultTransport;
 
     /// <summary>Creates the server host for the config's single transport.</summary>
     internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport]);
@@ -110,19 +99,26 @@ internal static partial class McpServerSetup
         }
 
         builder.ConfigureMcpServer(transports);
-        return builder.Build().ConfigureMcpEndpoints(transports, config.IdleTimeout > TimeSpan.Zero);
+        return builder.Build().ConfigureMcpEndpoints(config, transports);
     }
 
     extension(WebApplication webApplication)
     {
-        private WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports, bool armWatchdog)
+        private WebApplication ConfigureMcpEndpoints(ServerConfig config, IReadOnlyCollection<McpTransport> transports)
         {
             if (transports.Contains(McpTransport.Https))
             {
                 Log.HttpsTransportNotSupported(webApplication.Logger);
             }
 
-            if (armWatchdog)
+            if (config.McpToken is { } mcpToken)
+            {
+                // Ahead of the watchdog: an unauthorized caller must not keep the daemon alive
+                // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
+                webApplication.UseMiddleware<McpTokenGate>(mcpToken, new McpTokenFile(config.Options.DataRoot).Path);
+            }
+
+            if (config.IdleTimeout > TimeSpan.Zero)
             {
                 // Spliced between routing and endpoints (.NET 10): branches on /mcp so 404s on
                 // other paths never signal (docs/plans/2026-08-06-http-serve-mode-plan.md R4).
@@ -197,5 +193,8 @@ public enum McpTransport
 {
     Stdio = 0,
     Http = 1,
-    Https = 2
+    Https = 2,
+
+    /// <summary>A stdio front end that relays every message to one HTTP backend (ADR-0020).</summary>
+    Proxy = 3
 }

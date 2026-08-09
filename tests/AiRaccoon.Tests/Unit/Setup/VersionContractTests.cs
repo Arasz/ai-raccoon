@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class VersionContractTests
 {
-    private const string ExpectedVersion = "1.4.0";
+    private const string ExpectedVersion = "1.5.0";
 
     [Fact]
     public void PackageMetadata_IsStable_OnePointZero()

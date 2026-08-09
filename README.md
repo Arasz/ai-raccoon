@@ -30,9 +30,19 @@ dotnet tool install -g ai-raccoon
 Run the server:
 
 ```bash
-ai-raccoon                    # stdio (default)
+ai-raccoon                    # proxy (default): relays to one HTTP backend, autostarting it
+ai-raccoon --transport stdio  # complete in-process server, no backend, no autostart
 ai-raccoon --transport http   # Streamable HTTP at /mcp
 ```
+
+The proxy is the zero-config path (`.mcp.json` never changes): the first tool
+call from any client probes `http://127.0.0.1:7721/mcp`, spawns `ai-raccoon
+serve` if nothing answers, and relays every JSON-RPC message to it. It opens
+no bank, holds no encryption key, and loads no embedding model itself — see
+[Serve mode](#serve-mode-http) below and
+[ADR 0020](docs/adr/0020-always-on-http-stdio-proxy.md). If the backend can
+neither be reached nor started, the proxy exits loudly naming the URL and the
+`--transport stdio` escape hatch — there is no silent in-process fallback.
 
 Connect an MCP client with a zero-config `.mcp.json`:
 
@@ -84,20 +94,30 @@ Launch flags (startup-scoped only):
 
 | Option | Values | Default |
 |---|---|---|
-| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
+| `--transport` | `proxy`, `stdio`, `http`, `https` (https → warning) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | any port; `0` = random free port | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
 
-Diagnostics go to stderr; stdout carries only MCP protocol frames.
+Diagnostics go to stderr; stdout carries only MCP protocol frames — true of
+the proxy too, which relays JSON-RPC frames without adding output of its own.
 
 ### Serve mode (HTTP)
+
+Bare `ai-raccoon` (the default `proxy` transport) starts `ai-raccoon serve`
+for you the first time any client touches memory — you normally never run
+`serve` by hand. This section covers the manual path: connecting an
+HTTP-native client straight to a long-lived server, or attaching to one the
+proxy already started.
 
 `ai-raccoon serve` runs the same HTTP endpoint with an idle watchdog — after 4
 hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
 disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
 server, `serve` attaches to it and exits 0 (the first process owns the
-watchdog). Background it and point a client at the URL:
+watchdog). `/mcp` requires the `X-AiRaccoon-Token` header: before binding,
+`serve` mints a random token into `<data-root>/mcp-token` (0600) and every
+caller — the proxy included — must present it; `/observability` stays open,
+unauthenticated. Background it and point a client at the URL:
 
 ```bash
 ai-raccoon serve > serve.log 2>&1 &            # POSIX
@@ -106,8 +126,14 @@ hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
 
 `serve --mcp-entry` prints the client config entry for the bound URL
 (`--format hermes|claude|all`; keep stderr out of the entry file:
-`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`). `serve --port 0`
-picks a random free port and reports it.
+`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`) — the printed
+entry carries the URL only, not the token, so a client connecting this way
+(bypassing the proxy) must add the `X-AiRaccoon-Token` header itself, read
+from `<data-root>/mcp-token`. `serve --port 0` picks a random free port and
+reports it.
+
+A direct `ai-raccoon --transport http` launch (no `serve` verb) stays
+**ungated** — deliberate for now; see [SECURITY.md](SECURITY.md).
 
 ## Embeddings
 

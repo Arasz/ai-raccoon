@@ -34,8 +34,10 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 
 | Surface                    | What it does                                                                                                                                                                            | Who controls the input                        |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| stdio transport (default)  | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr                                                                                          | The MCP client that launched the process      |
-| HTTP transport (opt-in)    | Serves MCP over Streamable HTTP at `/mcp` on `localhost`                                                                                                                                | Any process that can reach the listening port |
+| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to one `ai-raccoon serve` backend over loopback HTTP, starting it if none is listening (ADR-0020). Opens no bank, holds no key, runs no tool | The MCP client that launched the process      |
+| stdio transport (`--transport stdio`) | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr. A complete in-process server — the escape hatch when the backend cannot start           | The MCP client that launched the process      |
+| `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from `<data-root>/mcp-token` (0600); the proxy supplies it, so no client config carries a secret | Any local process that can read the token file |
+| HTTP transport (`--transport http`, manual) | The same endpoint started directly rather than through `serve`. **Ungated** — see below                                                                                       | Any process that can reach the listening port |
 | `/observability` endpoint (HTTP mode) | Returns the server's PID and OTLP export state on the same loopback port as `/mcp`                                                                                          | Any process that can reach the listening port |
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
 | Memory tools (22 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
@@ -47,8 +49,24 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 **The dangerous direction is the client that launches the process.** A stdio MCP server
 inherits the privileges of whatever starts it and trusts the protocol messages it reads —
 a malicious client can invoke tools, and anything a tool does runs with the server's
-privileges. Keep the HTTP endpoint opt-in and loopback-only for the same reason: an
-unauthenticated `localhost` listener is reachable by any local process.
+privileges.
+
+**The HTTP endpoint is no longer opt-in, so a token replaces that mitigation.** Until
+ADR-0020, this paragraph read "keep the HTTP endpoint opt-in and loopback-only" — an
+unauthenticated `localhost` listener is reachable by any local process, and being opt-in
+was half the defence. The proxy starts a server on first memory use, so that half is gone.
+In its place, `serve` mints a random token into `<data-root>/mcp-token` (0600) before it
+binds and requires it on `/mcp`. That is a bar, not a boundary: it raises the reach from
+"any local process" to "any process that can read that file", which on a single-user
+machine means anything running as you. `/observability` stays unauthenticated by design —
+it returns a PID and OTLP on/off, nothing that touches the bank, and discovery depends on
+it (ADR-0008).
+
+**Two known gaps, stated rather than implied.** `--transport http` started directly is
+**not** token-gated — it is manual and opt-in, i.e. the posture this document already
+accepted before ADR-0020, so it is not a regression; but if you run it, the listener is
+open to any local process. And `UnixFileMode` is POSIX-only: on Windows the token file
+inherits the data-root directory's ACL rather than being owner-only.
 
 **Access modes provide a defence-in-depth layer:** `ro` mode allows only reads; `rw`
 (default) adds writes; `full` enables destructive operations (delete, sweep, forget).
