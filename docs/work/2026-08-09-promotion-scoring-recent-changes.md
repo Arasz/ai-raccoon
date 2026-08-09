@@ -19,6 +19,12 @@ Everything below therefore shipped unmeasured.
 Change 1 carries a comment calling it a deliberate decision. It may well be the better rule — but
 it was never measured, and it is the exact quantity the ±0.03 parity gate exists to police.
 
+**Now measured.** With the gate restored and reporting, the C# scorer returns **0.713** on the
+rebuilt 59-row reference fixture against the prototype's **0.7156** — a gap of 0.003, comfortably
+inside the ±0.03 tolerance. So the four divergences are behaviourally minor *on this fixture*, and
+none of them is the reason the model underperforms on the live corpus. They remain undocumented
+drift that shipped without a gate; that is the finding, not a regression in the number.
+
 ## The channel router is bypassed for every `memory_write` row
 
 `ProvenanceArchetype.cs:119`:
