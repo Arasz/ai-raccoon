@@ -93,7 +93,19 @@ put the defect in front of the check and watch it fail before fixing it.
 | **WP18** | `ServerInfo` reads resolved state (panel) | The CLI verb reports the endpoint actually in use, and cannot drift from the host's resolved state | New test — see the correction below; **not** the regression this row first claimed |
 | **WP19** | `IMeterFactory` migration | Meters come from the factory; the two `IDisposable`s go | Existing suite — runs **last**, on settled constructors |
 
-### WP5's seam, located
+### WP5's seam, located — and widened by the second gate
+
+**Ruled 2026-08-09 (D6): combined mode is reachable, and logging configuration gets one home that
+takes the transport as an input.** That is broader than "add a file sink to the stdio path". Today
+logging is configured in two places with the same defect: `AddStderrConsoleLogging`
+(`McpServerSetup.cs:153-162`, the stdio path) and `CreateWebHost`'s own
+`builder.Logging.AddConsole(...)`/`SetMinimumLevel(Warning)` block. Both honour `--quiet` by lowering
+the *level* rather than changing the *destination*.
+
+WP5 therefore collapses them into a single configuration point parameterised by transport and quiet,
+which decides destination first and level second. The transport is what determines whether a stream
+is ours to write to at all — stdio is owned by the client, HTTP is not — so it belongs in the
+signature rather than being inferred at two call sites.
 
 The pre-host logging problem is **one shared seam with three call sites**, not three unrelated ones.
 `ServeRunner.RunAsync`, `ObservabilityRunner.RunAsync` and now `OtlpExport.AddOtlpExport` each
@@ -120,6 +132,22 @@ respectively. Serialise around the files, not the items.
 - **WP13 after WP8**, which extracts the shared span/timing mechanics from the MCP-specific tags.
 - **WP19 last** — it touches the same constructors as WP1, WP2 and WP11 and should touch them once.
 - **WP16/WP17 anytime**, docs only.
+
+## Second gate — ruled 2026-08-09
+
+All nine approved (`docs/work/2026-08-09-otlp-fix-plan-feedback.md`). Two carried notes that change
+the work rather than merely confirming it:
+
+- **D4 → option A.** Background services acquire telemetry through one generic `IOperationTelemetry`
+  port in Core, not four inline meters.
+- **D6 → combined mode is reachable**, and logging configuration gets **one home that accepts the
+  transport**. See "WP5's seam" above — this merges two configuration sites, it does not just add a
+  sink to one.
+- **D8 carried a question**, not an objection: is there a *profile* concept in the tooling that could
+  say "capture everything we care about" instead of a hand-typed provider list? Being researched;
+  the derived-registry fallback stands until that comes back.
+
+The decisions themselves are recorded below as originally posed.
 
 ## Open decisions — second gate
 
