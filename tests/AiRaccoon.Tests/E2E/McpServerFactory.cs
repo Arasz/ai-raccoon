@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,11 +24,15 @@ namespace AiRaccoon.Tests.E2E;
 public sealed class McpServerFactory : WebApplicationFactory<Program>
 {
     private readonly InstallScope _scope;
+    private readonly Action<IServiceCollection>? _configureAdditionalServices;
     private bool _disposed;
 
-    public McpServerFactory(InstallScope scope = InstallScope.User)
+    /// <summary>configureAdditionalServices is a test seam (e.g. chaining AddInMemoryExporter onto
+    /// the OTel builder the real host already configures) — production boot never passes it.</summary>
+    public McpServerFactory(InstallScope scope = InstallScope.User, Action<IServiceCollection>? configureAdditionalServices = null)
     {
         _scope = scope;
+        _configureAdditionalServices = configureAdditionalServices;
     }
 
     /// <summary>The temp data root the server instance writes into.</summary>
@@ -81,6 +86,10 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         }
 
         builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        if (_configureAdditionalServices is not null)
+        {
+            builder.ConfigureServices(_configureAdditionalServices);
+        }
     }
 
     protected override void Dispose(bool disposing)
