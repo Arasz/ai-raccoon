@@ -140,12 +140,22 @@ split. This is the single most important line in this brief. PR #246's own migra
 the same distinction ("unlike `promotion_queue_entries_ad` above, which reaches every bank via
 `IF NOT EXISTS`"), so the mechanism is established, not speculative.
 
-> **Blocked on PR #246.** That PR is open and touches `MemorySchema.cs`, `PromotionQueueSql.cs`,
-> `SqlitePromotionQueueStore.cs` and `PromotionQueueService.cs` — every file H4 and H5 need. It adds
-> a `scorer_version` column and bumps `CurrentVersion` 3 → 4 with a `MigrateToV4Async` hard step. It
-> does **not** touch the `NOT EXISTS` guard or the orphan predicates, so H4 and H5 remain open.
-> **Do not start H4/H5 until #246 merges**, then rebase onto it — the version ladder it introduces is
-> also the natural place to hang the `DROP TRIGGER` step.
+> **UNBLOCKED, 2026-08-09 18:11 UTC — PR #246 merged, and #248 after it.** `main` is now
+> `5a249917`. Both were verified against current `main`: the trigger's `NOT EXISTS` guard and the
+> `OrphanCountsPerProject` / `DeleteOrphans` predicates are **still scope-blind** — no
+> `scope = 'project'` filter anywhere — so **H4 and H5 remain open exactly as written.**
+>
+> Two things the merge changed in your favour:
+> - The schema is now at `CurrentVersion = 4` with a **`MigrateToV4Async` ladder step**. That is the
+>   natural home for the `DROP TRIGGER IF EXISTS promotion_queue_entries_ad` this fix needs — a
+>   versioned hard step is exactly the mechanism that guarantees existing banks get the corrected
+>   body, which `CREATE TRIGGER IF NOT EXISTS` alone cannot do.
+> - `MemorySchema.cs`'s own new comment states the distinction outright ("unlike
+>   `promotion_queue_entries_ad` above, which reaches every bank via `IF NOT EXISTS`"), so the trap
+>   is documented in the file you will be editing.
+>
+> **Rebase onto `main` before starting** — the in-flight fix lanes all branched from `68fd411e` and
+> `main` has advanced twice since.
 
 **What to test, and what to assert.**
 - *(red first)* Insert an `entries` row in `project` scope and a `custom`-scope sibling with the
