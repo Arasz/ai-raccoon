@@ -209,5 +209,8 @@ public enum McpTransport
 {
     Stdio = 0,
     Http = 1,
-    Https = 2
+    Https = 2,
+
+    /// <summary>A stdio front end that relays every message to one HTTP backend (ADR-0020).</summary>
+    Proxy = 3
 }

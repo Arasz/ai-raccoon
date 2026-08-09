@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup.Serve;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
@@ -40,5 +41,38 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 
         File.Exists(Path.Combine(_factory.DataRoot, ".ai-raccoon", "memory.db")).ShouldBeTrue();
         File.Exists(Path.Combine(_factory.DataRoot, "memory.db")).ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     ADR-0020's escape hatch: --transport stdio stays a complete in-process server. The port it
+    ///     is given is free and stays free — nothing is proxied and no backend is started.
+    /// </summary>
+    [Fact]
+    public async Task ExplicitStdio_StillServesTheFullToolSurfaceInProcess()
+    {
+        var dataRoot = TestData.CreateTempRoot("explicit-stdio");
+        var port = AiRaccoonProcess.FreePort();
+        try
+        {
+            await using var client = await AiRaccoonProcess.ConnectAsync(
+                ["--transport", "stdio", "--data-root", dataRoot, "--port", port.ToString()],
+                TestContext.Current.CancellationToken);
+
+            var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var result = await client.CallToolAsync("memory_stats",
+                new Dictionary<string, object?> { ["projectId"] = "acme" },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            tools.Count.ShouldBe(22);
+            result.IsError.ShouldNotBe(true);
+            // The in-process server opened its own bank, and nothing was ever spawned on the port.
+            File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeTrue();
+            (await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken))
+                .ShouldBeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dataRoot, true);
+        }
     }
 }

@@ -13,6 +13,10 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
+    /// <summary>Derived from McpTransport so a new transport cannot leave the help name stale.</summary>
+    internal static readonly string TransportHelpName =
+        string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
+
     internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -75,7 +79,11 @@ internal static class CliCommandTree
 
     private static void AddLaunchOptions(RootCommand root)
     {
-        root.Add(new Option<McpTransport>("--transport") { Description = "MCP transport; https unsupported", HelpName = "stdio|http|https" });
+        root.Add(new Option<McpTransport>("--transport")
+        {
+            Description = "MCP transport; proxy (default) relays to one HTTP backend, https unsupported",
+            HelpName = TransportHelpName
+        });
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
         root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: info logs off (Warning+ only); the caller emits its own status cues" });
