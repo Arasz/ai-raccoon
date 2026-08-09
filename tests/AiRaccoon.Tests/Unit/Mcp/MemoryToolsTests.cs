@@ -583,9 +583,9 @@ public class MemoryToolsTests
         }
 
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),

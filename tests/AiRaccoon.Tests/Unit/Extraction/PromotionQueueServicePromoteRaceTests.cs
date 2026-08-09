@@ -244,7 +244,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

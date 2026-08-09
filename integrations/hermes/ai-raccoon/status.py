@@ -32,6 +32,7 @@ STATUS_WORDS: Dict[str, str] = {
     "memory_workspace_consolidate": "consolidating",
     "memory_workspace_discard": "discarding",
     "memory_sweep": "sweeping",
+    "memory_set_ttl": "expiring",
     "memory_sync": "syncing",
     "memory_watch_add": "watching",
     "memory_watch_status": "watching",

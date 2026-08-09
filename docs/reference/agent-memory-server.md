@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (22)
+## Tools (23)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
@@ -48,6 +48,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
 | `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
 | `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
+| `memory_set_ttl`               | `projectId`, `hash`, `ttlDays?`                                                                                                                             | `{hash, ttlDays, rating, threshold, canEverExpire}`                                                |
 | `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
 | `memory_promotion_list`        | `projectId?`, `limit=50`                                                                                                                                    | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
@@ -119,8 +120,16 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   discard mark it `Closed` with `closed_at`. A workspace begun but never finished stays
   traceable after a crash.
 - **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
-  to delete. An entry is a candidate when its retrieval rating falls below 0.3 and its
-  age exceeds 30 days. `shared` entries are never swept.
+  to delete. An entry is a candidate only when it carries a per-entry TTL, its retrieval
+  rating is below the sweep threshold (default 0.3) *and* its age exceeds that TTL.
+  `shared` entries are never swept.
+- **`memory_set_ttl`:** the only way to give an entry a TTL — without one it can never be
+  swept. `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
+  but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
+  `ttlDays=7` does not expire an entry at age 30. The returned `canEverExpire` reports
+  whether the rating gate is already met. An unknown hash — or one owned by another
+  project — is refused as `unknown-hash`. Side effect: an entry carrying a TTL leaves
+  `memory_share_extract`'s candidate set unless that call passes `includeTtlRows`.
 - **File watching:** watching is enabled per project (or `*`) with
   `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
   allowlist (`ingest scope add|remove|list`) and a concurrency cap (`watch concurrency

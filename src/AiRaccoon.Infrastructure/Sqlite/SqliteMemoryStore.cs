@@ -744,16 +744,17 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
     }
 
-    public async Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    public async Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
+        var affected = await connection.ExecuteAsync(
                 Def(MemorySql.UpdateEntryTtl, new { projectId, hash, ttlDays }, cancellationToken))
             .ConfigureAwait(false);
+        return affected > 0;
     }
 
     /// <summary>

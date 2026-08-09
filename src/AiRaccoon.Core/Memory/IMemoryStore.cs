@@ -89,7 +89,8 @@ public interface IMemoryStore
     /// <summary>Deletes one settings row (unset/reset commands); absent keys are a no-op.</summary>
     Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default);
 
-    /// <summary>Sets an entry's ttl_days override — a forgetting knob gated to full mode at the boundary.</summary>
-    Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    /// <summary>Sets (or clears, when null) an entry's ttl_days override — a forgetting knob gated to full mode at
+    /// the boundary. False when the project owns no such hash, so the caller cannot mistake a no-op for a write.</summary>
+    Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default);
 }

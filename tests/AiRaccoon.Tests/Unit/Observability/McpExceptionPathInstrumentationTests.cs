@@ -198,7 +198,7 @@ public class McpExceptionPathInstrumentationTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class SimpleFakeSyncService : SyncService
