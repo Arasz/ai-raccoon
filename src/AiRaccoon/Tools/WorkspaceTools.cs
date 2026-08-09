@@ -3,7 +3,6 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Observability;
 using JetBrains.Annotations;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -15,8 +14,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over WorkspaceService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WorkspaceTools(
     WorkspaceService workspaces,
-    ToolGate gate,
-    ToolCallMetrics observability)
+    ToolGate gate)
 {
     private const string TnMemoryWorkspaceBegin = "memory_workspace_begin";
     private const string TnMemoryWorkspaceStatus = "memory_workspace_status";
@@ -34,22 +32,12 @@ public sealed class WorkspaceTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceBegin, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
 
-            var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
-            var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var workspace = await workspaces.BeginAsync(projectId, cancellationToken);
+        var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceStatus)]
@@ -59,23 +47,13 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceStatus, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
-            ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-            var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
-            var result = new WorkspaceStatusResult(entries, entries.Count);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var entries = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
+        var result = new WorkspaceStatusResult(entries, entries.Count);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceConsolidate)]
@@ -88,24 +66,14 @@ public sealed class WorkspaceTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceConsolidate, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceConsolidate, cancellationToken);
-            ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
-            ArgumentNullException.ThrowIfNull(keep);
+        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceConsolidate, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        ArgumentNullException.ThrowIfNull(keep);
 
-            var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
-            var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
-            var envelope = await gate.WrapAsync(projectId, toolResult, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
+        var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
+        var envelope = await gate.WrapAsync(projectId, toolResult, cancellationToken);
+        return envelope;
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceDiscard)]
@@ -115,23 +83,13 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryWorkspaceDiscard, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceDiscard, cancellationToken);
-            ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
+        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceDiscard, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-            var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
-            var result = new WorkspaceDiscardResult(discarded);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
+        var result = new WorkspaceDiscardResult(discarded);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

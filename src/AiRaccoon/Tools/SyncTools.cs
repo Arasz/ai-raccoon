@@ -3,7 +3,6 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Infrastructure.Sync;
-using AiRaccoon.Observability;
 using JetBrains.Annotations;
 using ModelContextProtocol.Server;
 
@@ -15,8 +14,7 @@ namespace AiRaccoon.Tools;
 public sealed class SyncTools(
     SyncService sync,
     SyncCloudStoreFactory syncFactory,
-    ToolGate gate,
-    ToolCallMetrics observability)
+    ToolGate gate)
 {
     private const string TnMemorySync = "memory_sync";
 
@@ -30,25 +28,15 @@ public sealed class SyncTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemorySync, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
 
-            // Reads the configured objectKey override, if any — SyncService owns both the
-            // IsConfigured decision and the default objectKey naming convention now.
-            var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
-            var result = await sync.MemorySyncAsync(projectId, syncSettings.ObjectKey, cancellationToken);
-            var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-            var envelope = await gate.WrapAsync(projectId, syncResult, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        // Reads the configured objectKey override, if any — SyncService owns both the
+        // IsConfigured decision and the default objectKey naming convention now.
+        var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
+        var result = await sync.MemorySyncAsync(projectId, syncSettings.ObjectKey, cancellationToken);
+        var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
+        var envelope = await gate.WrapAsync(projectId, syncResult, cancellationToken);
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

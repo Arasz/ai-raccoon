@@ -18,7 +18,7 @@ public sealed class PromotionToolsTests
     {
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(new AllowingGuard(), queue);
-        return (queue, new PromotionTools(queue, gate, new ToolCallMetrics()));
+        return (queue, new PromotionTools(queue, gate));
     }
 
     private static PromotionQueueRow Row(string hash, string value) =>

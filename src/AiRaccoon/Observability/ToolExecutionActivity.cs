@@ -67,8 +67,12 @@ public sealed class ToolExecutionActivity : IDisposable
         _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, false);
     }
 
-    /// <summary>Marks the activity as failed and records the invocation with the exception's type name.</summary>
-    public void RecordError(Exception exception)
+    /// <summary>
+    ///     Marks the activity as failed and records the invocation with the exception's type name.
+    ///     metricProjectId overrides the counter's project id — a refused call passes a bounded
+    ///     sentinel so an unauthorised caller cannot mint one series per id it invents.
+    /// </summary>
+    public void RecordError(Exception exception, string? metricProjectId = null)
     {
         if (_recorded)
         {
@@ -80,6 +84,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
         _activity?.SetTag(ResultActivityTag, ResultError);
         _activity?.AddException(exception);
-        _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
+        _metrics.RecordInvocation(_toolName, metricProjectId ?? _metricProjectId, _stopwatch.Elapsed, true,
+            exception.GetType().Name);
     }
 }

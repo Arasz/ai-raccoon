@@ -24,7 +24,7 @@ public sealed class WatchToolsAccessModeTests
     public WatchToolsAccessModeTests()
     {
         _tools = new WatchTools(new FakeWatchService(),
-            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()), new ToolCallMetrics());
+            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()));
     }
 
     private void SetMode(string? global = null, string? perProject = null)

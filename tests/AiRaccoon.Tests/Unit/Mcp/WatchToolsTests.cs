@@ -23,8 +23,7 @@ public sealed class WatchToolsTests
 
     public WatchToolsTests()
     {
-        _tools = new WatchTools(_watch, new ToolGate(new FakeAccessGuard(), new FakePromotionQueue()),
-            new ToolCallMetrics());
+        _tools = new WatchTools(_watch, new ToolGate(new FakeAccessGuard(), new FakePromotionQueue()));
     }
 
     [Fact]

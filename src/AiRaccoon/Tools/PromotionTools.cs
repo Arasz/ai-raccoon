@@ -2,7 +2,6 @@ using System.ComponentModel;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Observability;
 using JetBrains.Annotations;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -14,8 +13,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over the propose tier (IPromotionQueue) — no business logic here.</summary>
 public sealed class PromotionTools(
     IPromotionQueue queue,
-    ToolGate gate,
-    ToolCallMetrics observability)
+    ToolGate gate)
 {
     private const string TnMemoryPromotionList = "memory_promotion_list";
     private const string TnMemoryPromotionDiscard = "memory_promotion_discard";
@@ -32,30 +30,20 @@ public sealed class PromotionTools(
         bool includeFullValue = false,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryPromotionList, projectId ?? "all");
-        try
+        if (limit < 1)
         {
-            if (limit < 1)
-            {
-                throw new McpException("invalid-params: limit must be at least 1");
-            }
-
-            if (projectId is not null)
-            {
-                await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
-            }
-
-            var rows = await queue.ListAsync(projectId, limit, cancellationToken);
-            var result = new PromotionListResult(rows.Select(r => ToView(r, includeFullValue)).ToList());
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
+            throw new McpException("invalid-params: limit must be at least 1");
         }
-        catch (Exception ex)
+
+        if (projectId is not null)
         {
-            activity.RecordError(ex);
-            throw;
+            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
         }
+
+        var rows = await queue.ListAsync(projectId, limit, cancellationToken);
+        var result = new PromotionListResult(rows.Select(r => ToView(r, includeFullValue)).ToList());
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     private static PromotionQueueRowView ToView(PromotionQueueRow row, bool includeFullValue) =>
@@ -76,22 +64,12 @@ public sealed class PromotionTools(
         string? hash = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemoryPromotionDiscard, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
 
-            var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
-            var result = new PromotionDiscardResult(discarded);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
+        var result = new PromotionDiscardResult(discarded);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
