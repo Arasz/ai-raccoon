@@ -31,4 +31,10 @@ public interface IOperationScope : IDisposable
     void Succeeded();
 
     void Failed(Exception exception);
+
+    /// <summary>Records a pass that ran to completion but where some unit of work (e.g. one
+    /// project in a per-project loop) failed — distinct from <see cref="Succeeded" /> (nothing
+    /// failed) and <see cref="Failed" /> (the whole pass threw). Always worth a span, no-op
+    /// pass or not: a pass with a failure in it is never the quiet case span suppression exists for.</summary>
+    void PartiallyFailed(int failureCount);
 }

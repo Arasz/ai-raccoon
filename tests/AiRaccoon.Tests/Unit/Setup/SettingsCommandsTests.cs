@@ -123,7 +123,7 @@ public class SettingsCommandsTests
         showOut.Trim().ShouldBe("enabled: True  interval: 24 h  threshold: 0.55");
 
         var policy = new ForgettingPolicyService(store, new MemoryAccessGuard(store));
-        var threshold = await policy.GetSweepThresholdAsync("proj-1", TestContext.Current.CancellationToken);
+        var threshold = await policy.GetSweepThresholdAsync(TestContext.Current.CancellationToken);
         threshold.ShouldBe(0.55);
     }
 

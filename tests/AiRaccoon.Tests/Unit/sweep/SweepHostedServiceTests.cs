@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
@@ -78,6 +79,9 @@ public sealed class SweepHostedServiceTests : IDisposable
     /// <summary>
     ///     Writes one entry, gives it a 1-day TTL, and raises the threshold above the stored
     ///     rating: ratings only move on a search hit, so an unsearched entry sits at 0.5 forever.
+    ///     Also opts the project into full access mode (H6): the reaper now honours the same
+    ///     Destructive requirement memory_sweep enforces at the MCP boundary, so a project that
+    ///     has not consented no longer gets swept just because the caller is a timer.
     /// </summary>
     private async Task<string> SeedExpiringEntryAsync()
     {
@@ -89,6 +93,7 @@ public sealed class SweepHostedServiceTests : IDisposable
         await _store.SetSettingAsync(SweepThreshold.SettingKey, "0.9", cancellationToken);
         await _store.SetSettingAsync(SweepConfigKeys.IntervalHoursGlobal,
             IntervalHours.ToString(), cancellationToken);
+        await _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(ProjectId), "full", cancellationToken);
         return entry.Hash;
     }
 

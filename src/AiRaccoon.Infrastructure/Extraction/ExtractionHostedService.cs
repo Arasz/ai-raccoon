@@ -82,8 +82,15 @@ public sealed partial class ExtractionHostedService : BackgroundService
         using var pass = _telemetry.Begin(OperationName);
         try
         {
-            await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
-            pass.Succeeded();
+            var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            if (failures > 0)
+            {
+                pass.PartiallyFailed(failures);
+            }
+            else
+            {
+                pass.Succeeded();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -96,7 +103,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
         }
     }
 
-    private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
+    /// <summary>Runs the pass and returns the number of projects whose propose/promote threw
+    /// (H8): RunOnceAsync uses this to decide Succeeded vs PartiallyFailed.</summary>
+    private async Task<int> RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         // Default 30-minute cadence (WP13 span-volume fix): low-volume enough that spanning every
         // pass costs nothing, so every pass is worth reading rather than distinguishing on candidates.
@@ -107,7 +116,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
         if (!enabled)
         {
             Log.Skipped(_logger);
-            return;
+            return 0;
         }
 
         var mode = ExtractionConfigKeys.ParseMode(
@@ -117,11 +126,12 @@ public sealed partial class ExtractionHostedService : BackgroundService
         if (projects.Count == 0)
         {
             Log.NoProjects(_logger);
-            return;
+            return 0;
         }
 
         var sharedIndex = await _store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         var promotedTotal = 0;
+        var failures = 0;
         foreach (var projectId in projects)
         {
             try
@@ -170,12 +180,15 @@ public sealed partial class ExtractionHostedService : BackgroundService
             catch (Exception ex)
             {
                 Log.ProjectFailed(_logger, projectId, ex);
+                failures++;
             }
         }
 
         pass.Tag("projects", projects.Count.ToString());
         pass.Tag("promoted", promotedTotal.ToString());
+        // "failures" is tagged by PartiallyFailed (RunOnceAsync), not here — one place sets it.
         Log.RunCompleted(_logger, projects.Count, promotedTotal);
+        return failures;
     }
 
     private async Task<TimeSpan> ReadIntervalAsync(CancellationToken cancellationToken)

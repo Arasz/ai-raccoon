@@ -410,4 +410,59 @@ public sealed class ExtractionHostedServiceTests
         duration.Tags["result"].ShouldBe("error");
         duration.Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
     }
+
+    // ---- H8: a pass with per-project failures must not report result=success ----
+
+    [Fact]
+    public async Task RunOnce_AllProjectsThrow_ResultIsNotSuccess()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var (store, _, service, queue) = NewStack(NullLogger<ExtractionHostedService>.Instance, probe.Telemetry);
+        store.Projects.Clear();
+        store.Projects.AddRange(["acme", "beta", "gamma"]);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        // PromoteAsync always throws regardless of project (the fake's one error source),
+        // so this exercises "every project in the pass failed".
+        queue.PromoteError = new InvalidOperationException("boom");
+
+        await Should.NotThrowAsync(() => service.RunOnceAsync(TestContext.Current.CancellationToken));
+
+        queue.PromoteCalls.Count.ShouldBe(3, "all three projects must still have been attempted");
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldNotBe("success");
+    }
+
+    [Fact]
+    public async Task RunOnce_OneOfThreeThrows_OthersStillProcessed_AndTheFailureIsVisible()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var (store, _, service, _) = NewStack(NullLogger<ExtractionHostedService>.Instance, probe.Telemetry);
+        store.Projects.Clear();
+        store.Projects.AddRange(["acme", "beta", "gamma"]);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        // Propose mode (default): the fake only throws ExtractionError for "acme".
+        store.ExtractionError = new InvalidOperationException("boom");
+        store.Candidates["beta"] = [Row("h1", null, "organic fact about beta")];
+        store.Candidates["gamma"] = [Row("h2", null, "organic fact about gamma")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        store.ExtractionCalls.ShouldBe(3, "beta and gamma must still have been scanned");
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.GetTagItem("failures").ShouldNotBeNull();
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldNotBe("success");
+    }
+
+    [Fact]
+    public async Task RunOnce_CleanPass_StillRecordsSuccess()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var (store, _, service, _) = NewStack(NullLogger<ExtractionHostedService>.Instance, probe.Telemetry);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
 }
