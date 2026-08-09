@@ -63,8 +63,8 @@ blast-radius damage (incident 8) — are both misses.
 that dimension. The coupling, verified in the current tree, is a string-literal match across a file
 boundary:
 
-- `src/AiRaccoon/Observability/OtlpExport.cs:32` — `.AddMeter("AiRaccoon.PromotionQueue")`
-- `src/AiRaccoon/Observability/PromotionQueueMetrics.cs:24` — `new Meter("AiRaccoon.PromotionQueue")`
+- `src/AiRaccoon/Observability/OtlpExport.cs:43` — `.AddMeter([.. OtlpNames.Meters])`
+- `src/AiRaccoon/Observability/PromotionQueueMetrics.cs:23` — `new Meter(OtlpNames.PromotionQueueScope)`
 
 Two different files, disjoint diffs, both test suites green. A file-scoped claims board never fires:
 A never asks about a file it is not touching. A topic board fires only if A and B independently
@@ -73,6 +73,13 @@ as its sharpest lesson (`:290-291`): *"two independent expert opinions agreeing 
 
 That coupling **is** a static edge, and this repo already runs the `code-review-graph` MCP server.
 Incident 2 is a graph query, not a message. Routing it to the board is the proposal's weakest claim.
+
+**Updated after PR #215 merged (2026-08-09).** That PR introduced `OtlpNames`, so the two sides now
+reference a shared constant rather than each spelling the same string literal. This makes the point
+stronger, not weaker: the edge is now a symbol reference, which is precisely what a code graph
+resolves for free, whereas a matching pair of string literals is the hardest case for it. Note also
+what did *not* get fixed — the meter *name* is now single-sourced, but the `project_id` *tag* that
+incident 2 was actually about still is not. The illustration moved; the exposure did not.
 
 ## The declared-but-unwired defect class
 
@@ -108,7 +115,7 @@ identity: the spec says *"`agent_id` is provenance only"*
 (`integrations/hermes/ai-raccoon/__init__.py:285,354`), to a coarse `hermes-<identity>` label.
 
 There is also no session or connection identity to borrow: the HTTP transport is
-`options.Stateless = true` (`src/AiRaccoon/Setup/McpServerSetup.cs:196`), and nothing in `src/`
+`options.Stateless = true` (`src/AiRaccoon/Setup/McpServerSetup.cs:171`), and nothing in `src/`
 reads `ClientInfo`.
 
 **Recommendation: do not introduce an agent identity. Use the git worktree path as the lane key.**
@@ -217,8 +224,8 @@ reproduced in SQL. Not recommended.
 
 ## Two prerequisites owed regardless
 
-1. **De-duplicate the tool list.** `WithTools<…>` is hand-written twice — `McpServerSetup.cs:57-64`
-   and `:143-150` — with nothing comparing them. This is the `derive-or-delete-the-list` invariant
+1. **De-duplicate the tool list.** `WithTools<…>` is hand-written twice — `McpServerSetup.cs:58-65`
+   and `:136-143` — with nothing comparing them. This is the `derive-or-delete-the-list` invariant
    in its purest form, and any new tool means editing both.
 2. **Cap `PromotionMeta`.** Top-N projects with an overflow count. Without it, "the envelope is
    bounded" is false no matter what a board does.
@@ -308,7 +315,7 @@ another worktree. It is not merely a transport change — it collapses N indepen
 servers into one. Three consequences for this plan:
 
 1. **C4 resolves itself; do not do it.** The duplication exists because two hosts each compose a
-   full server and each register the tool list (`McpServerSetup.cs:57-64` stdio, `:143-150` web).
+   full server and each register the tool list (`McpServerSetup.cs:58-65` stdio, `:136-143` web).
    When stdio becomes a proxy it registers no tools at all — it forwards. Extracting a shared
    `WithAiRaccoonTools()` helper would be edits to a file that is being rewritten underneath us,
    to fix a duplication that is being deleted. **Withdrawn.**

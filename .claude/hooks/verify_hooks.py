@@ -61,6 +61,9 @@ ALLOW = [
 DENY = [
     "killall5 -15",
     "bash -c 'kill $(pgrep -f dotnet)'",
+    "bash -lc 'pkill -f \"dotnet build\"'",
+    "sh -ec 'pkill dotnet'",
+    "/bin/bash -cx 'killall dotnet'",
     "launchctl kickstart -k system/foo",
     "rm -rf ~/.nuget/packages",
     INCIDENT_8,
@@ -256,6 +259,31 @@ def check_dirty_cache_shape(cache_dir: Path) -> None:
 
 # ------------------------------------------------------------------------------ fail-open
 
+def check_lexer_fail_open() -> None:
+    """Unparseable, deeply nested and oversized commands must ALLOW, never raise."""
+    # A command that does not lex yields no tokens, so nothing is classified: it must allow.
+    probe("lexer fail-open: unlexable command allows",
+          guard.find_hazard("echo 'unterminated") is None)
+    # Adversarial input must never raise — the verdict may be either way, but a raise blocks the call.
+    for command in ("pkill 'unterminated", "kill $(", "pkill \x00 x", "kill \\"):
+        try:
+            guard.find_hazard(command)
+            probe(f"lexer does not raise on {command!r}", True)
+        except Exception as exc:
+            probe(f"lexer does not raise on {command!r}", False, f"raised {exc!r}")
+    nested = "bash -c '" * 10 + "pkill x" + "'" * 10
+    try:
+        guard.find_hazard(nested)
+        probe("lexer depth cap: 10-deep nesting does not raise", True)
+    except Exception as exc:
+        probe("lexer depth cap: 10-deep nesting does not raise", False, f"raised {exc!r}")
+    try:
+        big = "echo " + ("a" * 200_000)
+        probe("lexer size cap: oversized command allows", guard.find_hazard(big) is None)
+    except Exception as exc:
+        probe("lexer size cap: oversized command allows", False, f"raised {exc!r}")
+
+
 def check_fail_open() -> None:
     cases = [
         ("blast_radius_kill_guard", "not json at all"),
@@ -289,6 +317,7 @@ def main() -> int:
         check_dirty_cache(root / "cache", root / "case-a")
         check_dirty_budget(root / "cache-b", root / "case-b")
         check_dirty_cache_shape(root / "cache-c")
+        check_lexer_fail_open()
         check_fail_open()
 
     total = len(_failures)

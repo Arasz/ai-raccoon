@@ -38,8 +38,18 @@ _KILLALL = re.compile(r"^killall\d*$")
 _SIGNAL_FLAG = re.compile(r"^-(?:\d+|[A-Za-z]+)$")
 _PID = re.compile(r"^\d+$")
 _SIGNAL_OPTION = frozenset(("-s", "--signal", "-n"))
+# The lexer is superlinear; past this a payload-sized command would outrun the hook timeout.
+_MAX_COMMAND = 100_000
 _RECURSIVE_RM = re.compile(r"^-(?!-)[a-zA-Z]*[rR]|^--recursive$")
 _SHARED_CACHE = re.compile(r"(^|/)(\.nuget|\.dotnet|\.local/share/nuget|msbuildcache)(/|$)")
+
+
+def _dash_c_index(args: List[str]) -> Optional[int]:
+    """Index of the shell's command-string flag, spelled `-c` or combined as `-lc`/`-ec`."""
+    for index, token in enumerate(args):
+        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
+            return index
+    return None
 
 
 def _tokenize(text: str) -> List[str]:
@@ -124,15 +134,17 @@ def _segment_hazard(tokens: List[str], depth: int) -> Optional[str]:
         return "killall matches processes by name, never by PID"
     if program == "kill":
         return _kill_hazard(args)
-    if program in _SHELLS and depth > 0 and "-c" in args:
-        index = args.index("-c")
-        if index + 1 < len(args):
+    if program in _SHELLS and depth > 0:
+        index = _dash_c_index(args)
+        if index is not None and index + 1 < len(args):
             return find_hazard(args[index + 1], depth - 1)
     return _reap_hazard(program, args)
 
 
 def find_hazard(command: str, depth: int = 3) -> Optional[str]:
     """The reason *command* is a blast-radius hazard, or None when it looks scoped."""
+    if len(command) > _MAX_COMMAND:
+        return None
     for tokens in _segments(command):
         reason = _segment_hazard(tokens, depth)
         if reason:
