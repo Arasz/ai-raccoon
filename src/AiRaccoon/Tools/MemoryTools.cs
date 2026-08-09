@@ -176,7 +176,8 @@ public sealed class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryDelete)]
-    [Description("Deletes a specific memory entry by its content hash.")]
+    [Description(
+        "Deletes a specific memory entry by its content hash. Idempotent: an unknown hash is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")] string projectId,
         [Description("The content hash to delete.")]
@@ -203,7 +204,8 @@ public sealed class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryDeleteContext)]
-    [Description("Deletes every entry stored under a context label (e.g. a project or workspace context).")]
+    [Description(
+        "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
         [Description("The project id.")] string projectId,
         [Description("The context label to delete.")]
