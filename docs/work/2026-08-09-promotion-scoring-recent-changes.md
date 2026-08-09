@@ -99,9 +99,10 @@ series; the serve/proxy/token series; and #232's WP2/WP3/WP4 error-handling work
 `feat/c3-wire-workspace-provenance` is **refuted** despite its name: it wires `agentId`/`name` onto
 the workspace record and does not touch `source_file`, `path`, or the consolidate write path.
 
-## Unmerged, and it will move the score
+## Merged mid-task, and it moves the score
 
-`task/ttl-reaper-and-provenance` adds `memory_set_ttl` and a background reaper.
+`memory_set_ttl` and the sweep reaper landed on `main` as **#226** while this work was in flight —
+recorded here as unmerged when first written, corrected on merge.
 `SharedExtractionService.cs:68-71` drops any row with a non-null `TtlDays` from candidacy unless
 `includeTtlRows` — so **setting a TTL silently vetoes promotion**: a forgetting knob doubles as a
 promotion veto, which is not what an operator setting an expiry would expect. Separately, #232's

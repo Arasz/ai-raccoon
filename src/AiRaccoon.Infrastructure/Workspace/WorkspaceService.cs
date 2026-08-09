@@ -10,27 +10,30 @@ namespace AiRaccoon.Infrastructure.Workspace;
 /// </summary>
 public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider)
 {
-    public async Task<WorkspaceRecord> BeginAsync(string projectId, CancellationToken cancellationToken = default)
+    public async Task<WorkspaceRecord> BeginAsync(string projectId, string? agentId = null, string? name = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         // v7 (sortable, time-ordered) ids make workspace lists deterministic by creation order.
         var id = Guid.CreateVersion7().ToString("N");
-        var workspace = new WorkspaceRecord(id, projectId);
-        await workspaceStore.BeginAsync(projectId, id, timeProvider.GetUtcNow(), cancellationToken)
+        var workspace = new WorkspaceRecord(id, projectId, agentId: agentId, name: name);
+        await workspaceStore.BeginAsync(workspace, timeProvider.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
         return workspace;
     }
 
-    public async Task<IReadOnlyList<MemoryEntry>> GetStatusAsync(string projectId, string workspaceId,
+    public async Task<WorkspaceOutbox> GetStatusAsync(string projectId, string workspaceId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
-        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
+        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken)
+            .ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        return await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        var entries = await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        return new WorkspaceOutbox(workspace, entries);
     }
 
     public async Task<ConsolidationResult> ConsolidateAsync(
@@ -78,7 +81,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         var discarded = await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
-        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
+        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Discarded, timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return discarded;
     }

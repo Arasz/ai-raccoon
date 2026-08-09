@@ -356,6 +356,31 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task WorkspaceStatus_ReturnsTheProvenanceGivenAtBegin()
+    {
+        var begun = await _workspace.WorkspaceBegin("acme", "agent-a", "refactor the parser",
+            TestContext.Current.CancellationToken);
+
+        var status = await _workspace.WorkspaceStatus("acme", begun.Data!.WorkspaceId,
+            TestContext.Current.CancellationToken);
+
+        status.Data!.AgentId.ShouldBe("agent-a");
+        status.Data!.Name.ShouldBe("refactor the parser");
+    }
+
+    [Theory]
+    [InlineData("agent\na", null)]
+    [InlineData(null, "name\twith control")]
+    public async Task WorkspaceBegin_WithControlCharacters_IsRejected(string? agentId, string? name) =>
+        await Should.ThrowAsync<ArgumentException>(() =>
+            _workspace.WorkspaceBegin("acme", agentId, name, TestContext.Current.CancellationToken));
+
+    [Fact]
+    public async Task WorkspaceBegin_WithOverLongName_IsRejected() =>
+        await Should.ThrowAsync<ArgumentException>(() =>
+            _workspace.WorkspaceBegin("acme", null, new string('a', 201), TestContext.Current.CancellationToken));
+
+    [Fact]
     public async Task WorkspaceConsolidate_WithAll_PromotesEverything()
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full";
@@ -583,9 +608,9 @@ public class MemoryToolsTests
         }
 
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),
@@ -614,18 +639,26 @@ public class MemoryToolsTests
             Task.FromResult("fake-etag");
     }
 
+    /// <summary>Round-trips the begun record so the tools' provenance mapping is exercised end to end.</summary>
     private sealed class FakeWorkspaceStore : IWorkspaceStore
     {
-        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        private readonly Dictionary<string, Workspace> _begun = new(StringComparer.Ordinal);
+
+        public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default)
+        {
+            _begun[workspace.Id] = workspace;
+            return Task.CompletedTask;
+        }
 
         public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task RequireActiveAsync(string projectId, string workspaceId,
+        public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(_begun.TryGetValue(workspaceId, out var workspace)
+                ? workspace
+                : new Workspace(workspaceId, projectId));
     }
 }

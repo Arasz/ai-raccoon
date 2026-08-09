@@ -511,13 +511,15 @@ rating = baseScore × 0.5^(ageDays / halfLifeDays) × (1 + accessCount × multip
 Defaults: `baseScore = 0.5`, `halfLifeDays = 30`, `multiplier = 0.1`. The rating
 is recalculated each time a search returns the entry (via `BumpAccessAsync`).
 
-**Degradation** (`memory_sweep`) evaluates each entry against two thresholds:
+**Degradation** (`memory_sweep`) evaluates each entry against its per-entry TTL
+and the sweep threshold:
 
 ```
-ShouldDegrade = rating < 0.3 AND age > 30 days
+ShouldDegrade = ttlDays IS SET AND rating < threshold AND ageDays > ttlDays
 ```
 
-Entries are only candidates when they are both old enough *and* rated low
+There is no global TTL knob: an entry without a `ttl_days` value set by
+`memory_set_ttl` is never a candidate. Entries also have to be rated low
 enough — a frequently accessed entry stays even past its TTL. `shared` entries
 are never swept.
 

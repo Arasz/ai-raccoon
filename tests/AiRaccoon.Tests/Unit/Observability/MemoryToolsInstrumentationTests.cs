@@ -274,7 +274,7 @@ public class MemoryToolsInstrumentationTests
 
         public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class SimpleFakeSyncService : SyncService
@@ -305,7 +305,7 @@ public class MemoryToolsInstrumentationTests
 
     private sealed class SimpleFakeWorkspaceStore : IWorkspaceStore
     {
-        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+        public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
@@ -313,8 +313,8 @@ public class MemoryToolsInstrumentationTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task RequireActiveAsync(string projectId, string workspaceId,
+        public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(new Workspace(workspaceId, projectId));
     }
 }

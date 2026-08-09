@@ -115,6 +115,6 @@ internal sealed class FakeConfigStore : IMemoryStore
         return Task.CompletedTask;
     }
 
-    public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+    public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 }

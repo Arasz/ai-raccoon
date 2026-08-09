@@ -147,13 +147,18 @@ internal static class CliCommandTree
 
     private static Command SweepCommand()
     {
-        var sweep = new Command("sweep", "Degradation sweep configuration (ttl_days was removed by ruling)");
+        var sweep = new Command("sweep",
+            "Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.");
+        sweep.Add(new Command("enable", "Arms the background reaper (the default: it deletes expired entries on its cadence)"));
+        sweep.Add(new Command("disable", "Disarms the background reaper — nothing is deleted until it is enabled again"));
+        sweep.Add(new Command("interval-hours", "Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed")
+            { new Argument<string>("hours") { HelpName = "1..8760" } });
         var threshold = new Command("threshold", "Sweep rating threshold")
         {
             new Command("set", "Sets sweep.threshold (0..1, default 0.3)") { new Argument<string>("threshold") { HelpName = "0..1" } }
         };
         sweep.Add(threshold);
-        sweep.Add(new Command("show", "Shows the current threshold (row value, else 0.3)"));
+        sweep.Add(new Command("show", "Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"));
         return sweep;
     }
 

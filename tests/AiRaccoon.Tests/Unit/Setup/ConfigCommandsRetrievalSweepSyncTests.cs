@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Degradation;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
@@ -6,8 +7,8 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     retrieval alpha, sweep threshold and sync config commands: settings-table writes
-///     with validation, redacted key output, and the sweep-ttl removal (no ttl command).
+///     retrieval alpha, sweep policy (kill switch, cadence, threshold) and sync config
+///     commands: settings-table writes with validation and redacted key output.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -88,6 +89,103 @@ public class ConfigCommandsRetrievalSweepSyncTests
         stdout.Trim().ShouldBe("0.8");
     }
 
+    // ── sweep kill switch ──
+
+    [Fact]
+    public async Task SweepDisable_WritesFalse_AndShowReportsDisabled()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, _) = await Run(["sweep", "disable"], store);
+
+        exit.ShouldBe(0);
+        store.Settings["sweep.enabled.global"].ShouldBe("false");
+        stdout.ShouldContain("disabled");
+
+        var (_, shown, _) = await Run(["sweep", "show"], store);
+        shown.ShouldContain("enabled: False");
+    }
+
+    [Fact]
+    public async Task SweepEnable_RestoresTheReaper_AndShowReportsEnabled()
+    {
+        var store = new FakeConfigStore { Settings = { ["sweep.enabled.global"] = "false" } };
+
+        var (exit, stdout, _) = await Run(["sweep", "enable"], store);
+
+        exit.ShouldBe(0);
+        store.Settings["sweep.enabled.global"].ShouldBe("true");
+        stdout.ShouldContain("enabled");
+
+        var (_, shown, _) = await Run(["sweep", "show"], store);
+        shown.ShouldContain("enabled: True");
+    }
+
+    /// <summary>What `sweep disable` writes must disarm the reaper through the parse the service uses.</summary>
+    [Fact]
+    public async Task SweepDisable_WritesAValueThatParseEnabledReadsAsOff()
+    {
+        var store = new FakeConfigStore();
+
+        await Run(["sweep", "disable"], store);
+
+        SweepConfigKeys.ParseEnabled(store.Settings["sweep.enabled.global"]).ShouldBeFalse();
+    }
+
+    // A default-ON deleter must fail safe: any casing of "false" disarms it, and `show`
+    // must agree with the service rather than reporting the raw row.
+    [Theory]
+    [InlineData("false")]
+    [InlineData("False")]
+    [InlineData("FALSE")]
+    public async Task SweepShow_AnyCasingOfFalse_ReportsDisabled(string raw)
+    {
+        var store = new FakeConfigStore { Settings = { ["sweep.enabled.global"] = raw } };
+
+        var (exit, stdout, _) = await Run(["sweep", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("enabled: False");
+    }
+
+    // ── sweep interval ──
+
+    [Fact]
+    public async Task SweepIntervalHours_WritesSetting()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, _) = await Run(["sweep", "interval-hours", "6"], store);
+
+        exit.ShouldBe(0);
+        store.Settings["sweep.interval-hours.global"].ShouldBe("6");
+        stdout.ShouldContain("6");
+    }
+
+    [Fact]
+    public async Task SweepIntervalHours_OutOfRange_ReturnsErrorWithoutWriting()
+    {
+        foreach (var value in new[] { "0", "8761" })
+        {
+            var store = new FakeConfigStore();
+
+            var (exit, _, err) = await Run(["sweep", "interval-hours", value], store);
+
+            exit.ShouldBe(1);
+            err.ShouldContain("1..8760");
+            store.Settings.ShouldNotContainKey("sweep.interval-hours.global");
+        }
+    }
+
+    [Fact]
+    public async Task SweepIntervalHours_InvalidNumber_ReturnsError()
+    {
+        var (exit, _, err) = await Run(["sweep", "interval-hours", "soon"], new FakeConfigStore());
+
+        exit.ShouldBe(1);
+        err.ShouldContain("invalid interval");
+    }
+
     // ── sweep threshold ──
 
     [Fact]
@@ -119,29 +217,33 @@ public class ConfigCommandsRetrievalSweepSyncTests
         err.ShouldContain("invalid threshold");
     }
 
+    // ── sweep show (the whole policy: a reader must be able to tell whether anything is armed) ──
+
     [Fact]
-    public async Task SweepShow_NoRow_PrintsDefault()
+    public async Task SweepShow_NoRows_PrintsTheDefaultPolicy()
     {
         var (exit, stdout, _) = await Run(["sweep", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("0.3");
+        stdout.Trim().ShouldBe("enabled: True  interval: 24 h  threshold: 0.3");
     }
 
     [Fact]
-    public async Task SweepShow_WithRow_PrintsRowValue()
+    public async Task SweepShow_WithRows_PrintsTheStoredPolicy()
     {
         var store = new FakeConfigStore
         {
             Settings =
             {
+                ["sweep.enabled.global"] = "false",
+                ["sweep.interval-hours.global"] = "72",
                 ["sweep.threshold"] = "0.1"
             }
         };
 
         var (_, stdout, _) = await Run(["sweep", "show"], store);
 
-        stdout.Trim().ShouldBe("0.1");
+        stdout.Trim().ShouldBe("enabled: False  interval: 72 h  threshold: 0.1");
     }
 
     // ── sync add / remove / show ──

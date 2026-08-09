@@ -54,7 +54,9 @@ memory (`project:<id>`). For in-progress notes use workspace isolation:
 `memory_workspace_begin` → `memory_workspace_status` → `memory_workspace_consolidate(keep=[...])`
 (or `["all"]` to promote everything; `memory_workspace_discard` to drop). Promote durable
 cross-project facts with `memory_share` — never automatically. `memory_sweep` removes old
-low-rated entries; shared entries are exempt.
+low-rated entries; shared entries are exempt. Only entries carrying a TTL are sweepable at
+all — set one with `memory_set_ttl` (and note a TTL alone is not enough: the entry's rating
+must also be below the sweep threshold).
 
 ## 5. Scopes
 

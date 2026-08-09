@@ -420,11 +420,11 @@ public sealed class PromotionQueueServiceTests : IDisposable
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry", null, null, null, null, null),
             TestContext.Current.CancellationToken);
-        await store.SetEntryTtlAsync("acme", doomed.Hash, 0.001, TestContext.Current.CancellationToken);
+        await store.SetEntryTtlAsync("acme", doomed.Hash, 1, TestContext.Current.CancellationToken);
         var healthy = await store.WriteAsync(
             new MemoryWriteRequest("acme", "healthy entry", null, null, null, null, null),
             TestContext.Current.CancellationToken);
-        _clock.Advance(TimeSpan.FromDays(1)); // older than the TTL, rating below any threshold
+        _clock.Advance(TimeSpan.FromDays(2)); // older than the TTL, rating below any threshold
         await _service.ProposeAsync("acme",
             [Candidate(doomed.Hash, "doomed entry", 1.0), Candidate("fake-hash", "queued row", 2.0),
              Candidate(healthy.Hash, "healthy entry", 3.0)],

@@ -286,9 +286,9 @@ public sealed class MemoryToolsAccessModeTests
         }
 
 
-        public Task SetEntryTtlAsync(string projectId, string hash, double ttlDays,
+        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),
@@ -310,7 +310,7 @@ public sealed class MemoryToolsAccessModeTests
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore
     {
-        public Task BeginAsync(string projectId, string workspaceId, DateTimeOffset startedAt,
+        public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
@@ -318,9 +318,9 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task RequireActiveAsync(string projectId, string workspaceId,
+        public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            Task.FromResult(new Workspace(workspaceId, projectId));
     }
 
     [Fact]
