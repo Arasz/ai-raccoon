@@ -9,6 +9,46 @@ cloud sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK
 2.1.0 (net10.0).
 
+## What's new (from 1.2.0 to 1.6.0)
+
+- **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that
+  probes port 7721 and starts the backend itself, so every client on the machine
+  shares one embedding model and one bank instead of paying for its own.
+  [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
+- **Upgrading no longer means hunting for a process.** `ai-raccoon serve --restart`
+  cycles the server already on the port over an authenticated loopback shutdown —
+  no PID, no lockout when `dotnet tool update` needs the file.
+  [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
+- **Search got roughly ten times faster.** Persisted chunk columns and partition-key
+  KNN took a vector batch from 32.2 ms to 3.05 ms and an FTS batch from 41.2 ms to
+  9.60 ms, measured on a real bank.
+  [measurements](docs/plans/2026-08-08-search-knn-perf.md)
+- **The shared tier proposes better memories.** Promotion scoring v3 routes each
+  candidate through its own channel — an ADR section and a scratch note are no longer
+  judged by the same yardstick. [ADR-0018](docs/adr/0018-promotion-scoring-v2.md)
+- **Promotion stopped losing candidates.** The queue used to hold hashes whose entry
+  had been re-ingested, and promoting one destroyed the candidate while reporting the
+  whole call as failed. Deleting an entry now clears its queue row, and
+  `ai-raccoon extract prune` cleans up what already leaked.
+  [ADR-0023](docs/adr/0023-promotion-queue-entries-delete-invalidation.md)
+- **Errors tell your agent what to fix.** A wrong or blank argument now comes back as
+  `invalid-argument:` naming the parameter, instead of the opaque
+  `An error occurred invoking '<tool>'`.
+  [tool reference](docs/reference/agent-memory-server.md)
+- **Headings count, not just words.** A second structure vector ranks a match by where
+  it sits in a document, so a heading path pulls its weight alongside the prose.
+  [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
+- **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy
+  scheme, with a migration that moves an existing bank across without a re-import.
+  [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
+- **You can see what the server is doing.** OTLP export ships traces and metrics for
+  tool calls, the promotion queue and ASP.NET requests, following the MCP semantic
+  conventions. [ADR-0009](docs/adr/0009-otlp-export.md)
+- **An old build can't corrupt a newer bank.** The schema is stamped and writes are
+  refused when the binary is behind it — which matters now that one bank is shared by
+  every project on the machine.
+  [ADR-0019](docs/adr/0019-forward-version-write-guard.md)
+
 ## Quick start
 
 Install the tool (package id `ai-raccoon`, command `ai-raccoon`):
