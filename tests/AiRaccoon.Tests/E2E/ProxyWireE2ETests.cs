@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using AiRaccoon.Setup.Serve;
 using ModelContextProtocol;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
@@ -46,6 +47,9 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
         });
         _backend.MapMcp("/mcp");
         await _backend.StartAsync(TestContext.Current.CancellationToken);
+        // Ungated on purpose: this fixture records headers, it does not check them. The proxy still
+        // reads a token, so mint one the way serve would.
+        await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -80,6 +84,21 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
         recorded.ShouldNotBeEmpty();
         recorded.ShouldNotContain(name => name.Equals("traceparent", StringComparison.OrdinalIgnoreCase));
         recorded.ShouldNotContain(name => name.Equals("tracestate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     The second net under the token wiring: this fixture's backend is ungated, so only the
+    ///     header on the wire can show the proxy still presents it.
+    /// </summary>
+    [Fact]
+    public async Task ForwardedRequests_CarryTheLoopbackToken()
+    {
+        await using var client = await AiRaccoonProcess.ConnectAsync(
+            ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+
+        await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Recorded().ShouldContain(name => name.Equals(McpTokenGate.HeaderName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

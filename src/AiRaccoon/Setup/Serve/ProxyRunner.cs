@@ -61,21 +61,23 @@ internal static partial class ProxyRunner
             Timeout = Timeout.InfiniteTimeSpan
         };
 
-    /// <summary>Opens an MCP session on the backend endpoint over the proxy's own client.</summary>
-    internal static Task<McpClient> OpenBackendAsync(Uri endpoint, HttpClient httpClient,
-        ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
-        McpClient.CreateAsync(
+    /// <summary>Opens an MCP session on the backend endpoint, presenting the loopback token on every request.</summary>
+    internal static Task<McpClient> OpenBackendAsync(Uri endpoint, string token, HttpClient httpClient,
+        ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNullOrWhiteSpace(token);
+        return McpClient.CreateAsync(
             new HttpClientTransport(
                 new HttpClientTransportOptions
                 {
                     Name = BackendName,
                     Endpoint = endpoint,
-                    TransportMode = HttpTransportMode.StreamableHttp
-                    // AdditionalHeaders is where the loopback token goes once it lands
-                    // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
+                    TransportMode = HttpTransportMode.StreamableHttp,
+                    AdditionalHeaders = new Dictionary<string, string> { [McpTokenGate.HeaderName] = token }
                 },
                 httpClient, loggerFactory, false),
             cancellationToken: cancellationToken);
+    }
 
     /// <summary>Launch identity forwarded to the spawned backend; the launch flags precede the verb.</summary>
     internal static string[] ServeArguments(ServerConfig config)
@@ -120,6 +122,7 @@ internal static partial class ProxyRunner
         private readonly HttpClient _httpClient = CreateBackendHttpClient();
         private readonly BackendLauncher _launcher = new(ServerProbe.ForLoopback(), logger);
         private readonly List<McpClient> _sessions = [];
+        private readonly McpTokenFile _tokenFile = new(config.Options.DataRoot);
 
         /// <summary>The endpoint the last successful acquire returned; empty until one succeeds.</summary>
         public string Url { get; private set; } = string.Empty;
@@ -140,17 +143,41 @@ internal static partial class ProxyRunner
                 cancellationToken);
             if (acquired.Url is null)
             {
-                throw new BackendUnavailableException(UnavailableMessage(config.Port, acquired.ServeExitCode));
+                throw new BackendUnavailableException(Unavailable(
+                    $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit " +
+                    $"{acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"));
             }
 
+            // Read after the acquire, never before: the token is minted strictly ahead of the bind,
+            // so a port that answers guarantees the file is on disk. The proxy never mints
+            // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
+            var token = _tokenFile.Read() ?? throw new BackendUnavailableException(Unavailable(
+                $"the backend at {acquired.Url} is listening but {_tokenFile.Path} holds no token — " +
+                $"a serve on another data root may own port {config.Port}"));
+
             Url = acquired.Url;
-            var session = await OpenBackendAsync(new Uri(acquired.Url), _httpClient, loggerFactory, cancellationToken);
+            var session = await OpenSessionAsync(new Uri(acquired.Url), token, cancellationToken);
             lock (_sessions)
             {
                 _sessions.Add(session);
             }
 
             return session;
+        }
+
+        /// <summary>A refused session is a diagnosable failure, not an unhandled crash on the client's stdio.</summary>
+        private async Task<McpClient> OpenSessionAsync(Uri endpoint, string token, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await OpenBackendAsync(endpoint, token, _httpClient, loggerFactory, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw new BackendUnavailableException(Unavailable(
+                    $"the backend at {endpoint} would not open a session ({ex.Message}) — " +
+                    $"check that {_tokenFile.Path} holds the token it minted"));
+            }
         }
 
         private McpClient[] Snapshot()
@@ -166,10 +193,9 @@ internal static partial class ProxyRunner
     private static string Executable() =>
         Environment.ProcessPath ?? throw new InvalidOperationException("the running executable path is unknown");
 
-    private static string UnavailableMessage(int port, int? serveExitCode) =>
-        $"ai-raccoon: no MCP backend at {ServerProbe.EndpointFor(port)} (serve exit " +
-        $"{serveExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"}); " +
-        "to serve in-process instead, run: ai-raccoon --transport stdio";
+    /// <summary>Every way the backend can be unusable ends on the same line, with the same escape hatch.</summary>
+    private static string Unavailable(string reason) =>
+        $"ai-raccoon: {reason}; to serve in-process instead, run: ai-raccoon --transport stdio";
 
     internal static partial class Log
     {

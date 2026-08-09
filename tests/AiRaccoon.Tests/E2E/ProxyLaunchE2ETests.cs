@@ -4,6 +4,7 @@ using System.Text.Json;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
@@ -32,6 +33,10 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         _backend = McpServerSetup.CreateServerHost(new ServerConfig(_port, McpTransport.Http,
             new InfrastructureOptions { DataRoot = _backendRoot, Scope = InstallScope.User }));
         await _backend.StartAsync(TestContext.Current.CancellationToken);
+        // This fixture's backend is deliberately ungated — the backend is incidental to what these
+        // tests measure. The proxy still reads a token, so mint one the way serve would.
+        // ProxySpawnedBackendE2ETests is the path that goes through a real gate.
+        await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()

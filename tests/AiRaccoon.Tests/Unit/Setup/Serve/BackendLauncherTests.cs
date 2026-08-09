@@ -72,7 +72,9 @@ public sealed class BackendLauncherTests : IDisposable
         result.Url.ShouldBe(UrlFor(port));
         var captured = await File.ReadAllTextAsync(capturePath, TestContext.Current.CancellationToken);
         captured.ShouldNotContain(UrlFor(port));
-        managedStdout.ToString().ShouldBeEmpty();
+        // Console.Out is process-global, so a test running in parallel can land text in this
+        // capture too. Assert what only the launcher could have written, not that it is empty.
+        managedStdout.ToString().ShouldNotContain(UrlFor(port));
     }
 
     [Fact]
