@@ -18,7 +18,7 @@ public class VersionContractTests
     [Fact]
     public void PackageMetadata_IsStable_OnePointZero()
     {
-        var csproj = XDocument.Load(RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        var csproj = XDocument.Load(TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
 
         string Property(string name) => csproj.Descendants("PropertyGroup").Elements(name).First().Value;
 
@@ -30,7 +30,7 @@ public class VersionContractTests
     [Fact]
     public void McpServerJson_Versions_MatchPackageVersion()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(RepoFile("src/AiRaccoon/.mcp/server.json")));
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("src/AiRaccoon/.mcp/server.json")));
         var root = doc.RootElement;
 
         root.GetProperty("version").GetString().ShouldBe(ExpectedVersion);
@@ -40,8 +40,8 @@ public class VersionContractTests
     [Fact]
     public void PackageId_MatchesServerIdentifier_CommandUnchanged()
     {
-        var csproj = XDocument.Load(RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
-        using var doc = JsonDocument.Parse(File.ReadAllText(RepoFile("src/AiRaccoon/.mcp/server.json")));
+        var csproj = XDocument.Load(TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("src/AiRaccoon/.mcp/server.json")));
         var root = doc.RootElement;
 
         string Property(string name) => csproj.Descendants("PropertyGroup").Elements(name).First().Value;
@@ -54,7 +54,7 @@ public class VersionContractTests
     [Fact]
     public void McpServerJson_ConformsToRegistrySchemaConstraints()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(RepoFile("src/AiRaccoon/.mcp/server.json")));
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("src/AiRaccoon/.mcp/server.json")));
         var root = doc.RootElement;
 
         root.GetProperty("description").GetString()!.Length.ShouldBeLessThanOrEqualTo(100);
@@ -72,7 +72,7 @@ public class VersionContractTests
     [Fact]
     public void DeclaredVersions_CarryNoPrereleaseSuffix()
     {
-        var csproj = XDocument.Load(RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        var csproj = XDocument.Load(TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
         var versions = csproj.Descendants("PropertyGroup")
             .Elements("PackageVersion")
             .Concat(csproj.Descendants("PropertyGroup").Elements("InformationalVersion"))
@@ -87,17 +87,4 @@ public class VersionContractTests
         }
     }
 
-    private static string RepoFile(string relative)
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, relative);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
-    }
 }
