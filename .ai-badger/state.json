@@ -11,6 +11,27 @@
       "summary": "Swept all 22 MCP tools over stdio JSON-RPC against 1.3.1 and found 7 defects, then fixed them: consolidate crashing on its own documented keep:'all'; four different answers for an unknown workspace; untyped refusals on unknown hash and on the forward-version guard, so 'update ai-raccoon' never reached the operator; memory_stats leaking every project's contexts; consolidate reporting promoted entries as discarded; and a one-entry scope tier ranking 1.0000 for every scope=all query. Promotion queue was running two scorer generations - 204/288 rows never scored by v3 because a propose pass emitted only the top 20. Integration review refuted 5 structure-vector hypotheses and found 5 real defects (unbounded heal pass, sync bypassing the schema guard, a heal/reindex race, dropped source_file). OTLP diagnosed as two separate non-defects plus an untested export path. Comment cleanup against a written rule across src and tests; ADR-0019 written for a guard that shipped without one; 12 doc citations repointed after a 657-reference sweep."
     },
     {
+      "id": "perf-impr-part2",
+      "title": "Search perf: persisted chunk columns + vec0 KNN + structure writer (#178 items 1+2, #190)",
+      "finished": "2026-08-08T20:06:20Z",
+      "pr": "180 (WP0-WP3, merged by owner mid-task as 2722c39) + 197 (WP5/#190/bench, squash-merged 8ae7887)",
+      "summary": "End-to-end hybrid search p50 57ms -> ~8-9ms (~6-7x, WP4 benchmark). Schema v2: persisted chunk_index/total_chunks per (ctx, source_file), vec0 tables rebuilt with ctx TEXT partition key + distance_metric=cosine (the old tables were L2!), one version bump. Three search statements rewritten: window functions deleted, FTS MATERIALIZED CTE deleted, vector queries on native KNN (embedding MATCH + k) with exact partition semantics. Structure modality resurrected: writer deleted in ae75e74 left dead schema (fable diagnosis, red proof test); HeadingPathParser restored, embed transition writes heading_path/structure_embedding, heal pass via pending-embed with heading_path='' sentinel (orchestrator's initial no-sentinel override caused a starvation blocker caught by opus review - reversed). #190 fixed: vec_structure_pending trigger + widened merge-reindex invalidation. Golden files byte-identical throughout - structure fusion coming alive stayed within ADR-0015 tolerance, WP6 re-pin unnecessary. Key learnings: vec0 partition-key KNN in v0.1.9 is exact filter-then-k; 4-key partition scheme measured 280x slower than single encoded ctx key; chunk numbering is per-context not global (ShareAsync cross-context case); background-suite-wait stalls subagents (resume via SendMessage). WP7 (FTS snippet deferral) filed as #198, optional. Live bank migrates+heals on first open post-release (1.3.0)."
+    },
+    {
+      "id": "scoring-v3-port",
+      "title": "Port round-2 winner as promotion scoring v3",
+      "finished": "2026-08-08T19:56:39Z",
+      "pr": "195 (squash-merged by owner while in draft; closes #192)",
+      "summary": "Ported the round-2 tournament winner into the v2 seams: 19 provenance channels (.remember//session-* hard noise, named auto-memory notes 2.70, MEMORY.md rows 0.55), turn-mirror prose-prefix rescue, first-person exclusion, plan rule-lift cap; ADR-0018 amended. Owner merged before the lane posted its gate table, so the orchestrator verified merged main directly: PromotionScoringRealDataTests green on all four fixtures (v1>=0.60, v2>=0.45/organic>=0.50, v3>=0.60 within ±0.03 of prototype +0.665, secret 42-holdout within ±0.03 of +0.690) and proven able to fail (shuffled labels -> -0.007 red). Serve on 7721 still runs 1.2.0 — release/update/restart, review one propose queue, then flip extract.mode.global back to promote."
+    },
+    {
+      "id": "otlp",
+      "title": "OTLP traces research + memory hook/skill health + memory distribution + scoring v2/v3",
+      "finished": "2026-08-08T19:11:47Z",
+      "pr": "179 (mcp-index reconcile + eval report), 182/185/186 (scoring v2, via lane), 183 (OTLP trace flush, closes #181), 184 (serve log noise), 187 (1.3.0 bump), 191 (round-2 report); issues #181 fixed, #192 filed (v3 port)",
+      "summary": "Rider showed no traces because stdio mode never wires OTLP (by design) AND HTTP serve had a real bug: default ParentBased sampler dropped every span under ASP.NET's unrecorded request Activity — fixed with AlwaysOnSampler (#183); Rider's satellite listens on a dynamic port (17011), not 4317/4318. Memory hooks + skill verified working; mcp-tools.json reconciled (#179). Shared tier wiped twice (86 + 31 re-promoted by the promote-mode loop with the old scorer — mode flipped to propose); 292-entry hand-labeled scoring dataset built; incumbent scorer proved near-random (rho +0.125/+0.087); 3-agent tournament winner shipped as scoring v2 (#182/#185, gates 0.735/0.509/0.569); round-2 fable tournament winner (channel-routed prior, +0.690 secret holdout vs v2's +0.545) spec'd in #192. Version bumped to 1.3.0 (#187). Serve on 7721 still runs the 1.2.0 binary — update+restart, review one propose queue, then flip extract.mode back to promote."
+    },
+    {
       "id": "hermes-envelope",
       "title": "Unwrap the ApiEnvelope in the Hermes provider client",
       "finished": "2026-08-08T12:19:30Z",
@@ -364,11 +385,6 @@
       "hasNotes": true
     },
     {
-      "id": "retrieval-improvement-cont",
-      "summary": "Exploration continuation: produced plan C (docs/plans/retrieval-improvement-c.md), research docs (per-query-alpha-tuning, structured-doc-retrieval-scamper, dual-vector-vs-plan-comparison), notes/adr-sibling-competition. No code changes. Output docs carried into fix-baseline branch and committed there (task branch).",
-      "hasNotes": false
-    },
-    {
       "id": "retrieval-improvement-b",
       "summary": "Exploration + planning phase (session killed by OOM mid-prototype). Produced: plans A/B/C (retrieval-improvement-{a,b,c}.md), research docs (adr-retrieval-solutions, structured-doc-retrieval-scamper, per-query-alpha-tuning), notes/adr-sibling-competition.md. Built dual-vector alpha prototype (tools/AiRaccoon.DualVectorPrototype) in worktree /Users/arasz/RiderProjects/ai-raccoon-prototype (branch prototype/dual-vector-alpha); run OOM-killed at 50GB during content embedding of 6675-chunk corpus. Prototype found broken: expected-source matcher strips only first ':' (0/10 hits), random 2000-chunk sample, no content-only baseline arm.",
       "hasNotes": false
@@ -432,6 +448,20 @@
       "id": "agent-memory-server",
       "summary": "Agent memory management MCP server over sqlite-memory: Core domain (records, RatingPolicy, DegradationPolicy, IMemoryExtension + MemoryExtensionHost pipeline, SearchScope), Infrastructure (one SQLite bank per install scope, SqliteMemoryStore via Dapper, MetaStore rating, WorkspaceService, SweepService, ExtensionProvisioner with real SHA-256 manifest, SyncService), thin MCP layer (17 tools + 2 prompts, dual transport). Workspace sandboxes (workspace_id = isolation by design, no flag), shared promotion tier (memory_share via path-scoped hashes, sweep-exempt), deferred embeddings by default (FR-MEM-1.12), opt-in SQLite Cloud sync of committed contexts. Real-extension integration tests against sqlite-memory 1.3.5 + sqlite-vector 1.0.0. 168 tests, build 0 warnings.",
       "hasNotes": true
+    },
+    {
+      "id": "perf-optimization",
+      "title": "Vectorize EmbeddingMath.MeanPoolAndNormalize with TensorPrimitives, finish EmbeddingMathBenchmark",
+      "finished": "2026-08-08T16:16:44Z",
+      "pr": "174 (squash-merged as c87078b)",
+      "summary": "The mean-pool + L2-normalize kernel's three scalar loops became TensorPrimitives.Add/Divide/Norm: 4.5x faster at the decisive case (SeqLen=256, MaskDensity=1.0: 31,701 -> 6,990 ns, ratio 0.22, RatioSD <= 0.03), allocations unchanged, retrieval baselines unchanged (296/296 Speed=Slow green). ADR 0017 records System.Numerics.Tensors 10.0.10 entering AiRaccoon.Core (precedent: ADR 0001/FluentValidation). Also fixed the --bnech typo in the benchmark Program.cs. Negative finding: corpus distance math is native in sqlite-vec, so this was the only managed float kernel worth vectorizing. Deliberate-break checks re-proven post-vectorization (lane truncation and mask drop each turned the suite red). Earlier loaded-machine baseline (60,524 ns, StdDev ~38% of mean) was discarded; benchmarks need a quiet machine. The WP-0 TokenBatch work was superseded mid-task by the owner's revert of generator pooling (0e81852) and deleted. Residue for future tasks lives in docs/plans/2026-08-08-embedding-perf.md 'Findings reported, not worked here': SnippetFallback laziness (dispatched as follow-up task/search-snippet-laziness), ranking LINQ churn (likely not worth it), dead EmbeddingBlob.ToFloats, do-not-touch note on ToBytes, unwired clean-layering ArchUnitNET gate."
+    },
+    {
+      "id": "skill-discovery",
+      "title": "SEP-2640 MCP skill discovery (abandoned)",
+      "finished": "2026-08-08T16:22:03Z",
+      "pr": "83 (closed unmerged); issue #82 closed",
+      "summary": "Owner decision 2026-08-08: feature will not be pursued. Research record kept at docs/work/2026-08-07-skill-discovery-mcp-server.md; experimental/skill-discovery branch deleted. Key residue: ModelContextProtocol 2.1.0 already ships the resource attributes needed if this is ever revived; the skill://index.json $schema URL (schemas.agentskills.io) had no DNS record as of 2026-08-07."
     }
   ],
   "next": "Open from this task: cross-context retrieval measurement has no ground truth (scope=all with two populated tiers is unmeasured); promotion propose tier still has no drain (extract.mode=propose, no depth alarm); docs/tutorials empty and docs/how-to has no product-usage content.",
