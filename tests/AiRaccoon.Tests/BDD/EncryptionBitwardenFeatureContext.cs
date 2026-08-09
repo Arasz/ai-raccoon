@@ -41,12 +41,14 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// <summary>The env leg of the resolver: a fixed stub passphrase (never the ambient environment).</summary>
     public const string EnvPassphrase = "env-passphrase";
 
-    // fake bws: serves the matching key fixture per secret id, accepts only the known token via
-    // argv -t, and logs every invocation to bws-calls.log for steps to assert against.
+    // fake bws: serves the matching key fixture per secret id, accepts the known token from either
+    // channel, and logs every invocation to bws-calls.log for steps to assert against. Each line
+    // records argv AND the inherited BWS_ACCESS_TOKEN, because the token travels by environment
+    // rather than argv — that is the property the -t scenario now pins.
     private const string FakeBwsScript = """
                                          #!/bin/sh
                                          DIR="$(dirname "$0")"
-                                         echo "$@" >> "$DIR/bws-calls.log"
+                                         echo "$@ | env:BWS_ACCESS_TOKEN=${BWS_ACCESS_TOKEN}" >> "$DIR/bws-calls.log"
                                          TOKEN=""
                                          ID=""
                                          while [ "$#" -gt 0 ]; do
@@ -57,6 +59,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
                                              *) shift ;;
                                            esac
                                          done
+                                         TOKEN="${TOKEN:-$BWS_ACCESS_TOKEN}"
                                          if [ -z "$ID" ]; then echo "bws: missing secret id" >&2; exit 1; fi
                                          if [ -n "$TOKEN" ] && [ "$TOKEN" != "test-bws-token-0123" ]; then echo "bws: invalid access token" >&2; exit 1; fi
                                          case "$ID" in

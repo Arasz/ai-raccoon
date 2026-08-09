@@ -1302,18 +1302,16 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var ex = (scenarioContext.TryGetValue("LastError", out var stored) ? stored : _lastError) as AccessDeniedException;
         ex.ShouldNotBeNull();
 
-        var projectId = (string)scenarioContext["ProjectId"];
         var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
-        (await policy.GetSweepThresholdAsync(projectId, CancellationToken.None))
+        (await policy.GetSweepThresholdAsync(CancellationToken.None))
             .ShouldBe(ForgettingPolicyService.DefaultSweepThreshold);
     }
 
     [Then("the forgetting policy reflects the adjustment")]
     public async Task ThenForgettingPolicyReflectsAdjustment()
     {
-        var projectId = (string)scenarioContext["ProjectId"];
         var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
-        (await policy.GetSweepThresholdAsync(projectId, CancellationToken.None)).ShouldBe(0.5);
+        (await policy.GetSweepThresholdAsync(CancellationToken.None)).ShouldBe(0.5);
     }
 
     [Then("the provider is configured with that endpoint")]

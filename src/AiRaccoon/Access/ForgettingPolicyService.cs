@@ -16,13 +16,17 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
 
     public const double DefaultSweepThreshold = SweepThreshold.Default;
 
-    public async Task<double> GetSweepThresholdAsync(string projectId, CancellationToken cancellationToken = default)
+    /// <summary>Reads the sweep threshold — a single bank-global setting, not scoped by project;
+    /// unlike <see cref="SetSweepThresholdAsync" /> a read needs no caller to gate.</summary>
+    public async Task<double> GetSweepThresholdAsync(CancellationToken cancellationToken = default)
     {
         var raw = await store.GetSettingAsync(SweepThresholdSettingKey, cancellationToken).ConfigureAwait(false);
         return SweepThreshold.Parse(raw);
     }
 
-
+    /// <summary>Writes the sweep threshold — again a single bank-global setting: every project's
+    /// sweep reads the same value. <paramref name="projectId" /> is not a scope, only the caller's
+    /// proof of Destructive consent for changing a policy that affects every project's data.</summary>
     public async Task SetSweepThresholdAsync(string projectId, double threshold,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +53,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
             throw new UnknownHashException(hash, projectId);
         }
 
-        var threshold = await GetSweepThresholdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var threshold = await GetSweepThresholdAsync(cancellationToken).ConfigureAwait(false);
         var metadata = await store.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
         var rating = metadata?.Rating ?? RatingPolicy.DefaultBaseScore;
         return new TtlResult(hash, metadata?.TtlDays, rating, threshold,

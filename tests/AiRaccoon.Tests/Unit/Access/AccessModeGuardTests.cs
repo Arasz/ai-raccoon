@@ -66,7 +66,7 @@ public sealed class AccessModeGuardTests
         await Should.ThrowAsync<AccessDeniedException>(() =>
             _knobs.SetSweepThresholdAsync("acme-web", 0.1, TestContext.Current.CancellationToken));
 
-        (await _knobs.GetSweepThresholdAsync("acme-web", TestContext.Current.CancellationToken)).ShouldBe(0.3);
+        (await _knobs.GetSweepThresholdAsync(TestContext.Current.CancellationToken)).ShouldBe(0.3);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class AccessModeGuardTests
 
         await _knobs.SetSweepThresholdAsync("acme-web", 0.1, TestContext.Current.CancellationToken);
 
-        (await _knobs.GetSweepThresholdAsync("acme-web", TestContext.Current.CancellationToken)).ShouldBe(0.1);
+        (await _knobs.GetSweepThresholdAsync(TestContext.Current.CancellationToken)).ShouldBe(0.1);
     }
 
     [Fact]

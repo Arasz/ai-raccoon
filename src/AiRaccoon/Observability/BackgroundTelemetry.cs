@@ -16,8 +16,10 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
     private const string OperationTag = "operation";
     private const string ResultTag = "result";
     private const string ErrorTypeTag = "error.type";
+    private const string FailuresTag = "failures";
     private const string ResultSuccess = "success";
     private const string ResultError = "error";
+    private const string ResultPartial = "partial";
     private const string ResultUnknown = "unknown";
 
     private readonly Counter<long> _passes;
@@ -140,6 +142,21 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             _activity?.SetTag(ErrorTypeTag, errorType);
             _activity?.AddException(exception);
             _owner.Record(_operation, Elapsed, ResultError, errorType);
+        }
+
+        public void PartiallyFailed(int failureCount)
+        {
+            Guard.IsGreaterThan(failureCount, 0);
+            if (!Take())
+            {
+                return;
+            }
+
+            StartSpan(); // some work failed: always worth reading, no-op pass or not
+            _activity?.SetStatus(ActivityStatusCode.Ok);
+            _activity?.SetTag(ResultTag, ResultPartial);
+            _activity?.SetTag(FailuresTag, failureCount.ToString());
+            _owner.Record(_operation, Elapsed, ResultPartial, null);
         }
 
         public void Dispose()

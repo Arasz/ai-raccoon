@@ -26,6 +26,10 @@ public sealed class TestTelemetry : IOperationTelemetry, IOperationScope
     {
     }
 
+    public void PartiallyFailed(int failureCount)
+    {
+    }
+
     public void Dispose()
     {
     }

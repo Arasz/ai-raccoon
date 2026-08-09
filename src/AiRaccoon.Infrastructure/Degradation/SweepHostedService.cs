@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
@@ -80,8 +81,15 @@ public sealed partial class SweepHostedService : BackgroundService
         using var pass = _telemetry.Begin(OperationName);
         try
         {
-            await RunPassAsync(cancellationToken).ConfigureAwait(false);
-            pass.Succeeded();
+            var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            if (failures > 0)
+            {
+                pass.PartiallyFailed(failures);
+            }
+            else
+            {
+                pass.Succeeded();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -94,18 +102,21 @@ public sealed partial class SweepHostedService : BackgroundService
         }
     }
 
-    private async Task RunPassAsync(CancellationToken cancellationToken)
+    /// <summary>Runs the pass and returns the number of projects whose sweep threw. Test seam
+    /// for RunOnceAsync's outcome decision (H8).</summary>
+    private async Task<int> RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         var enabled = SweepConfigKeys.ParseEnabled(
             await _store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
         if (!enabled)
         {
             Log.Skipped(_logger);
-            return;
+            return 0;
         }
 
-        // Read the threshold directly: ForgettingPolicyService enforces a caller's access mode,
-        // and a timer has no caller.
+        // Read the threshold directly: it is a bank-global setting (ForgettingPolicyService's
+        // per-project Destructive gate exists for the caller's *consent to change it*, not for
+        // reading it) and a timer has no caller to gate in the first place.
         var threshold = SweepThreshold.Parse(
             await _store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken).ConfigureAwait(false));
 
@@ -113,14 +124,25 @@ public sealed partial class SweepHostedService : BackgroundService
         if (projects.Count == 0)
         {
             Log.NoProjects(_logger);
-            return;
+            return 0;
         }
 
         var deletedTotal = 0;
+        var failures = 0;
         foreach (var projectId in projects)
         {
             try
             {
+                // H6: the same Destructive requirement memory_sweep enforces at the MCP boundary
+                // (full mode only) applies here — a project that has not consented to destructive
+                // operations does not lose that consent just because the caller is a timer.
+                var mode = await ResolveModeAsync(projectId, cancellationToken).ConfigureAwait(false);
+                if (mode != AccessMode.Full)
+                {
+                    Log.SkippedMode(_logger, projectId, mode);
+                    continue;
+                }
+
                 var outcome = await _sweeper.SweepAsync(projectId, threshold, DryRun, cancellationToken)
                     .ConfigureAwait(false);
                 deletedTotal += LogDeletions(projectId, outcome);
@@ -132,10 +154,40 @@ public sealed partial class SweepHostedService : BackgroundService
             catch (Exception ex)
             {
                 Log.ProjectFailed(_logger, projectId, ex);
+                failures++;
             }
         }
 
+        if (deletedTotal > 0)
+        {
+            // A pass that deleted user data is always worth reading, unlike an empty pass
+            // (WP13 span-volume fix): NoteWork only fires here, never unconditionally.
+            pass.NoteWork();
+            pass.Tag("deleted", deletedTotal.ToString());
+        }
+
         Log.RunCompleted(_logger, projects.Count, deletedTotal);
+        return failures;
+    }
+
+    /// <summary>Resolves one project's effective access mode: per-project setting, else global
+    /// default, else rw (mirrors AiRaccoon.Access.MemoryAccessGuard.ResolveAsync's rule via the
+    /// same Core policy, without a project reference back to the host layer — clean layering).
+    /// Never throws for an unparsable value; propagates a genuine store failure to the caller's
+    /// per-project catch, which counts it as this project's failure rather than aborting the pass.</summary>
+    private async Task<AccessMode> ResolveModeAsync(string projectId, CancellationToken cancellationToken)
+    {
+        var perProjectRaw = await _store
+            .GetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), cancellationToken)
+            .ConfigureAwait(false);
+        if (AccessModePolicy.Parse(perProjectRaw) is { } perProject)
+        {
+            return perProject;
+        }
+
+        var globalRaw = await _store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken)
+            .ConfigureAwait(false);
+        return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), null);
     }
 
     /// <summary>Names every deleted hash and its rating — never the entry value — and returns the count.</summary>
@@ -198,5 +250,10 @@ public sealed partial class SweepHostedService : BackgroundService
         [LoggerMessage(EventId = 526, Level = LogLevel.Warning,
             Message = "Sweep interval read failed; falling back to the default")]
         public static partial void IntervalReadFailed(ILogger logger, Exception exception);
+
+        /// <summary>H6: a project outside full access mode is skipped, not reaped.</summary>
+        [LoggerMessage(EventId = 527, Level = LogLevel.Debug,
+            Message = "Sweep skipped {ProjectId}: access mode {Mode} has not consented to destructive sweeps")]
+        public static partial void SkippedMode(ILogger logger, string projectId, AccessMode mode);
     }
 }

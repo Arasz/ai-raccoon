@@ -40,8 +40,10 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
 
         if (token is not null)
         {
-            startInfo.ArgumentList.Add("-t");
-            startInfo.ArgumentList.Add(token);
+            // Never argv: any same-user process can read another process's command line (ps aux)
+            // for its whole lifetime. The env var is the same channel the inherited-token path
+            // already relies on (see ICliSecretManager), just set explicitly for this run.
+            startInfo.EnvironmentVariables["BWS_ACCESS_TOKEN"] = token;
         }
 
         Process process;

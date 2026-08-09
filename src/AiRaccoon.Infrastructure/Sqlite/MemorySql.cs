@@ -233,13 +233,16 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
+    // @scope null preserves memory_delete's documented reach ("wherever this hash lives",
+    // including a shared row); a caller that enumerated one scope (the sweep, H2) passes it so
+    // the delete cannot also remove a sibling row sharing this hash in another scope/workspace.
     public const string DeleteByHashAndProject =
-        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
+        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
 
     // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
     // recorded before the delete so sync can suppress resurrection and ship the tombstone.
     public const string SelectScopeByHashAndProject =
-        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
+        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
     // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
@@ -248,6 +251,7 @@ internal static class MemorySql
                                                                workspace_id AS WorkspaceId, source_file AS SourceFile
                                                         FROM entries
                                                         WHERE hash = @hash AND project_id = @projectId
+                                                          AND (@scope IS NULL OR scope IS @scope)
                                                         """;
 
     public const string UpsertTombstone =
@@ -274,6 +278,9 @@ internal static class MemorySql
                                                   DELETE FROM queue_restore;
                                                   """;
 
+    // e.scope = 'project' matches what ShareAsync can actually resolve
+    // (SelectSourceByHashAndProject); a custom- or workspace-scoped row backing this hash cannot
+    // promote it, so it must not count as "still backed" here either (H4).
     public const string CaptureQueueRowsForSourcePath = """
                                                         INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
                                                         SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
@@ -281,7 +288,7 @@ internal static class MemorySql
                                                         WHERE q.project_id = @projectId
                                                           AND EXISTS (SELECT 1 FROM entries e
                                                                       WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                        AND e.workspace_id IS NULL
+                                                                        AND e.scope = 'project'
                                                                         AND (e.source_file = @path OR e.source_file LIKE @pathPrefix ESCAPE '\'))
                                                         """;
 
@@ -290,7 +297,8 @@ internal static class MemorySql
                                                        SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
                                                        FROM queue_restore r
                                                        WHERE EXISTS (SELECT 1 FROM entries e
-                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash)
+                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash
+                                                                       AND e.scope = 'project')
                                                        ON CONFLICT(project_id, hash) DO NOTHING;
                                                        DELETE FROM queue_restore;
                                                        """;
@@ -463,18 +471,25 @@ internal static class MemorySql
         DELETE FROM settings WHERE key = @key
         """;
 
+    // Scoped to the committed project row (H2): hash alone is not a unique row — a workspace or
+    // custom-context write of identical content shares it — and only the project-scope row is
+    // ever read by the sweep's degradation check, so a TTL on any other scope's sibling is inert.
     public const string UpdateEntryTtl =
         """
         UPDATE entries
         SET ttl_days = @ttlDays
-        WHERE project_id = @projectId AND hash = @hash
+        WHERE project_id = @projectId AND hash = @hash AND scope = 'project'
         """;
 
+    // Scoped to the committed project row (H2), matching UpdateEntryTtl: both callers (the sweep's
+    // degradation check, memory_set_ttl's response) mean the project row specifically, and without
+    // this a same-hash sibling in another scope could supply the rating/ttl instead (LIMIT 1, no
+    // ORDER BY, picks whichever row SQLite returns first).
     public const string SelectEntryMetadata =
         """
         SELECT rating AS Rating, ttl_days AS TtlDays
         FROM entries
-        WHERE project_id = @projectId AND hash = @hash
+        WHERE project_id = @projectId AND hash = @hash AND scope = 'project'
         LIMIT 1
         """;
 
