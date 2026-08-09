@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
@@ -57,6 +58,71 @@ public class LoggerMessageEventIdTests
         names.ShouldContain("AiRaccoon");
         names.ShouldContain("AiRaccoon.Core");
         names.ShouldContain("AiRaccoon.Infrastructure");
+    }
+
+    /// <summary>
+    ///     The doc calls its table "that measurement, not a hand-maintained list", but nothing held it
+    ///     to that — it drifted twice in one day. These two derive it from the assemblies instead.
+    /// </summary>
+    [Fact]
+    public void DocumentedCount_MatchesTheMeasuredCount()
+    {
+        var documented = DeclaredCount();
+
+        documented.ShouldBe(Entries().Count,
+            $"docs/reference/logging-event-ids.md declares {documented} [LoggerMessage] methods; " +
+            "re-measure it against src/ and update the prose and the table together");
+    }
+
+    [Fact]
+    public void EveryEventIdInSource_FallsInsideADocumentedBlock()
+    {
+        var documented = DocumentedIds();
+
+        var undocumented = Entries()
+            .Where(e => !documented.Contains(e.EventId))
+            .Select(e => $"{e.EventId} ({e.Location})")
+            .Distinct()
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        undocumented.ShouldBeEmpty(
+            "these EventIds exist in src/ but fall outside every block in the allocation table: " +
+            string.Join(", ", undocumented));
+    }
+
+    private static string Registry() => File.ReadAllText(TestData.RepoFile("docs/reference/logging-event-ids.md"));
+
+    /// <summary>The count the doc's prose claims it measured.</summary>
+    private static int DeclaredCount()
+    {
+        var match = Regex.Match(Registry(), @"\*\*(\d+)\*\*\s+`\[LoggerMessage\]`");
+        match.Success.ShouldBeTrue("could not find the measured-count sentence in logging-event-ids.md");
+        return int.Parse(match.Groups[1].Value);
+    }
+
+    /// <summary>Every id the allocation table claims, expanding "300, 301" and "500-509" alike.</summary>
+    private static HashSet<int> DocumentedIds()
+    {
+        var ids = new HashSet<int>();
+        // Anchored on a digit so the table's own |---|---| separator row is not read as a block.
+        foreach (Match row in Regex.Matches(Registry(), @"^\|\s*(\d[\d,\s\-]*?)\s*\|", RegexOptions.Multiline))
+        {
+            foreach (var part in row.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries |
+                                                                StringSplitOptions.RemoveEmptyEntries))
+            {
+                var bounds = part.Split('-', StringSplitOptions.TrimEntries);
+                var first = int.Parse(bounds[0]);
+                var last = int.Parse(bounds[^1]);
+                for (var id = first; id <= last; id++)
+                {
+                    ids.Add(id);
+                }
+            }
+        }
+
+        ids.ShouldNotBeEmpty("could not parse any id block out of logging-event-ids.md's table");
+        return ids;
     }
 
     /// <summary>Every [LoggerMessage] in the product assemblies, with the type that owns its id block.</summary>
