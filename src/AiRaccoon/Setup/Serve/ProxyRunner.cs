@@ -27,7 +27,7 @@ internal static partial class ProxyRunner
         McpClient backend;
         try
         {
-            backend = await backends.OpenAsync(cancellationToken);
+            backend = await backends.OpenAsync(null, cancellationToken);
         }
         catch (BackendUnavailableException ex)
         {
@@ -42,7 +42,7 @@ internal static partial class ProxyRunner
         // No tools and no prompts: an interception failure has to surface as an empty tool list,
         // never as a second server quietly opening the bank (ADR-0020).
         options.Filters.Message.IncomingFilters.Add(
-            ProxyForwarder.Create(backend, async ct => await backends.OpenAsync(ct), logger));
+            ProxyForwarder.Create(backend, async (revision, ct) => await backends.OpenAsync(revision, ct), logger));
 
         Log.ProxyReady(logger, backends.Url);
         await using var server = McpServer.Create(
@@ -61,9 +61,12 @@ internal static partial class ProxyRunner
             Timeout = Timeout.InfiniteTimeSpan
         };
 
-    /// <summary>Opens an MCP session on the backend endpoint, presenting the loopback token on every request.</summary>
-    internal static Task<McpClient> OpenBackendAsync(Uri endpoint, string token, HttpClient httpClient,
-        ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Opens an MCP session on the backend endpoint, presenting the loopback token on every request.
+    ///     revision pins the protocol the session negotiates; null leaves the choice to the SDK.
+    /// </summary>
+    internal static Task<McpClient> OpenBackendAsync(Uri endpoint, string token, string? revision,
+        HttpClient httpClient, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         Guard.IsNotNullOrWhiteSpace(token);
         return McpClient.CreateAsync(
@@ -76,6 +79,7 @@ internal static partial class ProxyRunner
                     AdditionalHeaders = new Dictionary<string, string> { [McpTokenGate.HeaderName] = token }
                 },
                 httpClient, loggerFactory, false),
+            new McpClientOptions { ProtocolVersion = revision },
             cancellationToken: cancellationToken);
     }
 
@@ -137,7 +141,7 @@ internal static partial class ProxyRunner
             _httpClient.Dispose();
         }
 
-        public async Task<McpClient> OpenAsync(CancellationToken cancellationToken)
+        public async Task<McpClient> OpenAsync(string? revision, CancellationToken cancellationToken)
         {
             var acquired = await _launcher.AcquireAsync(config.Port, Executable(), ServeArguments(config),
                 cancellationToken);
@@ -156,7 +160,7 @@ internal static partial class ProxyRunner
                 $"a serve on another data root may own port {config.Port}"));
 
             Url = acquired.Url;
-            var session = await OpenSessionAsync(new Uri(acquired.Url), token, cancellationToken);
+            var session = await OpenSessionAsync(new Uri(acquired.Url), token, revision, cancellationToken);
             lock (_sessions)
             {
                 _sessions.Add(session);
@@ -166,11 +170,13 @@ internal static partial class ProxyRunner
         }
 
         /// <summary>A refused session is a diagnosable failure, not an unhandled crash on the client's stdio.</summary>
-        private async Task<McpClient> OpenSessionAsync(Uri endpoint, string token, CancellationToken cancellationToken)
+        private async Task<McpClient> OpenSessionAsync(Uri endpoint, string token, string? revision,
+            CancellationToken cancellationToken)
         {
             try
             {
-                return await OpenBackendAsync(endpoint, token, _httpClient, loggerFactory, cancellationToken);
+                return await OpenBackendAsync(endpoint, token, revision, _httpClient, loggerFactory,
+                    cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

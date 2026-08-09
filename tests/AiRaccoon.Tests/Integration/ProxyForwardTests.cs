@@ -85,7 +85,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     }
 
     /// <summary>Stands in for the runner's backend acquisition: a brand new server, counted.</summary>
-    private async Task<McpSession> ReacquireAsync(CancellationToken cancellationToken)
+    private async Task<McpSession> ReacquireAsync(string? revision, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _reacquireCount);
         if (_failReacquire)

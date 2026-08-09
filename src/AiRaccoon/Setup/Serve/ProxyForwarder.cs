@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using CommunityToolkit.Diagnostics;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -14,14 +15,15 @@ internal static partial class ProxyForwarder
     /// <summary>
     ///     Relays requests and notifications to the backend, suppressing the local handlers; any other
     ///     message kind falls through to them. A lost connection re-acquires and retries once.
+    ///     <paramref name="open" /> takes the revision the client asked for, or null for the SDK's choice.
     /// </summary>
     internal static McpMessageFilter Create(McpSession backend,
-        Func<CancellationToken, Task<McpSession>> reacquire, ILogger logger)
+        Func<string?, CancellationToken, Task<McpSession>> open, ILogger logger)
     {
         Guard.IsNotNull(backend);
-        Guard.IsNotNull(reacquire);
+        Guard.IsNotNull(open);
         Guard.IsNotNull(logger);
-        var channel = new BackendChannel(backend, reacquire);
+        var channel = new BackendChannel(backend, open);
         return next => async (context, cancellationToken) =>
         {
             switch (context.JsonRpcMessage)
@@ -30,7 +32,7 @@ internal static partial class ProxyForwarder
                     Log.RequestRelayed(logger, request.Method);
                     // A fresh message: the incoming one carries this session's transport, which would
                     // send the relayed copy straight back to the client instead of to the backend.
-                    var answer = await RelayAsync(channel, logger, request.Method,
+                    var answer = await RelayAsync(channel, logger, request.Method, RevisionOf(request),
                         session => session.SendRequestAsync(
                             new JsonRpcRequest { Id = request.Id, Method = request.Method, Params = request.Params },
                             cancellationToken), cancellationToken);
@@ -42,7 +44,7 @@ internal static partial class ProxyForwarder
                     return;
                 case JsonRpcNotification notification:
                     Log.NotificationRelayed(logger, notification.Method);
-                    await RelayAsync(channel, logger, notification.Method, async session =>
+                    await RelayAsync(channel, logger, notification.Method, null, async session =>
                     {
                         await session.SendMessageAsync(
                             new JsonRpcNotification { Method = notification.Method, Params = notification.Params },
@@ -58,9 +60,18 @@ internal static partial class ProxyForwarder
     }
 
     private static async Task<TAnswer> RelayAsync<TAnswer>(BackendChannel channel, ILogger logger, string method,
-        Func<McpSession, Task<TAnswer>> send, CancellationToken cancellationToken)
+        string? revision, Func<McpSession, Task<TAnswer>> send, CancellationToken cancellationToken)
     {
-        var session = channel.Current;
+        McpSession session;
+        try
+        {
+            session = await channel.SpeakingAsync(revision, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw Failed(logger, method, ex);
+        }
+
         try
         {
             return await send(session);
@@ -98,6 +109,24 @@ internal static partial class ProxyForwarder
     }
 
     /// <summary>
+    ///     The protocol revision this request speaks, or null when it does not say. Newer clients
+    ///     declare it per request and the SDK lifts it into the context; a handshake carries it in the
+    ///     body, which is the only place it appears before a revision has been agreed.
+    /// </summary>
+    private static string? RevisionOf(JsonRpcRequest request)
+    {
+        if (request.Context?.ProtocolVersion is { } declared)
+        {
+            return declared;
+        }
+
+        return (request.Params as JsonObject)?["protocolVersion"] is JsonValue value
+               && value.TryGetValue(out string? proposed)
+            ? proposed
+            : null;
+    }
+
+    /// <summary>
     ///     True when nothing answered. A JSON-RPC error is an answer, and so is an HTTP status —
     ///     both mean the backend is alive and must not be re-acquired.
     /// </summary>
@@ -119,41 +148,74 @@ internal static partial class ProxyForwarder
         return new McpProtocolException($"backend relay failed: {ex.Message}", ex, McpErrorCode.InternalError);
     }
 
-    /// <summary>Holds the session in use and swaps it once per loss, however many calls saw that loss.</summary>
+    /// <summary>
+    ///     Holds the session in use, swaps it once per loss however many calls saw that loss, and keeps
+    ///     it on the revision the client speaks (docs/adr/0020-always-on-http-stdio-proxy.md).
+    /// </summary>
     private sealed class BackendChannel
     {
         private readonly SemaphoreSlim _gate = new(1, 1);
-        private readonly Func<CancellationToken, Task<McpSession>> _reacquire;
+        private readonly Func<string?, CancellationToken, Task<McpSession>> _open;
         private McpSession _current;
+        private string? _revision;
 
-        public BackendChannel(McpSession backend, Func<CancellationToken, Task<McpSession>> reacquire)
+        public BackendChannel(McpSession backend, Func<string?, CancellationToken, Task<McpSession>> open)
         {
             _current = backend;
-            _reacquire = reacquire;
+            _open = open;
         }
 
-        public McpSession Current => Volatile.Read(ref _current);
+        private McpSession Current => Volatile.Read(ref _current);
 
-        public async Task<McpSession> ReplaceAsync(McpSession lost, CancellationToken cancellationToken)
+        /// <summary>
+        ///     The session to relay on: the current one unless the client asked for a revision it did
+        ///     not open at, in which case a session on that revision replaces it.
+        /// </summary>
+        public async Task<McpSession> SpeakingAsync(string? revision, CancellationToken cancellationToken)
         {
+            var current = Current;
+            if (Speaks(current, revision))
+            {
+                return current;
+            }
+
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                // Concurrent callers all fail on the same dead session; only the first re-acquires.
-                if (!ReferenceEquals(Current, lost))
-                {
-                    return Current;
-                }
-
-                var replacement = await _reacquire(cancellationToken);
-                Volatile.Write(ref _current, replacement);
-                return replacement;
+                return Speaks(Current, revision) ? Current : await OpenAsync(revision, cancellationToken);
             }
             finally
             {
                 _gate.Release();
             }
         }
+
+        public async Task<McpSession> ReplaceAsync(McpSession lost, CancellationToken cancellationToken)
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                // Concurrent callers all fail on the same dead session; only the first re-acquires,
+                // and it re-opens on the revision the client is already speaking.
+                return ReferenceEquals(Current, lost) ? await OpenAsync(_revision, cancellationToken) : Current;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        private async Task<McpSession> OpenAsync(string? revision, CancellationToken cancellationToken)
+        {
+            var session = await _open(revision, cancellationToken);
+            Volatile.Write(ref _current, session);
+            _revision = revision;
+            return session;
+        }
+
+        /// <summary>A client that names no revision takes whatever session is open; it has no opinion.</summary>
+        private static bool Speaks(McpSession session, string? revision) =>
+            revision is null || session.NegotiatedProtocolVersion == revision;
     }
 
     internal static partial class Log
