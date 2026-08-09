@@ -228,12 +228,30 @@ runs the server.
 
 | Option | Values | Default |
 |---|---|---|
-| `--transport` | `stdio`, `http`, `https` (https → warning) | `stdio` |
+| `--transport` | `proxy`, `stdio`, `http`, `https` (https → warning) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | any port; `0` = random free port | `7721` |
 
+`proxy` is the default and the zero-config path
+([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
+opens no bank, resolves no encryption key, and loads no embedding model — it
+probes `http://127.0.0.1:<port>/mcp`, spawns `ai-raccoon serve` when nothing
+answers, and forwards every JSON-RPC message to it, restoring the client's
+own request id on the response. No tool method is named in the proxy, so a
+new tool needs no proxy change. If the backend can neither be reached nor
+started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
+(6) with one stderr line naming the URL, the `serve` exit code, and the
+`--transport stdio` escape hatch — there is no in-process fallback.
+`--transport stdio` is that escape hatch: a complete in-process server, no
+proxy, no autostart — exactly how the server behaved before `proxy` became
+the default.
+
 ### Serve mode
+
+Since ADR-0020, `serve` is not only a manual verb — it is autostarted by the
+default `proxy` transport the first time any client touches memory. This
+section describes `serve` itself, whether started by the proxy or run by hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
@@ -244,13 +262,25 @@ owning process keeps the watchdog, and the attached run never touches the bank.
 A busy port held by a foreign listener fails fast with exit code 3 and a
 `--port 0` hint.
 
+`/mcp` requires the `X-AiRaccoon-Token` header: before binding, `serve` mints
+a random token into `<data-root>/mcp-token` (0600, exclusive create, reused
+across restarts), and every request to `/mcp` must present it — the proxy
+reads the file after a successful probe and sends it automatically.
+`/observability` stays unauthenticated by design (it returns only a PID and
+OTLP on/off state, nothing that touches the bank). A direct `ai-raccoon
+--transport http` launch (no `serve` verb) is **not** gated — see
+[SECURITY.md](../../SECURITY.md) for the reasoning and the known gaps.
+
 `serve --mcp-entry [--format hermes|claude|all]` prints the client config entry
 for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
 http://127.0.0.1:7721/mcp`) or Claude Code (`.mcp.json` `type: http` entry).
-Keep stderr out of the entry file: `ai-raccoon serve --mcp-entry > entry.json
-2> serve.log &`. One long-lived HTTP server avoids the ~5-minute stdio
-recycle of per-connection processes and lets the background extraction and
-bank-maintenance hosted services actually fire.
+The printed entry carries the URL only, not the token, so a client connecting
+this way (bypassing the proxy) must add the `X-AiRaccoon-Token` header itself,
+read from `<data-root>/mcp-token`. Keep stderr out of the entry file:
+`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`. One long-lived
+HTTP server avoids the ~5-minute stdio recycle of per-connection processes and
+lets the background extraction and bank-maintenance hosted services actually
+fire.
 
 `serve observability <counters|trace|otlp|pid> [--port <n>]` prints a ready-to-run
 diagnostic command for the **running** server, with its process id filled in. It
@@ -275,14 +305,20 @@ stdout, so command substitution yields an empty string rather than an error mess
 
 OTLP export is **serve/HTTP mode only** — a stdio server is a per-connection
 process on a ~5-minute recycle, too short-lived for a batch exporter to be worth
-its schedule delay and shutdown grace. It is opt-in and configured only through
-the standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_PROTOCOL`
-variables, read at host-build time; unset means no exporter is constructed.
-Exported: the
+its schedule delay and shutdown grace. Since ADR-0020 that scope covers nearly
+all traffic: the default `proxy` transport forwards every call to a `serve`
+backend, so instrumentation now reaches whatever a client does, not only
+callers who opt into `serve` directly. The proxy itself wires no exporter and
+propagates no `traceparent` — it records nothing, so there is nothing of its
+own to export, and the server it forwards to stays the trace root. It is
+opt-in and configured only through the standard `OTEL_EXPORTER_OTLP_ENDPOINT` /
+`OTEL_EXPORTER_OTLP_PROTOCOL` variables, read at host-build time; unset means
+no exporter is constructed. Exported: the
 `AiRaccoon.MemoryTools` meter and ActivitySource, the `AiRaccoon.PromotionQueue`
 meter, and the built-in `System.Runtime` meter. See
-[ADR 0008](../adr/0008-live-pid-discovery-for-monitoring.md) and
-[ADR 0009](../adr/0009-otlp-export.md).
+[ADR 0008](../adr/0008-live-pid-discovery-for-monitoring.md),
+[ADR 0009](../adr/0009-otlp-export.md), and
+[ADR 0020](../adr/0020-always-on-http-stdio-proxy.md).
 
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):

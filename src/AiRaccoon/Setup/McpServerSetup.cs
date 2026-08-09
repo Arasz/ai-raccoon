@@ -15,17 +15,6 @@ namespace AiRaccoon.Setup;
 /// </summary>
 internal static partial class McpServerSetup
 {
-    private static readonly IReadOnlyCollection<McpTransport> DefaultTransport = [DefaultOptions.Transport];
-
-    /// <summary>
-    ///     Resolves a --transport value to the transports to enable; an unparseable value falls back
-    ///     to the launch default rather than to a second one of its own.
-    /// </summary>
-    internal static IReadOnlyCollection<McpTransport> SelectTransports(string? transport) =>
-        Enum.TryParse<McpTransport>(transport, true, out var mcpTransport)
-            ? [mcpTransport]
-            : DefaultTransport;
-
     /// <summary>Creates the server host for the config's single transport.</summary>
     internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport]);
 
