@@ -137,6 +137,22 @@ internal static class MemorySchema
                                    DELETE FROM vec_entries WHERE rowid = OLD.id;
                                END;
 
+                               -- Propose-tier invalidation (ADR-0022): a queue row is a promise about
+                               -- an entries row that may no longer exist. NOT EXISTS is load-bearing —
+                               -- uq_entries_committed_bucket permits the same hash in two contexts of
+                               -- one project, so deleting one live sibling must not drop a candidate
+                               -- the surviving sibling still backs. OLD.project_id is NULL for
+                               -- shared-scope deletes and `= NULL` never matches, so those are inert by
+                               -- construction (promotion dequeues explicitly). No CurrentVersion bump:
+                               -- IF NOT EXISTS lets an additive trigger reach every existing bank on its
+                               -- next open with no migration step (ADR-0022).
+                               CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                                   DELETE FROM promotion_queue
+                                   WHERE project_id = OLD.project_id AND hash = OLD.hash
+                                     AND NOT EXISTS (SELECT 1 FROM entries e
+                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash);
+                               END;
+
                                CREATE TABLE IF NOT EXISTS sync_meta (
                                    key TEXT PRIMARY KEY,
                                    value TEXT NOT NULL

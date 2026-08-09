@@ -38,6 +38,6 @@ internal static class CliCommandRunner
         var encryptionCommands = new EncryptionCommands(bank, bws, env, sidecar, logger);
 
         return await new ConfigCommands(settings: new SettingsCommands(), sync: new SyncCommands(), watch: new WatchCommands(new WatchStore(bank)), encryptionCommands: encryptionCommands,
-            extract: new ExtractCommands(), maintenance: new MaintenanceCommands(bank)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin, cancellationToken);
+            extract: new ExtractCommands(new SqlitePromotionQueueStore(bank, TimeProvider.System)), maintenance: new MaintenanceCommands(bank)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin, cancellationToken);
     }
 }

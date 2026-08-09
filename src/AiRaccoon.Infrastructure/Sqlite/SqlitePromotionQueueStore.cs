@@ -4,6 +4,9 @@ using Dapper;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
+/// <summary>One-shot orphan report for `ai-raccoon extract prune` (ADR-0022): rows PruneOrphansAsync found (and, with apply, removed) per project.</summary>
+public sealed record PromotionQueueOrphanReport(int TotalOrphans, IReadOnlyDictionary<string, int> PerProject);
+
 /// <summary>Propose-tier persistence in the memory.db promotion_queue table; never synced (waiting rows are per-machine by design).</summary>
 public sealed class SqlitePromotionQueueStore(
     SqliteConnectionFactory factory,
@@ -153,6 +156,38 @@ public sealed class SqlitePromotionQueueStore(
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return victim is null ? null : ToRow(victim);
+    }
+
+    /// <summary>
+    ///     Rows whose backing entries row was deleted before the promotion_queue_entries_ad
+    ///     trigger existed (ADR-0022) — the trigger covers everything from here on; this is the
+    ///     one-shot catch-up for a bank that already accumulated dead rows. Reports without
+    ///     deleting unless <paramref name="apply"/> is true; idempotent either way (a second call
+    ///     after apply finds nothing left to report).
+    /// </summary>
+    public async Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        // Dynamic query: an orphan-free queue yields no rows, and Dapper cannot build a typed
+        // deserializer from an empty result — the dynamic path materializes per row instead.
+        var perProject = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var row in await connection.QueryAsync(
+                     new CommandDefinition(PromotionQueueSql.OrphanCountsPerProject,
+                         cancellationToken: cancellationToken)).ConfigureAwait(false))
+        {
+            perProject[(string)row.ProjectId] = (int)(long)row.Count;
+        }
+
+        if (apply && perProject.Count > 0)
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(PromotionQueueSql.DeleteOrphans, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        return new PromotionQueueOrphanReport(perProject.Values.Sum(), perProject);
     }
 
     private static PromotionQueueRow ToRow(PromotionQueueRowRow row) =>
