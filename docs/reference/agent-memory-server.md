@@ -441,7 +441,7 @@ loads the embedding engine.
 | Kind | stdout |
 |---|---|
 | `counters` | `dotnet-counters monitor -p <pid>` — `System.Runtime` only (GC, CPU, working set, thread pool); append `--counters AiRaccoon.MemoryTools` for the tool metrics, broken out by `project_id` on the invocation counter |
-| `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools` |
+| `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http` |
 | `otlp` | the OTLP endpoint the server exports to; the protocol goes to stderr |
 | `pid` | the bare process id, for composing with other tools |
 
