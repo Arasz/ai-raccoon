@@ -17,6 +17,20 @@ internal static class CliRendering
     internal static int Render(CliParseResult result, TextWriter output, IReadOnlySet<string>? cwdEntries = null)
     {
         var exit = result.ParseResult.Invoke(new InvocationConfiguration { Output = output, Error = output });
+        if (exit == 0 && result.Errors.Count > 0)
+        {
+            // A top-level option's value failed to coerce (H1): System.CommandLine 2.0.10
+            // resolves ParseResult.Action during Parse(), before CliArgs detects this kind of
+            // failure, so Invoke() ran the normal (successful) action. Report it ourselves
+            // rather than let a refused invocation silently exit 0.
+            foreach (var message in result.Errors)
+            {
+                output.WriteLine(message);
+            }
+
+            exit = 1;
+        }
+
         if (result.Errors.Count > 0 && GlobExpansionHint(result, cwdEntries) is { } hint)
         {
             output.WriteLine(hint);
