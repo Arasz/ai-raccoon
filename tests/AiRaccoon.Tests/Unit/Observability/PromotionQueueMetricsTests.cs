@@ -109,23 +109,41 @@ public class PromotionQueueMetricsTests
     }
 
     /// <summary>
-    ///     A2: the cached-field version defaulted to 0.0 ("queue empty") until the first mutation
-    ///     in-process, even when the store was already occupied at boot.
+    ///     A2: before any propose/promote/discard has published a snapshot in this process
+    ///     (e.g. a fresh boot), the observable instruments must yield no measurement at all —
+    ///     never a confident 0.0/empty that a collector can mistake for "queue is empty".
     /// </summary>
     [Fact]
-    public void UtilizationGauge_ReadBeforeAnyMutation_ReflectsPreloadedOccupancy_NotZero()
+    public void BeforeAnySnapshotIsPublished_ObservableInstruments_YieldNoMeasurement()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var depthCollector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueueQueued);
+        using var utilizationCollector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueCapacityUtilization);
+
+        depthCollector.RecordObservableInstruments();
+        utilizationCollector.RecordObservableInstruments();
+
+        depthCollector.GetMeasurementSnapshot().ShouldBeEmpty("depth was never measured, not measured-as-zero");
+        utilizationCollector.GetMeasurementSnapshot().ShouldBeEmpty("utilization was never measured, not measured-as-zero");
+    }
+
+    /// <summary>
+    ///     Regression check on the ratio arithmetic once a snapshot has been published — not a
+    ///     pin on boot behavior (see <see cref="BeforeAnySnapshotIsPublished_ObservableInstruments_YieldNoMeasurement" />
+    ///     for that).
+    /// </summary>
+    [Fact]
+    public void AfterASnapshotIsPublished_UtilizationReflectsOccupancy()
     {
         using var metrics = new PromotionQueueMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.QueueCapacityUtilization);
 
-        // A store pre-loaded at nonzero occupancy against a nonzero cap, published before any
-        // propose/promote/discard runs in this process.
         var stats = new PromotionQueueStats(800, null, new Dictionary<string, int> { ["acme"] = 800 });
         metrics.RecordSnapshot(stats, capacity: 1000);
         collector.RecordObservableInstruments();
 
         var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
-        measurement.Value.ShouldBe(0.8, "queue is 80% full; a cached field defaulting to 0.0 would misreport it as empty");
+        measurement.Value.ShouldBe(0.8, "queue is 80% full");
     }
 
     /// <summary>

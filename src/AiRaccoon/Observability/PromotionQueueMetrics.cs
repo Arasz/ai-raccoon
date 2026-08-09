@@ -16,7 +16,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
     private readonly Histogram<double> _waitSeconds;
     private readonly Counter<long> _promoted;
     private readonly Counter<long> _discarded;
-    private QueueSnapshot _snapshot = QueueSnapshot.Empty;
+    private QueueSnapshot? _snapshot;
 
     public PromotionQueueMetrics()
     {
@@ -45,12 +45,15 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
             OtlpNames.QueueQueued,
             ObserveQueued,
             unit: "{item}",
-            description: "Queued promotions per project, read from the store's current state");
+            description: "Queued promotions per project, read from the store's current state. "
+                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process.");
         Meter.CreateObservableGauge(
             OtlpNames.QueueCapacityUtilization,
             ObserveUtilization,
             unit: "1",
-            description: "Queue occupancy against the cap (1.0 = full)");
+            description: "Queue occupancy against the cap (1.0 = full). "
+                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process — "
+                + "a gap, not a confident 0.0, until then.");
     }
 
     /// <summary>Meter named "AiRaccoon.PromotionQueue" — discoverable by dotnet-counters via EventPipe.</summary>
@@ -77,20 +80,28 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
     public void RecordSnapshot(PromotionQueueStats stats, int capacity) =>
         Volatile.Write(ref _snapshot, QueueSnapshot.From(stats, capacity));
 
-    private IEnumerable<Measurement<long>> ObserveQueued() =>
-        Volatile.Read(ref _snapshot).PerProject
-            .Select(p => new Measurement<long>(p.Value, new TagList { { "project_id", p.Key } }));
+    private IEnumerable<Measurement<long>> ObserveQueued()
+    {
+        var snapshot = Volatile.Read(ref _snapshot);
+        return snapshot is null
+            ? []
+            : snapshot.PerProject.Select(p => new Measurement<long>(p.Value, new TagList { { "project_id", p.Key } }));
+    }
 
-    private double ObserveUtilization() => Volatile.Read(ref _snapshot).Utilization;
+    private IEnumerable<Measurement<double>> ObserveUtilization()
+    {
+        var snapshot = Volatile.Read(ref _snapshot);
+        return snapshot is null ? [] : [new Measurement<double>(snapshot.Utilization)];
+    }
 
     public void Dispose() => Meter.Dispose();
 
     /// <summary>Immutable, so a single Volatile field swap is enough to publish it (ADR-0009's
-    /// zero-background-threads guarantee — no timer, the writers publish on the request path).</summary>
+    /// zero-background-threads guarantee — no timer, the writers publish on the request path).
+    /// A <see langword="null" /> <see cref="_snapshot" /> means "never published" and must yield
+    /// no measurement, not a measured zero.</summary>
     private sealed record QueueSnapshot(IReadOnlyDictionary<string, int> PerProject, double Utilization)
     {
-        public static readonly QueueSnapshot Empty = new(new Dictionary<string, int>(), 0.0);
-
         public static QueueSnapshot From(PromotionQueueStats stats, int capacity) =>
             new(stats.PerProject, stats.TotalCount / (double)Math.Max(1, capacity));
     }
