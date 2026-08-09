@@ -148,6 +148,71 @@ public sealed class SharedExtractionRunnerTests
             "3 new top-ranked candidates plus the 1 already-queued refresh — not the whole eligible pool");
     }
 
+    /// <summary>The defect this cap fixes: one document's chunks must not flood the queue in a single
+    /// pass (docs/work/2026-08-09-promotion-scoring-measurement.md — 33 slots from one document).</summary>
+    [Fact]
+    public async Task ProposeAsync_AppliesThePerDocumentCap_ToNewlyQueuedCandidates()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = Enumerable.Range(0, 5)
+            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta", sourceFile: "doc.md"))
+            .ToList();
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Count.ShouldBe(SharedExtractionService.MaxQueuedPerSourceDocument,
+            "one document may not occupy more than the per-document cap of the queue in a single pass");
+    }
+
+    /// <summary>Counting must look at the whole queue, not just this pass — otherwise each pass admits
+    /// `cap` more and the accumulation defect survives across passes.</summary>
+    [Fact]
+    public async Task ProposeAsync_DocumentAlreadyAtCapInTheQueue_AdmitsNoNewRowsFromThatDocument()
+    {
+        var (store, queue, _, runner) = NewStack();
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0),
+            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0),
+            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0)
+        ];
+        store.Candidates["acme"] = [Row("new1", "organic fact about beta", sourceFile: "doc.md")];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastProject.ShouldBeNull("the only new candidate belongs to an already-capped document, "
+            + "and none of the already-queued rows are in this pass's eligible pool to refresh");
+    }
+
+    /// <summary>Regression pin for the refresh stream: rows already in the queue keep being refreshed
+    /// every pass regardless of the per-document cap, even when their document is already at or over
+    /// it — refreshing and capping new admissions are different operations.</summary>
+    [Fact]
+    public async Task ProposeAsync_RefreshesQueuedRows_EvenWhenTheirDocumentIsAtTheCap()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] =
+        [
+            Row("q1", "organic fact 1 about beta", sourceFile: "doc.md"),
+            Row("q2", "organic fact 2 about beta", sourceFile: "doc.md"),
+            Row("q3", "organic fact 3 about beta", sourceFile: "doc.md")
+        ];
+        queue.Rows =
+        [
+            new PromotionQueueRow("acme", "q1", "q1.md", "v", "doc.md", 0.1, [], 0, 0),
+            new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0),
+            new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0)
+        ];
+
+        await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["q1", "q2", "q3"], ignoreOrder: true,
+            "already-queued rows must still be refreshed even though their document is at the cap");
+    }
+
     [Fact]
     public async Task ProposeAsync_SkipsRowsAlreadyShared()
     {

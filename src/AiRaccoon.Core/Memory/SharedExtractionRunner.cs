@@ -34,13 +34,19 @@ public sealed class SharedExtractionRunner(
         {
             // Refreshing an already-queued row and enqueueing a new one are different operations:
             // a queued row is refreshed regardless of rank, but a not-yet-queued row is bounded by
-            // `limit`, so one pass cannot insert the whole eligible pool.
-            var alreadyQueued = (await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
-                    .ConfigureAwait(false))
-                .Select(r => r.Hash)
-                .ToHashSet(StringComparer.Ordinal);
+            // `limit` and the per-source-document cap, so one pass cannot insert the whole eligible
+            // pool nor let one document flood the queue (docs/work/2026-08-09-promotion-scoring-measurement.md).
+            var existingQueueRows = await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
+                .ConfigureAwait(false);
+            var alreadyQueued = existingQueueRows.Select(r => r.Hash).ToHashSet(StringComparer.Ordinal);
+            var queuedCountsBySourceFile = existingQueueRows
+                .Where(r => r.SourceFile is not null)
+                .GroupBy(r => r.SourceFile!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+            var notYetQueued = ranked.Where(c => !alreadyQueued.Contains(c.Hash)).ToList();
+            var admissibleNew = SharedExtractionService.CapPerSourceDocument(notYetQueued, queuedCountsBySourceFile);
             var toQueue = ranked.Where(c => alreadyQueued.Contains(c.Hash))
-                .Concat(ranked.Where(c => !alreadyQueued.Contains(c.Hash)).Take(limit))
+                .Concat(admissibleNew.Take(limit))
                 .ToList();
             if (toQueue.Count > 0)
             {
