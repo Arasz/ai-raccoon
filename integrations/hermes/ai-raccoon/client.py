@@ -6,7 +6,11 @@ Two transports behind one duck-typed surface:
   (MCP over stdio; the child inherits the parent env, so a data-root
   override such as ``AIRACCOON_DATA_ROOT`` flows through).
 - ``http``: connects to a running server's Streamable HTTP endpoint
-  (default ``http://127.0.0.1:7721/mcp``).
+  (default ``http://127.0.0.1:7721/mcp``). ``ai-raccoon serve`` gates ``/mcp``
+  behind a loopback token (``McpTokenGate``); this transport reads
+  ``token_file`` (default ``~/.ai-raccoon/mcp-token``) at connect and sends it
+  as ``X-AiRaccoon-Token`` — only when ``url`` is loopback, so the secret
+  never ships to a remote host a caller configures.
 
 The official ``mcp`` SDK is imported lazily inside ``connect()`` so code
 that only constructs or fakes these clients (unit tests) never needs it.
@@ -20,14 +24,28 @@ import asyncio
 import json
 import logging
 import threading
+from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_HTTP_URL = "http://127.0.0.1:7721/mcp"
+DEFAULT_TOKEN_FILE = "~/.ai-raccoon/mcp-token"
+TOKEN_HEADER = "X-AiRaccoon-Token"
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 CONNECT_TIMEOUT_S = 30.0
 CALL_TIMEOUT_S = 15.0
 CLOSE_TIMEOUT_S = 10.0
+# Matches the host runtime's own httpx.AsyncClient defaults for the streamable-http
+# transport (~/.hermes/hermes-agent/tools/mcp_tool.py:3079-3095): connect at
+# CONNECT_TIMEOUT_S, read generously since a tool call can run long.
+_HTTP_READ_TIMEOUT_S = 300.0
+
+
+def _is_loopback_url(url: str) -> bool:
+    """R3: the loopback token must never ship to a host the caller configured."""
+    return urlsplit(url).hostname in _LOOPBACK_HOSTS
 
 
 class AiRaccoonError(RuntimeError):
@@ -161,29 +179,64 @@ class StdioClient(_MCPClient):
 
 
 class HttpClient(_MCPClient):
-    """Connects to a running server's Streamable HTTP MCP endpoint."""
+    """Connects to a running server's Streamable HTTP MCP endpoint.
 
-    def __init__(self, url: str = DEFAULT_HTTP_URL) -> None:
+    ``token_file`` (default ``~/.ai-raccoon/mcp-token``) is read at connect time and, when
+    ``url`` targets loopback, sent as ``X-AiRaccoon-Token`` — the header ``ai-raccoon serve``
+    (unlike the ungated ``--transport http``) requires. A missing, unreadable, empty or
+    whitespace-only file just means no header: the ungated case must keep working (D2).
+    """
+
+    def __init__(self, url: str = DEFAULT_HTTP_URL, token_file: str = DEFAULT_TOKEN_FILE) -> None:
         super().__init__()
         self._url = url
+        self._token_file = token_file
+        self._http_client = None
+
+    def _auth_headers(self) -> Dict[str, str]:
+        if not self._token_file or not _is_loopback_url(self._url):
+            return {}
+        try:
+            token = Path(self._token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            return {}
+        if not token:
+            return {}
+        return {TOKEN_HEADER: token}
 
     async def _open(self) -> None:
+        import httpx
         from mcp import ClientSession
         from mcp.client.streamable_http import streamable_http_client
 
-        self._ctx = streamable_http_client(self._url)
+        self._http_client = httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(CONNECT_TIMEOUT_S, read=_HTTP_READ_TIMEOUT_S),
+            headers=self._auth_headers() or None,
+        )
+        self._ctx = streamable_http_client(self._url, http_client=self._http_client)
         read, write, _ = await self._ctx.__aenter__()
         session = ClientSession(read, write)
         self._session = await session.__aenter__()
         await self._session.initialize()
 
     async def _close(self) -> None:
-        if self._session is not None:
-            await self._session.__aexit__(None, None, None)
-            self._session = None
-        if self._ctx is not None:
-            await self._ctx.__aexit__(None, None, None)
-            self._ctx = None
+        # try/finally: session/ctx teardown can itself raise (observed: anyio
+        # "cancel scope in a different task", since _open and _close each run as
+        # a separate run_coroutine_threadsafe task on the same loop) and
+        # streamable_http_client does not close a client it did not create
+        # (mcp.client.streamable_http.streamable_http_client) — either way, the
+        # httpx client must still be closed or it leaks a connection pool.
+        try:
+            if self._session is not None:
+                await self._session.__aexit__(None, None, None)
+                self._session = None
+            if self._ctx is not None:
+                await self._ctx.__aexit__(None, None, None)
+                self._ctx = None
+        finally:
+            if self._http_client is not None:
+                await self._http_client.aclose()
 
 
 def create_client(config: dict) -> _MCPClient:
@@ -196,7 +249,10 @@ def create_client(config: dict) -> _MCPClient:
     """
     transport = config.get("transport", "stdio")
     if transport == "http":
-        return HttpClient(config.get("url", DEFAULT_HTTP_URL))
+        return HttpClient(
+            config.get("url", DEFAULT_HTTP_URL),
+            config.get("token_file", DEFAULT_TOKEN_FILE),
+        )
     args = list(config.get("binary_args") or [])
     if config.get("quiet", True):
         args.append("--quiet")

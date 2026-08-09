@@ -61,3 +61,104 @@ def test_unwrap_needs_both_envelope_keys(client_module):
 
 def test_unwrap_leaves_non_mapping_payloads_alone(client_module):
     assert client_module._unwrap("plain text") == "plain text"
+
+
+# -- token_file / _auth_headers (loopback token, D1-D3 + R3) ----------------
+
+
+def test_create_client_http_passes_token_file_through(client_module, tmp_path):
+    """N5: create_client must forward token_file, or it can never reach the client."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("abc123\n")
+    client = client_module.create_client({"transport": "http", "token_file": str(token_file)})
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "abc123"}
+
+
+def test_auth_headers_trims_trailing_newline(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("  abc123  \n")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "abc123"}
+
+
+def test_auth_headers_missing_file_returns_no_header(client_module, tmp_path):
+    client = client_module.HttpClient(token_file=str(tmp_path / "does-not-exist"))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_empty_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_whitespace_only_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("   \n\t  ")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_unreadable_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    token_file.chmod(0o000)
+    try:
+        client = client_module.HttpClient(token_file=str(token_file))
+        assert client._auth_headers() == {}
+    finally:
+        token_file.chmod(0o600)  # restore so tmp_path teardown can remove it
+
+
+def test_create_client_http_empty_token_file_disables_header(client_module, tmp_path):
+    client = client_module.create_client({"transport": "http", "token_file": ""})
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_expands_tilde(client_module, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("tilde-token")
+    client = client_module.HttpClient(token_file="~/mcp-token")
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "tilde-token"}
+
+
+def test_auth_headers_attaches_for_127_0_0_1(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_attaches_for_localhost(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://localhost:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_attaches_for_ipv6_loopback(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://[::1]:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_withheld_for_a_remote_host(client_module, tmp_path):
+    """R3: url is arbitrary and passed straight through — an unconditional header would ship
+    the loopback secret in cleartext to whatever host a user configures."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://example.com:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_get_config_schema_documents_token_file(provider_module):
+    provider = provider_module.AiRaccoonMemoryProvider(config={})
+    schema = provider.get_config_schema()
+    entry = next(e for e in schema if e["key"] == "token_file")
+    assert entry["default"] == "~/.ai-raccoon/mcp-token"
+    description = entry["description"].lower()
+    assert "read at connect" in description or "connect" in description
+    assert "never" in description and "config.yaml" in description

@@ -99,7 +99,12 @@ def test_shutdown_terminates_child_and_is_idempotent(real_provider):
 
 
 def test_http_transport_smoke(tmp_path, client_module):
-    """HTTP path: spawn a server on a random port, connect the HttpClient, call stats."""
+    """HTTP path against an *ungated* server (``--transport http``, no ``serve``): spawn on a
+    random port, connect the HttpClient, call stats. R2: token_file is passed explicitly and
+    points at a path that does not exist, so this stays independent of whatever the developer's
+    ``~/.ai-raccoon/mcp-token`` (the new default) happens to contain — D2's guard that a
+    missing/unreadable token file must never block an ungated connection.
+    """
     binary = _binary()
     proc = subprocess.Popen(
         [binary, "--transport", "http", "--port", "0", "--data-root", str(tmp_path / "httpbank")],
@@ -122,13 +127,61 @@ def test_http_transport_smoke(tmp_path, client_module):
         if not url:
             pytest.fail("server never reported its listening URL")
 
-        client = client_module.HttpClient(url)
+        client = client_module.HttpClient(url, token_file=str(tmp_path / "no-such-mcp-token"))
         client.connect()
         try:
             stats = client.stats("smoke")
             assert "entries" in stats and stats["entries"] == 0
         finally:
             client.close()
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def test_http_transport_gated_smoke(tmp_path, client_module):
+    """Regression for S1: `ai-raccoon serve` gates /mcp behind McpTokenGate, so the plugin's
+    http transport must present the loopback token — a bare URL 401s (measured in
+    docs/work/2026-08-09-http-token-client-regression.md). The token lands at
+    ``<data-root>/mcp-token`` (McpTokenFile.cs), minted strictly before the Kestrel bind, so it
+    is present as soon as ``serve`` prints its listening URL on stdout.
+    """
+    binary = _binary()
+    data_root = tmp_path / "gatedbank"
+    proc = subprocess.Popen(
+        [binary, "--data-root", str(data_root), "serve", "--port", "0"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+    )
+    assert proc.stdout is not None
+    try:
+        url = None
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            line = proc.stdout.readline()
+            if not line:
+                if proc.poll() is not None:
+                    pytest.fail(f"server exited early: {proc.returncode}")
+                continue
+            line = line.strip()
+            if line.startswith("http://"):
+                url = line
+                break
+        if not url:
+            pytest.fail("server never reported its listening URL")
+
+        token_file = data_root / "mcp-token"
+        client = client_module.HttpClient(url, token_file=str(token_file))
+        client.connect()
+        try:
+            stats = client.stats("smoke")
+            assert "entries" in stats and stats["entries"] == 0
+        finally:
+            client.close()
+        assert client._http_client is not None
+        assert client._http_client.is_closed
     finally:
         proc.terminate()
         try:
