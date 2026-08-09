@@ -141,7 +141,9 @@ stays unauthenticated by design: it proves "an ai-raccoon server is here", never
 | Token file missing when the proxy needs it | Proxy fails before forwarding | One stderr line naming the file path and `ai-raccoon --transport stdio` |
 | Proxy's token does not match the server's — a `serve` started against a different data root owns the port | Every forward 401s | JSON-RPC error naming both the file and the port, so the data-root mismatch is diagnosable rather than looking like a dead server |
 | Another local user's process calls `/mcp` | 401 | Nothing; that is the feature |
-| File exists but is empty or unreadable | Treated as absent — fail, do not mint a second token | Same as missing |
+| File exists but is empty or unreadable, proxy side | Treated as absent — fail, never mint a second token | Same as missing |
+| File exists but is empty, `serve` side | Given `HealAfter` (5 s) to fill in; still empty means its creator died, so it is deleted and re-minted through the same exclusive create | Nothing; the start that hit it is the one rescued |
+| File unreadable or undeletable, `serve` side | `ExitCode.McpTokenUnavailable` before the bind | One stderr line naming the path |
 | Backend restarts mid-session | Token unchanged, reconnect succeeds | Nothing |
 
 ## Corrections from implementation
@@ -165,12 +167,33 @@ not a regression, and gating it would require the E2E `McpServerFactory` to read
 a real hole for anyone who runs that command, and it is named in `SECURITY.md` rather than left
 for a reader to discover.
 
-**3. An empty token file wedges `serve`.** If a process dies between the exclusive create and the
-write, the file exists and holds nothing. `EnsureAsync` retries for 1 s and then refuses, which is
-right — re-minting over it could overwrite a live token a slow starter is about to write. But for
-an always-on server "wedged until a human deletes a file" needs to fail like every other `serve`
-failure: an `ExitCode` and one clean stderr line naming the file, not an unhandled exception with
-a stack trace.
+**3. An empty token file wedged `serve`; it now heals.** If a process dies between the exclusive
+create and the write, the file exists and holds nothing, and no later start could get past it.
+**Owner ruling, 2026-08-09: self-heal rather than wedge.** The file gets `HealAfter` (5 s) to fill
+in; if it is still empty its creator is dead, so it is deleted and minted again through the same
+exclusive create. Three things this design turns on:
+
+- **Never write over the file.** Overwriting is worse than the wedge: one healer's token reaches
+  the file while another's reaches the serving process, so every caller 401s forever against a
+  server that looks healthy — a wedge that no longer announces itself. Routing the heal back
+  through the exclusive create reuses the convergence the mint already has.
+- **The delete is guarded by an exclusive open, not by `Read()`.** `Read()` reports a mint in
+  flight as absent, so a `Read()`-guarded delete removes the token the winner is still writing.
+  Caught by `TwoProcessesHealingConcurrently_ConvergeOnOneToken`: 9 distinct secrets across 16
+  healers. A residual window remains between the check and the delete, unreachable without the
+  cross-process lock this design refuses.
+- **5 s, not the 2 minutes first proposed.** `BackendLauncher`'s acquire budget is 30 s, so a
+  longer wait heals for nobody — the proxy gives up before it finishes. The window only has to
+  outlast a live writer, and a live writer writes microseconds after it creates. Worst case is
+  `2 × HealAfter` when the heal itself fails, still inside the budget.
+
+**No lock file.** The exclusive create is already the cross-process primitive and it is tested; a
+second one needs a TTL and an owner id to avoid wedging on the lock instead of the token — the
+machinery ADR-0008 refused for the PID file.
+
+A path that still cannot be healed — unreadable, undeletable, wrong permissions — fails like every
+other `serve` failure: `ExitCode.McpTokenUnavailable` and one stderr line naming the file, not an
+unhandled exception with a stack trace.
 
 **4. EventId 640 was wrong.** It straddled `IdleWatchdog`, `ObservabilityRunner` and
 `BackendLauncher`, tripping `EventIdBlocks_DoNotInterleaveBetweenOwners`. Moved to 606.
