@@ -1,13 +1,8 @@
-using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Observability;
-using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
-using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
@@ -29,9 +24,8 @@ public sealed class ToolTelemetryCoverageTests
         var dataRoot = TestData.CreateTempRoot("tool-telemetry-coverage");
         try
         {
-            var port = FreePort();
-            var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+            var port = TelemetryServerHost.FreePort();
+            var host = TelemetryServerHost.Create(dataRoot, port);
 
             // The list is derived from the container, never hand-kept: a tool added to any
             // WithTools<> class joins this assertion without anybody editing it.
@@ -46,7 +40,7 @@ public sealed class ToolTelemetryCoverageTests
             await host.StartAsync(TestContext.Current.CancellationToken);
             try
             {
-                await using var client = await ConnectAsync(port);
+                await using var client = await TelemetryServerHost.ConnectAsync(port, TestContext.Current.CancellationToken);
 
                 // Empty arguments: the call is refused, and a refused call must be counted too —
                 // the contract is "every call emits", not "every successful call emits".
@@ -82,28 +76,4 @@ public sealed class ToolTelemetryCoverageTests
         }
     }
 
-    private static async Task<McpClient> ConnectAsync(int port)
-    {
-        var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-        var transport = new HttpClientTransport(
-            new HttpClientTransportOptions
-            {
-                Name = "tool-telemetry-test",
-                Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                TransportMode = HttpTransportMode.StreamableHttp
-            },
-            httpClient,
-            NullLoggerFactory.Instance,
-            true);
-        return await McpClient.CreateAsync(transport, cancellationToken: TestContext.Current.CancellationToken);
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 }
