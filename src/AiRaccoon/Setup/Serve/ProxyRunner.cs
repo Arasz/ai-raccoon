@@ -56,7 +56,7 @@ internal static partial class ProxyRunner
     ///     the caller's cancellation, as it is in-process) and JSON-RPC errors restored.
     /// </summary>
     internal static HttpClient CreateBackendHttpClient() =>
-        new(new SocketsHttpHandler())
+        new(new JsonRpcErrorHandler { InnerHandler = new SocketsHttpHandler() })
         {
             Timeout = Timeout.InfiniteTimeSpan
         };
