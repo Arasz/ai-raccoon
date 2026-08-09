@@ -381,19 +381,51 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>
-    ///     H4 migration trap: `CREATE TRIGGER IF NOT EXISTS` never replaces a trigger body already on
-    ///     disk, so every bank that opened with a pre-fix binary carries the scope-blind guard forever
-    ///     unless a versioned ladder step drops and recreates it. Asserting on the SQL text (not just
-    ///     the trigger's name existing) is deliberate — a name-only assertion passes against the old
-    ///     body too and would let the split ship.
+    ///     H4 migration trap, amended: `CREATE TRIGGER IF NOT EXISTS` never replaces a trigger body
+    ///     already on disk, so a body *replacement* cannot ride the same additive mechanism the
+    ///     original trigger did. ADR-0023 explicitly rejects a `CurrentVersion` bump for this trigger
+    ///     (bumping would make every older binary that already touched a migrated bank refuse to open
+    ///     it read-write, per ADR-0019's forward-version guard — costly on a bank shared across
+    ///     concurrent sessions). The fix instead stays inside the unconditional `Ddl` script (a
+    ///     `DROP TRIGGER IF EXISTS` immediately before an unguarded `CREATE TRIGGER`), which already
+    ///     runs in full on every open regardless of stamped version — so this case needs no
+    ///     `PRAGMA user_version` manipulation at all, unlike the superseded version of this test.
     /// </summary>
     [Fact]
-    public async Task EnsureAsync_OnAV4Bank_WithTheOldTriggerBody_ReplacesItWithTheScopeAwareGuard()
+    public async Task EnsureAsync_WhenTheTriggerIsMissingEntirely_RecreatesItWithTheScopeAwareGuard()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-        // What every bank opened before this fix has on disk: the pre-ADR-0023-fix scope-blind body,
-        // stamped v4 (the version this fix ships from).
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER promotion_queue_entries_ad",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var sql = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
+                cancellationToken: TestContext.Current.CancellationToken));
+        sql.ShouldNotBeNull();
+        sql.ShouldContain("scope");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion,
+            "the trigger fix must not require or trigger any version-ladder step");
+    }
+
+    /// <summary>
+    ///     The case that actually matters: not a missing trigger, but the *old* scope-blind body still
+    ///     on disk — exactly what every bank opened by a pre-fix binary carries. No `PRAGMA
+    ///     user_version` write here either; the unconditional `Ddl` path must correct this regardless
+    ///     of what version the bank is stamped at. Asserting on the SQL text (not just the trigger's
+    ///     name existing) is deliberate — a name-only assertion passes against the old body too and
+    ///     would let the split ship.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_WhenTheTriggerCarriesTheOldScopeBlindBody_ReplacesItOnReopen()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // What every bank opened by a pre-fix binary has on disk: the pre-H4 scope-blind body.
         await connection.ExecuteAsync(new CommandDefinition(
             """
             DROP TRIGGER promotion_queue_entries_ad;
@@ -403,7 +435,6 @@ public sealed class MemorySchemaVersionTests
                   AND NOT EXISTS (SELECT 1 FROM entries e
                                   WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash);
             END;
-            PRAGMA user_version = 4;
             """,
             cancellationToken: TestContext.Current.CancellationToken));
 
@@ -417,7 +448,8 @@ public sealed class MemorySchemaVersionTests
         // A name-only assertion (the trigger merely exists) would pass against the old
         // scope-blind body too and would let the split ship — the SQL text is the real witness.
         sql.ShouldContain("scope");
-        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion,
+            "the trigger fix must not require or trigger any version-ladder step");
     }
 
     // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.

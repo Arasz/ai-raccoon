@@ -147,3 +147,36 @@ Rejected. The change is additive and idempotent; a version bump exists to gate c
 ordered, one-time migration work, and forcing this one through the ladder would make ADR-0019's
 write guard reject older binaries opening a bank this build already touched, for no migration this
 change actually requires.
+
+## Amendment (2026-08-09): a body *replacement* is a different case from an *addition*
+
+The 1.6.0 integration review (H4) found the guard itself was wrong: `NOT EXISTS (SELECT 1 FROM
+entries e WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash)` treats *any* surviving
+sibling as "still live," but `ShareAsync` only ever resolves a candidate against a
+`scope = 'project'` row. A queue row backed solely by a `custom`- or workspace-scoped sibling was
+kept, unpromotable, and destroyed as `stale-hash` on the next promote pass — the fix adds
+`AND e.scope = 'project'` to the guard.
+
+That fix is not additive the way the trigger's original creation was: it *replaces* a trigger body
+that may already be on disk. `CREATE TRIGGER IF NOT EXISTS` — the mechanism "No `CurrentVersion`
+bump" above relies on — only ever creates; it never touches a definition that already exists. Left
+alone, editing the DDL text in this file would ship the fix to fresh banks only, while every bank
+already opened by a pre-fix binary kept the broken guard forever. The "Bump `CurrentVersion`"
+rejection above still holds for the reason given there (ADR-0019's forward-version write guard), so
+the fix does not use the ladder either.
+
+Resolution: `DROP TRIGGER IF EXISTS promotion_queue_entries_ad` immediately before an *unguarded*
+`CREATE TRIGGER` (no `IF NOT EXISTS`), both kept inside the same unconditional `Ddl` script that
+already runs in full on every bank open (`MemorySchema.EnsureAsync` executes it before consulting
+`storedVersion` at all). Dropping something absent is a no-op, so this is idempotent exactly like
+the original `IF NOT EXISTS` form was, and it reaches every existing bank on its very next open —
+no `CurrentVersion` bump, no ladder step, the same no-migration guarantee the original decision
+made, just achieved with DROP+CREATE instead of CREATE-only because this change replaces rather
+than adds.
+
+**The general rule going forward:** a trigger body change that is safe to re-run unconditionally on
+every open (no data transform, no dependency on prior state) belongs in the unconditional `Ddl`
+path — via `CREATE ... IF NOT EXISTS` for a genuine addition, or `DROP IF EXISTS` + unguarded
+`CREATE` for a replacement. The version ladder is reserved for changes that need guarded, ordered,
+one-time work (a data backfill, a non-idempotent `ALTER TABLE`) — not for "does this touch a
+trigger" as such.
