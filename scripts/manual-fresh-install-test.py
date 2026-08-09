@@ -107,6 +107,18 @@ r = run(install_cmd, env=env, timeout=300)
 install_ok = r.returncode == 0
 check("dotnet tool install exits 0", install_ok, r.stderr.strip()[-300:] if not install_ok else "")
 print(f"    install took {time.time()-t0:.1f}s")
+if not install_ok:
+    # Everything below inspects the installed tool, so without it each step fails for the same
+    # reason and the model sha256 check dies on a missing path — burying the real error under a
+    # traceback. Stop here and let the install failure be the answer.
+    print("\nFAIL: install failed; skipping the remaining steps (they all inspect the install).",
+          file=sys.stderr)
+    if "is not found in NuGet feeds" in r.stderr:
+        print("Hint: a just-published version reaches api.nuget.org/v3-flatcontainer before the\n"
+              "registration index that `dotnet tool install` queries. Check\n"
+              "https://api.nuget.org/v3/registration5-gz-semver2/ai-raccoon/index.json and retry.",
+              file=sys.stderr)
+    sys.exit(1)
 
 print("== step 2: layout + integrity ==")
 store_root = None
