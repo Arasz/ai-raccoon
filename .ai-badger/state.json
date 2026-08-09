@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-09T20:54:00Z",
+  "lastUpdated": "2026-08-09T21:45:00Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "promotion-accounting-fix",
+      "title": "Honest promotion accounting + per-chunk sharing (MemoryEntryResult, absorbed counter)",
+      "finished": "2026-08-09T21:29:00Z",
+      "pr": "255",
+      "summary": "Two promotion defects fixed (found in mem-test + owner correction): (1) every non-skipped claim was reported as promoted — now promotedHashes contains only actually-created rows (MemoryEntryResult.Created = affected == 1 from the insert outcome), with an absorbed counter and the invariant claimed = promoted + absorbed + skipped + failures; (2) file-path-addressed shared rows coalesced all chunks of a file into one row — owner f: corrected to per-chunk sharing: shared rows are value-addressed (shared/<sha256(value)>.md) so every promoted chunk lands and identical chunk content from different paths dedupes by construction (UNIQUE path+hash). ContentHash.OfValue added. Plan rev 2 (reviewed APPROVE-WITH-CHANGES) + rev 3 (owner correction) in docs/plans. TDD RED->GREEN incl. inverted TwoChunksOfOneFile_BothChunksShared; 186/186 targeted; full suite only the pre-existing OTLP flake. 1.6.3 bump (folded into the 1.6.2 line per owner: local build + live test of 1.6.2 with the change verified 3 chunks -> 3 shared rows on the real bank)."
+    },
     {
       "id": "fix-watch-source-file-delete",
       "title": "Watch replace-by-path deletes manual rows citing watched source_file",
