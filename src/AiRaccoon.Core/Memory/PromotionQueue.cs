@@ -29,6 +29,14 @@ public sealed record PromotionQueueStats(
     IReadOnlyDictionary<string, int> PerProject,
     double? OldestWaitSeconds = null);
 
+/// <summary>Queue occupancy for one project (or the whole bank when unscoped) — the response-meta
+/// source. OccupyingProjects is the projects with queued rows, which the capacity split divides by.</summary>
+public sealed record PromotionWaitStats(
+    int WaitingCount,
+    double? AvgWaitSeconds,
+    double? OldestWaitSeconds,
+    int OccupyingProjects);
+
 /// <summary>The row an eviction removed (for logging and the response).</summary>
 public sealed record EvictedRow(string ProjectId, string Hash, double Score, string Reason);
 

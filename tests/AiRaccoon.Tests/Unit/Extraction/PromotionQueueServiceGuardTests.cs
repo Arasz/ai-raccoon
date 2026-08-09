@@ -88,6 +88,9 @@ public sealed class PromotionQueueServiceGuardTests
         public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }

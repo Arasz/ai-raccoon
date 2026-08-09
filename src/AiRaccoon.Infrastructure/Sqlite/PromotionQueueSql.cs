@@ -44,6 +44,16 @@ internal static class PromotionQueueSql
                                           GROUP BY project_id
                                           """;
 
+    /// <summary>One project's waiting count and wait ages (whole bank when @ProjectId is null), with the occupying-project count the capacity split needs.</summary>
+    public const string WaitStats = """
+                                    SELECT count(*) AS WaitingCount,
+                                           CAST(avg(@Now - created_at) AS REAL) AS AvgWaitSeconds,
+                                           CAST(max(@Now - created_at) AS REAL) AS OldestWaitSeconds,
+                                           (SELECT count(DISTINCT project_id) FROM promotion_queue) AS OccupyingProjects
+                                    FROM promotion_queue
+                                    WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
+                                    """;
+
     public const string EvictVictim = """
                                       DELETE FROM promotion_queue
                                       WHERE id = (

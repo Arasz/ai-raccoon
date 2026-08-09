@@ -40,7 +40,7 @@ public sealed class SyncTools(
             var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
             var result = await sync.MemorySyncAsync(projectId, syncSettings.ObjectKey, cancellationToken);
             var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-            var envelope = await gate.WrapAsync(syncResult, cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, syncResult, cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }

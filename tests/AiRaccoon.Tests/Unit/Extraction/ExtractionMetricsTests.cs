@@ -130,6 +130,14 @@ public sealed class ExtractionMetricsTests
             Task.FromResult(new PromotionQueueStats(_rows.Count, null,
                 _rows.GroupBy(r => r.ProjectId).ToDictionary(g => g.Key, g => g.Count())));
 
+        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
+            CancellationToken cancellationToken = default)
+        {
+            var scoped = _rows.Where(r => projectId is null || r.ProjectId == projectId).ToList();
+            return Task.FromResult(new PromotionWaitStats(scoped.Count, null, null,
+                _rows.Select(r => r.ProjectId).Distinct(StringComparer.Ordinal).Count()));
+        }
+
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
             CancellationToken cancellationToken = default)
         {

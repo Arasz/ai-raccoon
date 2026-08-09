@@ -79,6 +79,14 @@ public sealed class PromotionQueueServicePromoteRaceTests
             Task.FromResult(new PromotionQueueStats(Rows.Count, null,
                 Rows.GroupBy(r => r.ProjectId).ToDictionary(g => g.Key, g => g.Count())));
 
+        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
+            CancellationToken cancellationToken = default)
+        {
+            var scoped = Rows.Where(r => projectId is null || r.ProjectId == projectId).ToList();
+            return Task.FromResult(new PromotionWaitStats(scoped.Count, null, null,
+                Rows.Select(r => r.ProjectId).Distinct(StringComparer.Ordinal).Count()));
+        }
+
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
