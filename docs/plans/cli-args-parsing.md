@@ -5,6 +5,13 @@
 > verb tree + settings table. See `docs/work/2026-08-04-cli-config-findings.md` + owner
 > rulings; kept as an archive of the System.CommandLine decisions that DID land (parse-first,
 > all CLI text → stderr).
+>
+> **Correction:** the env-var inventory and CLI-surface tables below (§1, §2) still name
+> `MCP_TRANSPORT` as a real, currently-read environment variable. It is not — the
+> single-channel ruling this doc's own header describes removed the entire env-merge
+> layer, `MCP_TRANSPORT` included; `ServerConfig.cs:5-10` records that removal, and no
+> `MCP_TRANSPORT` read exists anywhere in `src/` today. Left in place below as the
+> original plan text, not as a current claim.
 
 > **Based on:** `docs/work/2026-08-04-cli-args-exploration.md` (decision: System.CommandLine 2.0.10,
 > parse-first, all CLI text → stderr).
@@ -36,7 +43,7 @@ no `MCP_TRANSPORT`, no `AIRACCOON_DB_PASSPHRASE`):
 
 | # | Env var | Read at | Becomes CLI option | Secret? |
 |---|---------|---------|--------------------|---------|
-| 1 | `MCP_TRANSPORT` | `Setup/McpServerSetup.cs:15` | `--transport` | no |
+| 1 | `MCP_TRANSPORT` † | `Setup/McpServerSetup.cs:15` | `--transport` | no |
 | 2 | `AIRACCOON_DATA_ROOT` | `Infrastructure/Options/InfrastructureOptions.cs:29` | `--data-root` | no |
 | 3 | `AIRACCOON_INSTALL_SCOPE` | `Setup/Dependencies.cs:24` | `--install-scope` | no |
 | 4 | `AIRACCOON_ACCESS_MODE` | `Infrastructure/Sqlite/SqliteConnectionFactory.cs:66` | `--access-mode` | no |
@@ -49,6 +56,9 @@ no `MCP_TRANSPORT`, no `AIRACCOON_DB_PASSPHRASE`):
 | 11 | `AIRACCOON_SYNC_SECRET_KEY` | `Setup/Dependencies.cs:38` | — **env-only** | **YES** |
 | 12 | `AIRACCOON_OPENAI_API_KEY` | `Infrastructure/Embedding/EmbeddingService.cs:88`, `Tools/MemoryTools.cs:414` | — **env-only** | **YES** |
 | 13 | `AIRACCOON_DB_PASSPHRASE` | `Infrastructure/Sqlite/EnvEncryptionKeyProvider.cs:13` | — **env-only** | **YES** |
+
+† `MCP_TRANSPORT` does not exist in `src/` today — see the correction note at the top
+of this document.
 
 Rule: **9 CLI options, 4 env-only secrets.** The four secret vars are *not declared* as options,
 so the parser's own unknown-option error is the defense: `ai-raccoon --sync-access-key x` must
@@ -69,7 +79,7 @@ and `--version` from the framework). No credentials among them.
 
 | Option | Type | Values | Default | Maps to |
 |--------|------|--------|---------|---------|
-| `--transport` | enum | `stdio`, `http`, `https` (https → unsupported warning, no endpoints — mirrors the env layer today) | `stdio` | `MCP_TRANSPORT` → `McpTransport` |
+| `--transport` | enum | `stdio`, `http`, `https` (https → unsupported warning, no endpoints — mirrors the env layer today) | `stdio` | `MCP_TRANSPORT` † → `McpTransport` |
 | `--data-root` | string (path, `~` expanded) | any | `~/.ai-raccoon` | `AIRACCOON_DATA_ROOT` |
 | `--install-scope` | enum | `user`, `project` | `user` | `AIRACCOON_INSTALL_SCOPE` → `InstallScope` |
 | `--access-mode` | enum | `ro`, `rw`, `full` | `rw` | `AIRACCOON_ACCESS_MODE` (seed) |
@@ -78,6 +88,9 @@ and `--version` from the framework). No credentials among them.
 | `--sync-bucket` | string | any | unset | `AIRACCOON_SYNC_BUCKET` |
 | `--sync-region` | string | any | unset | `AIRACCOON_SYNC_REGION` |
 | `--sync-object-key` | string | any | `memory-<projectId>.db` | `AIRACCOON_SYNC_OBJECT_KEY` |
+
+† `MCP_TRANSPORT` does not exist in `src/` today — see the correction note at the top
+of this document.
 
 Validation: enum options reject unknown values at parse time ("Cannot parse argument 'foo' for
 option '--transport'"); unknown options and missing values are parse errors. `https` is a
