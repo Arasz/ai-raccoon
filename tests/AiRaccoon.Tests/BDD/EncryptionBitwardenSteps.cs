@@ -212,11 +212,14 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         _lastCli.Exit.ShouldBe(0);
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source))
             .ShouldBe("bitwarden");
-        // The fake bws logs every argv line — this proves the CLI passed -t <token> to the fetch
-        // (and only the fetch; the presence check never takes the token).
+        // The fake bws logs argv plus the inherited BWS_ACCESS_TOKEN per call. The token reaches the
+        // fetch by environment and never by argv — argv is world-readable via ps for the life of the
+        // process. Still only the fetch: the presence check inherits no token.
         var calls = await File.ReadAllTextAsync(Ctx.CallsLogPath);
-        calls.ShouldContain($"secret get {EncryptionBitwardenFeatureContext.SecretId} -t {EncryptionBitwardenFeatureContext.KnownToken}");
-        calls.ShouldNotContain($"--version -t");
+        calls.ShouldContain(
+            $"secret get {EncryptionBitwardenFeatureContext.SecretId} | env:BWS_ACCESS_TOKEN={EncryptionBitwardenFeatureContext.KnownToken}");
+        calls.ShouldNotContain($"-t {EncryptionBitwardenFeatureContext.KnownToken}");
+        calls.ShouldNotContain($"--version | env:BWS_ACCESS_TOKEN={EncryptionBitwardenFeatureContext.KnownToken}");
     }
 
     [Then("^the token is not stored anywhere$")]
