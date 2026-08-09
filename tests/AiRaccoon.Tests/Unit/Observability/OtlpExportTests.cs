@@ -130,6 +130,33 @@ public sealed class OtlpExportTests : IDisposable
         }
     }
 
+    // T4/J1+J4 join: WP4 warns and disables, WP5 routes quiet's destination; neither half was
+    // ever asserted together. This is the one Hermes-spawned backend depends on for a bad
+    // OTEL_EXPORTER_OTLP_ENDPOINT to be diagnosable at all under --quiet.
+    [Fact]
+    public async Task MalformedEndpoint_Quiet_WarningReachesTheLogFile_AndStderrStaysEmpty()
+    {
+        using var env = await AcquireCleanEnvAsync();
+        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User, Quiet = true };
+        var config = new ServerConfig(FreePort(), McpTransport.Http, options);
+
+        var originalError = Console.Error;
+        var stderr = new StringWriter();
+        Console.SetError(stderr);
+        try
+        {
+            using var host = McpServerSetup.CreateServerHost(config);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        stderr.ToString().ShouldBeEmpty();
+        File.ReadAllText(QuietLogging.LogFilePath(options)).ShouldContain("ai-raccoon: OTLP export disabled");
+    }
+
     [Fact]
     public async Task EndpointSet_RegistersAllThreeMeters_AndTheActivitySource()
     {
