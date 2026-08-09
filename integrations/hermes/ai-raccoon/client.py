@@ -72,20 +72,27 @@ class _MCPClient:
 
     # -- lifecycle ----------------------------------------------------------
 
+    def _describe(self) -> str:  # pragma: no cover - overridden per transport
+        """What this client was trying to reach, for a failure message."""
+        return type(self).__name__
+
     def connect(self) -> None:
-        """Start the loop thread and establish the MCP session. Raises on failure."""
+        """Start the loop thread and establish the MCP session. Raises AiRaccoonError on failure."""
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         future = asyncio.run_coroutine_threadsafe(self._open(), self._loop)
         try:
             future.result(timeout=CONNECT_TIMEOUT_S)
-        except Exception:
+        # BaseException, not Exception: anyio cancels the caller when a sibling task fails, so the
+        # real cause arrives as asyncio.CancelledError — outside Exception, and with an empty str().
+        except BaseException as e:
             # Never leave the pending _open task behind: a stdio spawn that
             # completes after the timeout would leak the child process.
             future.cancel()
             self.close()
-            raise
+            reason = str(e) or type(e).__name__
+            raise AiRaccoonError(f"ai-raccoon connect to {self._describe()} failed: {reason}") from e
 
     def close(self) -> None:
         if self._closed:
@@ -159,6 +166,9 @@ class StdioClient(_MCPClient):
         self._binary = binary
         self._args = list(args or [])
 
+    def _describe(self) -> str:
+        return " ".join([self._binary, *self._args])
+
     async def _open(self) -> None:
         from mcp import ClientSession
         from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -192,6 +202,10 @@ class HttpClient(_MCPClient):
         self._url = url
         self._token_file = token_file
         self._http_client = None
+
+    def _describe(self) -> str:
+        sent = "sent" if self._auth_headers() else "not sent"
+        return f"{self._url} ({TOKEN_HEADER} {sent}; token file {self._token_file})"
 
     def _auth_headers(self) -> Dict[str, str]:
         if not self._token_file or not _is_loopback_url(self._url):
