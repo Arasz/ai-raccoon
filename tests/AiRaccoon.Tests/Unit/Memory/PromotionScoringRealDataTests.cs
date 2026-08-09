@@ -44,48 +44,67 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
     // usefulness assignment is deterministic — verified directly against PromotionScorer, not asserted
     // from memory.
 
+    // Thresholds below are derived from a measurement taken through PromotionScorer at test time
+    // (MeasureSpearman), then offset — never hardcoded — so these tests stay valid across any change
+    // to the scorer's channel priors: see the task that added this comment for the prior break these
+    // hardcoded numbers caused.
+
     [Fact]
     public void MinSpearmanGate_ReportsFixtureNameAndBothMeasurements_WhenBelowFloor()
     {
+        var rows = CoreRows([4, 3, 2, 1, 0]);
+        var measured = MeasureSpearman(rows);
+        var minSpearman = measured + 0.10; // strictly above what was measured: floor must fail
+
         var dir = CreateTempDir();
-        WriteFixture(dir, "reversed.json", CoreRows([4, 3, 2, 1, 0]));
+        WriteFixture(dir, "reversed.json", rows);
         var manifestPath = WriteManifest(dir, "manifest.json", new
         {
-            fixtures = new[] { new { name = "reversed", path = "reversed.json", minSpearman = 0.5 } }
+            fixtures = new[] { new { name = "reversed", path = "reversed.json", minSpearman } }
         });
 
         var ex = Should.Throw<ShouldAssertException>(() => Verify(manifestPath));
 
         ex.Message.ShouldContain("reversed");
-        ex.Message.ShouldContain("-1.000");
-        ex.Message.ShouldContain("0.50");
+        ex.Message.ShouldContain(measured.ToString("F3", CultureInfo.InvariantCulture));
+        ex.Message.ShouldContain(minSpearman.ToString("F2", CultureInfo.InvariantCulture));
     }
 
     [Fact]
     public void PrototypeToleranceGate_Fails_WhenMeasuredSpearmanMissesTheBand()
     {
+        var rows = CoreRows([0, 1, 2, 3, 4]);
+        var measured = MeasureSpearman(rows);
+        const double tolerance = 0.03;
+        var prototypeSpearman = measured - 0.5; // far outside the tolerance band: parity must miss
+
         var dir = CreateTempDir();
-        WriteFixture(dir, "forward.json", CoreRows([0, 1, 2, 3, 4]));
+        WriteFixture(dir, "forward.json", rows);
         var manifestPath = WriteManifest(dir, "manifest.json", new
         {
             fixtures = new[]
             {
-                new { name = "forward", path = "forward.json", prototypeSpearman = 0.0, prototypeTolerance = 0.03 }
+                new { name = "forward", path = "forward.json", prototypeSpearman, prototypeTolerance = tolerance }
             }
         });
 
         var ex = Should.Throw<ShouldAssertException>(() => Verify(manifestPath));
 
         ex.Message.ShouldContain("forward");
-        ex.Message.ShouldContain("1.000");
-        ex.Message.ShouldContain("0.000");
+        ex.Message.ShouldContain(measured.ToString("F3", CultureInfo.InvariantCulture));
+        ex.Message.ShouldContain(prototypeSpearman.ToString("F3", CultureInfo.InvariantCulture));
     }
 
     [Fact]
     public void SubsetGate_FailsIndependently_OfTheFullSetGate()
     {
-        var dir = CreateTempDir();
         var rows = CoreRows([0, 1, 2, 3, 4]).Concat(OutlierRows([4, 0, 2], startId: 1001)).ToList();
+        var fullMeasured = MeasureSpearman(rows);
+        var subsetMeasured = MeasureSpearman(rows, id => id > 1000);
+        var fullMinSpearman = fullMeasured - 0.10; // strictly below: full-set gate must pass
+        var subsetMinSpearman = subsetMeasured + 0.10; // strictly above: subset gate must fail
+
+        var dir = CreateTempDir();
         WriteFixture(dir, "mixed.json", rows);
         var manifestPath = WriteManifest(dir, "manifest.json", new
         {
@@ -93,8 +112,8 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
             {
                 new
                 {
-                    name = "mixed", path = "mixed.json", minSpearman = 0.5,
-                    subsets = new[] { new { name = "organic", minIdExclusive = 1000, minSpearman = 0.5 } }
+                    name = "mixed", path = "mixed.json", minSpearman = fullMinSpearman,
+                    subsets = new[] { new { name = "organic", minIdExclusive = 1000, minSpearman = subsetMinSpearman } }
                 }
             }
         });
@@ -102,18 +121,22 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         var ex = Should.Throw<ShouldAssertException>(() => Verify(manifestPath));
 
         ex.Message.ShouldContain("mixed/organic");
-        ex.Message.ShouldContain("-0.500");
+        ex.Message.ShouldContain(subsetMeasured.ToString("F3", CultureInfo.InvariantCulture));
         ex.Message.ShouldNotContain("mixed: full-set");
     }
 
     [Fact]
     public void ManifestRelativePath_ResolvesAgainstManifestDirectory()
     {
+        var rows = CoreRows([0, 1, 2, 3, 4]);
+        var measured = MeasureSpearman(rows);
+        var minSpearman = measured - 0.10; // strictly below: gate must pass
+
         var dir = CreateTempDir();
-        WriteFixture(dir, "labeled.json", CoreRows([0, 1, 2, 3, 4]));
+        WriteFixture(dir, "labeled.json", rows);
         var manifestPath = WriteManifest(dir, "manifest.json", new
         {
-            fixtures = new[] { new { name = "relative", path = "labeled.json", minSpearman = 0.5 } }
+            fixtures = new[] { new { name = "relative", path = "labeled.json", minSpearman } }
         });
 
         Should.NotThrow(() => Verify(manifestPath));
@@ -143,17 +166,23 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
     [Fact]
     public void AllDeclaredGates_Pass_WhenMeasurementsClearEveryThreshold()
     {
+        var rows = CoreRows([0, 1, 2, 3, 4]);
+        var fullMeasured = MeasureSpearman(rows);
+        var subsetMeasured = MeasureSpearman(rows, id => id > 2);
+        var fullMinSpearman = fullMeasured - 0.10; // strictly below: full-set gate must pass
+        var subsetMinSpearman = subsetMeasured - 0.10; // strictly below: subset gate must pass
+
         var dir = CreateTempDir();
-        WriteFixture(dir, "clean.json", CoreRows([0, 1, 2, 3, 4]));
+        WriteFixture(dir, "clean.json", rows);
         var manifestPath = WriteManifest(dir, "manifest.json", new
         {
             fixtures = new[]
             {
                 new
                 {
-                    name = "clean", path = "clean.json", minSpearman = 0.5,
-                    prototypeSpearman = 1.0, prototypeTolerance = 0.03,
-                    subsets = new[] { new { name = "upper", minIdExclusive = 2, minSpearman = 0.5 } }
+                    name = "clean", path = "clean.json", minSpearman = fullMinSpearman,
+                    prototypeSpearman = fullMeasured, prototypeTolerance = 0.03, // exact parity: delta 0
+                    subsets = new[] { new { name = "upper", minIdExclusive = 2, minSpearman = subsetMinSpearman } }
                 }
             }
         });
@@ -338,6 +367,33 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
             candidate.AccessCount, DateTimeOffset.FromUnixTimeSeconds(candidate.CreatedAt), null);
         var (score, _) = PromotionScorer.Score(row, candidate.ProjectId, allProjectIds);
         return score;
+    }
+
+    /// <summary>Runs the same candidate-building, scoring and Spearman path as <see cref="VerifyFixture" />
+    /// / <see cref="VerifySubset" /> directly against <see cref="PromotionScorer" />, so a gate test can set
+    /// its thresholds as an offset from a value actually measured through the scorer rather than a number
+    /// hand-calibrated against a particular prior table.</summary>
+    private static double MeasureSpearman(
+        IEnumerable<(int Id, string SourceFile, int Usefulness)> rows, Func<int, bool>? idFilter = null)
+    {
+        var candidates = rows.Select(r => new LabeledCandidate
+        {
+            Id = r.Id,
+            ProjectId = "proj-a",
+            Hash = $"h{r.Id}",
+            Path = r.SourceFile,
+            Value = NeutralText,
+            SourceFile = r.SourceFile,
+            CreatedAt = 1750000000L,
+            AccessCount = 0,
+            Rating = 0.5,
+            Usefulness = r.Usefulness
+        }).ToList();
+
+        var allProjectIds = candidates.Select(c => c.ProjectId).Distinct().ToList();
+        var scores = candidates.ToDictionary(c => c.Id, c => Score(c, allProjectIds));
+        var subset = idFilter is null ? candidates : candidates.Where(c => idFilter(c.Id)).ToList();
+        return Spearman(subset.Select(c => scores[c.Id]).ToList(), subset.Select(c => (double)c.Usefulness).ToList());
     }
 
     /// <summary>Average-rank Spearman, matching promotion-scoring-eval/eval.py's rank() so the C#
