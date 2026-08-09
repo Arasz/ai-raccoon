@@ -69,7 +69,7 @@ boundary:
 Two different files, disjoint diffs, both test suites green. A file-scoped claims board never fires:
 A never asks about a file it is not touching. A topic board fires only if A and B independently
 choose the same free-text topic — which is the correlated-agreement failure the note itself names
-as its sharpest lesson (`:293`): *"two independent expert opinions agreeing did not make them right."*
+as its sharpest lesson (`:290-291`): *"two independent expert opinions agreeing did not make them right."*
 
 That coupling **is** a static edge, and this repo already runs the `code-review-graph` MCP server.
 Incident 2 is a graph query, not a message. Routing it to the board is the proposal's weakest claim.
@@ -113,7 +113,7 @@ reads `ClientInfo`.
 
 **Recommendation: do not introduce an agent identity. Use the git worktree path as the lane key.**
 It is *observed* rather than claimed — computed by a hook from `cwd` — which matters because the
-note's own stated limit (`:313`) is that "everything relied on accurate self-report." A
+note's own stated limit (`:312-313`) is that "everything relied on accurate self-report." A
 self-declared `agentId` fails open: two careless agents pick `"claude"` and silently impersonate
 each other. A worktree path survives restart, distinguishes lanes, and is already this project's
 unit of isolation (31 worktrees today).
@@ -276,6 +276,81 @@ The honest counter to that counter: **T1 does not catch incident 2 either.** So 
 semantic class is an argument that T1 is *insufficient*, not that T2 is *right* — since T2 catches
 it only by naming luck. If lane count is the real worry, the next move after T0 is a semantic
 signal from the code graph, not a bigger board.
+
+## Owner rulings — 2026-08-09
+
+All 17 items APPROVED. Full record: `docs/work/2026-08-09-memory-as-a-communication-layer-feedback.md`.
+Five notes changed the plan; the adjusted sequencing is below.
+
+### What the notes changed
+
+- **C1 — TTL gets its own tool, not a `memory_write` parameter.** *"Only new tool, we use it for
+  memory degradation algorithm."* So the TTL surface is a dedicated tool feeding the degradation
+  path, not a parameter bolted onto the write path.
+- **C3 — wire `agentId`, do not delete it.** This does not conflict with D2. D2 rules that we build
+  no identity *system* for coordination and key lanes on the observed worktree path; C3 says the
+  provenance plumbing that already exists should be finished rather than removed. Both hold.
+- **C4 — withdrawn as stated, because ADR-0020 deletes it.** See below.
+- **C5 — scope the waiting list to the asking project.** *"530 is almost nothing, but ... other
+  projects should not be interested in the other projects' waiting lists."* This is better than the
+  top-N cap proposed above: it bounds the envelope by construction (one project, always) instead of
+  by a tuned constant, and it removes a cross-project information leak nobody asked for.
+- **D7 — deferred, not changed.** *"Other agent is working on OTLP refactor right now."* The
+  code-graph routing for incident 2 targets the OTLP files under active edit; it waits.
+- **O1 — ADR-0020 will be merged.** Treated as landing, not as speculative.
+- **O2 — one machine today, but a real potential use case.** So: do not design cross-machine out.
+  Notices stay expressible as `entries` (which sync) rather than as a table that would not.
+
+### ADR-0020 changes the sequencing
+
+`ADR-0020` (always-on HTTP; the stdio entry point becomes a proxy) is accepted and in flight in
+another worktree. It is not merely a transport change — it collapses N independently-composed
+servers into one. Three consequences for this plan:
+
+1. **C4 resolves itself; do not do it.** The duplication exists because two hosts each compose a
+   full server and each register the tool list (`McpServerSetup.cs:57-64` stdio, `:143-150` web).
+   When stdio becomes a proxy it registers no tools at all — it forwards. Extracting a shared
+   `WithAiRaccoonTools()` helper would be edits to a file that is being rewritten underneath us,
+   to fix a duplication that is being deleted. **Withdrawn.**
+2. **C2's reaper gets simpler and more reliable.** Today a periodic job in a stdio process is
+   unsafe — that is exactly why `ExtractionHostedService` is gated to HTTP transports
+   (`Dependencies.cs:114-120`). One long-lived HTTP host gives the sweep timer a single
+   unambiguous home, with no cross-process lease of the kind `watches.scan_owner` needs.
+3. **The proxy is the honest place to capture lane identity.** It is the one component that sees a
+   distinct client per agent session, along with that client's working directory — which is the
+   observed worktree path D2 asks for, obtained without asking the caller to declare anything.
+   This is a better answer than either a self-declared `agentId` or a hook-computed path, and it
+   only becomes available once the proxy exists.
+
+### Adjusted order of work
+
+| Order | Item | Gate | Blocked by |
+|---|---|---|---|
+| 1 | **D1** — the two `PreToolUse` hooks | red/green transcript per hook | nothing — no server file touched |
+| 2 | **C5** — scope the waiting list to the asking project | envelope carries one project's counts | nothing (`ToolGate`/`PromotionMeta` only) |
+| 3 | **C2** — sweep reaper on a timer | expired row survives before wiring, gone after one tick | ADR-0020 merge |
+| 4 | **C1** — dedicated TTL tool for degradation | a row set to expire actually expires | ADR-0020 merge (adds a tool) |
+| 5 | **C3** — wire the provenance parameters | workspace rows carry the values the tool accepts | ADR-0020 merge |
+| 6 | **D4** — claim surface on `label:` contexts | only after 3 and 4 prove the reaper fires | 3, 4 |
+| 7 | **D7** — route semantic coupling to the code graph | — | the in-flight OTLP refactor |
+
+C4 is struck. D3, D5 and D6 are decisions not to build, and need no work beyond this record.
+
+Items 3–5 all touch files ADR-0020 is rewriting. Starting them now would mean resolving conflicts
+against a moving target, which is the same mistake incident 6 in the source note describes.
+
+### On C6's question
+
+The owner asked, against the finding that the envelope advisory is ignored: *"Yeah do you read it?
+Do you notice what is in it?"*
+
+Honestly: no. The block was in this session's context on every `memory_search` from the first call,
+and it did not change anything until it was deliberately gone looking for as evidence for this
+document. It then grew from 616 to 696 queued items, and the oldest wait from 16.6 to 16.8 hours,
+during the writing of the section that cites it — and that went unremarked until a later pass.
+
+That is the finding demonstrating itself on its own author, and it is the strongest argument in
+this document for D3.
 
 ## On the article
 
