@@ -133,7 +133,10 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   casing of `false` in `sweep.enabled.global` disarms it, and only an explicit `false`
   does — an absent or unreadable row leaves the reaper armed. Nothing without a per-entry
   TTL is ever a candidate, so a bank that has never called `memory_set_ttl` has nothing
-  to lose.
+  to lose. It honours the same per-project access mode `memory_sweep` enforces at the
+  tool boundary: a project not in `full` mode is skipped, not reaped, even while the
+  reaper is armed and the pass is running against every other project (see
+  [ADR-0025](../adr/0025-the-sweep-reaper.md)).
 - **`memory_set_ttl`:** the only way to give an entry a TTL — without one it can never be
   swept. `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
   but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
