@@ -45,7 +45,11 @@ internal static partial class ServeRunner
             return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
         }
 
-        var app = McpServerSetup.CreateServerHost(serveConfig);
+        // Minted strictly before the Kestrel bind: once the port answers, the token file is on
+        // disk, so the proxy never has to poll for it (ADR-0020).
+        var tokenFile = new McpTokenFile(config.Options.DataRoot);
+        var app = McpServerSetup.CreateServerHost(serveConfig with { McpToken = await tokenFile.EnsureAsync(cancellationToken) });
+        Log.McpTokenReady(logger, tokenFile.Path);
         try
         {
             if (!TryResolveEncryptionKey(logger, app.Services.GetRequiredService<IEncryptionKeyResolver>(), out var encryptionKey))
@@ -230,5 +234,8 @@ internal static partial class ServeRunner
 
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url}")]
         public static partial void AttachedToExistingServer(ILogger logger, string url);
+
+        [LoggerMessage(EventId = 640, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
+        public static partial void McpTokenReady(ILogger logger, string tokenPath);
     }
 }

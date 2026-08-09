@@ -104,19 +104,26 @@ internal static partial class McpServerSetup
         }
 
         builder.ConfigureMcpServer(transports);
-        return builder.Build().ConfigureMcpEndpoints(transports, config.IdleTimeout > TimeSpan.Zero);
+        return builder.Build().ConfigureMcpEndpoints(config, transports);
     }
 
     extension(WebApplication webApplication)
     {
-        private WebApplication ConfigureMcpEndpoints(IReadOnlyCollection<McpTransport> transports, bool armWatchdog)
+        private WebApplication ConfigureMcpEndpoints(ServerConfig config, IReadOnlyCollection<McpTransport> transports)
         {
             if (transports.Contains(McpTransport.Https))
             {
                 Log.HttpsTransportNotSupported(webApplication.Logger);
             }
 
-            if (armWatchdog)
+            if (config.McpToken is { } mcpToken)
+            {
+                // Ahead of the watchdog: an unauthorized caller must not keep the daemon alive
+                // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
+                webApplication.UseMiddleware<McpTokenGate>(mcpToken, new McpTokenFile(config.Options.DataRoot).Path);
+            }
+
+            if (config.IdleTimeout > TimeSpan.Zero)
             {
                 // Spliced between routing and endpoints (.NET 10): branches on /mcp so 404s on
                 // other paths never signal (docs/plans/2026-08-06-http-serve-mode-plan.md R4).
