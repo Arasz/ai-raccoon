@@ -54,6 +54,7 @@ plugins:
   ai-raccoon:
     transport: stdio      # stdio | http
     url: http://127.0.0.1:7721/mcp   # http mode
+    token_file: ~/.ai-raccoon/mcp-token   # http mode; read at connect, never copied into config.yaml
     binary: ai-raccoon    # stdio mode (resolved on PATH)
     binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
     quiet: true           # spawn the server with --quiet (all logs to a file, none on stdout/stderr)
@@ -70,7 +71,11 @@ plugins:
   `--data-root` flag, so `binary_args: ["--data-root", "/tmp/bank"]` is the way to point a
   spawned server at a temp bank.
 - **http:** the provider connects to a running server's Streamable HTTP endpoint —
-  useful when one long-running server should serve several clients.
+  useful when one long-running server should serve several clients. Reads
+  `token_file` (default `~/.ai-raccoon/mcp-token`) at connect and sends its
+  contents as `X-AiRaccoon-Token` — the header is sent **only** when `url`
+  resolves to a loopback host (`127.0.0.1`, `::1`, `localhost`); the token
+  itself is never copied into `config.yaml`.
 - `project_id` is derived `hermes-<profile>` unless overridden; every memory operation
   is scoped to it inside the shared `~/.ai-raccoon` bank.
 

@@ -105,32 +105,27 @@ the proxy too, which relays JSON-RPC frames without adding output of its own.
 ### Serve mode (HTTP)
 
 Bare `ai-raccoon` (the default `proxy` transport) starts `ai-raccoon serve`
-for you the first time any client touches memory — you normally never run
-`serve` by hand. This section covers the manual path: connecting an
-HTTP-native client straight to a long-lived server, or attaching to one the
-proxy already started.
+for you the first time any client touches memory, and reads the loopback
+token itself — you normally never run `serve` by hand and never see the
+token.
 
 `ai-raccoon serve` runs the same HTTP endpoint with an idle watchdog — after 4
 hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
 disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
 server, `serve` attaches to it and exits 0 (the first process owns the
-watchdog). `/mcp` requires the `X-AiRaccoon-Token` header: before binding,
-`serve` mints a random token into `<data-root>/mcp-token` (0600) and every
-caller — the proxy included — must present it; `/observability` stays open,
-unauthenticated. Background it and point a client at the URL:
+watchdog). `/mcp` requires `X-AiRaccoon-Token` or `Authorization: Bearer
+<token>`: before binding, `serve` mints a random token into
+`<data-root>/mcp-token` (0600) and every caller — the proxy included — must
+present one of the two; `/observability` stays open, unauthenticated.
+`serve --port 0` picks a random free port and reports it.
 
-```bash
-ai-raccoon serve > serve.log 2>&1 &            # POSIX
-hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
-```
-
-`serve --mcp-entry` prints the client config entry for the bound URL
-(`--format hermes|claude|all`; keep stderr out of the entry file:
-`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`) — the printed
-entry carries the URL only, not the token, so a client connecting this way
-(bypassing the proxy) must add the `X-AiRaccoon-Token` header itself, read
-from `<data-root>/mcp-token`. `serve --port 0` picks a random free port and
-reports it.
+**Advanced: connecting a client directly to `serve`'s URL, bypassing the
+proxy.** Bare `ai-raccoon` already handles the token for you, so nothing
+above needs this. It stays documented for two narrower cases: a client that
+cannot spawn a process at all, and bisecting a *proxy* failure with `curl` —
+the tool you need exactly when the default is down. The three working
+incantations (Hermes CLI, printed entry, Claude Code) are in
+[the direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced).
 
 A direct `ai-raccoon --transport http` launch (no `serve` verb) stays
 **ungated** — deliberate for now; see [SECURITY.md](SECURITY.md).

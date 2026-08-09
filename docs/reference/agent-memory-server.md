@@ -278,25 +278,93 @@ owning process keeps the watchdog, and the attached run never touches the bank.
 A busy port held by a foreign listener fails fast with exit code 3 and a
 `--port 0` hint.
 
-`/mcp` requires the `X-AiRaccoon-Token` header: before binding, `serve` mints
-a random token into `<data-root>/mcp-token` (0600, exclusive create, reused
-across restarts), and every request to `/mcp` must present it — the proxy
-reads the file after a successful probe and sends it automatically.
+`/mcp` requires `X-AiRaccoon-Token` or `Authorization: Bearer <token>` (the
+Bearer envelope added 2026-08-09, see
+[ADR 0020](../adr/0020-always-on-http-stdio-proxy.md) §"Amendment
+2026-08-09"): before binding, `serve` mints a random token into
+`<data-root>/mcp-token` (0600, exclusive create, reused across restarts), and
+every request to `/mcp` must present one of the two — the proxy reads the
+file after a successful probe and sends `X-AiRaccoon-Token` automatically.
 `/observability` stays unauthenticated by design (it returns only a PID and
 OTLP on/off state, nothing that touches the bank). A direct `ai-raccoon
 --transport http` launch (no `serve` verb) is **not** gated — see
 [SECURITY.md](../../SECURITY.md) for the reasoning and the known gaps.
 
-`serve --mcp-entry [--format hermes|claude|all]` prints the client config entry
-for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
-http://127.0.0.1:7721/mcp`) or Claude Code (`.mcp.json` `type: http` entry).
-The printed entry carries the URL only, not the token, so a client connecting
-this way (bypassing the proxy) must add the `X-AiRaccoon-Token` header itself,
-read from `<data-root>/mcp-token`. Keep stderr out of the entry file:
+`serve --mcp-entry [--format hermes|claude|all]` prints the client config
+entry for the actually-bound URL, now with a `headers` map carrying
+`X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}` alongside the URL — a
+placeholder, never a live token. Keep stderr out of the entry file:
 `ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`. One long-lived
 HTTP server avoids the ~5-minute stdio recycle of per-connection processes and
 lets the background extraction and bank-maintenance hosted services actually
-fire.
+fire. Turning that entry, or `hermes mcp add`'s own auth prompt, into a
+connection that actually authenticates is the advanced path below.
+
+#### Direct HTTP access (advanced)
+
+Bare `ai-raccoon` (the proxy) is the default, handles the token itself, and
+needs none of what follows. Connecting a client straight to `serve`'s URL,
+bypassing the proxy, is still genuinely useful for two narrower cases: a
+client that cannot spawn a process at all (a containerised or remote client,
+a gateway reaching in over a tunnel), and bisecting a **proxy** failure —
+when bare `ai-raccoon` is what's broken, `--transport http` plus `curl` is
+the diagnostic you reach for exactly when the default is down.
+
+Every incantation below uses single quotes, or an unquoted `$(...)` meant to
+expand immediately, around the token — `--header "X: ${VAR}"` in double
+quotes is expanded by *your own shell* before the CLI ever sees it, silently
+storing an empty or corrupted value. That footgun sits directly in the
+copy-paste path, which is why it is worth avoiding by construction rather
+than by care.
+
+**1 — Hermes, via the CLI's own auth prompt.** The token lands in
+`~/.hermes/.env`, never in `config.yaml`:
+
+```bash
+ai-raccoon serve > serve.log 2>&1 &
+hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
+#   "Does this server require authentication?" -> y
+#   "API key / Bearer token"                   -> paste the output of: cat ~/.ai-raccoon/mcp-token
+```
+
+`hermes mcp add` only prompts when the `.env` key for this server is empty —
+a retry against a *different* `--data-root` (a different token) gets a
+silent 401 with no prompt the second time round; edit the `.env` line by
+hand or start from a fresh profile.
+
+**2 — Hermes, via the printed entry.** Paste `entry.json` under
+`mcp_servers` in `~/.hermes/config.yaml`, then add the one `.env` line the
+placeholder resolves against:
+
+```bash
+ai-raccoon serve --mcp-entry > entry.json 2> serve.log &
+echo "AIRACCOON_MCP_TOKEN=$(cat ~/.ai-raccoon/mcp-token)" >> ~/.hermes/.env
+```
+
+**3 — Claude Code.** Verified against the installed CLI: `${VAR}` expansion
+in `.mcp.json` covers `command`, `args`, `env`, `url` and `headers`, and
+`${VAR:-default}` works. An unset variable is not a hard failure —
+`claude mcp list` prints a warning, but the connection still fires and sends
+the literal `${AIRACCOON_MCP_TOKEN}` string, which the server's 401 then
+names. Export the variable before adding the server, and single-quote the
+header so *your* shell leaves the placeholder alone for Claude Code to
+expand. Use `--scope local` (the default) or `--scope user` — **never
+`--scope project`**, which writes `.mcp.json`, the one file a repo is likely
+to commit; `local` and `user` both write `~/.claude.json`, which is per-user
+and untracked:
+
+```bash
+export AIRACCOON_MCP_TOKEN=$(cat ~/.ai-raccoon/mcp-token)
+claude mcp add --transport http --scope user ai-raccoon http://127.0.0.1:7721/mcp \
+  --header 'X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}'
+```
+
+None of the three commands above has been run by this change — the gate
+that makes `Authorization: Bearer` and the `${AIRACCOON_MCP_TOKEN}`
+placeholder real ships in a parallel lane. Treat all three as
+**untested-by-you**: the proof is
+[the regression-fix plan](../plans/2026-08-09-http-token-clients.md)'s own
+§E integration gate, run against a live `serve`, not this doc.
 
 `serve observability <counters|trace|otlp|pid> [--port <n>]` prints a ready-to-run
 diagnostic command for the **running** server, with its process id filled in. It
