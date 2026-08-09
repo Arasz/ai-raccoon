@@ -352,10 +352,20 @@ exists in the same class; the `-t` path just does not use it.
 
 ---
 
-## H9 — rating decays only on access: needs a ruling before any patch
+## H9 — rating decays only on access
 
-**Do not implement this without a decision from the owner.** It is listed here because it is a High
-finding, not because it is ready to fix.
+> **RULED, 2026-08-09.** The owner's ruling: the reaper exists to prune memories that are *not
+> used*, and memories should **decay** rather than disappear after a fixed time — a real decay
+> algorithm belongs in the product. That turns H9 from a bug fix into a design change, specified in
+> **`2026-08-09-h9-decay-design-brief.md`** — read that, not the paragraphs below, which are kept
+> only as the record of what was found.
+>
+> Headline from the design brief: `RatingPolicy.Rating(...)` has exactly **one** call site (the
+> search-hit bump), the rating is read in only two places, and it has **no influence on search
+> ranking at all**. A decay formula exists; a decay system does not. Measured on the live bank,
+> the change lands with **zero immediate deletions** (0 rows carry a TTL, max idle 3.9 days, and
+> the threshold crosses at ~22 idle days), so now is the safest moment to make it — but it must be
+> sequenced after H2 and H6, and after in-flight lane A1, which owns two of the files.
 
 `rating` is written only by `BumpAccessAsync`, which runs when an entry is returned by a search. An
 entry nobody searches keeps the column default `0.5`, above the `0.3` threshold, forever — so
