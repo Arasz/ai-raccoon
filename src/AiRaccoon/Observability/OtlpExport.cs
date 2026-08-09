@@ -44,14 +44,12 @@ internal static class OtlpExport
     }
 
     /// <summary>Endpoint/protocol/timeout stay explicit; other exporter config flows through the SDK's
-    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md).</summary>
-    private static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
+    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md). Internal, not private, for direct unit testing.</summary>
+    internal static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
     {
         options.Endpoint = SignalEndpoint(state, signalPath);
         options.Protocol = IsHttpProtobuf(state.Protocol) ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
-        // Bounds a single unreachable-collector export attempt from hanging a detached serve
-        // (docs/adr/0009-otlp-export.md).
-        options.TimeoutMilliseconds = 5_000;
+        options.TimeoutMilliseconds = OtlpExportState.ExportTimeoutMilliseconds;
     }
 
     /// <summary>Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the

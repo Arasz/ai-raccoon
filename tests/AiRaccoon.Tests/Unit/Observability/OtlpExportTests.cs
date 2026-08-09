@@ -9,6 +9,7 @@ using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Shouldly;
@@ -278,6 +279,21 @@ public sealed class OtlpExportTests : IDisposable
         var endpoint = OtlpExport.SignalEndpoint(state, "/v1/traces");
 
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
+    }
+
+    // Pins the per-export timeout to its one named source (ADR-0009). The SDK discards the
+    // OtlpExporterOptions instance once it derives the exporter's transmission handler from it
+    // (opentelemetry-dotnet, OtlpMetricExporter/OtlpTraceExporter ctors), so TimeoutMilliseconds
+    // does not survive into the built provider for reflection — ConfigureExporter is tested
+    // directly instead, the same way SignalEndpoint already is.
+    [Fact]
+    public void ConfigureExporter_SetsTimeoutToTheNamedConstant()
+    {
+        var options = new OtlpExporterOptions();
+
+        OtlpExport.ConfigureExporter(options, Enabled, "/v1/traces");
+
+        options.TimeoutMilliseconds.ShouldBe(OtlpExportState.ExportTimeoutMilliseconds);
     }
 
     // Must run through the real CreateWebHost pipeline (ADR-0009 "Configuration channel"): the SDK
