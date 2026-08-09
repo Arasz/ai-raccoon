@@ -163,6 +163,18 @@ process for a `url` entry, so nothing would ever start the server.
   would become a child of a remote parent, `ParentBased` would honour the proxy's unrecorded
   Activity, and every server span would be dropped. A test pins the absence of the header on the
   wire; ADR-0021's sampler decision depends on it.
+- **Constraint — the backend's error status, and why `JsonRpcErrorHandler` exists.** From revision
+  `2026-07-28` on — the SDK's default, so the proxy's own session negotiates it — the backend maps
+  JSON-RPC error codes onto HTTP statuses: an unknown method answers **404 with
+  `text/event-stream`** carrying `-32601` and a correlating id. `StreamableHttpClientSessionTransport`
+  converts an error body only when the content type is `application/json`, so the client would
+  otherwise get a bare `HttpRequestException` that the SDK flattens to `-32603`, and
+  `resources/list` / `completion/complete` would read as "backend broken" rather than "capability
+  absent". On `2025-06-18` and `2025-11-25` the same methods answer **200**, which is why the
+  handler looks dead if it is measured on a pinned older revision. It is driven off the body and
+  never off the status, and only rewrites an error carrying an id the client can correlate — a null
+  id (the token gate's 401, a malformed POST's 400) stays a failure, because rewritten to 200 it
+  would correlate with nothing and the SDK would drop it.
 - **Negative — `OTEL_*` becomes machine-wide, decided by whichever client starts the backend
   first.** The spawned `serve` inherits the proxy's environment, and the proxy is spawned by every
   MCP client. So one project's `.mcp.json` `env` block fixes the OTLP configuration for every other

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using AiRaccoon.Setup.Serve;
@@ -25,6 +26,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("proxy-wire");
     private readonly List<string> _headerNames = [];
+    private readonly List<int> _postStatuses = [];
     private WebApplication _backend = null!;
     private int _port;
 
@@ -44,6 +46,13 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
             }
 
             await next();
+            if (HttpMethods.IsPost(context.Request.Method))
+            {
+                lock (_postStatuses)
+                {
+                    _postStatuses.Add(context.Response.StatusCode);
+                }
+            }
         });
         _backend.MapMcp("/mcp");
         await _backend.StartAsync(TestContext.Current.CancellationToken);
@@ -102,21 +111,26 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     Clients detect unsupported capabilities by MethodNotFound. The backend answers an unknown
-    ///     method with an error status whose body the SDK only converts when it is application/json,
-    ///     so without the proxy's recovery handler both code and message collapse to -32603.
+    ///     Clients detect unsupported capabilities by MethodNotFound. On the revisions that map
+    ///     JSON-RPC errors onto HTTP statuses the backend answers an unknown method with 404, and the
+    ///     SDK converts an error body only when it is application/json — so without the proxy's
+    ///     recovery handler the code collapses to -32603 (ADR-0020, "the backend's error status").
     /// </summary>
     [Fact]
     public async Task UnknownMethod_KeepsItsMethodNotFoundCode()
     {
         await using var client = await AiRaccoonProcess.ConnectAsync(
             ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+        ForgetPostStatuses(); // the handshake negotiates down through 400s of its own
 
         var failure = await Should.ThrowAsync<McpProtocolException>(async () =>
             await client.SendRequestAsync(
                 new JsonRpcRequest { Method = "x/unknown", Id = new RequestId("wire-1") },
                 TestContext.Current.CancellationToken));
 
+        // The premise, asserted rather than assumed: on a revision that answered 200 here the code
+        // would survive on its own, and this test would keep passing with the handler deleted.
+        PostStatuses().ShouldContain(status => status >= 400);
         failure.ErrorCode.ShouldBe(McpErrorCode.MethodNotFound);
     }
 
@@ -125,6 +139,22 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
         lock (_headerNames)
         {
             return [.. _headerNames];
+        }
+    }
+
+    private int[] PostStatuses()
+    {
+        lock (_postStatuses)
+        {
+            return [.. _postStatuses];
+        }
+    }
+
+    private void ForgetPostStatuses()
+    {
+        lock (_postStatuses)
+        {
+            _postStatuses.Clear();
         }
     }
 
