@@ -143,7 +143,7 @@ public sealed partial class PromotionQueueService(
 
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
-        Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, skipped, absorbed);
+        Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, absorbed, skipped);
         return new PromoteOutcome(promoted, skipped, remaining.PerProject, absorbed) { Failures = failures };
     }
 

@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -147,6 +148,30 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         second.Absorbed.ShouldBe(1, "the race loser is absorbed, not skipped: its snapshot predates the winner's row");
         store.CreatedShares.ShouldBe(["h1"], "exactly one share actually created a row");
         store.SharedRows.ShouldBe(1, "exactly one shared row exists for the raced content");
+    }
+
+    [Fact]
+    public async Task Promote_TwoChunksOfOneFile_LogLinePinsFieldOrder()
+    {
+        // The live test caught the EventId 702 args swapped (promoted/absorbed). Pin the order:
+        // {Promoted} shared, {Absorbed} absorbed into existing files, {Skipped} duplicate-skipped.
+        var logger = new ListLogger();
+        var service = new PromotionQueueService(
+            new SqlitePromotionQueueStore(_factory, _clock),
+            new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
+                NullLogger<SqliteMemoryStore>.Instance),
+            new UniformCountEvictionPolicy(), new SpyMetrics(), logger, _clock);
+        await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
+        await SeedChunkAsync("acme", "h2", "docs/a.md", "chunk two", TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("acme",
+            [Candidate("h1", "docs/a.md", "chunk one", 5.0), Candidate("h2", "docs/a.md", "chunk two", 4.0)],
+            TestContext.Current.CancellationToken);
+
+        await service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
+
+        logger.Messages.ShouldContain(m => m.Contains(
+            "Promoted from the queue for acme: 1 shared, 1 absorbed into existing files, 0 duplicate-skipped"),
+            "the log line must report promoted and absorbed in their real order — a swapped pair was shipped once and caught live");
     }
 
     /// <summary>Queue store whose rows the test controls (copy of the race-tests shape).</summary>
@@ -306,6 +331,17 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
             text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private sealed class ListLogger : ILogger<PromotionQueueService>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 
     private sealed class RecordingMetrics : IPromotionQueueMetrics
