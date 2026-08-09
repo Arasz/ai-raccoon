@@ -129,19 +129,88 @@ Relax `ttlDays.HasValue` from a **mandatory** conjunct to an optional override:
 tool description currently tells agents that decay is a matter of time, which is wrong today and
 would still be wrong after change 1.
 
-### The hazard this ruling creates, and what to do about it
+### Watched-file entries are excluded — RULED 2026-08-09
 
-**Watched-file-derived entries must be excluded from rating-driven pruning, or healed after it.**
-A chunk indexed from a file on disk is not "unwanted" merely because nobody searched it — the
-source of truth still exists. Worse, pruning it is *not self-healing*: the watch digest compares
-file hashes, so an unchanged file is never re-ingested and the chunk stays missing from the index
-until someone edits the file. The measured bank makes this the dominant case, not a corner: the
-`max idle 3.9 days` figure above is itself evidence that re-ingestion keeps resetting `created_at`
-for watched content.
+**Decision: exclude file-derived entries from rating-driven deletion.** The reasoning holds: a chunk
+indexed from a file on disk is not "unwanted" merely because nobody searched it, the source of truth
+still exists, and pruning it is *not self-healing* — the watch digest compares file hashes, so an
+unchanged file is never re-ingested and the chunk simply stays missing from the index until someone
+edits it.
 
-Recommendation: exclude rows with a non-null `source_file` from rating-driven deletion (they are
-already reproducible from disk, so they need eviction, not deletion), or make the watcher treat a
-missing chunk as a reason to re-ingest. Decide explicitly; do not leave it implied.
+**RULED, 2026-08-09 (second clarification): decay-driven deletion affects ONLY "manual" memories —
+never watch-created, never file-derived.** That makes the predicate simple and strict:
+
+> **An entry is eligible for rating-driven deletion only if it has no file provenance at all:
+> `source_file IS NULL`.**
+
+Anything carrying a `source_file` is out of scope for deletion, whether or not a watch currently
+covers its path. The 152 rows I earlier proposed keeping in scope (a `source_file` no watch root
+covers) are **excluded too** — they name a file, so they are file-derived by the owner's rule. My
+earlier "watch-covered" refinement below is superseded; it is kept only to record why the simpler
+rule was chosen.
+
+On the live bank this makes the eligible population **30 rows out of 13,289 (0.2%)**.
+
+**Implementer's note — confirm the discriminator before relying on it.** `source_file` is written by
+both paths: `FileIngestor` sets it during ingestion, and `MemoryWriteRequest.SourceFile` is an
+optional argument on `memory_write`, so an agent *may* set it on a hand-written note. Under this
+ruling that is the correct outcome (an agent that declares a source file has declared file
+provenance), but if a cleaner ingestion marker exists, prefer it and say so. Do **not** invert the
+default: an entry whose provenance cannot be established must be treated as file-derived and left
+alone, because the failure mode of over-deleting is unrecoverable and the failure mode of
+under-deleting is a slightly larger bank.
+
+**Open sub-decision, flagged not assumed:** this ruling is stated in terms of *deletion*. Whether
+decay should also damp the **search ranking** of file-derived entries is a separate question and is
+*not* treated as ruled here. My recommendation is yes — damping loses nothing (the row is never
+deleted, only ranked lower), it is fully reversible, and it is the only lever that reaches the 98.6%
+of the bank that deletion no longer touches. But it needs an explicit yes before it is built.
+
+---
+
+*(Superseded analysis, retained as the record of why the strict rule was chosen.)*
+
+**The obvious predicate needed care.** `source_file` is *not* a
+watcher-only column — plain `memory_write` accepts a `sourceFile` argument, so an agent note that
+merely cites a path carries one too. Measured on the live bank:
+
+| Predicate | Excluded | Left prunable |
+|---|---|---|
+| `source_file IS NOT NULL` (naive) | 13,259 (99.8%) | **30 rows** (0.2%) |
+| `source_file` lies under a registered watch root | 13,107 (98.6%) | **182 rows** (1.4%) |
+
+Use the second. The 152-row difference is entries naming a path no watch covers — agent notes
+citing a source, or stale roots. Those are *not* reproducible from disk, so they must decay
+normally; excluding them would be a bug, not caution. The bank has 7 registered watch roots, so
+the predicate is cheap to evaluate.
+
+### What this exclusion means for the feature — read this before building it
+
+**On the bank that actually exists, the exclusion makes decay-driven *deletion* nearly inert.**
+99.8% of project rows are file-derived; after the ruling, the reaper's entire target population is
+**182 rows out of 13,289 — about 1.4%.**
+
+That is not an argument against the ruling. It is an argument about which half of the design carries
+the value:
+
+- **Change 2 (decay damps ranking) is the whole benefit for 98.6% of this bank.** A stale doc chunk
+  that nobody reads should stop crowding search results — and damping costs nothing, loses nothing,
+  and is reversible. For file-derived content this is the *only* mechanism that can help, because
+  deletion is now off the table for it by ruling.
+- **Change 3 (deletion beyond a TTL) applies to ~1.4% of rows today.** Worth doing, and correct, but
+  it is a tail case rather than the headline.
+
+**So the staging below is reordered: ranking first, deletion last.** If only one of the three lands,
+it should be change 2. The honest framing for anyone reading this later: the owner asked to prune
+unused memories; the measurement says that on this bank "unused" is overwhelmingly *file-derived and
+therefore protected*, so the practical form of forgetting here is **fading, not deleting**.
+
+One consequence to keep in view: excluded rows still accumulate. If file-derived content is never
+deleted, the bank grows monotonically with the docs it watches, and the ceiling is the corpus size
+rather than a retention policy. That is probably fine — it is bounded by disk and by what the watch
+roots cover — but it should be a stated position rather than an accident. If it ever stops being
+fine, the answer is eviction-with-reingest (drop the chunk *and* clear the watch digest so the
+watcher rebuilds it), not deletion.
 
 ## Staging — how to land this without a cliff
 
