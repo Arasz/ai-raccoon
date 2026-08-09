@@ -40,14 +40,25 @@ internal static partial class ServeRunner
         // Probe first, before bank/key/embedding work (docs/plans/2026-08-06-http-serve-mode-plan.md R14):
         // attach mode never arms the watchdog, touches the bank, or honors --idle-timeout.
         var url = $"http://127.0.0.1:{port}/mcp";
+        var restarting = parsed.ParseResult.GetValue(CliCommandTree.ServeRestartOption);
+        var tokenFile = new McpTokenFile(config.Options.DataRoot);
         if (await Probe.RespondsAsync(port, cancellationToken))
         {
-            return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
+            if (!restarting)
+            {
+                return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
+            }
+
+            var restart = await new ServerRestart(Probe, logger).CycleAsync(port, tokenFile, cancellationToken);
+            if (RestartRefusal(restart, port, tokenFile.Path) is { } refusal)
+            {
+                await stderr.WriteLineAsync(refusal);
+                return ExitCode.RestartFailed;
+            }
         }
 
         // Minted strictly before the Kestrel bind: once the port answers, the token file is on
         // disk, so the proxy never has to poll for it (ADR-0020).
-        var tokenFile = new McpTokenFile(config.Options.DataRoot);
         if (await tokenFile.EnsureAsync(cancellationToken) is not { } mcpToken)
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
@@ -80,6 +91,16 @@ internal static partial class ServeRunner
             // actionable PortInUse line. Never auto-fallback to a random port.
             if (await Probe.RespondsAsync(port, cancellationToken))
             {
+                if (restarting)
+                {
+                    // A restart that attached would report success for the server it was asked
+                    // to replace: another start won the port, and that has to be said out loud.
+                    Log.RestartLostThePort(logger, port);
+                    await stderr.WriteLineAsync(
+                        $"ai-raccoon: restart on port {port} did not take — another server took the port while this one was starting; check it with 'ai-raccoon serve observability pid --port {port}'");
+                    return ExitCode.RestartFailed;
+                }
+
                 return await ReportAttachedAsync(url, parsed, stdout, stderr, logger);
             }
 
@@ -171,6 +192,22 @@ internal static partial class ServeRunner
         return exception.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The operator line for a restart that cannot go ahead, or null when `serve` may bind:
+    /// nothing was listening, it stopped, or the listener is not ours and the bind will say so.</summary>
+    private static string? RestartRefusal(RestartResult restart, int port, string tokenPath) =>
+        restart.Outcome switch
+        {
+            RestartOutcome.Nothing or RestartOutcome.Stopped or RestartOutcome.Foreign => null,
+            RestartOutcome.NoToken =>
+                $"ai-raccoon: cannot restart the server on port {port}: {tokenPath} holds no token, so it cannot be asked to stop — it may serve another data root; stop it yourself, or serve on another port",
+            RestartOutcome.Refused =>
+                $"ai-raccoon: cannot restart the server on port {port}: it refused the token in {tokenPath} — it serves another data root; stop it yourself, or serve on another port",
+            RestartOutcome.Unsupported =>
+                $"ai-raccoon: cannot restart the server on port {port}: the ai-raccoon {restart.Version} serving it (pid {restart.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
+            _ =>
+                $"ai-raccoon: restart on port {port} timed out: the server (pid {restart.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again"
+        };
+
     private static async Task<int> ReportAttachedAsync(string url, CliParseResult parsed, TextWriter stdout,
         TextWriter stderr, ILogger logger)
     {
@@ -249,5 +286,9 @@ internal static partial class ServeRunner
         [LoggerMessage(EventId = 607, Level = LogLevel.Error,
             Message = "ai-raccoon: cannot read or create the MCP token at {TokenPath} — check its permissions, or remove it and start serve again")]
         public static partial void McpTokenUnavailable(ILogger logger, string tokenPath);
+
+        [LoggerMessage(EventId = 608, Level = LogLevel.Error,
+            Message = "ai-raccoon: restart on port {Port} did not take — another server took the port while this one was starting")]
+        public static partial void RestartLostThePort(ILogger logger, int port);
     }
 }

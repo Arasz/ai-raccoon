@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
@@ -44,6 +45,30 @@ public sealed class ObservabilityEndpointTests : IDisposable
 
             json.RootElement.GetProperty("name").GetString().ShouldBe("ai-raccoon");
             json.RootElement.GetProperty("pid").GetInt32().ShouldBe(Environment.ProcessId);
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task Get_ReportsTheRunningBinarysVersion()
+    {
+        // The discriminator `serve --restart` needs (ADR-0022): without it nothing on the wire
+        // says which binary answers, which is exactly the mixed-binary lockout ADR-0019 names.
+        using var env = await AcquireCleanEnvAsync();
+        var port = FreePort();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var json = await GetObservabilityAsync(port);
+
+            json.RootElement.GetProperty("version").GetString()
+                .ShouldBe(typeof(AiRaccoon.Observability.ServerInfo).Assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion);
         }
         finally
         {
