@@ -79,15 +79,16 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   bank-wide count with `capacity` absent. No response names another project.
 - **`memory_share_extract(mode=promote)` result shape:** `candidates` is always `[]` in promote
   mode (it is only populated by `propose`). `promotedHashes` are the hashes whose share actually
-  CREATED a shared row — never a claim for a row that already existed. The shared tier holds
-  **one row per source file: the first chunk promoted for it, in queue order
-  (`score DESC, created ASC`)** — chunks already promoted or evicted earlier don't participate.
-  That is intent, not a schema guarantee: the path pre-check is per-connection sequential, so
-  concurrent same-path promotes can still create two rows. `absorbed` counts queued chunks that
-  were claimed but folded into a file the tier already represents (or lost an insert race to a
-  concurrent caller) — they are dropped from the queue, not reported promoted. `skippedDuplicates`
-  counts queued candidates whose value (whitespace-normalized) already exists in `shared` — one
-  copy per value, even across different paths — dropped without an error. Invariant per call:
+  CREATED a shared row — never a claim for a row that already existed. Every promoted chunk gets
+  its own shared row under a value-addressed path (`shared/<sha256(value)>.md`): one file may
+  hold many shared rows. Identical chunk content from different sources (e.g. the same section
+  mirrored in two repos) dedupes to one row by construction — the shared bucket key is
+  (path, hash), and the value hash makes the path identical for identical values. `absorbed`
+  counts queued chunks that were claimed but whose identical value was already shared (idempotent
+  re-share, or an insert race lost to a concurrent caller) — they are dropped from the queue, not
+  reported promoted. `skippedDuplicates` counts queued candidates whose value
+  (whitespace-normalized) already exists in `shared` — one copy per value, even across different
+  paths — dropped without an error. Invariant per call:
   claimed = `promotedHashes.length + absorbed + skippedDuplicates + failures.length`; `absorbed`
   is `0` in propose mode (same result record). `failures` is a list of `{projectId, hash, reason}`
   for candidates claimed off the queue but never shared, where `reason` is a bounded token —

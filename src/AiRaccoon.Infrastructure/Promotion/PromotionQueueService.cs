@@ -61,9 +61,9 @@ public sealed partial class PromotionQueueService(
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
-        // Mutable in-batch copies of the shared index in EXACTLY the formats IsDuplicate used
-        // (whitespace-stripped values, full "shared/{path}" strings), refreshed after every
-        // created share so later rows in this batch classify against what THIS call just wrote.
+        // Mutable in-batch copies of the shared index in EXACTLY the formats the classifier uses
+        // (whitespace-stripped values, full "shared/<sha256(value)>.md" strings), refreshed after
+        // every created share so later rows in this batch classify against what THIS call just wrote.
         var sharedValues = new HashSet<string>(
             sharedIndex.Values.Select(v => string.Concat(v.Where(c => !char.IsWhiteSpace(c)))),
             StringComparer.Ordinal);
@@ -90,7 +90,7 @@ public sealed partial class PromotionQueueService(
                     }
 
                     var valueKey = string.Concat(row.Value.Where(c => !char.IsWhiteSpace(c)));
-                    var sharedPath = $"shared/{row.Path}";
+                    var sharedPath = $"shared/{ContentHash.OfValue(row.Value)}.md";
                     if (sharedValues.Contains(valueKey))
                     {
                         // Value twin — checked FIRST: one copy of a value in the shared tier,
@@ -99,7 +99,8 @@ public sealed partial class PromotionQueueService(
                     }
                     else if (sharedPaths.Contains(sharedPath))
                     {
-                        // Chunk of a file the shared tier already represents (one row per file).
+                        // Identical chunk value already shared under its value-addressed path
+                        // (idempotent re-share; the exact-value twin of a whitespace-variant row).
                         absorbed++;
                     }
                     else
@@ -241,7 +242,7 @@ public sealed partial class PromotionQueueService(
             string reason);
 
         [LoggerMessage(EventId = 702, Level = LogLevel.Information,
-            Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Absorbed} absorbed into existing files, {Skipped} duplicate-skipped")]
+            Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Absorbed} absorbed (already shared), {Skipped} duplicate-skipped")]
         public static partial void Promoted(ILogger logger, string projectIds, int promoted, int absorbed,
             int skipped);
 

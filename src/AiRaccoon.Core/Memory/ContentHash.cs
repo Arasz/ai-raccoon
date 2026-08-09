@@ -21,4 +21,13 @@ public static class ContentHash
         valueBytes.CopyTo(bytes, pathBytes.Length);
         return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }
+
+    /// <summary>SHA-256 over UTF8(value) alone — the value-addressed identity behind shared-tier
+    /// row paths (shared/&lt;hash&gt;.md), so identical chunk content from different sources
+    /// dedupes to one row. Lowercase hex.</summary>
+    public static string OfValue(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    }
 }

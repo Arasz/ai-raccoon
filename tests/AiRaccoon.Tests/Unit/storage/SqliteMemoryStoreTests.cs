@@ -411,10 +411,10 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
         shared.Entry.Context.ShouldBe(ContextNaming.SharedContext);
-        shared.Entry.Path.ShouldBe($"shared/{entry.Path}");
+        shared.Entry.Path.ShouldBe($"shared/{ContentHash.OfValue(entry.Value)}.md");
         shared.Entry.Value.ShouldBe(entry.Value);
         shared.Entry.Hash.ShouldNotBe(entry.Hash);
-        shared.Entry.Hash.ShouldBe(ContentHash.Of($"shared/{entry.Path}", entry.Value));
+        shared.Entry.Hash.ShouldBe(ContentHash.Of($"shared/{ContentHash.OfValue(entry.Value)}.md", entry.Value));
         // The source row stays in the project scope: both rows exist after sharing.
         (await _store.ListContextAsync("acme", ContextNaming.SharedContext, TestContext.Current.CancellationToken))
             .Count(e => e.Value == "cross project fact").ShouldBe(1);

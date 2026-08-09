@@ -53,8 +53,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     /// <summary>Seeds a project-scoped row with a REAL file path (the ingest shape: one row per
-    /// chunk, path = source path, distinct values/hashes). Raw insert, because AddContentAsync's
-    /// path-in-bucket pre-check coalesces — and that coalescing is exactly what is under test.</summary>
+    /// chunk, path = source path, distinct values/hashes). Raw insert, because the shared-tier
+    /// path scheme (value-addressed) is what is under test.</summary>
     private async Task SeedChunkAsync(string projectId, string hash, string path, string value,
         CancellationToken ct)
     {
@@ -67,22 +67,25 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             new { hash, path, value, projectId }, cancellationToken: ct));
     }
 
-    private async Task<long> SharedRowCountAsync(string sharedPath, CancellationToken ct)
+    private async Task<long> SharedValueCountAsync(string value, CancellationToken ct)
     {
         await using var connection = await _factory.OpenBankAsync(ct);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT count(*) FROM entries WHERE scope = 'shared' AND path = @path",
-            new { path = sharedPath }, cancellationToken: ct));
+            "SELECT count(*) FROM entries WHERE scope = 'shared' AND value = @value",
+            new { value }, cancellationToken: ct));
     }
 
     private static QueueCandidate Candidate(string hash, string path, string value, double score) =>
         new(hash, path, value, null, score, ["organic-write"]);
 
     [Fact]
-    public async Task Promote_TwoChunksOfOneFile_OneSharedRowOneAbsorbed()
+    public async Task Promote_TwoChunksOfOneFile_BothChunksShared()
     {
-        // Two chunks of the same source file: the queue holds one row per chunk, the shared
-        // tier holds ONE row per file (the first chunk in queue order score DESC, created ASC).
+        // Two chunks of the same source file with DISTINCT content: every promoted chunk
+        // becomes its own shared row (value-addressed shared/<sha256(value)>.md). One file
+        // may hold many shared rows — only identical chunk VALUES dedupe (see the value-twin
+        // test). This was previously a bug: the file-path-addressed shared row coalesced all
+        // chunks of a file into one row and silently dropped the rest.
         await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
         await SeedChunkAsync("acme", "h2", "docs/a.md", "chunk two", TestContext.Current.CancellationToken);
         await _service.ProposeAsync("acme",
@@ -91,12 +94,13 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
         var outcome = await _service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
 
-        outcome.PromotedHashes.ShouldBe(["h1"],
-            "only the first chunk of a file is promoted — the second must be absorbed, not reported promoted");
-        outcome.Absorbed.ShouldBe(1, "the second chunk folds into the file's existing shared row");
+        outcome.PromotedHashes.ShouldBe(["h1", "h2"],
+            "every promoted chunk is shared — one file may hold many shared rows");
+        outcome.Absorbed.ShouldBe(0, "distinct chunk contents never coalesce");
         outcome.SkippedDuplicates.ShouldBe(0);
-        (await SharedRowCountAsync("shared/docs/a.md", TestContext.Current.CancellationToken)).ShouldBe(1,
-            "exactly one shared row for the whole file");
+        (await SharedValueCountAsync("chunk one", TestContext.Current.CancellationToken)).ShouldBe(1);
+        (await SharedValueCountAsync("chunk two", TestContext.Current.CancellationToken)).ShouldBe(1,
+            "both chunks of the file landed in the shared tier");
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken)).ShouldBeEmpty(
             "both chunks were claimed off the queue");
     }
@@ -119,9 +123,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         outcome.SkippedDuplicates.ShouldBe(1,
             "h2's value is already in shared after h1's share — the refreshed index must skip it");
         outcome.Absorbed.ShouldBe(0);
-        (await SharedRowCountAsync("shared/one.md", TestContext.Current.CancellationToken)).ShouldBe(1);
-        (await SharedRowCountAsync("shared/two.md", TestContext.Current.CancellationToken)).ShouldBe(0,
-            "a value twin is skipped, never absorbed into a second shared row");
+        (await SharedValueCountAsync("identical fact", TestContext.Current.CancellationToken)).ShouldBe(1,
+            "an identical chunk from a second path is a duplicate — one shared row, not two");
     }
 
     [Fact]
@@ -170,7 +173,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         await service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
 
         logger.Messages.ShouldContain(m => m.Contains(
-            "Promoted from the queue for acme: 1 shared, 1 absorbed into existing files, 0 duplicate-skipped"),
+            "Promoted from the queue for acme: 2 shared, 0 absorbed (already shared), 0 duplicate-skipped"),
             "the log line must report promoted and absorbed in their real order — a swapped pair was shipped once and caught live");
     }
 

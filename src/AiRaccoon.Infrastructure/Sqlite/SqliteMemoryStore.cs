@@ -281,11 +281,14 @@ public sealed partial class SqliteMemoryStore(
             throw new UnknownHashException(hash, projectId);
         }
 
-        // Promotion creates a REAL shared-scope row under shared/<path>; the path-scoped hash
-        // (FR-NM-7; see docs/work/features-native-memory/native-memory.feature) differs from the source row's by construction. AddContentAsync is idempotent:
-        // re-sharing finds the existing shared row.
-        return await AddContentAsync(projectId, $"shared/{source.Path}", source.Value,
-                ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
+        // Promotion creates a REAL shared-scope row under a VALUE-addressed path
+        // shared/<sha256(value)>.md: every promoted chunk gets its own row, and identical chunk
+        // content from different sources (e.g. the same section mirrored in two repos) dedupes to
+        // one row by construction — uq_entries_shared_bucket is on (path, hash). Provenance
+        // travels in source_file/section. AddContentAsync is idempotent: re-sharing finds the
+        // existing shared row.
+        return await AddContentAsync(projectId, $"shared/{ContentHash.OfValue(source.Value)}.md",
+                source.Value, ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
             .ConfigureAwait(false);
     }
 
