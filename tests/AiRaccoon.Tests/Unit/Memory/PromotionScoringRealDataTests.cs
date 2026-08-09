@@ -27,9 +27,10 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         if (string.IsNullOrWhiteSpace(manifestPath))
         {
             Assert.Skip($"{FixtureEnvVar} not set — local-only verification against the real labeled " +
-                        "candidate pool (docs/adr/0018-promotion-scoring-v2.md). Point this env var at a " +
-                        "manifest declaring the fixture(s) and gate(s) to run (see FixtureManifest) — " +
-                        "fixtures are never committed to this public repo.");
+                        "candidate pool (docs/adr/0018-promotion-scoring-v2.md). Build a fixture with " +
+                        "docs/work/promotion-scoring-eval/rebuild_fixture.py, write a manifest declaring " +
+                        "it (see FixtureManifest), and point this env var at the manifest — fixtures are " +
+                        "never committed to this public repo.");
             return;
         }
 
@@ -38,10 +39,10 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
 
     // Gate-machinery tests below: synthetic manifests + fixtures written to a temp directory, run with
     // no env var, so they exercise the manifest/gate machinery itself without the private real-data
-    // fixture. Candidate rows use archetype paths whose scores against a fixed neutral prose body are
-    // exact and reproducible (docs/adr/0018-promotion-scoring-v2.md's round-3 lane-A archetype table
-    // plus centred content evidence), so the measured Spearman for a given usefulness assignment is
-    // deterministic — verified directly against PromotionScorer, not asserted from memory.
+    // fixture. Candidate rows use archetype paths whose priors are exact and content-evidence-neutral
+    // (docs/adr/0018-promotion-scoring-v2.md's archetype table), so the measured Spearman for a given
+    // usefulness assignment is deterministic — verified directly against PromotionScorer, not asserted
+    // from memory.
 
     [Fact]
     public void MinSpearmanGate_ReportsFixtureNameAndBothMeasurements_WhenBelowFloor()
@@ -160,26 +161,25 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         Should.NotThrow(() => Verify(manifestPath));
     }
 
-    /// <summary>Five archetypes whose scores against <see cref="NeutralText" /> (round-3 lane-A prior +
-    /// centred content evidence, docs/adr/0018-promotion-scoring-v2.md) are strictly increasing:
-    /// measurement ~0.04 &lt; adr ~0.43 &lt; explanation ~0.62 &lt; plan ~0.76 &lt; work-note ~1.00.</summary>
+    /// <summary>Five archetypes whose priors (docs/adr/0018-promotion-scoring-v2.md) are strictly
+    /// increasing and, for content shaped like <see cref="NeutralText" />, exactly equal to the
+    /// measured score (0.35 / 0.70 / 1.45 / 2.15 / 2.55 — no content-evidence adjustment fires).</summary>
     private static readonly string[] CoreArchetypePaths =
     [
-        "docs/work/cache-benchmark-results.md", // Measurement
-        "docs/adr/0001-decision.md", // Adr
-        "docs/explanation/notes.md", // Explanation
-        "docs/plans/plan-notes.md", // Plan
-        "docs/work/notes.md" // WorkNote
+        "docs/README.md", // DocIndex     0.35
+        "docs/plans/plan-notes.md", // Plan   0.70
+        "docs/reference/api-notes.md", // Reference 1.45
+        "docs/explanation/notes.md", // Explanation 2.15
+        "docs/adr/0001-decision.md" // Adr    2.55
     ];
 
-    /// <summary>Three more archetypes, strictly increasing scores against <see cref="NeutralText" />
-    /// (reference ~0.48 &lt; charter ~0.71 &lt; review ~0.83), used to build an id-gt-1000 "organic"
+    /// <summary>Three more archetypes, priors 0.95 / 1.30 / 2.30, used to build an id-gt-1000 "organic"
     /// subset whose own ranking can be set independently of the core rows'.</summary>
     private static readonly string[] OutlierArchetypePaths =
     [
-        "docs/reference/api-notes.md", // Reference
-        "docs/charter-doc.md", // Charter
-        "docs/reviews/review-notes.md" // Review
+        "docs/reviews/review-notes.md", // Review   0.95
+        "docs/work/notes.md", // WorkNote  1.30
+        "docs/charter-doc.md" // Charter   2.30
     ];
 
     private const string NeutralText =

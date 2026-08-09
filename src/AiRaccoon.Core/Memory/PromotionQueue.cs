@@ -1,15 +1,19 @@
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>One candidate waiting in the propose tier (the promote-from-queue unit).</summary>
+/// <summary>One candidate waiting in the propose tier (the promote-from-queue unit). ScorerVersion
+/// names the <see cref="PromotionScorer.Version"/> that produced Score — 0 is a legitimate default
+/// for callers that never versioned a score, not an unset marker.</summary>
 public sealed record QueueCandidate(
     string Hash,
     string Path,
     string Value,
     string? SourceFile,
     double Score,
-    IReadOnlyList<string> Reasons);
+    IReadOnlyList<string> Reasons,
+    int ScorerVersion = 0);
 
-/// <summary>One queued row as persisted, with its proposal timestamps.</summary>
+/// <summary>One queued row as persisted, with its proposal timestamps and the scorer version that
+/// produced Score (ADR-0018) — the auto-clear compares this against the current scorer's version.</summary>
 public sealed record PromotionQueueRow(
     string ProjectId,
     string Hash,
@@ -19,7 +23,8 @@ public sealed record PromotionQueueRow(
     double Score,
     IReadOnlyList<string> Reasons,
     long CreatedAt,
-    long UpdatedAt);
+    long UpdatedAt,
+    int ScorerVersion = 0);
 
 /// <summary>Queue occupancy and wait — the response-meta source. OldestWaitSeconds is the single
 /// stalest row's age: an average can hide it once enough fresh rows join the same queue.</summary>

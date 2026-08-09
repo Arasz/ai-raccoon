@@ -241,4 +241,68 @@ public sealed class SharedExtractionServiceTests
         aged.Candidates.ShouldHaveSingleItem();
         aged.Candidates[0].Score.ShouldBe(fresh.Candidates[0].Score);
     }
+
+    /// <summary>Every eligible chunk of a source document ranks, however many; nothing about RankAll
+    /// itself limits how many chunks of one document may appear (docs/work/2026-08-09-promotion-scoring-measurement.md).
+    /// The per-document cap lives one layer up, over this unbounded list.</summary>
+    [Fact]
+    public void RankAll_ManyChunksFromOneDocument_ReturnsAllOfThemUncapped()
+    {
+        const string value = "Notes on the eviction policy behaviour under load, kept here for whoever revisits " +
+                              "this file next time the cache size needs tuning for the current traffic pattern.";
+        var rows = Enumerable.Range(0, 5)
+            .Select(i => Row($"h{i}", sourceFile: "doc.md", value: value))
+            .ToArray();
+
+        var ranked = _service.RankAll("ai-raccoon", AllProjects, rows, [], [], false, Now);
+
+        ranked.Count.ShouldBe(5);
+    }
+
+    private static ShareCandidate Candidate(string hash, string? sourceFile, double score) =>
+        new(hash, $"{hash}.md", "preview", score, 0.5, 0, Now, [], sourceFile);
+
+    /// <summary>Bullet 1 of the fix: a document with more ranked chunks than the cap contributes only
+    /// its highest-scoring ones (docs/work/2026-08-09-promotion-scoring-measurement.md).</summary>
+    [Fact]
+    public void CapPerSourceDocument_DocumentOverTheCap_KeepsOnlyItsHighestScoringChunks()
+    {
+        var ranked = new[]
+        {
+            Candidate("a1", "doc.md", 4.0),
+            Candidate("a2", "doc.md", 3.5),
+            Candidate("a3", "doc.md", 3.0),
+            Candidate("a4", "doc.md", 2.5),
+            Candidate("a5", "doc.md", 2.0)
+        };
+
+        var admitted = SharedExtractionService.CapPerSourceDocument(ranked, new Dictionary<string, int>());
+
+        admitted.Select(c => c.Hash).ShouldBe(["a1", "a2", "a3"]);
+    }
+
+    /// <summary>Bullet 2: a document already represented in the queue counts toward the cap — a
+    /// document already at the cap admits zero new rows.</summary>
+    [Fact]
+    public void CapPerSourceDocument_DocumentAlreadyAtCapInQueue_AdmitsNoNewRows()
+    {
+        var ranked = new[] { Candidate("a1", "doc.md", 4.0), Candidate("a2", "doc.md", 3.5) };
+        var queuedCounts = new Dictionary<string, int> { ["doc.md"] = SharedExtractionService.MaxQueuedPerSourceDocument };
+
+        var admitted = SharedExtractionService.CapPerSourceDocument(ranked, queuedCounts);
+
+        admitted.ShouldBeEmpty();
+    }
+
+    /// <summary>Bullet 3: organic notes have no document to flood, so a null source_file is exempt
+    /// from the cap however many rows share it.</summary>
+    [Fact]
+    public void CapPerSourceDocument_NullSourceFile_IsNeverCapped()
+    {
+        var ranked = Enumerable.Range(0, 10).Select(i => Candidate($"h{i}", null, 1.0)).ToArray();
+
+        var admitted = SharedExtractionService.CapPerSourceDocument(ranked, new Dictionary<string, int>());
+
+        admitted.Count.ShouldBe(10);
+    }
 }

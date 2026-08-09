@@ -7,10 +7,8 @@ internal static class PromotionScorer
 {
     /// <summary>Stamped onto every queue row this scorer produces; bumped whenever the scoring
     /// model changes in a way that makes previously-computed scores incomparable
-    /// (docs/adr/0018-promotion-scoring-v2.md). Independent of the ADR's design-generation labels.
-    /// Starts at 2, not 1: a sibling in-flight change (task/fix-promotion-algorithm) already claims
-    /// 1 for introducing this stamp with the then-unchanged v3 model, and this port changes the
-    /// model itself, so it must land strictly after whichever of the two merges first.</summary>
+/// (docs/adr/0018-promotion-scoring-v2.md). Independent of the ADR's design-generation labels.
+    /// 1 stamped the v3 model this mechanism shipped with (#246); 2 is the round-3 lane-A model.</summary>
     internal const int Version = 2;
 
     private const int MinWordsFloor = 8;

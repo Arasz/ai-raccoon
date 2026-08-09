@@ -4,14 +4,15 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class PromotionQueueSql
 {
     public const string Upsert = """
-                                 INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                 VALUES (@ProjectId, @Hash, @Path, @Value, @SourceFile, @Score, @Reasons, @CreatedAt, @UpdatedAt)
+                                 INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, scorer_version, created_at, updated_at)
+                                 VALUES (@ProjectId, @Hash, @Path, @Value, @SourceFile, @Score, @Reasons, @ScorerVersion, @CreatedAt, @UpdatedAt)
                                  ON CONFLICT(project_id, hash) DO UPDATE SET
                                      path = excluded.path,
                                      value = excluded.value,
                                      source_file = excluded.source_file,
                                      score = excluded.score,
                                      reasons = excluded.reasons,
+                                     scorer_version = excluded.scorer_version,
                                      updated_at = excluded.updated_at
                                  """;
 
@@ -24,7 +25,7 @@ internal static class PromotionQueueSql
     public const string List = """
                                SELECT project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
                                       source_file AS SourceFile, score AS Score, reasons AS Reasons,
-                                      created_at AS CreatedAt, updated_at AS UpdatedAt
+                                      created_at AS CreatedAt, updated_at AS UpdatedAt, scorer_version AS ScorerVersion
                                FROM promotion_queue
                                WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
                                ORDER BY score DESC, created_at ASC, id ASC
@@ -35,7 +36,7 @@ internal static class PromotionQueueSql
                                   WHERE project_id = @ProjectId AND (@Hash IS NULL OR hash = @Hash)
                                   RETURNING project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
                                             source_file AS SourceFile, score AS Score, reasons AS Reasons,
-                                            created_at AS CreatedAt, updated_at AS UpdatedAt
+                                            created_at AS CreatedAt, updated_at AS UpdatedAt, scorer_version AS ScorerVersion
                                   """;
 
     public const string StatsPerProject = """
@@ -80,6 +81,12 @@ internal static class PromotionQueueSql
                                       )
                                       RETURNING project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
                                                 source_file AS SourceFile, score AS Score, reasons AS Reasons,
-                                                created_at AS CreatedAt, updated_at AS UpdatedAt
+                                                created_at AS CreatedAt, updated_at AS UpdatedAt, scorer_version AS ScorerVersion
                                       """;
+
+    /// <summary>The auto-clear for a retired scorer (ADR-0018): a project's queued rows not carrying the current scorer_version are gone.</summary>
+    public const string ClearStale = """
+                                     DELETE FROM promotion_queue
+                                     WHERE project_id = @ProjectId AND scorer_version != @CurrentVersion
+                                     """;
 }

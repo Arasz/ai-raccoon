@@ -231,6 +231,22 @@ public sealed class PromotionQueueServiceTests : IDisposable
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 
+    // ------------------------------------------------------------------ clear stale (ADR-0018)
+    [Fact]
+    public async Task ClearStaleAsync_RemovesRowsOnAnOlderScorerVersion_ReportsTheCount()
+    {
+        await _service.ProposeAsync("acme",
+            [new QueueCandidate("stale", "stale.md", "old value", null, 2.5, [], ScorerVersion: 0),
+             new QueueCandidate("current", "current.md", "new value", null, 1.0, [], ScorerVersion: 1)],
+            TestContext.Current.CancellationToken);
+
+        var cleared = await _service.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
+
+        cleared.ShouldBe(1);
+        (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe(["current"]);
+    }
+
     [Fact]
     public async Task Discard_RemovesOneOrTheWholeProject()
     {

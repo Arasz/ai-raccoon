@@ -43,6 +43,9 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         string? sourceFile = null, params string[] reasons) =>
         new(hash, $"{hash}.md", value, sourceFile, score, reasons);
 
+    private static QueueCandidate CandidateWithVersion(string hash, string value, double score, int scorerVersion) =>
+        new(hash, $"{hash}.md", value, null, score, [], scorerVersion);
+
     // ------------------------------------------------------------------ schema
     [Fact]
     public async Task FreshBank_CreatesQueueTable_WithUniqueProjectHash()
@@ -62,6 +65,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         columns.ShouldContain("reasons");
         columns.ShouldContain("created_at");
         columns.ShouldContain("updated_at");
+        columns.ShouldContain("scorer_version");
 
         var indexes = (await connection.QueryAsync<string>(
             "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'promotion_queue'")).ToList();
@@ -126,6 +130,78 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
 
         second.ShouldBe(0, "h1 already occupied a queue slot; re-proposing it must not report queue growth");
+    }
+
+    /// <summary>scorer_version stamps every row (defaults to 0 on the bank column, but a candidate
+    /// always names an explicit version) — the auto-clear that follows a scorer redesign depends
+    /// on this surviving the round trip (ADR-0018).</summary>
+    [Fact]
+    public async Task Upsert_PersistsScorerVersion_ForANewRow()
+    {
+        await _store.UpsertAsync("acme",
+            [CandidateWithVersion("h1", "fact one", 1.0, scorerVersion: 3)], TestContext.Current.CancellationToken);
+
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Single().ScorerVersion.ShouldBe(3);
+    }
+
+    /// <summary>The refresh path (ON CONFLICT DO UPDATE) must re-stamp scorer_version too, not just
+    /// score/value/reasons — otherwise a row re-scored by a newer scorer keeps reporting the old one.</summary>
+    [Fact]
+    public async Task Upsert_RefreshingAnExistingRow_UpdatesScorerVersion()
+    {
+        await _store.UpsertAsync("acme",
+            [CandidateWithVersion("h1", "fact one", 1.0, scorerVersion: 0)], TestContext.Current.CancellationToken);
+
+        await _store.UpsertAsync("acme",
+            [CandidateWithVersion("h1", "fact one refreshed", 2.0, scorerVersion: 1)],
+            TestContext.Current.CancellationToken);
+
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Single().ScorerVersion.ShouldBe(1);
+    }
+
+    // ------------------------------------------------------------------ clear stale
+    /// <summary>The auto-clear for a retired scorer (ADR-0018): a row carrying any version other
+    /// than the current one is deleted; a row already on the current version survives untouched.</summary>
+    [Fact]
+    public async Task ClearStaleAsync_RemovesRowsWithADifferentScorerVersion_KeepsTheCurrentOne()
+    {
+        await _store.UpsertAsync("acme",
+            [
+                CandidateWithVersion("stale", "old value", 2.5, scorerVersion: 0),
+                CandidateWithVersion("current", "new value", 1.0, scorerVersion: 1)
+            ], TestContext.Current.CancellationToken);
+
+        var cleared = await _store.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
+
+        cleared.ShouldBe(1);
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe(["current"]);
+    }
+
+    [Fact]
+    public async Task ClearStaleAsync_OnlyTouchesTheNamedProject()
+    {
+        await _store.UpsertAsync("acme",
+            [CandidateWithVersion("h1", "v", 1.0, scorerVersion: 0)], TestContext.Current.CancellationToken);
+        await _store.UpsertAsync("other",
+            [CandidateWithVersion("h2", "v", 1.0, scorerVersion: 0)], TestContext.Current.CancellationToken);
+
+        await _store.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
+
+        (await _store.ListAsync("other", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe(["h2"], "another project's queue is not this call's business");
+    }
+
+    [Fact]
+    public async Task ClearStaleAsync_NothingStale_ReturnsZero()
+    {
+        await _store.UpsertAsync("acme",
+            [CandidateWithVersion("h1", "v", 1.0, scorerVersion: 1)], TestContext.Current.CancellationToken);
+
+        var cleared = await _store.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
+
+        cleared.ShouldBe(0);
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Select(r => r.Hash).ShouldBe(["h1"]);
     }
 
     [Fact]
