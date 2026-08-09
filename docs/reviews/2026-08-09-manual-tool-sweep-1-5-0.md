@@ -103,6 +103,31 @@ re-embedded (heal pass, schema migration) after it was queued, leaving the queue
 entries table no longer has. The loop does not catch that per-candidate failure; it propagates as
 the whole tool call's result, after already committing the earlier candidates' work.
 
+> **Mechanism correction, 2026-08-09 (from the WP1/WP2 follow-up code investigation).** This
+> under-diagnosed the defect. At 1.5.0, `PromotionQueueService.PromoteAsync` claims a candidate off
+> the queue (`queue.DiscardAsync`) *before* sharing it (`store.ShareAsync`) — two separate
+> connections, no enclosing transaction, and no try/catch around the pair. So the candidate whose
+> hash no longer resolves is not merely misreported: it is already gone from the queue and was
+> never shared — **permanently lost, not retried on the next pass.** The misleading error message
+> is the second-order symptom; silent, unrecoverable data loss is the defect.
+>
+> The root cause this sweep did not identify: nothing invalidated a `promotion_queue` row when the
+> `entries` row it referenced was deleted or re-chunked. Confirmed live: 19 orphaned queue rows (17
+> `ai-raccoon`, 2 `ai-badger`), every one pointing at a watched ADR that was edited and re-ingested —
+> `SqliteMemoryStore.ReplaceFileAsync` deletes the old chunk rows and inserts new ones under new
+> content-derived hashes, and nothing dropped the queue's now-dead reference. On the `ai-raccoon`
+> queue specifically, the rank-1 candidate (score 3.794) was one of the 17 orphans, along with ranks
+> 13, 14, 31, 41, 47, and 55 (and ten more further down the queue) — so with the background job's
+> default `limit` of 20, three of those orphans (ranks 1, 13, 14) sat inside a single promote batch,
+> and every pass destroyed the top candidate while promoting nothing. That gap was asserted as
+> *intended* behavior in a then-green test, `Sweep_NeverTouchesTheQueue`.
+>
+> Fixed by a later work package: an `AFTER DELETE ON entries` trigger now drops the matching
+> `promotion_queue` row (see [ADR-0022](../adr/0022-promotion-queue-entries-delete-invalidation.md)),
+> and `PromoteAsync` now wraps the claim-then-share pair in a try/catch that reports a per-candidate
+> `stale-hash`/`share-failed` failure instead of aborting the batch
+> (`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs`).
+
 **Why this matters more than a normal crash.** A caller — human, agent, or the 30-minute background
 hosted service — sees `unknown-hash` and has no way to tell from the response that partial,
 real, cross-project-visible work already happened. For the automated path specifically, this is a
@@ -157,11 +182,40 @@ closed; today's 09:23 log entry recorded exactly that fix landing. Only 5/249 ro
 reason tag; their average score (2.999) is marginally *higher* than the queue overall (2.979), not
 lower. Same finding, same magnitude, unchanged by the v3 re-scoring fix.
 
+> **Correction, 2026-08-09 (from the WP5 follow-up code investigation).** This is imprecise:
+> `mid-sentence` *does* penalize. `PromotionContentEvidence.Evaluate` subtracts a flat `-0.18`
+> after the archetype-adjustment clamp, deliberately, so a saturated-high chunk still gets demoted
+> for opening mid-sentence (`src/AiRaccoon.Core/Memory/PromotionContentEvidence.cs`, see the comment
+> immediately above the subtraction). But the penalty is wired into the **doc-channel** evaluator
+> only — `OrganicRefinement.Apply` and `PromotionContentEvidence.EvaluateAutoMemoryNote` never read
+> `CandidateFeatures.MidSentence`, so on the `OrganicNote`/`AutoMemoryNote` channels it is extracted
+> and never applied. The aggregate above looked inert because of archetype confounding, not because
+> the penalty is missing: restricted to the `adr` channel alone and freshly re-measured against the
+> live queue, mid-sentence rows average 2.997 (n=78) against 3.026 (n=76) for the rest — a ~0.03 gap
+> where the code applies -0.18, because ADR chunks that open mid-sentence also tend to carry more
+> positive rule-language evidence that offsets it in the raw, cross-channel average.
+
 **New observation, not verified further:** one high-scoring row (3.9, the deployment note discussed
 above) carries the reason `foreign-subject` despite being centrally about `ai-raccoon` itself — the
 value text does enumerate sibling project ids (`ai-raccoon, job-search-ai-assistant, ai-badger`) for
 context, which may be what the tagger is keying on. Flagged as a possible false-positive in the
 reason-labeling, not confirmed against the scoring code.
+
+> **Correction, 2026-08-09 (from the WP5 follow-up code investigation).** Confirmed against the
+> scoring code, and the sign matters: `foreign-subject` is a **bonus**, not a penalty — the scorer
+> adds `+0.25` in the doc channel and the auto-memory-note channel, and `+0.20` in the organic
+> channel, on the theory that content genuinely about another project is exactly what belongs in the
+> shared tier (`PromotionContentEvidence.cs`, `OrganicRefinement.cs`). The defect is that the
+> detector pays that bonus to the wrong candidates: it is a case-insensitive substring scan for
+> another project's id (or a known alias) within the first 250 characters of the value, with no
+> notion of subject or centrality (`CandidateFeatureExtractor.Extract`,
+> `src/AiRaccoon.Core/Memory/CandidateFeatures.cs`). The flagged row is centrally about
+> `ai-raccoon`'s own deployment; it trips purely on its own parenthetical —
+> `(project ids: ai-raccoon, job-search-ai-assistant, ai-badger)` — which the detector had no way to
+> distinguish from a chunk actually about `job-search-ai-assistant`. (A later work package strips
+> bracketed spans, `(...)`/`[...]`, before the subject scan, so this specific parenthetical would no
+> longer trip it — but a plain-text mention outside brackets still would; the underlying
+> "no notion of centrality" defect is not fully closed.)
 
 **The queue was not draining — now explained by D7, not a separate defect.** 1000/1000 (global cap)
 before this sweep, oldest row 20.5h and growing. This is not a new capacity-tuning problem to chase
