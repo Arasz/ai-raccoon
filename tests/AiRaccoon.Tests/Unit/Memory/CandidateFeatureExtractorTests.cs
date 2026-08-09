@@ -141,4 +141,31 @@ public sealed class CandidateFeatureExtractorTests
 
         features.MidSentence.ShouldBeTrue();
     }
+
+    /// <summary>Round-3 lane-A restores the heading-start bonus dropped for exact-parity reasons:
+    /// measurement showed restoring it beats the parity port on train, holdout and the owner guard
+    /// (scorer.py's `v.lstrip().startswith("#")`).</summary>
+    [Fact]
+    public void Extract_DocumentStartingWithAHeading_SetsHeadingStart()
+    {
+        var withHeading = CandidateFeatureExtractor.Extract(
+            "# Cache eviction policy\n\nEntries expire once their TTL lapses under the current design.",
+            "ai-raccoon", AllProjects);
+        var withoutHeading = CandidateFeatureExtractor.Extract(
+            "Entries expire once their TTL lapses under the current cache eviction design.",
+            "ai-raccoon", AllProjects);
+
+        withHeading.HeadingStart.ShouldBeTrue();
+        withoutHeading.HeadingStart.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Extract_LeadingWhitespaceBeforeHeadingMarker_StillSetsHeadingStart()
+    {
+        var features = CandidateFeatureExtractor.Extract(
+            "\n\n  ## Retry policy\n\nWorkers back off exponentially between attempts on failure.",
+            "ai-raccoon", AllProjects);
+
+        features.HeadingStart.ShouldBeTrue();
+    }
 }

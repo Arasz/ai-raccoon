@@ -82,6 +82,12 @@ internal static class PromotionContentEvidence
 
         adj += Substance(f);
 
+        if (f.HeadingStart)
+        {
+            adj += 0.10;
+            reasons.Add("heading-start");
+        }
+
         if (f.ForeignSubject)
         {
             adj += 0.15;

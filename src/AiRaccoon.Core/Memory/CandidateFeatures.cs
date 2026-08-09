@@ -23,6 +23,7 @@ internal readonly record struct CandidateFeatures(
     double XrefDensity,
     double ImpRuleDensity,
     bool ForeignSubject,
+    bool HeadingStart,
     bool StatusOpener,
     int StatusVocab,
     bool SecondPerson,
@@ -103,6 +104,7 @@ internal static partial class CandidateFeatureExtractor
             ImpRuleDensity: Per100(ImpersonalRule().Matches(v).Count, nWords),
             ForeignSubject: others.Any(id =>
                 AliasesFor(id).Any(alias => head.Contains(alias, StringComparison.Ordinal))),
+            HeadingStart: stripped.StartsWith('#'),
             StatusOpener: StatusOpener().IsMatch(openerHead),
             StatusVocab: StatusVocabulary().Matches(v).Count,
             SecondPerson: SecondPerson().IsMatch(v),

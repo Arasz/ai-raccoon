@@ -23,7 +23,7 @@ public sealed class PromotionContentEvidenceTests
         FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
         Frontmatter: false, NChars: 700, NWords: 110, MidSentence: false,
         TechBreadth: 0, XrefDensity: 0, ImpRuleDensity: 0,
-        ForeignSubject: false, StatusOpener: false, StatusVocab: 0,
+        ForeignSubject: false, HeadingStart: false, StatusOpener: false, StatusVocab: 0,
         SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
         FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
 
@@ -102,6 +102,20 @@ public sealed class PromotionContentEvidenceTests
             NeutralFeatures with { ForeignSubject = true }, ProvenanceArchetype.WorkNote);
 
         with.Adjustment.ShouldBe(without.Adjustment + 0.15, 0.0001);
+    }
+
+    /// <summary>Round-3 lane-A restores the heading-start bonus (scorer.py's `doc_adjust()`, dropped
+    /// for exact-parity reasons and reinstated on measurement — see docs/adr/0018): a document chunk
+    /// that opens on a markdown heading scores exactly 0.10 above an otherwise-identical chunk that
+    /// does not.</summary>
+    [Fact]
+    public void HeadingStart_AddsExactlyTenHundredths()
+    {
+        var without = PromotionContentEvidence.Evaluate(NeutralFeatures, ProvenanceArchetype.WorkNote);
+        var with = PromotionContentEvidence.Evaluate(
+            NeutralFeatures with { HeadingStart = true }, ProvenanceArchetype.WorkNote);
+
+        with.Adjustment.ShouldBe(without.Adjustment + 0.10, 0.0001);
     }
 
     /// <summary>Round-3 lane-A flips v3's sign: a chunk starting mid-sentence is body prose, not a

@@ -292,11 +292,13 @@ combined by `PromotionScorer`). Three substantive changes:
    "rule, contract or design decision" shape.
 
 Also dropped (present in v3's C# port, absent from the round-3 lane-A prototype, so
-removed to keep the two in lockstep): the heading-start bonus, the "≥2 foreign projects"
-bonus, and the bracketed-span stripping before foreign-subject detection. The last of
-these reintroduces a previously-fixed false positive (a project id mentioned only inside
-a parenthetical enumeration counting as the subject) — a known, deliberate regression in
-service of exact parity with the prototype, not an oversight.
+removed to keep the two in lockstep): the "≥2 foreign projects" bonus, and the
+bracketed-span stripping before foreign-subject detection. The latter reintroduces a
+previously-fixed false positive (a project id mentioned only inside a parenthetical
+enumeration counting as the subject) and measured flat-to-negative when tried (train
+−0.001, owner −0.002), so it stays out. The heading-start bonus was dropped for the same
+exact-parity reason and then **restored**: measurement showed it beats the parity port on
+train, holdout and the owner guard (+0.004 train, +0.004 holdout, +0.011 owner-guard).
 
 **Measured numbers** (`PromotionScoringRealDataTests`, local-only,
 `AIRACCOON_SCORING_EVAL_FIXTURE` pointed at a manifest over `split_train.json` /
@@ -305,9 +307,9 @@ service of exact parity with the prototype, not an oversight.
 
 | Fixture | C# port | Python prototype | Gate |
 |---|---|---|---|
-| train (228) | 0.688 | 0.688 | within ±0.03 of prototype |
-| validation (99) | 0.690 | 0.690 | within ±0.03 of prototype |
-| holdout (79) | 0.683 | 0.683 | within ±0.03 of prototype |
+| train (228) | 0.692 | 0.692 | within ±0.03 of prototype |
+| validation (99) | 0.689 | 0.689 | within ±0.03 of prototype |
+| holdout (79) | 0.687 | 0.687 | within ±0.03 of prototype |
 
 All three land within 0.001 of the Python prototype, well inside the ±0.03 tolerance.
 

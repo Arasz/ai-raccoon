@@ -167,7 +167,7 @@ public sealed class OrganicRefinementTests
             FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
             Frontmatter: false, NChars: 500, NWords: 80, MidSentence: false,
             TechBreadth: 0, XrefDensity: 0, ImpRuleDensity: 0,
-            ForeignSubject: false, StatusOpener: false, StatusVocab: 0,
+            ForeignSubject: false, HeadingStart: false, StatusOpener: false, StatusVocab: 0,
             SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 1, DatedFact: false,
             FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
 
