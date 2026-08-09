@@ -141,16 +141,31 @@ internal static class MemorySchema
                                -- an entries row that may no longer exist. NOT EXISTS is load-bearing —
                                -- uq_entries_committed_bucket permits the same hash in two contexts of
                                -- one project, so deleting one live sibling must not drop a candidate
-                               -- the surviving sibling still backs. OLD.project_id is NULL for
-                               -- shared-scope deletes and `= NULL` never matches, so those are inert by
-                               -- construction (promotion dequeues explicitly). No CurrentVersion bump:
-                               -- IF NOT EXISTS lets an additive trigger reach every existing bank on its
-                               -- next open with no migration step (ADR-0023).
-                               CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                               -- the surviving sibling still backs. `e.scope = 'project'` matches what
+                               -- ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject):
+                               -- a custom- or workspace-scoped sibling cannot back a promotable candidate,
+                               -- so it must not count as "still live" here either (H4). OLD.project_id is
+                               -- NULL for shared-scope deletes and `= NULL` never matches, so those are
+                               -- inert by construction (promotion dequeues explicitly).
+                               --
+                               -- DROP TRIGGER IF EXISTS immediately before an unguarded CREATE TRIGGER,
+                               -- not CREATE TRIGGER IF NOT EXISTS: the H4 guard fix *replaces* a trigger
+                               -- body that may already be on disk (every bank opened by a pre-fix binary
+                               -- has the old scope-blind body), and IF NOT EXISTS never replaces one. Both
+                               -- statements stay inside this unconditional Ddl script, which already runs
+                               -- in full on every open (see EnsureAsync) — so the corrected body reaches
+                               -- every existing bank on its next open, with no CurrentVersion bump and no
+                               -- ladder step, the same way the original additive trigger did (ADR-0023
+                               -- amendment: a body *replacement* is a different case from an *addition*,
+                               -- and this is how it stays inside the same no-migration guarantee).
+                               DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
+
+                               CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
                                    DELETE FROM promotion_queue
                                    WHERE project_id = OLD.project_id AND hash = OLD.hash
                                      AND NOT EXISTS (SELECT 1 FROM entries e
-                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash);
+                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                       AND e.scope = 'project');
                                END;
 
                                CREATE TABLE IF NOT EXISTS sync_meta (
@@ -232,7 +247,10 @@ internal static class MemorySchema
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/>/
-    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/> (ADR-0011).
+    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/> (ADR-0011). Not every schema
+    ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
+    ///     open belongs in the unconditional <see cref="Ddl"/> instead (ADR-0023 amendment) — the
+    ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
     internal const int CurrentVersion = 4;
 
@@ -308,7 +326,8 @@ internal static class MemorySchema
         if (healthy && storedVersion < 4)
         {
             // Hard step: ALTER TABLE ADD COLUMN is not idempotent, so it needs the version gate
-            // (unlike promotion_queue_entries_ad above, which reaches every bank via IF NOT EXISTS).
+            // (unlike promotion_queue_entries_ad above, which reaches every bank on every open —
+            // no version gate at all — because it reruns unconditionally inside Ddl).
             await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
         }
 

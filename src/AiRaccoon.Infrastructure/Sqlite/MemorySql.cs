@@ -278,6 +278,9 @@ internal static class MemorySql
                                                   DELETE FROM queue_restore;
                                                   """;
 
+    // e.scope = 'project' matches what ShareAsync can actually resolve
+    // (SelectSourceByHashAndProject); a custom- or workspace-scoped row backing this hash cannot
+    // promote it, so it must not count as "still backed" here either (H4).
     public const string CaptureQueueRowsForSourcePath = """
                                                         INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
                                                         SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
@@ -285,7 +288,7 @@ internal static class MemorySql
                                                         WHERE q.project_id = @projectId
                                                           AND EXISTS (SELECT 1 FROM entries e
                                                                       WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                        AND e.workspace_id IS NULL
+                                                                        AND e.scope = 'project'
                                                                         AND (e.source_file = @path OR e.source_file LIKE @pathPrefix ESCAPE '\'))
                                                         """;
 
@@ -294,7 +297,8 @@ internal static class MemorySql
                                                        SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
                                                        FROM queue_restore r
                                                        WHERE EXISTS (SELECT 1 FROM entries e
-                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash)
+                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash
+                                                                       AND e.scope = 'project')
                                                        ON CONFLICT(project_id, hash) DO NOTHING;
                                                        DELETE FROM queue_restore;
                                                        """;
