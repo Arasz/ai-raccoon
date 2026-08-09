@@ -114,11 +114,20 @@ layer can: the information is not on the wire.
 In-process stdio had no such boundary, so this is genuinely new behaviour rather than a defect
 introduced by an implementation choice. What it means per tool:
 
-- `memory_write` and ingestion are protected by content-hash dedup — a second execution is a no-op.
+- `memory_write` and ingestion are protected by content-hash dedup (`InsertEntry` is
+  `ON CONFLICT DO NOTHING`) — a second execution is a no-op.
 - `memory_delete` is idempotent by shape: the second delete removes nothing.
-- **`memory_sweep` is not.** A sweep selects by current state, so a second pass can remove entries
-  the first pass's deletions made eligible. This is the one to watch.
+- `memory_sweep` is idempotent too, and for a reason worth stating because it is not obvious:
+  `DegradationPolicy.ShouldDegrade` judges each entry on its own rating, age and TTL against a fixed
+  threshold. Nothing is selected relative to the rest of the set — no bottom-N, no quota — so
+  deleting entries never makes other entries eligible, and a second pass finds the same population
+  minus what is already gone.
 - `memory_sync` push/pull is wasteful rather than wrong — a duplicated push re-uploads a snapshot.
+- **The residual is `memory_workspace_consolidate` and `memory_share`,** and the symptom is the
+  opposite of duplication: both *consume* something (a workspace, a queued promotion row), so a
+  second attempt finds it gone and returns a typed refusal. The work happened exactly once; the
+  client is told it failed. That is the honest cost — not corruption, but a false negative the
+  caller may act on by retrying at a higher level.
 
 We deliberately did **not** narrow the retry to "safe" methods. That would require a
 hand-maintained table of which JSON-RPC methods are idempotent, which is the exact drift the
