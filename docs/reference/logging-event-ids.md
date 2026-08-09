@@ -43,7 +43,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 410-412 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 500-507 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` |
 | 510-516 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` |
-| 601-603, 605 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (604 unused — not a gap to fill) |
+| 601-603, 605-606 | `src/AiRaccoon/Setup/Serve/ServeRunner.cs` (604 unused — not a gap to fill) |
 | 610-612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Observability/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 700-704 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` |

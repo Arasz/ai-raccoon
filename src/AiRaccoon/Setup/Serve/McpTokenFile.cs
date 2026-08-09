@@ -49,7 +49,10 @@ internal sealed class McpTokenFile
             await Task.Delay(RetryDelay, cancellationToken);
         }
 
-        return Read() ?? ThrowHelper.ThrowInvalidOperationException<string>($"could not mint or read the MCP token at {Path}");
+        // Reached only when the file exists yet holds no token for a full second — a crash between
+        // create and write. Rotation is manual by design: delete it and start serve again.
+        return Read() ?? ThrowHelper.ThrowInvalidOperationException<string>(
+            $"ai-raccoon: {Path} exists but holds no token — delete it and start serve again");
     }
 
     /// <summary>The stored token, or null when the file is missing, empty or unreadable.</summary>

@@ -235,7 +235,7 @@ internal static partial class ServeRunner
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url}")]
         public static partial void AttachedToExistingServer(ILogger logger, string url);
 
-        [LoggerMessage(EventId = 640, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
+        [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
         public static partial void McpTokenReady(ILogger logger, string tokenPath);
     }
 }
