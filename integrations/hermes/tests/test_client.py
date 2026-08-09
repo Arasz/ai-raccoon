@@ -199,3 +199,51 @@ def test_connect_failure_with_an_empty_reason_still_names_the_transport(client_m
     message = str(caught.value)
     assert "CancelledError" in message
     assert "http://127.0.0.1:7799/mcp" in message
+
+
+def test_auth_headers_survives_an_undecodable_token_file(client_module, tmp_path):
+    """_describe() calls _auth_headers() from inside the connect-failure handler, so anything
+    it raises replaces the diagnostic it exists to produce. read_text raises UnicodeDecodeError
+    (a ValueError), not OSError, on a clobbered file."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_bytes(b"\xff\xfe\x00binary")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {}
+    assert "not sent" in client._describe()
+
+
+def test_auth_headers_survives_an_unresolvable_home(client_module, monkeypatch):
+    """expanduser() raises RuntimeError when ~ cannot be resolved (no HOME, no passwd entry) —
+    and the default token_file starts with ~."""
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    monkeypatch.setattr("pathlib.Path.expanduser", _raise_runtime_error)
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp")
+    assert client._auth_headers() == {}
+    assert "not sent" in client._describe()
+
+
+def _raise_runtime_error(self):
+    raise RuntimeError("Could not determine home directory.")
+
+
+def test_http_client_does_not_follow_redirects(client_module, tmp_path):
+    """httpx strips Authorization across origins but keeps custom headers, so a 3xx from the
+    configured endpoint would hand X-AiRaccoon-Token to an arbitrary host — defeating the
+    loopback-only guard."""
+    import asyncio
+
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+
+    async def build():
+        try:
+            await asyncio.wait_for(client._open(), timeout=0.5)
+        except BaseException:
+            pass
+        return client._http_client
+
+    http_client = asyncio.run(build())
+    assert http_client is not None
+    assert http_client.follow_redirects is False

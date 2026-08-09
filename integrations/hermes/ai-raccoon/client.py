@@ -84,9 +84,10 @@ class _MCPClient:
         future = asyncio.run_coroutine_threadsafe(self._open(), self._loop)
         try:
             future.result(timeout=CONNECT_TIMEOUT_S)
-        # BaseException, not Exception: anyio cancels the caller when a sibling task fails, so the
-        # real cause arrives as asyncio.CancelledError — outside Exception, and with an empty str().
-        except BaseException as e:
+        # CancelledError explicitly: anyio cancels the caller when a sibling task fails, so the real
+        # cause arrives outside Exception with an empty str(). Not bare BaseException — a Ctrl-C
+        # during the 30 s wait belongs to the operator's shell, not to this error message.
+        except (Exception, asyncio.CancelledError) as e:
             # Never leave the pending _open task behind: a stdio spawn that
             # completes after the timeout would leak the child process.
             future.cancel()
@@ -101,7 +102,9 @@ class _MCPClient:
         if self._loop is not None and self._loop.is_running():
             try:
                 asyncio.run_coroutine_threadsafe(self._close(), self._loop).result(timeout=CLOSE_TIMEOUT_S)
-            except Exception as e:  # pragma: no cover - teardown best-effort
+            # Same widening as connect(): .result() surfaces a cancelled teardown as
+            # CancelledError, and letting it escape skips the loop stop and thread join below.
+            except (Exception, asyncio.CancelledError) as e:  # pragma: no cover - best-effort
                 logger.debug("ai-raccoon client teardown failed: %s", e)
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._thread is not None:
@@ -202,17 +205,22 @@ class HttpClient(_MCPClient):
         self._url = url
         self._token_file = token_file
         self._http_client = None
+        self._header_sent: Optional[bool] = None
 
     def _describe(self) -> str:
-        sent = "sent" if self._auth_headers() else "not sent"
-        return f"{self._url} ({TOKEN_HEADER} {sent}; token file {self._token_file})"
+        # What _open actually sent, when it got that far — re-probing would let the message
+        # describe a file that appeared or vanished after the attempt.
+        sent = self._auth_headers() if self._header_sent is None else self._header_sent
+        return f"{self._url} ({TOKEN_HEADER} {'sent' if sent else 'not sent'}; token file {self._token_file})"
 
     def _auth_headers(self) -> Dict[str, str]:
         if not self._token_file or not _is_loopback_url(self._url):
             return {}
         try:
             token = Path(self._token_file).expanduser().read_text(encoding="utf-8").strip()
-        except OSError:
+        except (OSError, ValueError, RuntimeError):
+            # RuntimeError: expanduser() with no resolvable home. ValueError: UnicodeDecodeError on
+            # a clobbered file. Both reach _describe() inside the connect-failure handler.
             return {}
         if not token:
             return {}
@@ -223,10 +231,14 @@ class HttpClient(_MCPClient):
         from mcp import ClientSession
         from mcp.client.streamable_http import streamable_http_client
 
+        headers = self._auth_headers()
+        self._header_sent = bool(headers)
         self._http_client = httpx.AsyncClient(
-            follow_redirects=True,
+            # False: httpx strips Authorization across origins but keeps a custom header, so a 3xx
+            # would hand the loopback token to whatever host it names. /mcp never redirects.
+            follow_redirects=False,
             timeout=httpx.Timeout(CONNECT_TIMEOUT_S, read=_HTTP_READ_TIMEOUT_S),
-            headers=self._auth_headers() or None,
+            headers=headers or None,
         )
         self._ctx = streamable_http_client(self._url, http_client=self._http_client)
         read, write, _ = await self._ctx.__aenter__()
