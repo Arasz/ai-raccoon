@@ -128,22 +128,21 @@ public sealed partial class PromotionQueueService(
             .Take(limit).ToList();
     }
 
-    public async Task<PromotionMeta> GetMetaAsync(CancellationToken cancellationToken = default)
+    public async Task<PromotionMeta> GetMetaAsync(string? projectId,
+        CancellationToken cancellationToken = default)
     {
-        var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
-        IReadOnlyDictionary<string, PromotionCapacityInfo>? capacityByProject = null;
-        if (stats.PerProject.Count > 0)
+        var stats = await queue.GetWaitStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
+        PromotionCapacityInfo? capacity = null;
+        if (projectId is not null && stats.WaitingCount > 0)
         {
-            // projectCount = occupying projects, not the full roster: that's what
-            // UniformCountEvictionPolicy competes over.
+            // OccupyingProjects, not the full roster: that's what UniformCountEvictionPolicy competes over.
             var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
-            capacityByProject = PromotionCapacityPolicy.CapacityInfo(cap, stats.PerProject.Count, stats.PerProject);
+            capacity = PromotionCapacityPolicy.CapacityFor(cap, stats.OccupyingProjects, stats.WaitingCount);
         }
 
-        return new PromotionMeta(stats.TotalCount, stats.AvgWaitSeconds,
-            stats.PerProject.Count > 0 ? stats.PerProject : null)
+        return new PromotionMeta(stats.WaitingCount, stats.AvgWaitSeconds)
         {
-            CapacityByProject = capacityByProject,
+            Capacity = capacity,
             OldestWaitSeconds = stats.OldestWaitSeconds
         };
     }

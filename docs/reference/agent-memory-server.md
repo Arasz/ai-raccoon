@@ -69,11 +69,13 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
   `memory_share_extract` in `mode=promote` drains the top queued candidates into
   `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
-  in `meta`; while the queue holds rows, `meta.capacityByProject` also carries each
-  occupying project's `reserved`/`used`/`borrowing` share of the cap (ADR-0007's
-  fair-share promise, made observable) — see [`capacityByProject`
-  semantics](#capacitybyproject-semantics) below for what `reserved` and `borrowing`
-  actually mean.
+  in `meta`, scoped to the project the call named; once that project holds queued rows,
+  `meta.capacity` also carries its `reserved`/`used`/`borrowing` share of the cap
+  (ADR-0007's fair-share promise, made observable) — see [`capacity`
+  semantics](#capacity-semantics) below for what `reserved` and `borrowing`
+  actually mean. The two tools that do not name a single project — `memory_promotion_list`
+  with `projectId` omitted, and `memory_share_extract` over several ids — report a
+  bank-wide count with `capacity` absent. No response names another project.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
@@ -132,11 +134,11 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 
-### `capacityByProject` semantics
+### `capacity` semantics
 
 `reserved` is not a fixed entitlement — it's `cap ÷ (number of projects currently
 holding at least one queued row)`, recomputed fresh on every meta read
-(`PromotionQueueService.GetMetaAsync`, `PromotionCapacityPolicy.CapacityInfo`). The
+(`PromotionQueueService.GetMetaAsync`, `PromotionCapacityPolicy.CapacityFor`). The
 denominator moves: it shrinks as unrelated projects' rows drain out of the queue and
 grows the moment another project proposes its first row, so `reserved` for a project
 that hasn't changed its own usage can still go up or down between two calls.

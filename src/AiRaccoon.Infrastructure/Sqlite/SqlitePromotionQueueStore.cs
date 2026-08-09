@@ -122,6 +122,26 @@ public sealed class SqlitePromotionQueueStore(
         return new PromotionQueueStats(total, avgWait, perProject, oldestWait);
     }
 
+    public async Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        // Dynamic query: over an empty queue the aggregates are untyped NULLs, and Dapper cannot
+        // build a typed deserializer from those — the dynamic path materializes the row instead.
+        var row = await connection.QuerySingleAsync(
+                new CommandDefinition(
+                    PromotionQueueSql.WaitStats,
+                    new { Now = now, ProjectId = projectId },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return new PromotionWaitStats(
+            (int)(long)row.WaitingCount,
+            (double?)row.AvgWaitSeconds,
+            (double?)row.OldestWaitSeconds,
+            (int)(long)row.OccupyingProjects);
+    }
+
     public async Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
         CancellationToken cancellationToken = default)
     {

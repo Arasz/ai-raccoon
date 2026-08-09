@@ -34,7 +34,7 @@ public sealed class WatchTools(
             await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
             await watch.AddAsync(projectId, path, cancellationToken);
-            var envelope = await gate.WrapAsync(new WatchAddResult(projectId, path), cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, new WatchAddResult(projectId, path), cancellationToken);
 
             activity.RecordInvocation();
             return envelope;
@@ -59,7 +59,7 @@ public sealed class WatchTools(
             await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
             var states = await watch.StatusAsync(projectId, cancellationToken);
-            var envelope = await gate.WrapAsync(new WatchStatusResult(states), cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, new WatchStatusResult(states), cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }
@@ -84,7 +84,7 @@ public sealed class WatchTools(
             await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
             await watch.RemoveAsync(projectId, path, cancellationToken);
-            var envelope = await gate.WrapAsync(new WatchRemoveResult(projectId, path), cancellationToken);
+            var envelope = await gate.WrapAsync(projectId, new WatchRemoveResult(projectId, path), cancellationToken);
             activity.RecordInvocation();
             return envelope;
         }

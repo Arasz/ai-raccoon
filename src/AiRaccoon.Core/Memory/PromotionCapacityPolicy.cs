@@ -21,15 +21,11 @@ public static class PromotionCapacityPolicy
     /// <summary>True when the queue is over the total cap and an eviction is due.</summary>
     public static bool NeedsEviction(int totalCount, int totalCap) => totalCount > totalCap;
 
-    /// <summary>Per-project reservation, usage, and whether it is borrowing another project's space.</summary>
-    public static IReadOnlyDictionary<string, PromotionCapacityInfo> CapacityInfo(
-        int totalCap, int projectCount, IReadOnlyDictionary<string, int> perProjectCounts)
+    /// <summary>One project's reservation, usage, and whether it is borrowing another project's space.</summary>
+    public static PromotionCapacityInfo CapacityFor(int totalCap, int projectCount, int used)
     {
         var reservation = ReservationFor(totalCap, projectCount);
-        return perProjectCounts.ToDictionary(
-            pair => pair.Key,
-            pair => new PromotionCapacityInfo(reservation, pair.Value, pair.Value > reservation),
-            StringComparer.Ordinal);
+        return new PromotionCapacityInfo(reservation, used, used > reservation);
     }
 }
 
