@@ -7,4 +7,8 @@ namespace AiRaccoon.Setup;
 ///     the single-channel ruling; runtime configuration lives in the settings table via the
 ///     config commands).
 /// </summary>
-public sealed record ServerConfig(int Port, McpTransport Transport, InfrastructureOptions Options, TimeSpan IdleTimeout = default);
+public sealed record ServerConfig(int Port, McpTransport Transport, InfrastructureOptions Options, TimeSpan IdleTimeout = default)
+{
+    /// <summary>The loopback secret guarding /mcp; null leaves the endpoint ungated (ADR-0020).</summary>
+    public string? McpToken { get; init; }
+}

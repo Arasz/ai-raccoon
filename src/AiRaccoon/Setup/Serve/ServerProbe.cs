@@ -6,7 +6,7 @@ namespace AiRaccoon.Setup.Serve;
 
 /// <summary>
 ///     Recognizes an ai-raccoon MCP server on an endpoint: POST /mcp with an MCP Accept header and a
-///     non-JSON body; recognized iff status ∈ {400,405,406} and the body mentions jsonrpc.
+///     non-JSON body; recognized iff status ∈ {400,401,405,406} and the body mentions jsonrpc.
 ///     2 attempts, 1s timeout each (docs/plans/2026-08-06-http-serve-mode-plan.md R14).
 /// </summary>
 internal sealed class ServerProbe(HttpClient httpClient)
@@ -37,7 +37,11 @@ internal sealed class ServerProbe(HttpClient httpClient)
                 };
                 request.Headers.Accept.ParseAdd("application/json, text/event-stream");
                 using var response = await httpClient.SendAsync(request, cancellationToken);
-                if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotAcceptable)
+                // 401 is in the set on purpose: the probe carries no token, so a token-guarded
+                // server — or one under a different data root — must still be recognized
+                // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
+                if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized
+                    or HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotAcceptable)
                 {
                     var body = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (body.Contains("jsonrpc", StringComparison.Ordinal))
