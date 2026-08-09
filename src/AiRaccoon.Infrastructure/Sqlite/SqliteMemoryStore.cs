@@ -461,10 +461,20 @@ public sealed partial class SqliteMemoryStore(
             {
                 var pathPrefix = LikePattern.Escape(path) + "/%";
                 await connection.ExecuteAsync(
+                        Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        Def(MemorySql.CaptureQueueRowsForSourcePath, new { projectId, path, pathPrefix },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
                         Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
                     .ConfigureAwait(false);
                 await Ingestor
                     .IngestFileAsync(connection, projectId, path, null, cancellationToken, embedInline: false)
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
                     .ConfigureAwait(false);
                 await connection.ExecuteAsync(
                         Def(MemorySql.UpsertWatchFile,

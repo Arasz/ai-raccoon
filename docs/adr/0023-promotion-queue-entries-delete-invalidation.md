@@ -66,7 +66,7 @@ went green.
 `OLD.project_id` is `NULL` for shared-scope `entries` rows (`project_id TEXT NULL`), and SQL's
 `project_id = NULL` never matches any row — not even another `NULL`. So deleting a shared-scope
 entry never touches `promotion_queue`, which is correct: promotion dequeues its own row explicitly
-(`PromotionQueueService.PromoteAsync` discards after `ShareAsync` succeeds), and a queue row is
+(`PromotionQueueService.PromoteAsync` claims the row with a discard *before* it shares), and a queue row is
 always project-scoped, never shared-scoped, so there is nothing for a shared delete to invalidate.
 This is a consequence of the predicate, not a special case written for it.
 
@@ -106,6 +106,15 @@ reaching a concrete infrastructure type directly instead of routing through a po
 - **Positive.** Every present and future deleter of `entries` rows is covered automatically —
   `SweepService`, the four `SqliteMemoryStore` delete paths, and `SyncService`'s merge — with no
   code at any of those call sites and nothing to keep in sync as new ones are added.
+- **Negative — a replace is a delete, so the trigger over-fires on it.** `ReplaceFileAsync` deletes
+  every chunk of a source path and re-ingests, inside one transaction. Chunk hashes are content-derived,
+  so a chunk whose text did not change returns under the *same* hash — but at the instant of the delete
+  nothing backs it, the `NOT EXISTS` guard passes, and its candidate is dropped. SQLite has no deferred
+  triggers, so the guard cannot see the end of the transaction. `ReplaceFileAsync` therefore captures the
+  affected queue rows into a temp table before the delete and re-inserts the ones whose hash is backed
+  again after the re-ingest (`CaptureQueueRowsForSourcePath` / `RestoreQueueRowsStillBacked`). A chunk
+  that genuinely changed does not come back and stays dropped, which is the intended behaviour.
+  `DeleteSourcePathAsync` needs no such treatment — it deletes without re-ingesting.
 - **Negative — per-row cost on large deletes.** The trigger is a per-row `AFTER DELETE` (SQLite has
   no statement-level triggers), so it runs once per row for a multi-row delete
   (`DeleteContextAsync`, `DeleteSourcePathAsync`'s subtree cascade, `SyncService`'s tombstone-driven

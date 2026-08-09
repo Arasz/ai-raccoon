@@ -4,6 +4,8 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -152,6 +154,67 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         var rerun = await _queueStore.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
         rerun.TotalOrphans.ShouldBe(0, "prune must be idempotent — nothing left to remove on a second pass");
+    }
+
+    /// <summary>
+    ///     The verb as a user runs it. The store-level test above passes a bool straight to
+    ///     PruneOrphansAsync and so cannot see the argv-to-handler wiring, which is where this shipped broken.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PruneVerb_ParsedFromArgv_ReachesTheStore(bool apply)
+    {
+        await _queueStore.UpsertAsync("acme", [Candidate("orphan-1", "gone", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        string[] argv = apply ? ["extract", "prune", "--apply"] : ["extract", "prune"];
+        CliArgs.TryParse(argv, out var parsed);
+        parsed.Errors.ShouldBeEmpty();
+
+        var stdout = new StringWriter();
+        var exit = await new ExtractCommands(_queueStore)
+            .PruneAsync(parsed.ParseResult, stdout, TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(0);
+        stdout.ToString().ShouldContain("1 orphaned candidate(s)");
+        var remaining = (await _queueStore.ListAsync(null, TestContext.Current.CancellationToken)).Count;
+        remaining.ShouldBe(apply ? 0 : 1);
+    }
+
+    /// <summary>
+    ///     A re-ingest deletes every chunk of the path and re-inserts them; a chunk whose text did not
+    ///     change returns under the same content hash. Its candidate must survive that round trip.
+    /// </summary>
+    [Fact]
+    public async Task ReplacingAWatchedFile_KeepsCandidatesForChunksThatDidNotChange()
+    {
+        await SetScopeAsync("acme");
+        var path = Path.Combine(_contentRoot, "multi.md");
+        await File.WriteAllTextAsync(path, "stable paragraph\n\noriginal second paragraph",
+            TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", path, null, TestContext.Current.CancellationToken);
+        var stableHash = await HashOfAsync("acme", "stable paragraph");
+        await _queueStore.UpsertAsync("acme", [Candidate(stableHash, "stable paragraph", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        await File.WriteAllTextAsync(path, "stable paragraph\n\nrevised second paragraph",
+            TestContext.Current.CancellationToken);
+        await _store.ReplaceFileAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
+
+        (await HashOfAsync("acme", "stable paragraph")).ShouldBe(stableHash,
+            "the unchanged chunk is re-inserted under the same content hash");
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldContain(stableHash,
+                "its entry is alive again after the replace, so the candidate must not have been dropped");
+    }
+
+    private async Task<string> HashOfAsync(string projectId, string value)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleAsync<string>(
+            "SELECT hash FROM entries WHERE project_id = @projectId AND value = @value",
+            new { projectId, value });
     }
 
     private async Task<string> SingleEntryHashAsync(string projectId, string sourceFile)
