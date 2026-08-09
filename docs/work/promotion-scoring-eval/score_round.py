@@ -5,7 +5,7 @@
 `<split-dir>` holds split_train.json / split_validation.json / split_holdout.json, each a JSON
 array of labeled candidates. Rows carrying `_owner_labeled` are reported separately: those labels
 come from the human owner, the rest from a rater jury, and a model that gains on one while losing
-the other has not improved (docs/work/2026-08-09-promotion-scoring-tournament.md).
+the other has not improved (docs/work/2026-08-09-promotion-scoring-round3.md).
 """
 import json
 import os

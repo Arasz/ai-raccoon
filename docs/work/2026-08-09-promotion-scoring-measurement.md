@@ -86,7 +86,7 @@ organic-only subset fell to 0.3875 on the 292-row round.
 > both are **over**scored, `organic_note` by +0.57 and `measurement` by +0.55. A prior-versus-
 > observed-mean gap shows what the evidence layer does; it says nothing about what it should do,
 > and reading a direction of *error* out of it was unsound. Only the labels settle that — see
-> `2026-08-09-promotion-scoring-tournament.md`.
+> `2026-08-09-promotion-scoring-round3.md`.
 
 ## 3. Where this leaves the algorithm
 
