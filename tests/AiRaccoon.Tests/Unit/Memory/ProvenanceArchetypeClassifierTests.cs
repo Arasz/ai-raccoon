@@ -274,12 +274,27 @@ public sealed class ProvenanceArchetypeClassifierTests
     [Theory]
     [InlineData("hermes/20260806_215718_fd7f66")]
     [InlineData("some/prefix/hermes/20260806_215718_fd7f66")]
+    [InlineData("hermes/84304448-08b6-4aec-a32b-af9f3a67097b")]
     public void HermesConversationIdSourceFile_IsTranscript(string sourceFile)
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(
             "docs/work/notes.md", sourceFile: sourceFile, value: "a conversation recap");
 
         archetype.ShouldBe(ProvenanceArchetype.Transcript);
+    }
+
+    /// <summary>A dated document that merely lives under a `hermes/` directory is not a conversation
+    /// id: both live id shapes are a timestamp followed by `_`, or a UUID, and neither admits a
+    /// dash-then-prose filename.</summary>
+    [Theory]
+    [InlineData("hermes/20260809-foo.md")]
+    [InlineData("hermes/notes-plan.md")]
+    public void DatedDocumentUnderAHermesDirectory_IsNotATranscript(string sourceFile)
+    {
+        var archetype = ProvenanceArchetypeClassifier.Classify(
+            "docs/work/notes.md", sourceFile: sourceFile, value: "a durable note about something");
+
+        archetype.ShouldNotBe(ProvenanceArchetype.Transcript);
     }
 
     /// <summary>The transcript check reads `source_file` even on a hex (organic-write) path — a

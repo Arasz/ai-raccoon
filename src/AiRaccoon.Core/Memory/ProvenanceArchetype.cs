@@ -244,7 +244,7 @@ internal static partial class ProvenanceArchetypeClassifier
     /// <summary>A Hermes conversation id used as a source, e.g. `hermes/20260809_125502_0d3cd9` — the
     /// one case where `source_file` on a hex-path (organic) row carries real, negative information
     /// (METHOD.md §7): a chat dump, whatever it looks like.</summary>
-    [GeneratedRegex(@"(^|/)hermes/\d{6,}[_-]", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(^|/)hermes/(\d{6,}_|[0-9a-f]{8}-[0-9a-f]{4}-)", RegexOptions.IgnoreCase)]
     private static partial Regex TranscriptSource();
 
     [GeneratedRegex(@"^[0-9a-f]{32,}(?:\.md)?$", RegexOptions.IgnoreCase)]
