@@ -31,7 +31,8 @@ Two remedies were put to the owner:
 
 - **A — root the tool span**, starting it with an explicit empty parent context. Keeps the non-goal
   and additionally lets the hardcoded sampler go, restoring `OTEL_TRACES_SAMPLER`.
-- **B — register `AddSource("Microsoft.AspNetCore.Hosting")`**, so the parent is recorded and
+- **B — register the ASP.NET Core request source** (put to the owner as `"Microsoft.AspNetCore.Hosting"`;
+  the correct name is `"Microsoft.AspNetCore"` — see the Decision section), so the parent is recorded and
   exported and the tool span nests under a real request span. Reopens the non-goal.
 
 **The owner chose B**, on a dated review form (`docs/work/2026-08-09-otlp-export-feedback.md`, F5
@@ -63,7 +64,15 @@ spans under it.
 > the pre-existing non-goal test `EndpointSet_DoesNotRegisterAspNetCoreInstrumentation` "was never
 > watching the right source". **That test had it right all along.** Four documents repeated one
 > mistake because each trusted the previous rather than the framework's own source. The metrics half
-> of the same confusion is *not* an error: `AddMeter("Microsoft.AspNetCore.Hosting")` is correct. One span per inbound HTTP request — 1:1 with tool-call volume, since
+> of the same confusion is *not* an error: `AddMeter("Microsoft.AspNetCore.Hosting")` is correct.
+>
+> **Why it was so easy to get wrong:** the Activity's own *name* is
+> `Microsoft.AspNetCore.Hosting.HttpRequestIn` — see the Context section above, which still uses it
+> correctly — while the *source* it is created on is `Microsoft.AspNetCore`. `AddSource` matches on
+> the source, not the activity name, and the two differ by exactly the token that also happens to be
+> the correct Meter name. Three plausible-looking strings, one right answer per signal.
+
+One span per inbound HTTP request — 1:1 with tool-call volume, since
 each Streamable HTTP POST carries one JSON-RPC call — plus the `/observability` GET from ADR 0008.
 
 Both names live in `OtlpNames`, the derived registry, so the exporter and the `dotnet-trace` command
@@ -86,9 +95,12 @@ switch must be set before any ASP.NET Core hosting type is touched, so it goes a
 web-host construction path, inside the OTLP opt-in gate — an unconfigured process never mutates
 process-global state.
 
-**Unverified, flagged rather than guessed:** whether the framework reads that switch lazily per
-request or caches it at type initialisation was not confirmed. The ordering above is chosen to be
-correct either way, but a test should pin that the tags actually arrive.
+**Settled, 2026-08-09 — this was flagged unverified and has since been checked.** The switch is
+read **once**, in `HostingApplicationDiagnostics`'s constructor, which runs when the generic host
+starts — not per request, and not at static type-init. Setting it before
+`WebApplication.CreateBuilder` is therefore comfortably early. `RequestSpan_CarriesHttpSemanticConventionTags`
+is the proof this section asked for: it was red (`http.request.method` null) until the switch was
+added, then green.
 
 ### Tool spans stay `ActivityKind.Internal`
 
