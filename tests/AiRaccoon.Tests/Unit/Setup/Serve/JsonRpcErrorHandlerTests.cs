@@ -59,6 +59,37 @@ public sealed class JsonRpcErrorHandlerTests
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
     }
 
+    /// <summary>
+    ///     The gate answers 401 with a JSON-RPC error carrying a null id (McpTokenGate). Rewritten to
+    ///     200 it correlates with no pending request, so the SDK drops it and `initialize` hangs to its
+    ///     timeout instead of reporting the token file.
+    /// </summary>
+    [Fact]
+    public async Task GateRefusal_StaysAFailure()
+    {
+        var response = await SendAsync(HttpStatusCode.Unauthorized, "application/json",
+            """
+            {"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"ai-raccoon: /mcp needs the X-AiRaccoon-Token header; the token is in /x/mcp-token"}}
+            """);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>
+    ///     The general rule the gate's 401 is one case of. Body measured from a real `serve`: a
+    ///     malformed POST answers 400 with id null, and nothing correlates with that either.
+    /// </summary>
+    [Fact]
+    public async Task ErrorBodyWithNoCorrelatingId_StaysAFailure()
+    {
+        var response = await SendAsync(HttpStatusCode.BadRequest, "application/json",
+            """
+            {"error":{"code":-32600,"message":"Bad Request: The POST body did not contain a valid JSON-RPC message."},"id":null,"jsonrpc":"2.0"}
+            """);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
     [Fact]
     public async Task SuccessfulResponse_IsUntouched()
     {

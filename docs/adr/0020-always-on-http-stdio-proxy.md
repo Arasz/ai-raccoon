@@ -80,7 +80,8 @@ process for a `url` entry, so nothing would ever start the server.
   `backend.SendRequestAsync(request, ct)` with the client's id restored on the response;
   notifications go to `SendMessageAsync`; the local handler is suppressed by not calling `next`. No
   method is named anywhere in the proxy — adding a tool or an entire new MCP method requires no
-  proxy change. `initialize` is forwarded, not synthesised, so capabilities are the backend's. The
+  proxy change *travelling client→backend*, which is the only direction this relays (see the
+  one-directional constraint in Consequences). `initialize` is forwarded, not synthesised, so capabilities are the backend's. The
   local server registers no tools, so an interception failure surfaces as an empty tool list rather
   than a second server quietly opening the bank.
 - **`--transport stdio` keeps today's behaviour exactly** — a complete in-process server, no proxy,
@@ -142,6 +143,13 @@ process for a `url` entry, so nothing would ever start the server.
   created closes without the exclusion being touched.
 - **Neutral.** `McpEntryRenderer` and `serve --mcp-entry` are unaffected; a direct `url` entry
   remains valid for anyone who wants one.
+- **Constraint — the relay is one-directional, so "no proxy change" holds only client→backend.**
+  `ProxyForwarder` filters the client's incoming messages and registers no notification or request
+  handler on the backend session, so anything the backend originates — `notifications/progress`,
+  `notifications/message`, `tools/list_changed`, a `sampling/createMessage` request — is dropped
+  rather than relayed. Nothing emits these today, which is why it costs nothing yet; the first tool
+  that reports progress or the first server-initiated sampling call needs a reverse relay built,
+  not just a tool added.
 - **Constraint for later readers — the proxy host composes no tool-layer filters.** Bare
   `ai-raccoon` executes no tools; it forwards. Anything registered beside `ToolRefusals.Filter`
   (`McpServerSetup.cs:169`) — tool metrics, refusal policy, a `CallToolFilter` — belongs on the

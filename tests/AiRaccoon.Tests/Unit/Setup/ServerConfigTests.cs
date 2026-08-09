@@ -123,6 +123,25 @@ public class ServerConfigTests
     [Fact]
     public void DefaultOptions_IdleTimeout_IsFourHours() => DefaultOptions.IdleTimeout.ShouldBe(TimeSpan.FromHours(4));
 
+    /// <summary>
+    ///     A record's synthesised ToString prints every property, and for `serve` stderr is where all
+    ///     logging goes — so one interpolated config in a log line or exception would put the loopback
+    ///     secret on disk (ADR-0020).
+    /// </summary>
+    [Fact]
+    public void ToString_DoesNotPrintTheMcpToken()
+    {
+        const string token = "loopback-secret-that-must-not-be-printed";
+        var config = new ServerConfig(7721, McpTransport.Proxy,
+            new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User }) { McpToken = token };
+
+        var printed = config.ToString();
+
+        printed.ShouldNotContain(token);
+        // Still a useful line: the launch identity an operator would read it for survives.
+        printed.ShouldContain("7721");
+    }
+
     private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
         int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>
         new()

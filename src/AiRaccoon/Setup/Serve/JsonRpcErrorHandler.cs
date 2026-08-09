@@ -8,7 +8,8 @@ namespace AiRaccoon.Setup.Serve;
 ///     Restores a JSON-RPC error the response status would otherwise swallow: the SDK's streamable
 ///     transport rejects an error status before it reads the body, so an unknown method comes back
 ///     as a bare -32603 with the backend's code and message both lost
-///     (docs/adr/0020-always-on-http-stdio-proxy.md).
+///     (docs/adr/0020-always-on-http-stdio-proxy.md). Only an error carrying an id the client can
+///     correlate qualifies — see IsJsonRpcError.
 /// </summary>
 internal sealed class JsonRpcErrorHandler : DelegatingHandler
 {
@@ -65,6 +66,11 @@ internal sealed class JsonRpcErrorHandler : DelegatingHandler
         }
     }
 
+    /// <summary>
+    ///     A JSON-RPC error answering a request this client sent. The id is the whole of that test:
+    ///     rewritten to 200, an error correlating with nothing is dropped by the SDK, which turns the
+    ///     gate's 401 into silence instead of the verdict it wrote (McpTokenGate).
+    /// </summary>
     private static bool IsJsonRpcError(string candidate)
     {
         if (candidate.Length == 0)
@@ -77,6 +83,7 @@ internal sealed class JsonRpcErrorHandler : DelegatingHandler
             using var document = JsonDocument.Parse(candidate);
             return document.RootElement.ValueKind == JsonValueKind.Object &&
                    document.RootElement.TryGetProperty("jsonrpc", out _) &&
+                   Correlates(document.RootElement) &&
                    document.RootElement.TryGetProperty("error", out var error) &&
                    error.ValueKind == JsonValueKind.Object &&
                    error.TryGetProperty("code", out var code) &&
@@ -87,4 +94,8 @@ internal sealed class JsonRpcErrorHandler : DelegatingHandler
             return false;
         }
     }
+
+    /// <summary>JSON-RPC ids are strings or numbers; absent and null name no request.</summary>
+    private static bool Correlates(JsonElement root) =>
+        root.TryGetProperty("id", out var id) && id.ValueKind is JsonValueKind.String or JsonValueKind.Number;
 }
