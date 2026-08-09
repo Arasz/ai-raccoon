@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiRaccoon.Infrastructure.Assets;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Embedding;
@@ -148,12 +149,12 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         return null;
     }
 
-    private static async Task<string?> DownloadAsync(HttpClient http, string url, string target, string expectedSha,
+    private async Task<string?> DownloadAsync(HttpClient http, string url, string target, string expectedSha,
         CancellationToken cancellationToken)
     {
         try
         {
-            var bytes = await http.GetByteArrayAsync(url, cancellationToken).ConfigureAwait(false);
+            var bytes = await new AssetDownloader(http).GetAsync(url, cancellationToken).ConfigureAwait(false);
             var actual = Convert.ToHexString(SHA256.HashData(bytes));
             if (!actual.Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
             {
@@ -162,6 +163,11 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
 
             await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
             return null;
+        }
+        catch (EmptyDownloadException ex)
+        {
+            Log.EmptyBundledModelDownload(logger, Path.GetFileName(target), url);
+            return $"{Path.GetFileName(target)}: {ex.Message}";
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException)
         {
@@ -179,6 +185,9 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
 
         [LoggerMessage(EventId = 412, Level = LogLevel.Debug, Message = "Bundled model assets verified")]
         public static partial void BundledModelAssetsVerified(ILogger logger);
+
+        [LoggerMessage(EventId = 413, Level = LogLevel.Error, Message = "Bundled model asset {Name} downloaded 0 bytes from {Url}")]
+        public static partial void EmptyBundledModelDownload(ILogger logger, string name, string url);
     }
 }
 

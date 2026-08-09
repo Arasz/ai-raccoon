@@ -391,25 +391,36 @@ public sealed class PromotionQueueServiceTests : IDisposable
         Json(meta).ShouldNotContain("other");
     }
 
+    /// <summary>
+    ///     Sweep degrades committed entries only, never the queue directly — but the
+    ///     promotion_queue_entries_ad trigger (ADR-0023) fires on the entries delete sweep does,
+    ///     so a candidate whose entry sweep just removed cannot survive it. A candidate with no
+    ///     backing entry, or one backed by a healthy entry sweep never touches, is untouched.
+    /// </summary>
     [Fact]
-    public async Task Sweep_NeverTouchesTheQueue()
+    public async Task Sweep_DropsQueueRowsForTheEntriesItDeleted_AndLeavesTheRest()
     {
         var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry", null, null, null, null, null),
             TestContext.Current.CancellationToken);
         await store.SetEntryTtlAsync("acme", doomed.Hash, 0.001, TestContext.Current.CancellationToken);
+        var healthy = await store.WriteAsync(
+            new MemoryWriteRequest("acme", "healthy entry", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromDays(1)); // older than the TTL, rating below any threshold
         await _service.ProposeAsync("acme",
-            [Candidate(doomed.Hash, "doomed entry", 1.0), Candidate("fake-hash", "queued row", 2.0)],
+            [Candidate(doomed.Hash, "doomed entry", 1.0), Candidate("fake-hash", "queued row", 2.0),
+             Candidate(healthy.Hash, "healthy entry", 3.0)],
             TestContext.Current.CancellationToken);
 
         var sweeper = new SweepService(store, _clock);
         await sweeper.SweepAsync("acme", 0.9, dryRun: false, TestContext.Current.CancellationToken);
 
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
-            .Select(r => r.Hash).ShouldBe(["fake-hash", doomed.Hash],
-            "sweep degrades committed entries only — the propose tier is untouched");
+            .Select(r => r.Hash).ShouldBe([healthy.Hash, "fake-hash"],
+            "the doomed entry's row is gone with it; a candidate with no backing entry and one backed " +
+            "by an entry sweep left alone both survive");
     }
 
     private sealed class RecordingMetrics : IPromotionQueueMetrics

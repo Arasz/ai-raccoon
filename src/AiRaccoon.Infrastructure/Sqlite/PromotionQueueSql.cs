@@ -54,6 +54,22 @@ internal static class PromotionQueueSql
                                     WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
                                     """;
 
+    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row, grouped per project for the dry-run report.</summary>
+    public const string OrphanCountsPerProject = """
+                                                 SELECT project_id AS ProjectId, count(*) AS Count
+                                                 FROM promotion_queue q
+                                                 WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                                   WHERE e.project_id = q.project_id AND e.hash = q.hash)
+                                                 GROUP BY project_id
+                                                 """;
+
+    public const string DeleteOrphans = """
+                                        DELETE FROM promotion_queue
+                                        WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                          WHERE e.project_id = promotion_queue.project_id
+                                                            AND e.hash = promotion_queue.hash)
+                                        """;
+
     public const string EvictVictim = """
                                       DELETE FROM promotion_queue
                                       WHERE id = (

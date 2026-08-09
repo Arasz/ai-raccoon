@@ -331,6 +331,34 @@ public sealed class ExtractionHostedServiceTests
     }
 
     [Fact]
+    public async Task RunOnce_PromoteMode_WithFailures_LogsWarningAndDebugDetail()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service, queue) = NewStack(logger);
+        store.Projects.Clear();
+        store.Projects.Add("acme"); // a single project keeps the per-pass log assertions unambiguous
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+        queue.PromoteOutcome = new PromoteOutcome(["h1"], 0, new Dictionary<string, int>())
+        {
+            Failures = [new PromoteFailure("acme", "h2", "stale-hash")]
+        };
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var warning = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 508);
+        warning.Level.ShouldBe(LogLevel.Warning);
+        warning.Message.ShouldContain("acme");
+        warning.Message.ShouldContain("1");
+
+        var detail = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 509);
+        detail.Level.ShouldBe(LogLevel.Debug);
+        detail.Message.ShouldContain("h2");
+        detail.Message.ShouldContain("stale-hash");
+    }
+
+    [Fact]
     public async Task RunOnce_PromoteMode_LogsCountsOnly_NoCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();

@@ -5,7 +5,7 @@ Proves a clean install from nuget.org works perfectly first try: all deps presen
 no missing models, no silent repair. Post-publish complement to the pre-publish pack
 gate; model/vocab sha256 pins come from scripts/src/bundle.py — the single source of
 the bundle contract. Run from anywhere; everything happens in temp dirs and never touches
-~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.5.0 (pin must be
+~/.dotnet/tools or ~/.ai-raccoon. Version override: AI_RACCOON_VERSION=1.6.0 (pin must be
 bumped after each republish — NuGet versions are immutable). Source override:
 AI_RACCOON_SOURCE=local installs from the repo's .nupkg-local (pre-publish dress
 rehearsal of the same shell+payload nuget.org receives); default nuget fetches from
@@ -50,7 +50,7 @@ if "--help" in sys.argv or "-h" in sys.argv:
     print(__doc__)
     sys.exit(0)
 
-VERSION = os.environ.get("AI_RACCOON_VERSION", "1.5.0")
+VERSION = os.environ.get("AI_RACCOON_VERSION", "1.6.0")
 SOURCE = os.environ.get("AI_RACCOON_SOURCE", "nuget")  # "nuget" | "local" (.nupkg-local)
 LOCAL_SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".nupkg-local"))
 # Model/vocab sha256 pins are imported from scripts/src/bundle.py — the single source

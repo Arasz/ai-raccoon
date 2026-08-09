@@ -67,7 +67,12 @@ internal static partial class CandidateFeatureExtractor
 
         var tableRowCount = lines.Count(l => TableRow().IsMatch(l));
         var others = allProjectIds.Where(id => !string.Equals(id, projectId, StringComparison.Ordinal)).ToList();
-        var head = v.Length > ForeignSubjectHeadChars ? v[..ForeignSubjectHeadChars] : v;
+        // An id mentioned only inside a bracketed enumeration is not the subject of the chunk;
+        // strip bracketed spans before taking the subject-detection head window.
+        var subjectScanText = BracketedSpan().Replace(v, string.Empty);
+        var head = subjectScanText.Length > ForeignSubjectHeadChars
+            ? subjectScanText[..ForeignSubjectHeadChars]
+            : subjectScanText;
 
         var openerHead = v.TrimStart('*', '#', '>', '-', '–', ' ', '\t', '\n');
         openerHead = openerHead.Length > StatusOpenerHeadChars ? openerHead[..StatusOpenerHeadChars] : openerHead;
@@ -121,6 +126,9 @@ internal static partial class CandidateFeatureExtractor
 
     [GeneratedRegex(@"[A-Za-z][A-Za-z0-9_\-']*")]
     private static partial Regex Words();
+
+    [GeneratedRegex(@"\([^)]*\)|\[[^\]]*\]")]
+    private static partial Regex BracketedSpan();
 
     [GeneratedRegex(
         """\bnever\b|\balways\b|\bmust (?:still |be |not |name|make|raise|treat|come|already|exist)|\bdo not\b|\bdon't\b|\bdoes not apply\b|(?<!\bI )(?<!we )\bcannot\b|\bprefer\b|\binvariant\b|\btraps?\b|\bgotchas?\b|\bbeware\b|\bmitigations?\b|\bworkarounds?\b|\brule\b|\bcontract\b|\bsemantics\b|\bprecedence\b|\bby design\b|\bdeliberate(?:ly)?\b|\bon purpose\b|\bsilently\b|\bfails? open\b|\bworse than\b|\bREGRESSION\b|\broot cause\b|\baccepted, not a defect\b|\bnot a defect\b|\bexempt\b|\bso nobody\b|\brecorded here\b|\bfuture (?:session|audit|reader|maintainer)|\binvisible to\b|\bhides?\b(?=[^.]{0,60}\b(?:from|rows|content|search))""",

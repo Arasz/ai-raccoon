@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+
 import pytest
 
 
@@ -61,3 +63,187 @@ def test_unwrap_needs_both_envelope_keys(client_module):
 
 def test_unwrap_leaves_non_mapping_payloads_alone(client_module):
     assert client_module._unwrap("plain text") == "plain text"
+
+
+# -- token_file / _auth_headers (loopback token, D1-D3 + R3) ----------------
+
+
+def test_create_client_http_passes_token_file_through(client_module, tmp_path):
+    """N5: create_client must forward token_file, or it can never reach the client."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("abc123\n")
+    client = client_module.create_client({"transport": "http", "token_file": str(token_file)})
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "abc123"}
+
+
+def test_auth_headers_trims_trailing_newline(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("  abc123  \n")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "abc123"}
+
+
+def test_auth_headers_missing_file_returns_no_header(client_module, tmp_path):
+    client = client_module.HttpClient(token_file=str(tmp_path / "does-not-exist"))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_empty_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_whitespace_only_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("   \n\t  ")
+    client = client_module.HttpClient(token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_unreadable_file_returns_no_header(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    token_file.chmod(0o000)
+    try:
+        client = client_module.HttpClient(token_file=str(token_file))
+        assert client._auth_headers() == {}
+    finally:
+        token_file.chmod(0o600)  # restore so tmp_path teardown can remove it
+
+
+def test_create_client_http_empty_token_file_disables_header(client_module, tmp_path):
+    client = client_module.create_client({"transport": "http", "token_file": ""})
+    assert client._auth_headers() == {}
+
+
+def test_auth_headers_expands_tilde(client_module, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("tilde-token")
+    client = client_module.HttpClient(token_file="~/mcp-token")
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "tilde-token"}
+
+
+def test_auth_headers_attaches_for_127_0_0_1(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_attaches_for_localhost(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://localhost:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_attaches_for_ipv6_loopback(client_module, tmp_path):
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://[::1]:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {"X-AiRaccoon-Token": "secret"}
+
+
+def test_auth_headers_withheld_for_a_remote_host(client_module, tmp_path):
+    """R3: url is arbitrary and passed straight through — an unconditional header would ship
+    the loopback secret in cleartext to whatever host a user configures."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://example.com:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {}
+
+
+def test_get_config_schema_documents_token_file(provider_module):
+    provider = provider_module.AiRaccoonMemoryProvider(config={})
+    schema = provider.get_config_schema()
+    entry = next(e for e in schema if e["key"] == "token_file")
+    assert entry["default"] == "~/.ai-raccoon/mcp-token"
+    description = entry["description"].lower()
+    assert "read at connect" in description or "connect" in description
+    assert "never" in description and "config.yaml" in description
+
+
+def test_connect_failure_names_the_url_and_the_token_file(client_module, tmp_path):
+    """A failed connect must say what it tried. Measured before this test existed: a gated
+    server plus a missing token file surfaced `CancelledError` with an empty message, so the
+    provider logged `connect failed:` and nothing else — the same unreadable failure this
+    whole change exists to remove."""
+
+    class Boom(client_module.HttpClient):
+        async def _open(self):
+            raise RuntimeError("backend said no")
+
+    client = Boom(url="http://127.0.0.1:7799/mcp", token_file=str(tmp_path / "absent-token"))
+    with pytest.raises(client_module.AiRaccoonError) as caught:
+        client.connect()
+    message = str(caught.value)
+    assert "http://127.0.0.1:7799/mcp" in message
+    assert "absent-token" in message
+    assert "backend said no" in message
+
+
+def test_connect_failure_with_an_empty_reason_still_names_the_transport(client_module, tmp_path):
+    """The exact observed shape: an exception whose str() is empty must not produce an
+    error message that is also empty."""
+
+    class Silent(client_module.HttpClient):
+        async def _open(self):
+            raise concurrent.futures.CancelledError()
+
+    client = Silent(url="http://127.0.0.1:7799/mcp", token_file=str(tmp_path / "absent-token"))
+    with pytest.raises(client_module.AiRaccoonError) as caught:
+        client.connect()
+    message = str(caught.value)
+    assert "CancelledError" in message
+    assert "http://127.0.0.1:7799/mcp" in message
+
+
+def test_auth_headers_survives_an_undecodable_token_file(client_module, tmp_path):
+    """_describe() calls _auth_headers() from inside the connect-failure handler, so anything
+    it raises replaces the diagnostic it exists to produce. read_text raises UnicodeDecodeError
+    (a ValueError), not OSError, on a clobbered file."""
+    token_file = tmp_path / "mcp-token"
+    token_file.write_bytes(b"\xff\xfe\x00binary")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+    assert client._auth_headers() == {}
+    assert "not sent" in client._describe()
+
+
+def test_auth_headers_survives_an_unresolvable_home(client_module, monkeypatch):
+    """expanduser() raises RuntimeError when ~ cannot be resolved (no HOME, no passwd entry) —
+    and the default token_file starts with ~."""
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    monkeypatch.setattr("pathlib.Path.expanduser", _raise_runtime_error)
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp")
+    assert client._auth_headers() == {}
+    assert "not sent" in client._describe()
+
+
+def _raise_runtime_error(self):
+    raise RuntimeError("Could not determine home directory.")
+
+
+def test_http_client_does_not_follow_redirects(client_module, tmp_path):
+    """httpx strips Authorization across origins but keeps custom headers, so a 3xx from the
+    configured endpoint would hand X-AiRaccoon-Token to an arbitrary host — defeating the
+    loopback-only guard."""
+    import asyncio
+
+    token_file = tmp_path / "mcp-token"
+    token_file.write_text("secret")
+    client = client_module.HttpClient(url="http://127.0.0.1:7721/mcp", token_file=str(token_file))
+
+    async def build():
+        try:
+            await asyncio.wait_for(client._open(), timeout=0.5)
+        except BaseException:
+            pass
+        return client._http_client
+
+    http_client = asyncio.run(build())
+    assert http_client is not None
+    assert http_client.follow_redirects is False

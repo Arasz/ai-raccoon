@@ -72,6 +72,7 @@ internal sealed class ConfigCommands(
                 ["extract", "exclude", "add"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<ExtractCommands>(nameof(extract))).ExcludeAddAsync(parseResult, store, stdout, cancellationToken),
                 ["extract", "exclude", "remove"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<ExtractCommands>(nameof(extract))).ExcludeRemoveAsync(parseResult, store, stdout, cancellationToken),
                 ["extract", "exclude", "list"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<ExtractCommands>(nameof(extract))).ExcludeListAsync(store, stdout, cancellationToken),
+                ["extract", "prune"] => await (extract ?? ThrowHelper.ThrowArgumentNullException<ExtractCommands>(nameof(extract))).PruneAsync(parseResult, stdout, cancellationToken),
                 ["encryption", "show"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).ShowAsync(store, stdout, cancellationToken),
                 ["encryption", "unset"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).UnsetAsync(store, stdout, stderr, cancellationToken),
                 ["encryption", "migrate"] => await (encryptionCommands ?? ThrowHelper.ThrowArgumentNullException<EncryptionCommands>(nameof(encryptionCommands))).MigrateAsync(stdout, stderr, cancellationToken),

@@ -9,6 +9,46 @@ cloud sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK
 2.1.0 (net10.0).
 
+## What's new (from 1.2.0 to 1.6.0)
+
+- **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that
+  probes port 7721 and starts the backend itself, so every client on the machine
+  shares one embedding model and one bank instead of paying for its own.
+  [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
+- **Upgrading no longer means hunting for a process.** `ai-raccoon serve --restart`
+  cycles the server already on the port over an authenticated loopback shutdown —
+  no PID, no lockout when `dotnet tool update` needs the file.
+  [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
+- **Search got roughly ten times faster.** Persisted chunk columns and partition-key
+  KNN took a vector batch from 32.2 ms to 3.05 ms and an FTS batch from 41.2 ms to
+  9.60 ms, measured on a real bank.
+  [measurements](docs/plans/2026-08-08-search-knn-perf.md)
+- **The shared tier proposes better memories.** Promotion scoring v3 routes each
+  candidate through its own channel — an ADR section and a scratch note are no longer
+  judged by the same yardstick. [ADR-0018](docs/adr/0018-promotion-scoring-v2.md)
+- **Promotion stopped losing candidates.** The queue used to hold hashes whose entry
+  had been re-ingested, and promoting one destroyed the candidate while reporting the
+  whole call as failed. Deleting an entry now clears its queue row, and
+  `ai-raccoon extract prune` cleans up what already leaked.
+  [ADR-0023](docs/adr/0023-promotion-queue-entries-delete-invalidation.md)
+- **Errors tell your agent what to fix.** A wrong or blank argument now comes back as
+  `invalid-argument:` naming the parameter, instead of the opaque
+  `An error occurred invoking '<tool>'`.
+  [tool reference](docs/reference/agent-memory-server.md)
+- **Headings count, not just words.** A second structure vector ranks a match by where
+  it sits in a document, so a heading path pulls its weight alongside the prose.
+  [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
+- **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy
+  scheme, with a migration that moves an existing bank across without a re-import.
+  [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
+- **You can see what the server is doing.** OTLP export ships traces and metrics for
+  tool calls, the promotion queue and ASP.NET requests, following the MCP semantic
+  conventions. [ADR-0009](docs/adr/0009-otlp-export.md)
+- **An old build can't corrupt a newer bank.** The schema is stamped and writes are
+  refused when the binary is behind it — which matters now that one bank is shared by
+  every project on the machine.
+  [ADR-0019](docs/adr/0019-forward-version-write-guard.md)
+
 ## Quick start
 
 Install the tool (package id `ai-raccoon`, command `ai-raccoon`):
@@ -107,8 +147,9 @@ the proxy too, which relays JSON-RPC frames without adding output of its own.
 ### Serve mode (HTTP)
 
 Bare `ai-raccoon` (the default `proxy` transport) starts `ai-raccoon serve`
-for you whenever a client launches it and nothing is already listening — you
-normally never run `serve` by hand. This section covers the manual path: connecting an
+for you whenever a client launches it and nothing is already listening, and
+reads the loopback token itself — you normally never run `serve` by hand and
+never see the token. This section covers the manual path: connecting an
 HTTP-native client straight to a long-lived server, or attaching to one the
 proxy already started.
 
@@ -117,23 +158,20 @@ hours without MCP traffic the server shuts itself down (`--idle-timeout 0`
 disables; spans: `90s/30m/4h/1d`). If the port already hosts an ai-raccoon
 server, `serve` attaches to it and exits 0 (the first process owns the
 watchdog) — pass `--restart` to cycle it instead, which is what an update
-needs (see [Updating](#updating)). `/mcp` requires the `X-AiRaccoon-Token` header: before binding,
+needs (see [Updating](#updating)). `/mcp` and `/shutdown` require
+`X-AiRaccoon-Token` or `Authorization: Bearer <token>`: before binding,
 `serve` mints a random token into `<data-root>/mcp-token` (0600) and every
-caller — the proxy included — must present it; `/observability` stays open,
-unauthenticated. Background it and point a client at the URL:
-
-```bash
-ai-raccoon serve > serve.log 2>&1 &            # POSIX
-hermes mcp add ai-raccoon --url http://127.0.0.1:7721/mcp
-```
-
-`serve --mcp-entry` prints the client config entry for the bound URL
-(`--format hermes|claude|all`; keep stderr out of the entry file:
-`ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`) — the printed
-entry carries the URL only, not the token, so a client connecting this way
-(bypassing the proxy) must add the `X-AiRaccoon-Token` header itself, read
-from `<data-root>/mcp-token`. `serve --port 0` picks a random free port and
+caller — the proxy included — must present one of the two; `/observability`
+stays open, unauthenticated. `serve --port 0` picks a random free port and
 reports it.
+
+**Advanced: connecting a client directly to `serve`'s URL, bypassing the
+proxy.** Bare `ai-raccoon` already handles the token for you, so nothing
+above needs this. It stays documented for two narrower cases: a client that
+cannot spawn a process at all, and bisecting a *proxy* failure with `curl` —
+the tool you need exactly when the default is down. The three working
+incantations (Hermes CLI, printed entry, Claude Code) are in
+[the direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced).
 
 A direct `ai-raccoon --transport http` launch (no `serve` verb) stays
 **ungated** — deliberate for now; see [SECURITY.md](SECURITY.md). It also gets

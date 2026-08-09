@@ -22,8 +22,15 @@ token signing, not session protection — so it stays inside the no-hand-rolled-
 Generation is `RandomNumberGenerator.GetBytes`; comparison is
 `CryptographicOperations.FixedTimeEquals`. Both are platform primitives.
 
-**The zero-config property survives.** The token file is read by the proxy itself, so no MCP client
-config changes and nobody types a secret anywhere.
+**The zero-config property survives, for the proxy path.** The token file is read by the proxy
+itself, so no MCP client config changes and nobody types a secret anywhere — true of bare
+`ai-raccoon` (the default). It is not true of a client connected directly to `serve`'s HTTP
+endpoint, bypassing the proxy: there a human has always had to put the token somewhere reachable at
+connect time. **Amendment 2026-08-09:** the gate now also accepts `Authorization: Bearer <token>`
+for exactly that direct route — see
+[ADR 0020](../adr/0020-always-on-http-stdio-proxy.md) §"Amendment 2026-08-09" and
+[the direct-HTTP walkthrough](../reference/agent-memory-server.md#direct-http-access-advanced) for
+where each route keeps the secret.
 
 ## The flow
 

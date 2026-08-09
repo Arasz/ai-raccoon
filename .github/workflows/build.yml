@@ -87,6 +87,17 @@ jobs:
         # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
         # host-specific ONNX artifact, not a portable expectation.
         run: dotnet test --filter "Speed=Slow" --no-build --nologo -v m
+      - name: Triage crash dumps
+        if: failure()
+        # A test-host segfault reads as "Passed! 167" followed by a bare "exit code 1"; this
+        # names the signal and the module that faulted, so the next occurrence is triaged from
+        # the log instead of by downloading half a gigabyte (scripts/src/coredump.py).
+        run: |
+          shopt -s nullglob
+          for dump in dumps/*.dmp; do
+            python3 scripts/triage-coredump.py "$dump"
+          done
+
       - name: Upload crash dumps
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
