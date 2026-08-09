@@ -11,9 +11,9 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageId>ai-raccoon</PackageId>
         <ToolCommandName>ai-raccoon</ToolCommandName>
-        <PackageVersion>1.6.0</PackageVersion>
-        <InformationalVersion>1.6.0</InformationalVersion>
-        <AssemblyVersion>1.6.0</AssemblyVersion>
+        <PackageVersion>1.6.1</PackageVersion>
+        <InformationalVersion>1.6.1</InformationalVersion>
+        <AssemblyVersion>1.6.1</AssemblyVersion>
         <PackageTags>ai mcp mcp-server model-context-protocol agent agents agent-memory memory knowledge knowledge-base server dotnet-tool global-tool tool cli sqlite vector vector-search embeddings semantic-search hybrid-search search retrieval rag llm stdio http dotnet</PackageTags>
         <PackageReleaseNotes>https://github.com/Arasz/ai-raccoon/releases</PackageReleaseNotes>
         <Authors>Rafał Araszkiewicz</Authors>
@@ -27,13 +27,8 @@
 
     <ItemGroup>
         <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/"/>
-        <None Include="README.md" Pack="true" PackagePath="/"/>
     </ItemGroup>
-
-    <!-- Bundled embedding model (FR-NM-3): the int8 ONNX binary and vocab.txt are committed —
-         they never change, and a fresh clone or worktree must be able to build and test without
-         a fetch step. scripts/download-embedding-model.py refreshes them. Both are copied to the
-         output for tests and packed into the tool package under Models/. -->
+    
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
         <None Include="Models/*.onnx" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>

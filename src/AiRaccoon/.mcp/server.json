@@ -1,29 +1,29 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "description": "Agent memory over MCP: project-scoped memory bank, workspace sandboxes, hybrid search, cloud sync.",
-  "name": "ai-raccoon/agent-memory",
-  "version": "1.6.0",
-  "packages": [
-    {
-      "registryType": "nuget",
-      "identifier": "ai-raccoon",
-      "version": "1.6.0",
-      "transport": {
-        "type": "stdio"
-      },
-      "packageArguments": [],
-      "environmentVariables": [
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+    "description": "Agent memory over MCP: project-scoped memory bank, workspace sandboxes, hybrid search, cloud sync.",
+    "name": "ai-raccoon/agent-memory",
+    "version": "1.6.1",
+    "packages": [
         {
-          "name": "AIRACCOON_DB_PASSPHRASE",
-          "description": "Passphrase for the encrypted memory bank",
-          "isSecret": true
+            "registryType": "nuget",
+            "identifier": "ai-raccoon",
+            "version": "1.6.1",
+            "transport": {
+                "type": "stdio"
+            },
+            "packageArguments": [],
+            "environmentVariables": [
+                {
+                    "name": "AIRACCOON_DB_PASSPHRASE",
+                    "description": "Passphrase for the encrypted memory bank",
+                    "isSecret": true
+                }
+            ]
         }
-      ]
+    ],
+    "repository": {
+        "id": "1320945078",
+        "url": "https://github.com/Arasz/ai-raccoon",
+        "source": "github"
     }
-  ],
-  "repository": {
-    "id": "1320945078",
-    "url": "https://github.com/Arasz/ai-raccoon",
-    "source": "github"
-  }
 }
