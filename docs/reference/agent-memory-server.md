@@ -292,9 +292,10 @@ replaces the binary while the always-on backend keeps the old assembly loaded,
 so every later client attaches to the stale one. `--restart` asks the running
 server to stop over `POST /shutdown` (token-guarded, POST-only), waits for the
 port to free, then serves in its place; with nothing listening it is a plain
-`serve`. In-flight calls drain for up to 10s — the host's stated
-`ShutdownTimeout` — after which they are aborted and the proxy's documented
-at-least-once retry re-issues them against the new backend. The port is then
+`serve`. The stop gets 10s in total — the host's stated `ShutdownTimeout`,
+shared by in-flight calls and every background service, not a per-call
+guarantee — after which what is left is aborted and the proxy's documented
+at-least-once retry re-issues it against the new backend. The port is then
 given 20s to free.
 
 `--restart` kills no process and never falls back to attaching. Every way the
@@ -304,8 +305,9 @@ the server refuses our token (it serves another data root), it has no
 needs the old process stopped by hand), our data root holds no token to
 present (nothing is asked to stop), the port is still held after the bound, or
 another start won the port while this one was binding. A listener that does
-not identify as an ai-raccoon over `/observability` is never sent a shutdown —
-it falls through to the unchanged exit code 3.
+not identify as an ai-raccoon over `/observability` is never sent a shutdown:
+it is refused before the bind is attempted, with the unchanged exit code 3 and
+a line saying the port is held by something that is not an ai-raccoon.
 
 `/mcp` and `/shutdown` require the `X-AiRaccoon-Token` header: before binding,
 `serve` mints a random token into `<data-root>/mcp-token` (0600, exclusive

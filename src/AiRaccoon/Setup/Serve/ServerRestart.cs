@@ -41,13 +41,22 @@ internal readonly record struct RestartResult(RestartOutcome Outcome, int? Pid =
 /// </summary>
 internal sealed partial class ServerRestart
 {
+    /// <summary>Stands in for the version in operator lines when the server reports none —
+    /// every build predating ADR-0022 does.</summary>
+    public const string UnknownVersion = "(version not reported)";
+
     /// <summary>How long the port is given to free once the shutdown is accepted: twice the
     /// window a stopping host has to drain, so a full drain is never mistaken for a hang.</summary>
     public static readonly TimeSpan PortFreeWithin = ShutdownEndpoint.DrainWindow * 2;
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
-    private static readonly HttpClient HttpClient = new() { Timeout = RequestTimeout };
+
+    /// <summary>Redirects are not followed: .NET carries custom headers like the token across
+    /// them, and a listener that redirects has not identified itself either way.</summary>
+    private static readonly HttpClient HttpClient =
+        new(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = RequestTimeout };
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly ILogger _logger;
@@ -80,6 +89,7 @@ internal sealed partial class ServerRestart
         // Identity first: an unidentified listener is never sent a shutdown.
         if (await IdentifyAsync(port, cancellationToken) is not { Name: "ai-raccoon" } info)
         {
+            Log.Foreign(_logger, port);
             return new RestartResult(RestartOutcome.Foreign);
         }
 
@@ -89,7 +99,7 @@ internal sealed partial class ServerRestart
             return found with { Outcome = RestartOutcome.NoToken };
         }
 
-        Log.Stopping(_logger, port, info.Pid, info.Version);
+        Log.Stopping(_logger, port, info.Pid, info.Version ?? UnknownVersion);
         var status = await RequestShutdownAsync(port, token, cancellationToken);
         switch (status)
         {
@@ -97,7 +107,7 @@ internal sealed partial class ServerRestart
                 Log.Refused(_logger, port, tokenFile.Path);
                 return found with { Outcome = RestartOutcome.Refused };
             case HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed:
-                Log.Unsupported(_logger, port, info.Version);
+                Log.Unsupported(_logger, port, info.Version ?? UnknownVersion);
                 return found with { Outcome = RestartOutcome.Unsupported };
         }
 
@@ -199,5 +209,9 @@ internal sealed partial class ServerRestart
         [LoggerMessage(EventId = 654, Level = LogLevel.Error,
             Message = "ai-raccoon: the ai-raccoon {Version} on port {Port} has no /shutdown endpoint")]
         public static partial void Unsupported(ILogger logger, int port, string version);
+
+        [LoggerMessage(EventId = 655, Level = LogLevel.Error,
+            Message = "ai-raccoon: the listener on port {Port} does not identify as an ai-raccoon server")]
+        public static partial void Foreign(ILogger logger, int port);
     }
 }
