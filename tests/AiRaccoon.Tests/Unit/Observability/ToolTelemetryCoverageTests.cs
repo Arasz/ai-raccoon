@@ -1,4 +1,5 @@
 using AiRaccoon.Observability;
+using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Hosting;
@@ -76,4 +77,26 @@ public sealed class ToolTelemetryCoverageTests
         }
     }
 
+    /// <summary>
+    ///     Both tool-serving hosts compose the filter through the same seam, so the in-process stdio
+    ///     host must also resolve what the filter looks up — otherwise it would quietly emit nothing.
+    ///     The proxy is not a tool-serving host: it returns before CreateServerHost (Program.cs, ADR-0020).
+    /// </summary>
+    [Fact]
+    public void StdioHost_RegistersToolsAndTheMetricsTheFilterResolves()
+    {
+        var dataRoot = TestData.CreateTempRoot("tool-telemetry-stdio");
+        try
+        {
+            var host = McpServerSetup.CreateServerHost(
+                new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(dataRoot), default));
+
+            host.Services.GetServices<McpServerTool>().ShouldNotBeEmpty();
+            host.Services.GetService<ToolCallMetrics>().ShouldNotBeNull();
+        }
+        finally
+        {
+            Directory.Delete(dataRoot, true);
+        }
+    }
 }
