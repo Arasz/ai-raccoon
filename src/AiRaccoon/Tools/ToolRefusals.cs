@@ -36,9 +36,13 @@ internal static partial class ToolRefusals
         [typeof(AccessDeniedException)] = "access-denied",
         [typeof(ValidationException)] = "invalid-params",
         // The SDK's own argument marshaller (Microsoft.Extensions.AI.AIFunctionFactory) throws a
-        // raw JsonException when a call's JSON shape doesn't match a parameter's declared type —
-        // before our tool method ever runs, so it otherwise escapes as an unhandled crash.
-        [typeof(JsonException)] = "invalid-argument"
+        // raw JsonException when a call's JSON shape doesn't match a parameter's declared type,
+        // and a plain ArgumentException (or a subtype) when a required parameter is missing or a
+        // guard clause rejects a present-but-blank value — before/inside our tool method, so it
+        // otherwise escapes as an unhandled crash. PrefixFor walks the base-type chain, so this
+        // one entry also covers ArgumentNullException and ArgumentOutOfRangeException.
+        [typeof(JsonException)] = "invalid-argument",
+        [typeof(ArgumentException)] = "invalid-argument"
     };
 
     /// <summary>
@@ -51,8 +55,19 @@ internal static partial class ToolRefusals
     /// <summary>Prefixes that are infrastructure faults (remote corruption, transport failure) rather than user mistakes; kept out of Information so log-based alerting still fires.</summary>
     private static readonly HashSet<string> WarningPrefixes = ["sync-network", "sync-corrupt-file"];
 
-    /// <summary>The wire prefix for a known refusal, or null when the exception is a genuine failure.</summary>
-    internal static string? PrefixFor(Exception exception) => RefusalPrefixes.GetValueOrDefault(exception.GetType());
+    /// <summary>The wire prefix for a known refusal, walking the base-type chain, or null when the exception is a genuine failure.</summary>
+    internal static string? PrefixFor(Exception exception)
+    {
+        for (var type = exception.GetType(); type is not null; type = type.BaseType)
+        {
+            if (RefusalPrefixes.TryGetValue(type, out var prefix))
+            {
+                return prefix;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The log level for a refused prefix: <see cref="WarningPrefixes" /> log at Warning, everything else at Information.</summary>
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
