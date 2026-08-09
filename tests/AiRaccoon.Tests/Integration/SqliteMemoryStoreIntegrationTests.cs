@@ -336,6 +336,31 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteSourcePath_LeavesManualRowsThatCiteThePathAlone()
+    {
+        var file = Path.Combine(_dataRoot, "cited.md");
+        await File.WriteAllTextAsync(file, "magnetostrictive cited content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        // A manual write stores path = <sha256(content)>.md and keeps the caller's sourceFile —
+        // the digest's replace-by-path delete must not own it.
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "kaleidophrenic manual note", SourceFile: file),
+            TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
+
+        deleted.ShouldBeGreaterThan(0);
+        (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
+                TestContext.Current.CancellationToken))
+            .ShouldBeEmpty("the file's own mirror chunks must be removed");
+        (await _store.SearchAsync(new SearchQuery("acme", "kaleidophrenic"),
+                TestContext.Current.CancellationToken))
+            .ShouldNotBeEmpty("a manual row citing the path as sourceFile must survive");
+        (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Schema_CreatesWatchTables_OnFreshBank()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
