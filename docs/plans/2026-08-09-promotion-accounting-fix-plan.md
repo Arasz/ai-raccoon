@@ -42,10 +42,10 @@ defect is accounting + silently dropped chunk claims:
 New record in `AiRaccoon.Core/Memory/`:
 
 ```csharp
-public sealed record AddContentResult(MemoryEntry Entry, bool Created);
+public sealed record MemoryEntryResult(MemoryEntry Entry, bool Created);
 ```
 
-- `IMemoryStore.AddContentAsync` returns `Task<AddContentResult>` (was `Task<MemoryEntry>`).
+- `IMemoryStore.AddContentAsync` returns `Task<MemoryEntryResult>` (was `Task<MemoryEntry>`).
 - `SqliteMemoryStore.AddContentAsync` — **Created from the actual insert outcome (review
   edit 1):** `var affected = await connection.ExecuteAsync(InsertEntry, …); Created =
   affected == 1;` (Dapper returns SQLite's change count; the ON CONFLICT DO NOTHING loser gets
@@ -53,7 +53,7 @@ public sealed record AddContentResult(MemoryEntry Entry, bool Created);
   `InvalidOperationException` path is unchanged (re-read must find a row — the winner's).
   This is the ONLY formula that makes "promotedHashes contains only actually-created rows"
   hold for concurrent racers.
-- `ShareAsync` returns `Task<AddContentResult>` (propagate; `ShareTools.cs:35-36` reads
+- `ShareAsync` returns `Task<MemoryEntryResult>` (propagate; `ShareTools.cs:35-36` reads
   `entry.Context` → `.Entry.Context`).
 - `WorkspaceService.ConsolidateAsync` (WorkspaceService.cs:61) ignores the result — compiles
   unchanged; keep its `promoted++` per kept hash (consolidate semantics are per-hash,
@@ -64,7 +64,7 @@ public sealed record AddContentResult(MemoryEntry Entry, bool Created);
   MemoryStorePortTests.cs:17-19, MemoryScopeSiblingTtlTests.cs:76-80,
   SqliteMemoryStoreIntegrationTests.cs:76-78, NativeMemorySteps, ManagedHarness, …). All
   mechanical, but budget for them; the fakes return
-  `Task.FromResult(new AddContentResult(entry, true))` unless noted otherwise.
+  `Task.FromResult(new MemoryEntryResult(entry, true))` unless noted otherwise.
 
 ### Fix 2 — in-batch snapshot refresh + honest classification
 
@@ -119,7 +119,7 @@ public sealed record AddContentResult(MemoryEntry Entry, bool Created);
 
 ## Files owned
 
-- `src/AiRaccoon.Core/Memory/IMemoryStore.cs`, new `AddContentResult.cs`, `PromotionQueue.cs`,
+- `src/AiRaccoon.Core/Memory/IMemoryStore.cs`, new `MemoryEntryResult.cs`, `PromotionQueue.cs`,
   `SharedExtraction.cs`
 - `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs`
 - `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` (AddContentAsync, ShareAsync)

@@ -157,7 +157,7 @@ public class SweepServiceTests
 
     public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
-        public Task<AddContentResult> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -179,7 +179,7 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -265,7 +265,7 @@ public class SweepServiceTests
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<AddContentResult> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -287,7 +287,7 @@ public class SweepServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 

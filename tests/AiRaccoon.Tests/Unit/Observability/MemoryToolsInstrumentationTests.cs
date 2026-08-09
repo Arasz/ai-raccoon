@@ -234,7 +234,7 @@ public class MemoryToolsInstrumentationTests
 
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<AddContentResult> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new AddContentResult(new MemoryEntry(hash, "p.md", "shared", "content", 1), true));
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "p.md", "shared", "content", 1), true));
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
@@ -256,8 +256,8 @@ public class MemoryToolsInstrumentationTests
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context, string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AddContentResult(new MemoryEntry("h", path, context ?? "project:test", content, 1), true));
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context, string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MemoryEntryResult(new MemoryEntry("h", path, context ?? "project:test", content, 1), true));
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
 

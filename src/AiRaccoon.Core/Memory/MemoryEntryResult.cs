@@ -4,4 +4,4 @@ namespace AiRaccoon.Core.Memory;
 /// existing row). Created comes from the insert's change count: the ON CONFLICT DO NOTHING
 /// loser reports false — the only formula that makes "promotedHashes contains only
 /// actually-created rows" hold for concurrent racers.</summary>
-public sealed record AddContentResult(MemoryEntry Entry, bool Created);
+public sealed record MemoryEntryResult(MemoryEntry Entry, bool Created);

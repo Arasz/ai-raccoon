@@ -265,7 +265,7 @@ public sealed partial class SqliteMemoryStore(
         return merged;
     }
 
-    public async Task<AddContentResult> ShareAsync(string projectId, string hash,
+    public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -622,7 +622,7 @@ public sealed partial class SqliteMemoryStore(
         return new EmbedPendingResult(processed, remaining);
     }
 
-    public async Task<AddContentResult> AddContentAsync(
+    public async Task<MemoryEntryResult> AddContentAsync(
         string projectId, string path, string content, string? context, string? sourceFile = null,
         string? section = null, CancellationToken cancellationToken = default)
     {
@@ -641,7 +641,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         if (existing is not null)
         {
-            return new AddContentResult(ToEntry(existing), Created: false);
+            return new MemoryEntryResult(ToEntry(existing), Created: false);
         }
 
         var hash = ContentHash.Of(path, content);
@@ -694,7 +694,7 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
-        return new AddContentResult(ToEntry(inserted), Created: affected == 1);
+        return new MemoryEntryResult(ToEntry(inserted), Created: affected == 1);
     }
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,

@@ -18,7 +18,7 @@ namespace AiRaccoon.Tests.Unit.Extraction;
 ///     Honest promotion accounting (fixes 1+2 of the count-math defect, measured 2026-08-09):
 ///     multi-chunk files coalesce to ONE shared row while every chunk used to be reported
 ///     promoted. The contract: claimed = promoted + absorbed + skipped + failures, where
-///     promoted means the share actually CREATED a shared row (AddContentResult.Created),
+///     promoted means the share actually CREATED a shared row (MemoryEntryResult.Created),
 ///     absorbed means the chunk was folded into an already-represented file (or lost an
 ///     insert race), and skipped means a whitespace-normalized value twin.
 /// </summary>
@@ -232,7 +232,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new SharedIndex([], []));
 
-        public Task<AddContentResult> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             var entry = new MemoryEntry(hash, HashPaths.GetValueOrDefault(hash) ?? $"{hash}.md", "shared", "value", 0);
@@ -240,12 +240,12 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             {
                 // The concurrent caller's insert landed first: the DO NOTHING loser reports
                 // affected == 0 and re-reads the winner's row.
-                return Task.FromResult(new AddContentResult(entry, Created: false));
+                return Task.FromResult(new MemoryEntryResult(entry, Created: false));
             }
 
             _createdByHash.Add(hash);
             CreatedShares.Add(hash);
-            return Task.FromResult(new AddContentResult(entry, Created: true));
+            return Task.FromResult(new MemoryEntryResult(entry, Created: true));
         }
 
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
@@ -288,7 +288,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
             string? context, string? sourceFile = null, string? section = null,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

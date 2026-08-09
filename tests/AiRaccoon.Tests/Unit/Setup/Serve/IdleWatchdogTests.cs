@@ -69,7 +69,7 @@ public sealed class IdleWatchdogTests
         public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
             Task.FromResult(Settings.GetValueOrDefault(key));
 
-        public Task<AddContentResult> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -117,7 +117,7 @@ public sealed class IdleWatchdogTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 

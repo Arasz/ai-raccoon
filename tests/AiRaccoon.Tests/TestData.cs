@@ -218,7 +218,7 @@ public sealed class FakeExtractionStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<AddContentResult> ShareAsync(string projectId, string hash,
+    public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
         Shared.Add((projectId, hash));
@@ -226,7 +226,7 @@ public sealed class FakeExtractionStore : IMemoryStore
         Index = new SharedIndex(
             Index.Values.Append(row.Value).ToArray(),
             Index.Paths.Append($"shared/{row.Path}").ToArray());
-        return Task.FromResult(new AddContentResult(new MemoryEntry(hash, row.Path, ContextNaming.SharedContext, row.Value, 1), true));
+        return Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, row.Path, ContextNaming.SharedContext, row.Value, 1), true));
     }
 
     public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
@@ -294,7 +294,7 @@ public sealed class FakeExtractionStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
+    public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
         string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 

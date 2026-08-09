@@ -177,11 +177,11 @@ public class MemoryStorePortTests
 
         public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<AddContentResult> ShareAsync(string projectId, string hash,
+        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             Shared = (projectId, hash);
-            return Task.FromResult(new AddContentResult(new MemoryEntry(hash, "notes.md", ContextNaming.SharedContext, "value", 1), true));
+            return Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "notes.md", ContextNaming.SharedContext, "value", 1), true));
         }
 
         public (string ProjectId, bool IncludeTtlRows)? Extracted { get; private set; }
@@ -242,7 +242,7 @@ public class MemoryStorePortTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbedPendingResult(7, 3));
 
-        public Task<AddContentResult> AddContentAsync(string projectId, string path, string content, string? context,
+        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
             string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
