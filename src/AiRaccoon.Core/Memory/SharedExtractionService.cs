@@ -16,6 +16,11 @@ public sealed class SharedExtractionService
     /// <summary>Kept at 0.4 after re-examination for v3 (docs/adr/0018-promotion-scoring-v2.md).</summary>
     private const double CandidateFloor = 0.4;
 
+    /// <summary>Per-source-document cap on how many chunks of one document may occupy the propose
+    /// queue at once — set to 3 pending the final value from labeled data
+    /// (docs/work/2026-08-09-promotion-scoring-measurement.md: one document held 33 of 965 slots).</summary>
+    public const int MaxQueuedPerSourceDocument = 3;
+
     /// <summary>Scoring and (in promote mode) selection of rows to share, capped at `limit`. Never mutates anything.</summary>
     public ShareExtractResult Run(
         ExtractMode mode,
@@ -105,6 +110,36 @@ public sealed class SharedExtractionService
         }
 
         return ranked;
+    }
+
+    /// <summary>Filters a ranked, not-yet-queued candidate stream to what each source document may
+    /// still admit, given how many of its chunks are already queued — keeping the highest-scoring
+    /// chunks first. Rows with a null source_file are organic notes with no document to flood and are
+    /// exempt (docs/work/2026-08-09-promotion-scoring-measurement.md).</summary>
+    public static IReadOnlyList<ShareCandidate> CapPerSourceDocument(
+        IReadOnlyList<ShareCandidate> rankedNotYetQueued, IReadOnlyDictionary<string, int> queuedCountsBySourceFile)
+    {
+        var counts = new Dictionary<string, int>(queuedCountsBySourceFile, StringComparer.Ordinal);
+        var admitted = new List<ShareCandidate>();
+        foreach (var candidate in rankedNotYetQueued)
+        {
+            if (candidate.SourceFile is null)
+            {
+                admitted.Add(candidate);
+                continue;
+            }
+
+            var count = counts.GetValueOrDefault(candidate.SourceFile);
+            if (count >= MaxQueuedPerSourceDocument)
+            {
+                continue;
+            }
+
+            counts[candidate.SourceFile] = count + 1;
+            admitted.Add(candidate);
+        }
+
+        return admitted;
     }
 
     private static bool IsDuplicate(

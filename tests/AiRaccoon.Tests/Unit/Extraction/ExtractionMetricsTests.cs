@@ -98,7 +98,7 @@ public sealed class ExtractionMetricsTests
                 var existing = _rows.FindIndex(r => r.ProjectId == projectId && r.Hash == candidate.Hash);
                 var updated = new PromotionQueueRow(projectId, candidate.Hash, candidate.Path, candidate.Value,
                     candidate.SourceFile, candidate.Score, candidate.Reasons,
-                    existing >= 0 ? _rows[existing].CreatedAt : 0, 0);
+                    existing >= 0 ? _rows[existing].CreatedAt : 0, 0, candidate.ScorerVersion);
                 if (existing >= 0)
                 {
                     _rows[existing] = updated;
@@ -149,6 +149,13 @@ public sealed class ExtractionMetricsTests
             }
 
             return Task.FromResult(victim);
+        }
+
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+            CancellationToken cancellationToken = default)
+        {
+            var removed = _rows.RemoveAll(r => r.ProjectId == projectId && r.ScorerVersion != currentScorerVersion);
+            return Task.FromResult(removed);
         }
     }
 }

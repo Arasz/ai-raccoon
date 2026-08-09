@@ -168,6 +168,21 @@ public sealed partial class PromotionQueueService(
         };
     }
 
+    public async Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+
+        var cleared = await queue.ClearStaleAsync(projectId, currentScorerVersion, cancellationToken)
+            .ConfigureAwait(false);
+        if (cleared > 0)
+        {
+            Log.StaleCleared(logger, projectId, cleared);
+        }
+
+        return cleared;
+    }
+
     private const string EvictionReason = "capacity";
 
     private async Task<int> ReadCapAsync(CancellationToken cancellationToken)
@@ -223,5 +238,9 @@ public sealed partial class PromotionQueueService(
         [LoggerMessage(EventId = 706, Level = LogLevel.Warning,
             Message = "Promote candidate failed to share for {ProjectId}: {Hash}")]
         public static partial void ShareFailed(ILogger logger, string projectId, string hash, Exception exception);
+
+        [LoggerMessage(EventId = 707, Level = LogLevel.Information,
+            Message = "Cleared {Count} stale-scored queue row(s) for {ProjectId}")]
+        public static partial void StaleCleared(ILogger logger, string projectId, int count);
     }
 }
