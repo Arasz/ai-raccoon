@@ -286,14 +286,38 @@ owning process keeps the watchdog, and the attached run never touches the bank.
 A busy port held by a foreign listener fails fast with exit code 3 and a
 `--port 0` hint.
 
-`/mcp` requires the `X-AiRaccoon-Token` header: before binding, `serve` mints
-a random token into `<data-root>/mcp-token` (0600, exclusive create, reused
-across restarts), and every request to `/mcp` must present it — the proxy
-reads the file after a successful probe and sends it automatically.
-`/observability` stays unauthenticated by design (it returns only a PID and
-OTLP on/off state, nothing that touches the bank). A direct `ai-raccoon
---transport http` launch (no `serve` verb) is **not** gated — see
-[SECURITY.md](../../SECURITY.md) for the reasoning and the known gaps.
+`serve --restart` cycles that server instead of attaching to it (ADR-0022).
+Attaching is wrong on exactly one path — an update: `dotnet tool update`
+replaces the binary while the always-on backend keeps the old assembly loaded,
+so every later client attaches to the stale one. `--restart` asks the running
+server to stop over `POST /shutdown` (token-guarded, POST-only), waits for the
+port to free, then serves in its place; with nothing listening it is a plain
+`serve`. In-flight calls drain for up to 10s — the host's stated
+`ShutdownTimeout` — after which they are aborted and the proxy's documented
+at-least-once retry re-issues them against the new backend. The port is then
+given 20s to free.
+
+`--restart` kills no process and never falls back to attaching. Every way the
+cycle can fail exits `8` with a line naming the port and the manual escape:
+the server refuses our token (it serves another data root), it has no
+`/shutdown` (too old to be cycled — the first update *onto* this version still
+needs the old process stopped by hand), our data root holds no token to
+present (nothing is asked to stop), the port is still held after the bound, or
+another start won the port while this one was binding. A listener that does
+not identify as an ai-raccoon over `/observability` is never sent a shutdown —
+it falls through to the unchanged exit code 3.
+
+`/mcp` and `/shutdown` require the `X-AiRaccoon-Token` header: before binding,
+`serve` mints a random token into `<data-root>/mcp-token` (0600, exclusive
+create, reused across restarts), and every request to either must present it —
+the proxy reads the file after a successful probe and sends it automatically.
+Both answer an unauthorised call with the same 401 body, whether the header is
+absent, the wrong length or simply wrong. `/observability` stays
+unauthenticated by design (it returns a PID, the binary version and OTLP
+on/off state, nothing that touches the bank). A direct `ai-raccoon
+--transport http` launch (no `serve` verb) is **not** gated, and gets no
+`/shutdown` at all — see [SECURITY.md](../../SECURITY.md) for the reasoning
+and the known gaps.
 
 `serve --mcp-entry [--format hermes|claude|all]` prints the client config entry
 for the actually-bound URL — for Hermes (`hermes mcp add ai-raccoon --url
