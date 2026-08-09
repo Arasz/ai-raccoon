@@ -233,16 +233,13 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
-    // @scope null preserves memory_delete's documented reach ("wherever this hash lives",
-    // including a shared row); a caller that enumerated one scope (the sweep, H2) passes it so
-    // the delete cannot also remove a sibling row sharing this hash in another scope/workspace.
     public const string DeleteByHashAndProject =
-        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId";
 
     // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
     // recorded before the delete so sync can suppress resurrection and ship the tombstone.
     public const string SelectScopeByHashAndProject =
-        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
     // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
@@ -251,7 +248,6 @@ internal static class MemorySql
                                                                workspace_id AS WorkspaceId, source_file AS SourceFile
                                                         FROM entries
                                                         WHERE hash = @hash AND project_id = @projectId
-                                                          AND (@scope IS NULL OR scope IS @scope)
                                                         """;
 
     public const string UpsertTombstone =
@@ -467,14 +463,11 @@ internal static class MemorySql
         DELETE FROM settings WHERE key = @key
         """;
 
-    // Scoped to the committed project row (H2): hash alone is not a unique row — a workspace or
-    // custom-context write of identical content shares it — and only the project-scope row is
-    // ever read by the sweep's degradation check, so a TTL on any other scope's sibling is inert.
     public const string UpdateEntryTtl =
         """
         UPDATE entries
         SET ttl_days = @ttlDays
-        WHERE project_id = @projectId AND hash = @hash AND scope = 'project'
+        WHERE project_id = @projectId AND hash = @hash
         """;
 
     public const string SelectEntryMetadata =

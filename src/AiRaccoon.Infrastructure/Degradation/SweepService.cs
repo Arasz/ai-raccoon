@@ -52,10 +52,7 @@ public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
                 continue;
             }
 
-            // Scoped to 'project' (H2): entries was enumerated from the project context only, so
-            // the delete must not also remove a sibling row sharing this hash in another scope.
-            await store.DeleteInScopeAsync(projectId, entry.Hash, "project", cancellationToken)
-                .ConfigureAwait(false);
+            await store.DeleteAsync(projectId, entry.Hash, cancellationToken).ConfigureAwait(false);
             deleted.Add(entry.Hash);
         }
 
