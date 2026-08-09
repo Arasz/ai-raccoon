@@ -29,7 +29,9 @@ internal static class CliArgs
         }
 
         var commandPath = CommandPathOf(parseResult);
-        result = new CliParseResult(ReadOptions(parseResult), commandPath, showHelp, showVersion, errors, parseResult);
+        var options = ReadOptions(parseResult, out var optionErrors);
+        var allErrors = errors.Union(optionErrors).ToList();
+        result = new CliParseResult(options, commandPath, showHelp, showVersion, allErrors, parseResult);
         return result.Errors.Count <= 0 && result is { ShowHelp: false, ShowVersion: false };
     }
 
@@ -75,33 +77,48 @@ internal static class CliArgs
         return path.Count <= 1 ? [] : [.. path.Skip(1)];
     }
 
-    /// <summary>Reads launch options; invalid option VALUES throw inside System.CommandLine's
-    /// GetValueOrDefault, so a failed parse falls back to defaults (errors are reported by
-    /// TryParse's return + Errors list, never by an exception).</summary>
-    private static CliOptions ReadOptions(ParseResult parseResult)
+    /// <summary>
+    ///     Reads launch options, one at a time: a bad value on one option falls back to that
+    ///     option's own default and is recorded in <paramref name="errors"/> — it can never
+    ///     discard a sibling option that parsed fine (H1). System.CommandLine 2.0.10 does not
+    ///     reliably surface a coercion failure via <c>parseResult.Errors</c> once a subcommand is
+    ///     present (verified against the raw ParseResult); <see cref="OptionResult.GetValueOrDefault{T}"/>
+    ///     throws <see cref="InvalidOperationException"/> instead, which this catches per option.
+    /// </summary>
+    private static CliOptions ReadOptions(ParseResult parseResult, out IReadOnlyList<string> errors)
     {
+        var collectedErrors = new List<string>();
+        var options = new CliOptions
+        {
+            Transport = ReadOption(parseResult, "--transport", DefaultOptions.Transport, collectedErrors),
+            DataRoot = ReadOption(parseResult, "--data-root", DefaultOptions.DataRoot, collectedErrors),
+            InstallScope = ReadOption(parseResult, "--install-scope", DefaultOptions.InstallScope, collectedErrors),
+            Port = ReadOption(parseResult, "--port", DefaultOptions.Port, collectedErrors),
+            IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
+            Quiet = ReadOption(parseResult, "--quiet", false, collectedErrors, requireTokens: false)
+        };
+        errors = collectedErrors;
+        return options;
+    }
+
+    /// <summary>Reads one option's value; a missing option (or one requiring tokens that has
+    /// none) returns <paramref name="defaultValue"/>, and a coercion failure records its message
+    /// in <paramref name="errors"/> and also returns <paramref name="defaultValue"/>.</summary>
+    private static T ReadOption<T>(ParseResult parseResult, string optionName, T defaultValue, List<string> errors, bool requireTokens = true)
+    {
+        if (parseResult.GetResult(optionName) is not OptionResult result || (requireTokens && result.Tokens.Count == 0))
+        {
+            return defaultValue;
+        }
+
         try
         {
-            return new()
-            {
-                Transport = parseResult.GetResult("--transport") is OptionResult { Tokens.Count: > 0 } transport ? transport.GetValueOrDefault<McpTransport>() : DefaultOptions.Transport,
-                DataRoot = parseResult.GetResult("--data-root") is OptionResult { Tokens.Count: > 0 } dataRoot ? dataRoot.GetValueOrDefault<string>() : DefaultOptions.DataRoot,
-                InstallScope = parseResult.GetResult("--install-scope") is OptionResult { Tokens.Count: > 0 } scope ? scope.GetValueOrDefault<InstallScope>() : DefaultOptions.InstallScope,
-                Port = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 } port ? port.GetValueOrDefault<int>() : DefaultOptions.Port,
-                IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
-                Quiet = parseResult.GetResult("--quiet") is OptionResult quietResult ? quietResult.GetValueOrDefault<bool>() : false
-            };
+            return result.GetValueOrDefault<T>();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            return new()
-            {
-                Transport = DefaultOptions.Transport,
-                DataRoot = DefaultOptions.DataRoot,
-                InstallScope = DefaultOptions.InstallScope,
-                Port = DefaultOptions.Port,
-                IsPortExplicit = false
-            };
+            errors.Add(ex.Message);
+            return defaultValue;
         }
     }
 }

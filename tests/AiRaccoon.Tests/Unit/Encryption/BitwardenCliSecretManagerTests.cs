@@ -52,14 +52,49 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         result.Stderr.ShouldBe("boom\n");
     }
 
+    /// <summary>
+    ///     H10: the token must never be a process argument — `ps aux` (or any same-user process)
+    ///     can read another process's argv for its whole lifetime. Proven live against a slowed
+    ///     stand-in bws with a token captured straight out of `ps aux`.
+    /// </summary>
     [Fact]
-    public void Run_PassesArgsAndAppendsTokenAsDashT()
+    public void Run_WithToken_NeverPlacesTokenInArgv()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$*\""));
 
         var result = runner.Run(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15));
 
-        result.Stdout.Trim().ShouldBe("secret get secret-1 -t tok-9");
+        result.Stdout.Trim().ShouldBe("secret get secret-1");
+        result.Stdout.ShouldNotContain("tok-9");
+        result.Stdout.ShouldNotContain("-t");
+    }
+
+    [Fact]
+    public void Run_WithToken_SetsBwsAccessTokenEnvironmentVariable()
+    {
+        var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
+
+        var result = runner.Run(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15));
+
+        result.Stdout.Trim().ShouldBe("tok-9");
+    }
+
+    [Fact]
+    public void Run_WithToken_OverridesAnInheritedBwsAccessTokenEnvironmentVariable()
+    {
+        var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
+        var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", "stale-inherited-tok");
+        try
+        {
+            var result = runner.Run([], "fresh-per-run-tok", TimeSpan.FromSeconds(15));
+
+            result.Stdout.Trim().ShouldBe("fresh-per-run-tok");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", previous);
+        }
     }
 
     [Fact]
@@ -111,6 +146,16 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
+    public void Run_Timeout_WithToken_ExceptionDoesNotContainToken()
+    {
+        var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 30"));
+
+        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(1)));
+
+        ex.Message.ShouldNotContain("secret-tok-should-not-leak");
+    }
+
+    [Fact]
     public void Run_ExitZeroWithEmptyStdout_Throws()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
@@ -118,5 +163,25 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], null, TimeSpan.FromSeconds(15)));
 
         ex.Message.ShouldBe("bws returned no output");
+    }
+
+    [Fact]
+    public void Run_ExitZeroWithEmptyStdout_WithToken_ExceptionDoesNotContainToken()
+    {
+        var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
+
+        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15)));
+
+        ex.Message.ShouldNotContain("secret-tok-should-not-leak");
+    }
+
+    [Fact]
+    public void Run_NonexistentExecutable_WithToken_ExceptionDoesNotContainToken()
+    {
+        var runner = new BitwardenCliSecretManager(Path.Combine(_dataRoot, "does-not-exist"));
+
+        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15)));
+
+        ex.Message.ShouldNotContain("secret-tok-should-not-leak");
     }
 }
