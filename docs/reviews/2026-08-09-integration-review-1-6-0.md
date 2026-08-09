@@ -20,6 +20,11 @@ and the token gate is correctly scoped. But it introduces an **unattended delete
 scope it selected from, and emits no span when it deletes. Separately, the ADR-0023 trigger that is
 this release's headline fix **does not close the data-loss window it was written for**.
 
+A third defect, found by the live test rather than the diff, is arguably the most dangerous of all
+because it is not in the new code at all: **a typo in an unrelated top-level flag silently discards
+`--data-root` and runs the command against the live bank, exit 0** (finding 0). It is pre-existing,
+but 1.6.0 is the release that adds destructive verbs worth pointing at the wrong bank.
+
 Two mitigating facts, both verified rather than assumed:
 
 - **Nothing is deletable on an existing bank today.** Every sweep candidate needs
@@ -37,6 +42,7 @@ release makes that is false.
 
 | # | Sev | Area | Finding |
 |---|-----|------|---------|
+| 0 | **High** | CLI *(live)* | **A bad value on any top-level option silently discards `--data-root` and runs against the default bank, exit 0.** `CliArgs.ReadOptions` reads every top-level option inside one `try`, so an unparseable enum/int throws from that one accessor and the `catch` resets the *entire* options record — including a `--data-root` that parsed fine. Reproduced independently against a throwaway root holding a distinctive value: `--data-root /tmp/verify-dr access default show` → `ro`; add `--transport garbage` or `--install-scope garbage` → `full`, which is the **live** bank's value. Exit 0, no warning, both options. So `ai-raccoon --data-root /tmp/test --transport htp sweep enable` arms the reaper on the real bank while appearing to configure a sandbox. |
 | 1 | **High** | Promotion | The ADR-0023 trigger's `NOT EXISTS` guard is **scope-blind** while `ShareAsync` requires `scope='project'`. A queue row whose hash survives only as a `custom`- or workspace-scoped sibling is kept by the trigger, is unpromotable, and is destroyed as `stale-hash` on the next pass. This is the exact D7 loss the ADR claims is gone. Reachable with no unusual action via `memory_delete_context` and via sync tombstones. |
 | 2 | **High** | Promotion | `extract prune` uses the same scope-blind predicate, so the one maintenance verb that exists cannot see or clean the orphan class the trigger newly creates. |
 | 3 | **High** | Sweep | The reaper never consults per-project access mode. `memory_sweep(dryRun:false)` is `Destructive`, which the tool surface grants only in `full` mode — default is `rw`. The operation the tool refuses on a default install now runs unattended, including against projects explicitly pinned to `ro`. |
@@ -100,6 +106,24 @@ nobody had checked on the wire.
 - **`memory_sync` refuses cleanly** when unconfigured, naming the command that would configure it.
 - **The tool inventory is 23 on the wire**, matching every documented count.
 
+## Every prior defect, re-tested against the candidate
+
+The 1.3.1 and 1.5.0 sweeps (`docs/reviews/2026-08-08-manual-tool-sweep-1-3-1.md`,
+`docs/reviews/2026-08-09-manual-tool-sweep-1-5-0.md`) left seven numbered defects. All seven were
+re-tested directly against the running candidate, not inferred from the diff.
+
+| # | Defect | Status on 1.6.0 | Evidence |
+|---|--------|-----------------|----------|
+| D1 | `memory_workspace_consolidate` schema/description mismatch | **Fixed** | `keep: ["all"]` → `{"promoted":1,"discarded":0}` |
+| D2 | Workspace family — four answers for an unknown workspace | **Fixed** | `status`, `discard`, `consolidate` and `write` all return `unknown-workspace: Workspace '…' does not exist for project '…'` |
+| D3 | Unknown-hash asymmetry (`memory_delete` vs `memory_share`) | **Ruled, not a defect** | ADR-0024 makes the split intentional: removals report a count, transitions refuse typed. Both behave as the ADR says. |
+| D4 | `memory_stats` leaking every project's contexts | **Fixed** | A fresh probe project reports `"contexts":["shared"]` only |
+| D5 | A one-entry shared tier capturing every `scope=all` search | **Fixed** | Three off-topic queries against the real 2,829-entry bank returned 5 results each, **0** from the shared tier |
+| D6 | `consolidate` reporting promoted entries as also discarded | **Fixed** | `{"promoted":1,"discarded":0}` |
+| D7 | `memory_share_extract(mode=promote)` losing candidates | **Fixed mechanically** | `promotedHashes: 2, skippedDuplicates: 0, failures: []`, conservation held. But findings 1/2/14 above are *new* loss paths in the same code, so D7's class is narrowed rather than closed. |
+| — | 1.5.0 addendum: `memory_write` leaking an untyped exception on an undeclared parameter | **Fixed** | now `invalid-argument: The arguments dictionary is missing a value for the required parameter 'content'` |
+| — | Same class, IO exceptions | **Still open** | finding 11 — `memory_ingest_file` / `memory_ingest_directory` on a missing path |
+
 ## Release decision
 
 Three of the High findings (1, 2, 15) are one change: align the trigger guard, the prune predicate
@@ -109,6 +133,11 @@ explicitly whether the reaper honours access modes. Finding 5 is one line plus a
 
 The cheapest safe path to a shippable 1.6.0, in order:
 
+0. **Finding 0** — parse each top-level option independently so one bad value cannot discard a good
+   `--data-root`. This is the smallest fix on the list and the one with the widest blast radius: it
+   is the only defect here that can point a *destructive* command at the wrong bank, and it makes
+   every sandbox-based test on this machine — including three lanes of this review — conditionally
+   untrustworthy.
 1. **Findings 4 and 21** — scope predicates on `DeleteByHashAndProject` and `UpdateEntryTtl`. These
    are the only findings that lose data a user never asked to expire.
 2. **Findings 1, 2, 15** — the scope-blind trigger guard and its mistaken test.
