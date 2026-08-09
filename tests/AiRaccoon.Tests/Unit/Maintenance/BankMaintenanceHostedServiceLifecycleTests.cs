@@ -30,7 +30,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
-        _service = new BankMaintenanceHostedService(_factory, _time, _logger);
+        _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None, _logger);
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
@@ -17,8 +18,12 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
 
     private readonly SqliteConnectionFactory _factory;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationTelemetry _telemetry;
     private readonly ILogger<BankMaintenanceHostedService> _logger;
     private DateTimeOffset? _lastVacuumUtc;
+
+    /// <summary>Span name and `operation` tag of one maintenance pass.</summary>
+    internal const string OperationName = "bank.maintenance";
 
     /// <summary>Completed after each maintenance pass (startup + ticks); test seam.</summary>
     internal TickSignal Ticks { get; } = new();
@@ -30,10 +35,11 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     internal TickSignal IntervalReReads { get; } = new();
 
     public BankMaintenanceHostedService(SqliteConnectionFactory factory, TimeProvider timeProvider,
-        ILogger<BankMaintenanceHostedService> logger)
+        IOperationTelemetry telemetry, ILogger<BankMaintenanceHostedService> logger)
     {
         _factory = factory;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
         _logger = logger;
     }
 
@@ -111,6 +117,25 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     /// <summary>One maintenance pass: WAL checkpoint, then vacuum+analyze if due. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
+        using var pass = _telemetry.Begin(OperationName);
+        try
+        {
+            await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            pass.Succeeded();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // shutdown cut the pass short: abandoned, not failed
+        }
+        catch (Exception ex)
+        {
+            pass.Failed(ex);
+            throw;
+        }
+    }
+
+    private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
+    {
         await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -158,6 +183,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
 
             _lastVacuumUtc = now;
+            pass.Tag("vacuumed", "true");
             Log.Vacuum(_logger);
         }
         finally

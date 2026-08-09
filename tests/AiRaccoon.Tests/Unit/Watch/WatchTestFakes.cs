@@ -103,6 +103,9 @@ internal sealed class FakeWatchStore : IWatchStore
     /// <summary>Runs before ListFilesAsync returns — gate to hold a scan open inside ReconcileMissingAsync.</summary>
     public Func<Task>? OnListFiles { get; set; }
 
+    /// <summary>Fails the whole reconcile pass — the loop's own failure path.</summary>
+    public Exception? ListWatchesError { get; set; }
+
     public Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
@@ -128,8 +131,10 @@ internal sealed class FakeWatchStore : IWatchStore
     }
 
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<WatchRegistration>>(
-            [.. Watches.Select(w => new WatchRegistration(w.Key.ProjectId, w.Key.Path, w.Value.CreatedAt, w.Value.LastChangeTs))]);
+        ListWatchesError is not null
+            ? throw ListWatchesError
+            : Task.FromResult<IReadOnlyList<WatchRegistration>>(
+                [.. Watches.Select(w => new WatchRegistration(w.Key.ProjectId, w.Key.Path, w.Value.CreatedAt, w.Value.LastChangeTs))]);
 
     public Task UpdateLastChangeAsync(string projectId, string path, long lastChangeTs,
         CancellationToken cancellationToken = default)

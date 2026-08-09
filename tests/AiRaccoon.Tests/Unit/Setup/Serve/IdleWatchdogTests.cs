@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Observability;
+using AiRaccoon.Tests.Unit.Observability;
 using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,13 +26,23 @@ public sealed class IdleWatchdogTests
     {
         public int StopCalls { get; private set; }
 
+        /// <summary>Fails the tick from inside the watchdog's own try block.</summary>
+        public Exception? StopError { get; set; }
+
         public CancellationToken ApplicationStarted { get; } = CancellationToken.None;
 
         public CancellationToken ApplicationStopping { get; } = CancellationToken.None;
 
         public CancellationToken ApplicationStopped { get; } = CancellationToken.None;
 
-        public void StopApplication() => StopCalls++;
+        public void StopApplication()
+        {
+            StopCalls++;
+            if (StopError is not null)
+            {
+                throw StopError;
+            }
+        }
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -131,7 +144,7 @@ public sealed class IdleWatchdogTests
         // Baseline: a fresh watchdog lives a full timeout with zero activity.
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
-        using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime,
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime, TestTelemetry.None,
             NullLogger<IdleWatchdog>.Instance);
 
         using var cts = new CancellationTokenSource();
@@ -154,7 +167,7 @@ public sealed class IdleWatchdogTests
         // lands exactly on a tick, which is not past it; the first tick strictly past it fires.
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
-        using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime,
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime, TestTelemetry.None,
             NullLogger<IdleWatchdog>.Instance);
 
         using var cts = new CancellationTokenSource();
@@ -180,7 +193,7 @@ public sealed class IdleWatchdogTests
         // timeout the tick is 0.5s, so 2.4s must not fire but 2.5s must.
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
-        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime,
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime, TestTelemetry.None,
             NullLogger<IdleWatchdog>.Instance);
 
         using var cts = new CancellationTokenSource();
@@ -210,7 +223,7 @@ public sealed class IdleWatchdogTests
     {
         var time = new FakeTimeProvider(FixedNow);
         var lifetime = new FakeLifetime();
-        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime,
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime, TestTelemetry.None,
             NullLogger<IdleWatchdog>.Instance);
 
         using var cts = new CancellationTokenSource();
@@ -244,11 +257,11 @@ public sealed class IdleWatchdogTests
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.IntervalMinutesGlobal] = "1";
         var lifetime = new FakeLifetime();
-        using var watchdog = new IdleWatchdog(time, TimeSpan.FromMinutes(4), lifetime,
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromMinutes(4), lifetime, TestTelemetry.None,
             NullLogger<IdleWatchdog>.Instance);
         using var extraction = new ExtractionHostedService(store,
             new SharedExtractionRunner(store, new SharedExtractionService(), new FakePromotionQueue(), time),
-            new FakePromotionQueue(), time, NullLogger<ExtractionHostedService>.Instance);
+            new FakePromotionQueue(), time, TestTelemetry.None, NullLogger<ExtractionHostedService>.Instance);
 
         using var cts = new CancellationTokenSource();
         var watchdogRun = watchdog.StartAsync(cts.Token);
@@ -271,5 +284,40 @@ public sealed class IdleWatchdogTests
         await cts.CancelAsync();
         await watchdogRun;
         await extractionRun;
+    }
+
+    [Fact]
+    public void RunOnce_EmitsASpanAndADurationForTheTick()
+    {
+        using var probe = new BackgroundTelemetryProbe(IdleWatchdog.OperationName);
+        var time = new FakeTimeProvider(FixedNow);
+        var lifetime = new FakeLifetime();
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromHours(4), lifetime, probe.Telemetry,
+            NullLogger<IdleWatchdog>.Instance);
+
+        watchdog.RunOnce().ShouldBeFalse();
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
+        span.Status.ShouldBe(ActivityStatusCode.Ok);
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public void RunOnce_WhenTheTickThrows_RecordsTheFailure()
+    {
+        using var probe = new BackgroundTelemetryProbe(IdleWatchdog.OperationName);
+        var time = new FakeTimeProvider(FixedNow);
+        var lifetime = new FakeLifetime { StopError = new InvalidOperationException("zephyrone") };
+        using var watchdog = new IdleWatchdog(time, TimeSpan.FromSeconds(2), lifetime, probe.Telemetry,
+            NullLogger<IdleWatchdog>.Instance);
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        watchdog.RunOnce().ShouldBeFalse();
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
+        var duration = probe.Durations.ShouldHaveSingleItem();
+        duration.Tags["result"].ShouldBe("error");
+        duration.Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
     }
 }

@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Observability;
+using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
@@ -23,6 +26,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
     private readonly SqliteConnectionFactory _factory;
     private readonly FakeTimeProvider _time;
     private readonly FakeLogger<BankMaintenanceHostedService> _logger;
+    private readonly BackgroundTelemetryProbe _probe = new(BankMaintenanceHostedService.OperationName);
     private readonly BankMaintenanceHostedService _service;
 
     public BankMaintenanceHostedServiceRunOnceTests()
@@ -31,10 +35,14 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
-        _service = new BankMaintenanceHostedService(_factory, _time, _logger);
+        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose()
+    {
+        _probe.Dispose();
+        Directory.Delete(_dataRoot, true);
+    }
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 
@@ -222,5 +230,38 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
 
         (await ReadFreelistCountAsync(TestContext.Current.CancellationToken)).ShouldBe(0);
         _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 512);
+    }
+
+    [Fact]
+    public async Task RunOnce_EmitsASpanAndADurationForThePass()
+    {
+        await _service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var span = _probe.Spans.ShouldHaveSingleItem();
+        span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
+        span.Status.ShouldBe(ActivityStatusCode.Ok);
+        _probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public async Task RunOnce_WhenThePassThrows_RecordsTheFailure()
+    {
+        // A directory where the bank file belongs: opening the bank fails, so the pass fails.
+        var brokenRoot = TestData.CreateTempRoot("bank-maintenance-broken");
+        Directory.CreateDirectory(Path.Combine(brokenRoot, "memory.db"));
+        var options = TestData.CreateInfrastructureOptions(brokenRoot);
+        using var probe = new BackgroundTelemetryProbe(BankMaintenanceHostedService.OperationName);
+        var service = new BankMaintenanceHostedService(
+            new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), _time, probe.Telemetry,
+            _logger);
+
+        var thrown = await Should.ThrowAsync<Exception>(
+            () => service.RunOnceAsync(TestContext.Current.CancellationToken));
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
+        var duration = probe.Durations.ShouldHaveSingleItem();
+        duration.Tags["result"].ShouldBe("error");
+        duration.Tags["error.type"].ShouldBe(thrown.GetType().Name);
+        Directory.Delete(brokenRoot, true);
     }
 }

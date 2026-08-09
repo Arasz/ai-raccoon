@@ -1,6 +1,10 @@
+using System.Diagnostics;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Observability;
+using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
@@ -19,7 +23,7 @@ public sealed class WatchHostedServiceTests
     private const string Project = "acme";
 
     private static (WatchTestStack Stack, WatchEventSource Source, WatchCatchUp CatchUp, WatchHostedService Hosted)
-        NewStack()
+        NewStack(IOperationTelemetry? telemetry = null)
     {
         var stack = new WatchTestStack();
         var source = new WatchEventSource(stack.Pipeline.Enqueue, _ => { },
@@ -27,8 +31,38 @@ public sealed class WatchHostedServiceTests
         var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
             NullLogger<WatchCatchUp>.Instance);
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
-            NullLogger<WatchHostedService>.Instance);
+            telemetry ?? TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         return (stack, source, catchUp, hosted);
+    }
+
+    [Fact]
+    public async Task Reconcile_EmitsASpanAndADurationForThePass()
+    {
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (_, _, _, hosted) = NewStack(probe.Telemetry);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        var span = probe.Spans.ShouldHaveSingleItem();
+        span.Source.Name.ShouldBe(OtlpNames.BackgroundScope);
+        span.Status.ShouldBe(ActivityStatusCode.Ok);
+        probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
+    }
+
+    [Fact]
+    public async Task Reconcile_WhenThePassThrows_RecordsTheFailure()
+    {
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, _, _, hosted) = NewStack(probe.Telemetry);
+        stack.Store.ListWatchesError = new InvalidOperationException("zephyrone");
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => hosted.ReconcileAsync(TestContext.Current.CancellationToken));
+
+        probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
+        var duration = probe.Durations.ShouldHaveSingleItem();
+        duration.Tags["result"].ShouldBe("error");
+        duration.Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
     }
 
     [Fact]

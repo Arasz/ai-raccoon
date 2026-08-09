@@ -31,7 +31,7 @@ public sealed class ExtractionMetricsTests
         var queue = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, time);
         var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time);
-        var service = new ExtractionHostedService(store, runner, queue, time,
+        var service = new ExtractionHostedService(store, runner, queue, time, TestTelemetry.None,
             NullLogger<ExtractionHostedService>.Instance);
         return (service, queue);
     }
