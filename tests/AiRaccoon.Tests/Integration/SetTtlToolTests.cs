@@ -38,8 +38,7 @@ public sealed class SetTtlToolTests : IDisposable
         _tools = new SweepTools(
             new SweepService(_store, _clock),
             new ForgettingPolicyService(_store, guard),
-            new ToolGate(guard, new FakePromotionQueue()),
-            new ToolCallMetrics());
+            new ToolGate(guard, new FakePromotionQueue()));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

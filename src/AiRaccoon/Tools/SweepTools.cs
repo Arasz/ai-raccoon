@@ -56,21 +56,11 @@ public sealed class SweepTools(
         int? ttlDays = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = new ToolExecutionActivity(observability, TnMemorySetTtl, projectId);
-        try
-        {
-            await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemorySetTtl, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemorySetTtl, cancellationToken);
 
-            var result = await knobs.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken);
-            var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-            activity.RecordInvocation();
-            return envelope;
-        }
-        catch (Exception ex)
-        {
-            activity.RecordError(ex);
-            throw;
-        }
+        var result = await knobs.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
