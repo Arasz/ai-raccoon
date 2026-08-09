@@ -18,11 +18,16 @@ public static class OtlpNames
     /// signal, the hosting *Meter* name (HostingMetrics.cs) — ADR-0021 names the wrong one.</summary>
     public const string AspNetCoreScope = "Microsoft.AspNetCore";
 
+    /// <summary>Self-instrumenting since .NET 9 (docs/work/2026-08-09-otlp-fix-plan.md WP12) — no
+    /// OpenTelemetry.Instrumentation.Http package. Covers embedding-endpoint and Azure Blob calls,
+    /// since Blob traffic rides HttpClient too.</summary>
+    public const string HttpScope = "System.Net.Http";
+
     /// <summary>Every meter the process registers for OTLP export.</summary>
-    public static readonly IReadOnlyList<string> Meters = [MemoryToolsScope, PromotionQueueScope, RuntimeScope];
+    public static readonly IReadOnlyList<string> Meters = [MemoryToolsScope, PromotionQueueScope, RuntimeScope, HttpScope];
 
     /// <summary>Every ActivitySource the process registers for OTLP export.</summary>
-    public static readonly IReadOnlyList<string> Sources = [MemoryToolsScope, AspNetCoreScope];
+    public static readonly IReadOnlyList<string> Sources = [MemoryToolsScope, AspNetCoreScope, HttpScope];
 
     public const string ToolInvocations = "ai_raccoon.tool.invocations";
 
