@@ -55,18 +55,20 @@ public sealed class ToolRefusalsTests : IDisposable
     ///     set read-only, then a write tool) and unknown-workspace (unknown workspaceId) now are too.
     ///     Sync prefixes are skipped here — they need real cloud config, not just a local bank.
     /// </summary>
-    public static TheoryData<string, Dictionary<string, object?>, string, string?> RealServerRefusalCases => new()
+    public static TheoryData<string, Dictionary<string, object?>, string, string?, string?> RealServerRefusalCases => new()
     {
         {
             "memory_write",
             new Dictionary<string, object?> { ["projectId"] = "acme-ro", ["content"] = "x" },
             "access-denied",
-            "acme-ro"
+            "acme-ro",
+            "ro"
         },
         {
             "memory_write",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
             "unknown-workspace",
+            null,
             null
         },
         {
@@ -76,6 +78,7 @@ public sealed class ToolRefusalsTests : IDisposable
             "memory_workspace_consolidate",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
             "invalid-argument",
+            null,
             null
         },
         {
@@ -85,7 +88,28 @@ public sealed class ToolRefusalsTests : IDisposable
                 ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
             },
             "unknown-hash",
+            null,
             null
+        },
+        {
+            // Binding-time failure: 'value' isn't a declared parameter, so the required 'content'
+            // is missing and the SDK's reflection marshaller throws a plain ArgumentException.
+            "memory_write",
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["value"] = "x" },
+            "invalid-argument",
+            null,
+            null
+        },
+        {
+            // In-body guard-clause failure: ArgumentException.ThrowIfNullOrWhiteSpace(hash) in
+            // MemoryTools.cs. Delete requires the "full" access mode, so the project is seeded
+            // that way — otherwise the access-denied check fires first and the guard clause is
+            // never reached.
+            "memory_delete",
+            new Dictionary<string, object?> { ["projectId"] = "acme-full", ["hash"] = "" },
+            "invalid-argument",
+            "acme-full",
+            "full"
         }
     };
 
@@ -144,14 +168,15 @@ public sealed class ToolRefusalsTests : IDisposable
     [Theory]
     [MemberData(nameof(RealServerRefusalCases))]
     public async Task KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog(string toolName,
-        Dictionary<string, object?> arguments, string expectedPrefix, string? readOnlyProjectId)
+        Dictionary<string, object?> arguments, string expectedPrefix, string? accessModeProjectId,
+        string? accessMode)
     {
         var dataRoot = TestData.CreateTempRoot($"tool-refusals-e2e-{expectedPrefix}");
         try
         {
-            if (readOnlyProjectId is not null)
+            if (accessModeProjectId is not null)
             {
-                await SeedProjectAccessModeAsync(dataRoot, readOnlyProjectId, "ro",
+                await SeedProjectAccessModeAsync(dataRoot, accessModeProjectId, accessMode!,
                     TestContext.Current.CancellationToken);
             }
 
@@ -255,6 +280,9 @@ public sealed class ToolRefusalsTests : IDisposable
         { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
         { new ValidationException("projectId is required"), "invalid-params" },
         { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
+        { new ArgumentException("The arguments dictionary is missing a value for the required parameter 'content'."), "invalid-argument" },
+        { new ArgumentNullException("projectIds"), "invalid-argument" },
+        { new ArgumentOutOfRangeException("limit"), "invalid-argument" },
         { new UnknownHashException("deadbeef", "acme"), "unknown-hash" },
         {
             new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
