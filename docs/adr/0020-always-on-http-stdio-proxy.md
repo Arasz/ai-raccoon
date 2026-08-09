@@ -90,7 +90,8 @@ process for a `url` entry, so nothing would ever start the server.
   process exits `ExitCode.ProxyBackendUnavailable` with one stderr line naming the URL, the `serve`
   exit code, and `ai-raccoon --transport stdio`. There is no in-process fallback.
 - **The proxy never kills or signals any process.** Daemon lifetime belongs to `IdleWatchdog` alone.
-  When a forward fails at the connection level the proxy re-acquires once and retries once; it does
+  When a forward fails at the connection level the proxy re-acquires once and retries once — **at
+  least once, not exactly once** (see below); it does
   not ping `/mcp` on a timer to keep the backend alive.
 - **`/mcp` is guarded by a loopback token, shipped in this same change.** `serve` mints a random
   secret into `<data-root>/mcp-token` (0600, exclusive create, reused across restarts) *before* it
@@ -101,6 +102,34 @@ process for a `url` entry, so nothing would ever start the server.
   it being reachable. The probe also stays unauthenticated and gains 401 as an accepted status, so
   it keeps recognising a live server across data roots. Full design:
   [the token flow](../plans/2026-08-09-mcp-loopback-token-flow.md).
+
+### The retry is at-least-once, and that is a real semantic change
+
+`ProxyForwarder`'s reconnect re-sends the **identical** request after re-acquiring the backend. A
+connection-level failure does not tell us whether the request arrived — so if the backend received
+and executed it and only the *response* was lost, the retry executes it a second time. The proxy
+cannot distinguish that case from one where the request never landed, and no amount of care at this
+layer can: the information is not on the wire.
+
+In-process stdio had no such boundary, so this is genuinely new behaviour rather than a defect
+introduced by an implementation choice. What it means per tool:
+
+- `memory_write` and ingestion are protected by content-hash dedup — a second execution is a no-op.
+- `memory_delete` is idempotent by shape: the second delete removes nothing.
+- **`memory_sweep` is not.** A sweep selects by current state, so a second pass can remove entries
+  the first pass's deletions made eligible. This is the one to watch.
+- `memory_sync` push/pull is wasteful rather than wrong — a duplicated push re-uploads a snapshot.
+
+We deliberately did **not** narrow the retry to "safe" methods. That would require a
+hand-maintained table of which JSON-RPC methods are idempotent, which is the exact drift the
+message-kind forwarding was designed to avoid, and it would be wrong the first time a tool changed
+character. Nor did we add idempotency keys: that is a protocol-level feature, not something a proxy
+can bolt on without the backend agreeing to it.
+
+The honest position is that one retry buys recovery from the common case — an idle-timed-out
+backend — at the cost of a rare double-execution whose blast radius is bounded by the dedup the
+domain already has. If that trade ever stops holding, the lever is to drop the retry entirely and
+surface the failure, not to make the retry cleverer.
 
 ## Consequences
 
