@@ -60,13 +60,19 @@ public sealed partial class SqliteMemoryStore(
 
         // Global content dedup within the project's committed set: identical content anywhere in
         // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
-        var existing = await connection.QueryFirstOrDefaultAsync<EntryRow>(
-                Def(MemorySql.SelectCommittedByValue,
-                    new { value = request.Content, projectId = request.ProjectId }, cancellationToken))
-            .ConfigureAwait(false);
-        if (existing is not null)
+        // Skipped for a workspace-scoped write (H3): a committed row must never short-circuit a
+        // write the caller explicitly scoped to a workspace, or the workspace never gets its own
+        // row and memory_workspace_discard has nothing to take back.
+        if (bucket.WorkspaceId is null)
         {
-            return ToEntry(existing);
+            var existing = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                    Def(MemorySql.SelectCommittedByValue,
+                        new { value = request.Content, projectId = request.ProjectId }, cancellationToken))
+                .ConfigureAwait(false);
+            if (existing is not null)
+            {
+                return ToEntry(existing);
+            }
         }
 
         await connection.ExecuteAsync(
@@ -335,28 +341,54 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await DeleteCoreAsync(connection, projectId, hash, scope: null, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>
+    ///     The sweep's own delete (H2): restricted to the one scope it enumerated, so a
+    ///     project-scoped pass cannot also remove a sibling row that shares this hash in another
+    ///     scope or workspace — hash alone is not a unique row (ContentHash.Of has no scope
+    ///     input). Unlike <see cref="DeleteAsync" />/memory_delete, which targets a hash wherever
+    ///     it lives; this is a narrower, internal verb, not a public tool.
+    /// </summary>
+    public async Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await DeleteCoreAsync(connection, projectId, hash, scope, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
+        string? scope, CancellationToken cancellationToken)
+    {
         // Record a tombstone for committed rows so sync propagates the deletion; workspace
-        // rows never leave the bank and need none (FR-NM-8 s4).
-        var scope = await connection.QueryFirstOrDefaultAsync<string?>(
-                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId }, cancellationToken))
+        // rows never leave the bank and need none (FR-NM-8 s4). Scoped the same way as the
+        // delete below, so a sibling row in a different scope can never supply the tombstone for
+        // a row it wasn't the one deleted (H2).
+        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
+                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
             .ConfigureAwait(false);
         // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read
         // alongside the scope lookup above, before the delete, so a removed chunk's siblings can
         // be renumbered afterward.
         var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId }, cancellationToken))
+                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
             .ConfigureAwait(false);
 
         var deleted = await connection.ExecuteAsync(
-                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId }, cancellationToken))
+                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
             .ConfigureAwait(false);
 
-        if (deleted > 0 && scope is not null)
+        if (deleted > 0 && rowScope is not null)
         {
             await connection.ExecuteAsync(
                     Def(MemorySql.UpsertTombstone,
-                        new { hash, scope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
                         cancellationToken))
                 .ConfigureAwait(false);
         }
