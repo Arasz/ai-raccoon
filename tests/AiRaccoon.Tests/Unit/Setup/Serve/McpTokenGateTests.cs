@@ -46,6 +46,19 @@ public sealed class McpTokenGateTests
         context.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
     }
 
+    /// <summary>The scheme parse's own edges: an empty remainder must never meet an empty secret.</summary>
+    [Theory]
+    [InlineData("Bearer")]
+    [InlineData("Bearer ")]
+    [InlineData("Bearer  ")]
+    public async Task Authorization_BearerWithNoToken_Is401(string headerValue)
+    {
+        var (context, nextCalled) = await InvokeAsync(("Authorization", headerValue));
+
+        nextCalled.ShouldBeFalse();
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
+    }
+
     [Fact]
     public async Task Authorization_BareTokenWithNoScheme_Is401()
     {
