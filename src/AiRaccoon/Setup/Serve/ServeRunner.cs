@@ -48,8 +48,16 @@ internal static partial class ServeRunner
         // Minted strictly before the Kestrel bind: once the port answers, the token file is on
         // disk, so the proxy never has to poll for it (ADR-0020).
         var tokenFile = new McpTokenFile(config.Options.DataRoot);
-        var app = McpServerSetup.CreateServerHost(serveConfig with { McpToken = await tokenFile.EnsureAsync(cancellationToken) });
+        if (await tokenFile.EnsureAsync(cancellationToken) is not { } mcpToken)
+        {
+            Log.McpTokenUnavailable(logger, tokenFile.Path);
+            await stderr.WriteLineAsync(
+                $"ai-raccoon: cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again");
+            return ExitCode.McpTokenUnavailable;
+        }
+
         Log.McpTokenReady(logger, tokenFile.Path);
+        var app = McpServerSetup.CreateServerHost(serveConfig with { McpToken = mcpToken });
         try
         {
             if (!TryResolveEncryptionKey(logger, app.Services.GetRequiredService<IEncryptionKeyResolver>(), out var encryptionKey))
@@ -237,5 +245,9 @@ internal static partial class ServeRunner
 
         [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
         public static partial void McpTokenReady(ILogger logger, string tokenPath);
+
+        [LoggerMessage(EventId = 607, Level = LogLevel.Error,
+            Message = "ai-raccoon: cannot read or create the MCP token at {TokenPath} — check its permissions, or remove it and start serve again")]
+        public static partial void McpTokenUnavailable(ILogger logger, string tokenPath);
     }
 }

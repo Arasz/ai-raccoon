@@ -11,5 +11,8 @@ public static class ExitCode
     /// <summary>The proxy could neither reach nor start a backend; there is no in-process fallback (ADR-0020).</summary>
     public const int ProxyBackendUnavailable = 6;
 
+    /// <summary>`serve` could not read, heal or mint the loopback token; it refuses to bind unguarded.</summary>
+    public const int McpTokenUnavailable = 7;
+
     public const int Success = 0;
 }
