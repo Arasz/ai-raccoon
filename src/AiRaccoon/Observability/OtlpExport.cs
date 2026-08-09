@@ -42,9 +42,8 @@ internal static partial class OtlpExport
                     .AddMeter([.. OtlpNames.Meters])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, MetricsSignalPath)))
                 .WithTracing(t => t
-                    // ASP.NET Core's unrecorded per-request Activity becomes the local parent for every
-                    // tool-call span; the SDK's default ParentBased sampler drops those (ADR-0009).
-                    .SetSampler(new AlwaysOnSampler())
+                    // The request span is now recorded (ADR-0021), so ParentBased samples it and
+                    // OTEL_TRACES_SAMPLER is live configuration again.
                     .AddSource([.. OtlpNames.Sources])
                     .AddOtlpExporter(o => ConfigureExporter(o, state, TracesSignalPath)));
 

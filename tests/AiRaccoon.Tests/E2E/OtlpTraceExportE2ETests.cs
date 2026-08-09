@@ -22,6 +22,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 {
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
+    private const string SamplerVar = "OTEL_TRACES_SAMPLER";
 
     private McpServerFactory _factory = null!;
     private CapturingCollector _collector = null!;
@@ -121,6 +122,40 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         finally
         {
             await client.DisposeAsync();
+        }
+    }
+
+    // ADR-0021 "The sampler stays until another lane's test says otherwise": with the hardcoded
+    // AlwaysOnSampler in place, this must go red — spans export regardless of OTEL_TRACES_SAMPLER.
+    // Removing the override restores it as live configuration; this proves the env var actually
+    // reaches the SDK, through a real tool call rather than a hand-built root Activity.
+    [Fact]
+    public async Task OtelTracesSamplerAlwaysOff_ProducesNoSpans()
+    {
+        Environment.SetEnvironmentVariable(SamplerVar, "always_off");
+        try
+        {
+            var exportedItems = new List<Activity>();
+            await using var factory = new McpServerFactory(configureAdditionalServices: services =>
+                services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+            var client = await factory.CreateClientAsync();
+            try
+            {
+                await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                    null, null, TestContext.Current.CancellationToken);
+
+                factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
+
+                exportedItems.ShouldBeEmpty();
+            }
+            finally
+            {
+                await client.DisposeAsync();
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(SamplerVar, null);
         }
     }
 
