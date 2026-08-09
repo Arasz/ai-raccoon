@@ -58,7 +58,7 @@ public class MemoryToolsInstrumentationTests
         durations[0].Tags["tool"].ShouldBe("memory_write");
 
         startedActivities.Count.ShouldBeGreaterThanOrEqualTo(1);
-        startedActivities.ShouldContain(a => a.OperationName == "memory_write");
+        startedActivities.ShouldContain(a => a.OperationName == "tools/call memory_write");
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class MemoryToolsInstrumentationTests
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
-        invocations[0].Tags["error_type"].ShouldBe("InvalidOperationException");
+        invocations[0].Tags["error.type"].ShouldBe("InvalidOperationException");
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class MemoryToolsInstrumentationTests
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
-        invocations[0].Tags["error_type"].ShouldBe("InvalidOperationException");
+        invocations[0].Tags["error.type"].ShouldBe("InvalidOperationException");
 
         var stopped = stoppedActivities.ShouldHaveSingleItem();
         stopped.Status.ShouldBe(ActivityStatusCode.Error);
@@ -153,7 +153,7 @@ public class MemoryToolsInstrumentationTests
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
         invocations[0].Tags["tool"].ShouldBe("memory_sync");
-        invocations[0].Tags["error_type"].ShouldNotBeNull();
+        invocations[0].Tags["error.type"].ShouldNotBeNull();
     }
 
     [Fact]

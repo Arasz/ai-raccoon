@@ -83,7 +83,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 
             factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
 
-            var toolSpan = exportedItems.Single(a => a.OperationName == "memory_stats");
+            var toolSpan = exportedItems.Single(a => a.OperationName == "tools/call memory_stats");
             var requestSpan = exportedItems.SingleOrDefault(a =>
                 a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
 

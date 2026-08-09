@@ -203,7 +203,7 @@ public sealed class OtlpExportTests : IDisposable
         tracerProvider.ForceFlush();
 
         exportedItems.ShouldNotBeEmpty();
-        exportedItems.ShouldContain(a => a.OperationName == "probe_tool");
+        exportedItems.ShouldContain(a => a.OperationName == "tools/call probe_tool");
     }
 
     // Metrics' twin of ToolCallSpan_IsForceFlushedToTheConfiguredExporter above: a MetricCollector
