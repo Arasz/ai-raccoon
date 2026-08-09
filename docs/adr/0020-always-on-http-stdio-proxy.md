@@ -142,6 +142,24 @@ process for a `url` entry, so nothing would ever start the server.
   created closes without the exclusion being touched.
 - **Neutral.** `McpEntryRenderer` and `serve --mcp-entry` are unaffected; a direct `url` entry
   remains valid for anyone who wants one.
+- **Constraint for later readers — the proxy host composes no tool-layer filters.** Bare
+  `ai-raccoon` executes no tools; it forwards. Anything registered beside `ToolRefusals.Filter`
+  (`McpServerSetup.cs:169`) — tool metrics, refusal policy, a `CallToolFilter` — belongs on the
+  **backend host only**. Registered on the proxy it would mint tool-layer signal for calls that
+  process never ran. The proxy's forwarding sits at the same seam via `IncomingFilters`, which is
+  what makes the mistake easy to make.
+- **Constraint — the proxy propagates no `traceparent`, and that is load-bearing elsewhere.** It
+  registers no tools and wires no exporter, so no `ActivityListener` exists, `HttpClient`'s
+  `DiagnosticsHandler` is bypassed, and no trace context reaches the backend. `HttpRequestIn` on
+  the server therefore stays a trace root. If the proxy ever propagated context, ASP.NET's span
+  would become a child of a remote parent, `ParentBased` would honour the proxy's unrecorded
+  Activity, and every server span would be dropped. A test pins the absence of the header on the
+  wire; ADR-0021's sampler decision depends on it.
+- **Negative — `OTEL_*` becomes machine-wide, decided by whichever client starts the backend
+  first.** The spawned `serve` inherits the proxy's environment, and the proxy is spawned by every
+  MCP client. So one project's `.mcp.json` `env` block fixes the OTLP configuration for every other
+  client's traffic, and a malformed endpoint that kills `serve` at boot takes memory down for all
+  of them rather than for one session.
 
 ## Non-Goals
 
