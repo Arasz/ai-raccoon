@@ -811,7 +811,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task AddContentAsync_ConcurrentSameBucket_SingleRowNoThrow()
+    public async Task AddContentAsync_ConcurrentSameBucket_ExactlyOneCreated()
     {
         var barrier = new Barrier(2);
         var tasks = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
@@ -822,12 +822,28 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         })).ToArray();
         var results = await Task.WhenAll(tasks);
 
-        results.Select(r => r.Hash).Distinct().ShouldHaveSingleItem();
+        results.Select(r => r.Entry.Hash).Distinct().ShouldHaveSingleItem();
+        results.Count(r => r.Created).ShouldBe(1,
+            "the ON CONFLICT DO NOTHING loser reports affected == 0 — exactly one caller created the row");
+        results.Count(r => !r.Created).ShouldBe(1);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var count = await connection.ExecuteScalarAsync<long>(
             "SELECT count(*) FROM entries WHERE path = 'p.md' AND scope = 'project'",
             TestContext.Current.CancellationToken);
         count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task AddContentAsync_SecondSamePath_CreatedFalse()
+    {
+        var first = await _store.AddContentAsync("acme", "p.md", "identical fact",
+            null, cancellationToken: TestContext.Current.CancellationToken);
+        var second = await _store.AddContentAsync("acme", "p.md", "identical fact",
+            null, cancellationToken: TestContext.Current.CancellationToken);
+
+        first.Created.ShouldBeTrue("the first write creates the row");
+        second.Created.ShouldBeFalse("the path pre-check finds the existing row — re-add is not a creation");
+        second.Entry.Hash.ShouldBe(first.Entry.Hash, "the existing row is returned, not a fresh hash");
     }
 
     [Fact]
