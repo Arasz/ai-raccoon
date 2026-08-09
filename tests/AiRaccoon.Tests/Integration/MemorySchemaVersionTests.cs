@@ -452,6 +452,36 @@ public sealed class MemorySchemaVersionTests
             "the trigger fix must not require or trigger any version-ladder step");
     }
 
+    /// <summary>
+    ///     The reason the replacement must be conditional, not unconditional: every other statement
+    ///     in <c>Ddl</c> is `CREATE ... IF NOT EXISTS`, a no-op read once the object exists. An
+    ///     unconditional `DROP TRIGGER` + `CREATE TRIGGER` is a real schema write on every single
+    ///     open, and `SqliteConnectionFactory` opens unpooled, per-operation connections —
+    ///     `SweepService` opens one per entry. On a large bank that turns one maintenance pass into
+    ///     thousands of schema writes, each bumping `PRAGMA schema_version` and forcing every other
+    ///     connection's prepared-statement cache to re-prepare, and each opening a window between the
+    ///     DROP and the CREATE where the trigger does not exist — a concurrent delete landing in that
+    ///     window would produce exactly the orphan ADR-0023 exists to prevent. Once a bank's trigger
+    ///     already carries the corrected body, a reopen must therefore cost one indexed
+    ///     `sqlite_master` read and no write at all.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnABankAlreadyCarryingTheScopeAwareTrigger_PerformsNoSchemaWriteOnReopen()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var before = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("PRAGMA schema_version", cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var after = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("PRAGMA schema_version", cancellationToken: TestContext.Current.CancellationToken));
+        after.ShouldBe(before,
+            "a bank whose trigger already carries the scope-aware guard must not take a schema write on reopen");
+    }
+
     // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.
     private const string V1Ddl = """
                                  CREATE TABLE workspaces (

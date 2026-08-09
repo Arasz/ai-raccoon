@@ -137,36 +137,12 @@ internal static class MemorySchema
                                    DELETE FROM vec_entries WHERE rowid = OLD.id;
                                END;
 
-                               -- Propose-tier invalidation (ADR-0023): a queue row is a promise about
-                               -- an entries row that may no longer exist. NOT EXISTS is load-bearing —
-                               -- uq_entries_committed_bucket permits the same hash in two contexts of
-                               -- one project, so deleting one live sibling must not drop a candidate
-                               -- the surviving sibling still backs. `e.scope = 'project'` matches what
-                               -- ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject):
-                               -- a custom- or workspace-scoped sibling cannot back a promotable candidate,
-                               -- so it must not count as "still live" here either (H4). OLD.project_id is
-                               -- NULL for shared-scope deletes and `= NULL` never matches, so those are
-                               -- inert by construction (promotion dequeues explicitly).
-                               --
-                               -- DROP TRIGGER IF EXISTS immediately before an unguarded CREATE TRIGGER,
-                               -- not CREATE TRIGGER IF NOT EXISTS: the H4 guard fix *replaces* a trigger
-                               -- body that may already be on disk (every bank opened by a pre-fix binary
-                               -- has the old scope-blind body), and IF NOT EXISTS never replaces one. Both
-                               -- statements stay inside this unconditional Ddl script, which already runs
-                               -- in full on every open (see EnsureAsync) — so the corrected body reaches
-                               -- every existing bank on its next open, with no CurrentVersion bump and no
-                               -- ladder step, the same way the original additive trigger did (ADR-0023
-                               -- amendment: a body *replacement* is a different case from an *addition*,
-                               -- and this is how it stays inside the same no-migration guarantee).
-                               DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
-
-                               CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
-                                   DELETE FROM promotion_queue
-                                   WHERE project_id = OLD.project_id AND hash = OLD.hash
-                                     AND NOT EXISTS (SELECT 1 FROM entries e
-                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
-                                                       AND e.scope = 'project');
-                               END;
+                               -- promotion_queue_entries_ad (ADR-0023) is *not* declared here. Its guard
+                               -- needed a body replacement (H4, see EnsurePromotionQueueTriggerScopeGuardAsync
+                               -- below), and CREATE TRIGGER IF NOT EXISTS can only ever create — replacing a
+                               -- body needs a DROP first, which is a real schema write and must not run on
+                               -- every open the way every other statement here (all IF NOT EXISTS, all
+                               -- no-ops once the object exists) safely can.
 
                                CREATE TABLE IF NOT EXISTS sync_meta (
                                    key TEXT PRIMARY KEY,
@@ -285,6 +261,10 @@ internal static class MemorySchema
         // written by an older one would otherwise keep an unreachable scope forever.
         await MigrateIngestScopeKeysAsync(connection, cancellationToken).ConfigureAwait(false);
 
+        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
+        // write only when the stored trigger body still needs the H4 scope guard.
+        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
+
         if (fresh)
         {
             await connection.ExecuteAsync(
@@ -363,6 +343,59 @@ internal static class MemorySchema
                        SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
                      WHERE key LIKE 'watch.scope.%';
                     DELETE FROM settings WHERE key LIKE 'watch.scope.%';
+                    """,
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
+    /// matches what ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject) — a
+    /// custom- or workspace-scoped sibling cannot back a promotable candidate, so it must not read
+    /// as "still live" here either.</summary>
+    private const string PromotionQueueTriggerDdl = """
+                                                     CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                                                         DELETE FROM promotion_queue
+                                                         WHERE project_id = OLD.project_id AND hash = OLD.hash
+                                                           AND NOT EXISTS (SELECT 1 FROM entries e
+                                                                           WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                                             AND e.scope = 'project');
+                                                     END;
+                                                     """;
+
+    /// <summary>
+    ///     H4 (ADR-0023 amendment): the trigger's guard needed a body *replacement*
+    ///     (<c>AND e.scope = 'project'</c>), and <c>CREATE TRIGGER IF NOT EXISTS</c> — the mechanism
+    ///     every other object in <see cref="Ddl"/> relies on — can only ever create, never replace. An
+    ///     unconditional <c>DROP TRIGGER</c> + <c>CREATE TRIGGER</c> on every open was tried and
+    ///     rejected: unlike the no-op <c>IF NOT EXISTS</c> statements around it, that pair is a real
+    ///     schema write every time, and <see cref="SqliteConnectionFactory"/> opens unpooled,
+    ///     per-operation connections — SweepService opens one per entry, so a large bank would turn
+    ///     one maintenance pass into thousands of schema writes, each bumping
+    ///     <c>PRAGMA schema_version</c> (forcing every other connection's prepared-statement cache to
+    ///     re-prepare) and each opening a window between the DROP and the CREATE where the trigger
+    ///     does not exist — a concurrent delete landing in that window would produce exactly the
+    ///     orphan ADR-0023 exists to prevent. Probing first (one indexed <c>sqlite_master</c> read,
+    ///     same shape as <see cref="MigrateIngestScopeKeysAsync"/> above) avoids all three: no write,
+    ///     no cookie bump, no window, on every open after the first corrected one.
+    /// </summary>
+    private static async Task EnsurePromotionQueueTriggerScopeGuardAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var storedSql = await connection.ExecuteScalarAsync<string?>(
+                new CommandDefinition(
+                    "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        if (storedSql is not null && storedSql.Contains("scope", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                    DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
+
+                    {PromotionQueueTriggerDdl}
                     """,
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
