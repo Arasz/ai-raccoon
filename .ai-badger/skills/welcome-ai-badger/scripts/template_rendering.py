@@ -51,16 +51,23 @@ def invariant_summary(text: str, name: str) -> str:
     return f"{head}\n  → `.ai-badger/invariants/{name}.md`"
 
 
+_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|cf|vs|approx)\.$", re.IGNORECASE)
+
+
 def _rule_sentence(block: str) -> str:
     """*block*'s first sentence on one line, code spans intact.
 
     Unlike `first_sentence` this keeps backticks — a rule about `x ?? throw` reads as prose
     without them — and flattens the source's hard wrapping, which would otherwise break out of
-    the bullet's indentation.
+    the bullet's indentation. A boundary after `e.g.` or its kin is not a sentence end: the
+    partition invariant shipped as "carries the tenant/owner key (e.g." for a release.
     """
     flat = " ".join(block.split())
-    end = re.search(r'(?<=[.!?])\s+(?=[A-Z`"*])', flat)
-    return (flat[:end.start()] if end else flat).rstrip(".")
+    for end in re.finditer(r'(?<=[.!?])\s+(?=[A-Z`"*])', flat):
+        if _ABBREVIATION.search(flat[:end.start()]):
+            continue
+        return flat[:end.start()].rstrip(".")
+    return flat.rstrip(".")
 
 
 def _leads_into_a_list(block: str) -> bool:
