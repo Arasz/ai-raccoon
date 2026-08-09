@@ -68,6 +68,27 @@ on a search hit), so an entry nobody touches keeps the schema default `0.5` fore
 - Treat the stored `rating` column as a cache, never as a source of truth. Nothing may branch on it
   without recomputing.
 
+**Known dependency — `BumpAccess` is scope-blind, and WP1 reads exactly what it writes.** Fix lane
+A1 (`fix/1-6-0-h2-h3-storage-scope`) confirmed while fixing H2 that `SelectRatingForBump` and
+`BumpAccess` filter on `(hash, project_id)` with no scope predicate, so **a single search hit writes
+`rating`, `access_count` and `last_accessed_at` to every same-hash sibling** — including a
+workspace-scratch row and a custom-context row. A1 deliberately left them alone (out of its lane,
+and nothing in its suite demonstrated them broken), which was the right call for that lane and
+leaves the work here.
+
+This is not cosmetic for WP1: the idle computation keys on `last_accessed_at`, so under the current
+statement a search that touched the committed row marks an untouched workspace sibling as recently
+used, and that sibling silently stops decaying. **Fix the bump statements as part of WP1** — same
+one-line predicate shape A1 already applied to `UpdateEntryTtl` and `SelectEntryMetadata`, and worth
+a test asserting a sibling's `last_accessed_at` stays null when the project row is searched.
+
+A1 also found, and fixed, a second-order version of this that the review had only hypothesized:
+`SelectEntryMetadata` was scope-blind too, so with `UpdateEntryTtl` alone fixed, the sweep's
+metadata read (`LIMIT 1`, no `ORDER BY`) could return the *sibling's* `ttl_days = NULL` and go inert
+on the very row it was meant to delete. Expect more of this class wherever a statement filters on
+`(hash, project_id)` — the hash does not encode scope, so that pair is not a row identity anywhere
+in this schema.
+
 **Acceptance.** Red-first, paste each failure:
 - An entry never accessed and idle past the crossover computes a factor below the threshold. *Fails
   today — the stored `0.5` comes back.* This single assertion is ruling 1.
