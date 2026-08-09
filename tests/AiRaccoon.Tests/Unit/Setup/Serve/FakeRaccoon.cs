@@ -33,8 +33,11 @@ internal sealed class FakeRaccoon : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
-    /// <summary>Starts on <paramref name="port"/>, answering /shutdown with <paramref name="shutdownStatus"/>.</summary>
-    public static async Task<FakeRaccoon> StartAsync(int port, HttpStatusCode shutdownStatus, CancellationToken cancellationToken)
+    /// <summary>Starts on <paramref name="port"/>, answering /shutdown with <paramref name="shutdownStatus"/>.
+    /// <paramref name="name"/> is what /observability claims to be; a null <paramref name="version"/>
+    /// leaves the field out entirely, like a server predating ADR-0022.</summary>
+    public static async Task<FakeRaccoon> StartAsync(int port, HttpStatusCode shutdownStatus,
+        CancellationToken cancellationToken, string name = "ai-raccoon", string? version = "0.0.0-fake")
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
@@ -42,14 +45,11 @@ internal sealed class FakeRaccoon : IAsyncDisposable
         var app = builder.Build();
         var fake = new FakeRaccoon(app, port);
 
+        var otlp = new { enabled = false, endpoint = (string?)null, protocol = (string?)null };
         app.MapPost("/mcp", () => Results.Text(JsonRpcRefusal, "application/json", null, StatusCodes.Status401Unauthorized));
-        app.MapGet("/observability", () => Results.Json(new
-        {
-            name = "ai-raccoon",
-            version = "0.0.0-fake",
-            pid = Environment.ProcessId,
-            otlp = new { enabled = false, endpoint = (string?)null, protocol = (string?)null }
-        }));
+        app.MapGet("/observability", () => version is null
+            ? Results.Json(new { name, pid = Environment.ProcessId, otlp })
+            : Results.Json(new { name, version, pid = Environment.ProcessId, otlp }));
         app.MapPost("/shutdown", () =>
         {
             fake.ShutdownRequests++;

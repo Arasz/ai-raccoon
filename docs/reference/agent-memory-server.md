@@ -34,7 +34,7 @@ verbs are the single config channel (see [Command-line options](#command-line-op
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
-| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...]}`                                                        |
+| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], skippedDuplicates, failures: [...]}`                    |
 | `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
@@ -76,6 +76,17 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   actually mean. The two tools that do not name a single project — `memory_promotion_list`
   with `projectId` omitted, and `memory_share_extract` over several ids — report a
   bank-wide count with `capacity` absent. No response names another project.
+- **`memory_share_extract(mode=promote)` result shape:** `candidates` is always `[]` in promote
+  mode (it is only populated by `propose`); `promotedHashes` are the hashes actually shared.
+  `skippedDuplicates` counts queued candidates that matched something already in `shared` by value
+  or path and were dropped without an error. `failures` is a list of `{projectId, hash, reason}`
+  for candidates claimed off the queue but never shared, where `reason` is a bounded token —
+  `stale-hash` (the queued hash no longer resolves in the entries table) or `share-failed` (any
+  other per-candidate error) — see `PromoteFailure`/`ShareExtractResult`
+  (`src/AiRaccoon.Core/Memory/PromotionQueue.cs`, `SharedExtraction.cs`). This exists so a caller
+  can tell "everything queued was already shared" (`skippedDuplicates` > 0, `failures` empty) apart
+  from "everything failed" (`failures` covers the whole batch), and can see partial success instead
+  of a single pass/fail verdict for the batch.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
@@ -133,6 +144,22 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   watch failures never fail the server.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+
+### Unknown-id rule
+
+An id that a tool cannot act on is handled one of two ways, and which way depends on what kind of
+tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
+
+- **A removal verb is idempotent and reports a count.** An unknown id is a no-op, not an error —
+  `memory_delete`, `memory_delete_context`, and `memory_promotion_discard` return `0` for the
+  count they would otherwise report; `memory_watch_remove` treats a non-existent watch the same
+  way. Calling a removal verb twice on the same id is safe by construction.
+- **A state transition refuses an id it cannot act on.** `memory_share` and the workspace family
+  (`memory_write` with `workspaceId`, `memory_workspace_status`, `memory_workspace_consolidate`,
+  `memory_workspace_discard`) return a typed refusal (`unknown-hash` / `unknown-workspace`, see
+  [Error shapes](#error-shapes)) instead of silently doing nothing — there is no well-defined
+  "already done" state for promoting a hash that was never written or writing into a workspace
+  that was never begun.
 
 ### `capacity` semantics
 
@@ -292,9 +319,10 @@ replaces the binary while the always-on backend keeps the old assembly loaded,
 so every later client attaches to the stale one. `--restart` asks the running
 server to stop over `POST /shutdown` (token-guarded, POST-only), waits for the
 port to free, then serves in its place; with nothing listening it is a plain
-`serve`. In-flight calls drain for up to 10s — the host's stated
-`ShutdownTimeout` — after which they are aborted and the proxy's documented
-at-least-once retry re-issues them against the new backend. The port is then
+`serve`. The stop gets 10s in total — the host's stated `ShutdownTimeout`,
+shared by in-flight calls and every background service, not a per-call
+guarantee — after which what is left is aborted and the proxy's documented
+at-least-once retry re-issues it against the new backend. The port is then
 given 20s to free.
 
 `--restart` kills no process and never falls back to attaching. Every way the
@@ -304,8 +332,9 @@ the server refuses our token (it serves another data root), it has no
 needs the old process stopped by hand), our data root holds no token to
 present (nothing is asked to stop), the port is still held after the bound, or
 another start won the port while this one was binding. A listener that does
-not identify as an ai-raccoon over `/observability` is never sent a shutdown —
-it falls through to the unchanged exit code 3.
+not identify as an ai-raccoon over `/observability` is never sent a shutdown:
+it is refused before the bind is attempted, with the unchanged exit code 3 and
+a line saying the port is held by something that is not an ai-raccoon.
 
 `/mcp` and `/shutdown` require `X-AiRaccoon-Token` or `Authorization: Bearer
 <token>` (the Bearer envelope added 2026-08-09, see
@@ -490,7 +519,9 @@ ai-raccoon encryption migrate
 # extract: background shared-extraction (HTTP/S hosts only — a stdio process is
 # per-connection and recycled before the loop can fire; default interval 30 min;
 # config changes apply live, no server restart needed; propose logs the ranked
-# candidates — path, preview, reasons — to the server log)
+# candidates — path, preview, reasons — to the server log; prune reports/removes
+# promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0022) —
+# read-only by default, --apply removes, idempotent)
 ai-raccoon extract enable {true|false}
 ai-raccoon extract mode {propose|promote}
 ai-raccoon extract interval {minutes}
@@ -499,6 +530,7 @@ ai-raccoon extract exclude add {prefix}
 ai-raccoon extract exclude remove {prefix}
 ai-raccoon extract exclude list
 ai-raccoon extract list
+ai-raccoon extract prune [--apply]
 
 # maintenance: bank housekeeping (every process checkpoints the WAL at startup
 # and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
@@ -702,13 +734,24 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
-| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared) — caught at argument-binding time, before the tool method runs | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
+| `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, a present-but-blank value fails a guard clause, or a value is out of the range a guard clause enforces — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. `ToolRefusals.PrefixFor` walks the exception's base-type chain, so this one table entry covers the whole `ArgumentException` family (`ArgumentException`, `ArgumentNullException`, `ArgumentOutOfRangeException`) as well as the SDK's own `JsonException` | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
-a key, or any other unmapped exception — is a genuine failure, not a refusal: it escapes
-as a normal tool-call error, logged at `Error`, e.g. `OpenAI-compatible embeddings
-require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'.`
+a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
+does **not** reach the caller. The MCP SDK's `CreateToolCallErrorResult` surfaces the exception
+message only for `McpException`; for every other exception type it discards the message and
+replaces it with the bare string `"An error occurred invoking '<tool>'."` (measured against the
+live server; see `docs/adr/0019-forward-version-write-guard.md`). So a call that hits, say, the
+embeddings service's plain `InvalidOperationException`
+(`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` —
+`"OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model>
+--api-key <key>'."`, thrown from whichever tool needed the embedding engine — `memory_write`,
+`memory_search`, `memory_ingest_file/directory`, `memory_embed_pending`) does not get that text on
+the wire at all: the caller sees only `"An error occurred invoking '<tool>'."`, logged at `Error`,
+with no indication of what to fix. This is precisely why the `ArgumentException` family is mapped
+to `invalid-argument` above instead of being left unmapped — an unmapped exception type's message
+is unrecoverable information loss, not just an untyped prefix.
 
 ## Managed store
 

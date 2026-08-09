@@ -50,10 +50,7 @@ internal static class PromotionContentEvidence
         if (f.ForeignProjects >= 2)
         {
             adj += 0.10;
-            if (!f.ForeignSubject)
-            {
-                reasons.Add("foreign-subject");
-            }
+            reasons.Add("many-foreign-projects");
         }
 
         if (f.HeadingStart)
@@ -154,9 +151,9 @@ internal static class PromotionContentEvidence
         }
 
         var clamped = Clamp(adj, Lo, Hi);
-        // Applied after the clamp, not folded into adj: a chunk with enough other evidence to
-        // already saturate Hi must still be demoted for opening mid-sentence, not have the
-        // penalty silently absorbed by the ceiling.
+        // Applied after the clamp: a saturated-Hi chunk must still be demoted for opening
+        // mid-sentence. Doc-channel only, by decision — wiring into OrganicNote/AutoMemoryNote
+        // would be an unmeasured weight change; revisit only with calibration fixtures (ADR-0018).
         if (f.MidSentence)
         {
             clamped -= 0.18;

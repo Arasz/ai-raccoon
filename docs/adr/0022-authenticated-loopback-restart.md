@@ -58,10 +58,11 @@ for the port to free, and then serves in its place. When nothing is listening it
   nothing on the wire said *which build* was answering. It does now — that is the discriminator this
   decision needs and the one an operator needs to confirm an update actually took.
 - **The drain window is stated, not inherited.** The serve host sets
-  `HostOptions.ShutdownTimeout = 10s` (`ShutdownEndpoint.DrainWindow`) instead of taking the
-  framework default, because a restart waits on that number. In-flight requests get up to 10s;
-  after that Kestrel aborts them. The port is then given `2 × DrainWindow` to free, so a full drain
-  is never mistaken for a hang.
+  `HostOptions.ShutdownTimeout = 10s` (`ShutdownEndpoint.DrainWindow`) instead of taking the 30s
+  framework default, because a restart waits on that number. It is the budget for the whole host
+  stop — every hosted service's `StopAsync` shares it with the in-flight requests — after which
+  Kestrel aborts what is left. The port is then given `2 × DrainWindow` to free, so a full drain
+  is never mistaken for a hang. See the Consequences for what the reduction costs.
 - **Every failure is loud and non-zero (`ExitCode.RestartFailed = 8`), and `--restart` never
   attaches.** Falling through to "attached to the existing server" would report success for exactly
   the process the operator asked to replace.
@@ -72,7 +73,7 @@ for the port to free, and then serves in its place. When nothing is listening it
 |---|---|---|
 | `Nothing` | probe finds no server | plain `serve` — bind and serve |
 | `Stopped` | 202, then the port freed | bind and serve |
-| `Foreign` | listening, but `/observability` does not identify an ai-raccoon | proceed; the bind fails and the unchanged `PortInUse` line is the answer. Nothing unidentified is ever sent a shutdown |
+| `Foreign` | listening, but `/observability` does not identify an ai-raccoon | `PortInUse` (3), refused before any bind is attempted and named as an unidentified listener. Nothing unidentified is ever sent a shutdown |
 | `NoToken` | our data root holds no token | `RestartFailed`; **no shutdown is attempted** |
 | `Refused` | `/shutdown` answered 401 | `RestartFailed` — it serves another data root |
 | `Unsupported` | `/shutdown` answered 404/405 | `RestartFailed` — an ai-raccoon too old to be asked to stop |
@@ -115,6 +116,18 @@ flush. The port poll, not the status code, is the verdict.
   bank, so a holder could already do far worse than stop a daemon the proxy restarts on next use.
   The bar is unchanged — "any process that can read a 0600 file in the data root" — and on Windows
   that bar is the data-root ACL, as ADR-0020 already records.
+- **Mixed — `--restart` presents the token to whatever answers the port.** `ServerRestart` decides
+  the listener is ours from that listener's own unauthenticated `name: "ai-raccoon"` claim on
+  `/observability` (`ServerRestart.cs:81`), then POSTs the long-lived token to it
+  (`ServerRestart.cs:143-146`). Identity here is a heuristic, not a security control.
+  `BackendLauncher`/`ProxyRunner.OpenBackendAsync` already do the same, so this is not a
+  regression, but it does cross the boundary SECURITY.md draws: a *different* local user cannot
+  read the 0600 token file, yet can bind a free loopback port, claim the name, and be handed the
+  token — which never rotates. Narrowed only by not following redirects (a 3xx `/observability` is
+  `Foreign`, and .NET would otherwise carry the custom header across the hop, unlike
+  `Authorization`) and by treating any non-2xx as `Foreign`. Rotating the token, or binding it to
+  the process that minted it, is the real fix and is not attempted here.
+
 - **Negative — a second failure surface on the update path.** `serve --restart` can now fail in
   ways plain `serve` could not (refused, unsupported, timed out). Each has its own stderr line
   naming the port, the PID and the manual escape, and none of them leaves a half-restarted state:
@@ -126,8 +139,16 @@ flush. The port poll, not the status code, is the verdict.
 - **Neutral — the 401 body wording changed.** It said "`/mcp` needs the header"; it now says "this
   endpoint needs the header", because one body serves both guarded paths. `ServerProbe`'s
   discriminator is the presence of `jsonrpc` in the body, which is untouched.
-- **Neutral — the drain window is now 10s where it was the framework default.** This also bounds
-  Ctrl-C and idle shutdown, which previously waited on whatever `HostOptions` defaulted to.
+- **Mixed — the shutdown budget drops from 30s to 10s, and it is shared.** `new
+  HostOptions().ShutdownTimeout` is 30 seconds (measured on .NET 10.0.302), so this is a 3x
+  reduction, not a neutral restatement. It is also not a per-request drain: it is the budget for
+  the whole host stop, spent by every hosted service's `StopAsync` as well as by in-flight
+  requests. `BankMaintenanceHostedService.StopAsync`
+  (`src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs:89-108`) runs a WAL
+  checkpoint there and swallows a cut-off into a `ShutdownCheckpointFailed` log, so a slow
+  checkpoint under a busy bank is now likelier to be abandoned. The bound applies to Ctrl-C and
+  idle shutdown too, not just a restart. Accepted because a restart has to wait on this number and
+  an unbounded wait turns one stuck call into a permanently un-restartable server.
 
 ## Non-Goals
 
