@@ -23,6 +23,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     private const string EndpointVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string SamplerVar = "OTEL_TRACES_SAMPLER";
+    private const string SamplerProbeSource = "AiRaccoon.Tests.SamplerProbe";
 
     private McpServerFactory _factory = null!;
     private CapturingCollector _collector = null!;
@@ -128,7 +129,13 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     // ADR-0021 "The sampler stays until another lane's test says otherwise": with the hardcoded
     // AlwaysOnSampler in place, this must go red — spans export regardless of OTEL_TRACES_SAMPLER.
     // Removing the override restores it as live configuration; this proves the env var actually
-    // reaches the SDK, through a real tool call rather than a hand-built root Activity.
+    // reaches the SDK. The assertion is a probe on a source registered only on this factory's
+    // provider: Activity.IsAllDataRequested is process-global (the union of every live listener's
+    // sample result), so a parallel collection's default-sampled provider marks the shared
+    // request/tool/HttpClient spans recorded and they show up here too — asserting on those would
+    // test the other lane's sampler, not ours. The probe source has no other listener, so its
+    // root span is created (AlwaysOff keeps PropagationData so the trace id survives) but never
+    // recorded or exported.
     [Fact]
     public async Task OtelTracesSamplerAlwaysOff_ProducesNoSpans()
     {
@@ -137,16 +144,22 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         {
             var exportedItems = new List<Activity>();
             await using var factory = new McpServerFactory(configureAdditionalServices: services =>
-                services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+                services.AddOpenTelemetry().WithTracing(t => t
+                    .AddInMemoryExporter(exportedItems)
+                    .AddSource(SamplerProbeSource)));
             var client = await factory.CreateClientAsync();
             try
             {
                 await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
                     null, null, TestContext.Current.CancellationToken);
 
+                using var probe = new ActivitySource(SamplerProbeSource).StartActivity("sampler-probe");
+                probe.ShouldNotBeNull();
+                probe!.Dispose();
+
                 factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
 
-                exportedItems.ShouldBeEmpty();
+                exportedItems.ShouldNotContain(a => a.Source.Name == SamplerProbeSource);
             }
             finally
             {
