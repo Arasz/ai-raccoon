@@ -157,6 +157,12 @@ public sealed class PromotionQueueServicePromoteRaceTests
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default) => Task.FromResult(0);
     }
 
     private sealed class RecordingShareStore : IMemoryStore

@@ -171,6 +171,12 @@ public sealed class SqlitePromotionQueueStore(
             .ConfigureAwait(false);
     }
 
+    public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+        CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    public Task<int> PruneRejectedAsync(string projectId,
+        CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
     /// <summary>
     ///     Rows whose backing entries row was deleted before the promotion_queue_entries_ad
     ///     trigger existed (ADR-0023) — the trigger covers everything from here on; this is the

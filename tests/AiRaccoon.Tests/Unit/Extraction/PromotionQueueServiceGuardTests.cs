@@ -109,6 +109,12 @@ public sealed class PromotionQueueServiceGuardTests
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     /// <summary>Simulates a store that found nothing to discard — every other member is unreachable
@@ -135,6 +141,12 @@ public sealed class PromotionQueueServiceGuardTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> PruneRejectedAsync(string projectId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
