@@ -63,6 +63,32 @@ public class PromotionQueueMetricsTests
     }
 
     [Fact]
+    public void RecordPruned_TagsProjectId()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueuePruned);
+
+        metrics.RecordPruned("acme", 7);
+
+        var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
+        measurement.Value.ShouldBe(7);
+        measurement.Tags["project_id"].ShouldBe("acme");
+    }
+
+    [Fact]
+    public void RecordFailed_TagsProjectId()
+    {
+        using var metrics = new PromotionQueueMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.QueuePromoteFailures);
+
+        metrics.RecordFailed("acme", 2);
+
+        var measurement = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
+        measurement.Value.ShouldBe(2);
+        measurement.Tags["project_id"].ShouldBe("acme");
+    }
+
+    [Fact]
     public void RecordEviction_RecordsTheVictimScore()
     {
         using var metrics = new PromotionQueueMetrics();

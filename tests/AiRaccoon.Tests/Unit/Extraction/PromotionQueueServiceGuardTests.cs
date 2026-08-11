@@ -109,6 +109,12 @@ public sealed class PromotionQueueServiceGuardTests
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     /// <summary>Simulates a store that found nothing to discard — every other member is unreachable
@@ -136,6 +142,12 @@ public sealed class PromotionQueueServiceGuardTests
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class UnreachableMetrics : IPromotionQueueMetrics
@@ -146,6 +158,10 @@ public sealed class PromotionQueueServiceGuardTests
         public void RecordPromoted(string projectId, double waitSeconds) => throw new NotSupportedException();
 
         public void RecordDiscarded(string projectId, double waitSeconds) => throw new NotSupportedException();
+
+        public void RecordPruned(string projectId, int count) => throw new NotSupportedException();
+
+        public void RecordFailed(string projectId, int count) => throw new NotSupportedException();
 
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => throw new NotSupportedException();
     }

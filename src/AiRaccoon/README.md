@@ -26,14 +26,14 @@ Built on the ModelContextProtocol C# SDK 2.1.0 (net10.0).
 - **Cloud sync (optional).** `memory_sync` pushes/pulls the bank's committed contexts (`shared` + `project:<id>`) as a single snapshot to cloud object storage — S3-compatible endpoints (R2, S3, MinIO) or Azure Blob — using VACUUM INTO +
   If-Match CAS + row merge.
 
-## Tools (23) and prompts (2)
+## Tools (24) and prompts (2)
 
 `memory_write`, `memory_search`, `memory_list`, `memory_stats`, `memory_share`,
 `memory_share_extract`, `memory_delete`, `memory_delete_context`, `memory_ingest_file`, `memory_ingest_directory`,
 `memory_embed_pending`, `memory_workspace_begin`,
 `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
 `memory_sweep`, `memory_set_ttl`, `memory_sync`, `memory_promotion_list`, `memory_promotion_discard` — plus the file-watcher trio
-`memory_watch_add`, `memory_watch_status`, `memory_watch_remove` — and the `memory-usage-guide` and
+`memory_watch_add`, `memory_watch_status`, `memory_watch_remove`, `memory_record_followthrough` — and the `memory-usage-guide` and
 `workspace-consolidation-guide` prompts. Every tool requires a `project_id`.
 
 Configuration is deliberately NOT an MCP tool: the CLI is the single config channel (see below), so `memory_configure`

@@ -1,5 +1,6 @@
 using AiRaccoon.Core;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -165,6 +166,25 @@ public sealed class FakePromotionQueue : IPromotionQueue
 
         return Meta;
     }
+}
+
+/// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>
+public sealed class NoOpSearchQualityService : ISearchQualityService
+{
+    public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
+        string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task RecordFollowThroughAsync(string correlationId, string filePath, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+        CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
+        CancellationToken ct = default) =>
+        Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
 }
 
 /// <summary>In-memory store fake for the shared-extraction path: settings, project ids, candidate rows and the shared index.</summary>

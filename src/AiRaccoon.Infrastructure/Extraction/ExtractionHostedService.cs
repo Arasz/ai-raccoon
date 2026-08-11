@@ -149,11 +149,9 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         outcome.Absorbed);
                     if (outcome.Failures.Count > 0)
                     {
+                        // One summary per batch; the per-failure detail lives in the outcome,
+                        // and the failure count is metered (ai_raccoon.queue.promote_failures).
                         Log.PromoteFailures(_logger, projectId, outcome.Failures.Count);
-                        foreach (var failure in outcome.Failures)
-                        {
-                            Log.PromoteFailureDetail(_logger, projectId, failure.Hash, failure.Reason);
-                        }
                     }
 
                     continue;
@@ -163,15 +161,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
                         includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
 
-                // Debug-only, preview-free review surface: candidate counts are metered, not
-                // logged at a default level.
-                for (var i = 0; i < candidates.Count; i++)
-                {
-                    var candidate = candidates[i];
-                    Log.Candidate(_logger, i + 1, projectId, candidate.Hash, candidate.Path,
-                        string.Join(", ", candidate.Reasons));
-                }
-
+                // Per-pass summary only; candidate counts are metered, not logged per row.
                 Log.Pass(_logger, projectId, mode, candidates.Count, 0, 0);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -217,13 +207,6 @@ public sealed partial class ExtractionHostedService : BackgroundService
             Message = "Extraction pass failed for {ProjectId}")]
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
 
-        /// <summary>No content preview (data-leak risk) — hash/path/reasons only, and Debug-only:
-        /// candidate counts are metered (ai_raccoon.queue.queued), not logged, at Information.</summary>
-        [LoggerMessage(EventId = 507, Level = LogLevel.Debug,
-            Message = "Extraction candidate #{Rank} for {ProjectId}: {Hash} {Path} ({Reasons})")]
-        public static partial void Candidate(ILogger logger, int rank, string projectId,
-            string hash, string path, string reasons);
-
         [LoggerMessage(EventId = 504, Level = LogLevel.Information,
             Message = "Extraction pass complete: {Projects} projects, {Promoted} promoted")]
         public static partial void RunCompleted(ILogger logger, int projects, int promoted);
@@ -236,12 +219,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
         public static partial void IntervalReadFailed(ILogger logger, Exception exception);
 
         [LoggerMessage(EventId = 508, Level = LogLevel.Warning,
-            Message = "Promote for {ProjectId} had {Count} candidate failure(s); see the debug log for hashes")]
+            Message = "Promote for {ProjectId} had {Count} candidate failure(s); details are in the outcome")]
         public static partial void PromoteFailures(ILogger logger, string projectId, int count);
-
-        [LoggerMessage(EventId = 509, Level = LogLevel.Debug,
-            Message = "Promote failure for {ProjectId}: {Hash} ({Reason})")]
-        public static partial void PromoteFailureDetail(ILogger logger, string projectId, string hash,
-            string reason);
     }
 }

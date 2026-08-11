@@ -95,6 +95,12 @@ first). Capacity is enforced by `PromotionQueueService` against the
 `extract.queue-capacity.global` setting (default 1000) with `UniformCountEvictionPolicy`
 — the biggest occupier loses its weakest row (docs/adr/0007).
 
+Two invariants (docs/adr/0026) keep the queue honest: the upsert refuses rows whose hash
+was discarded (`promotion_discards`) or whose exact value is already in the shared tier,
+and every propose/promote pass starts by pruning such residue. Discards are the agent's
+permanent, per-project "no" — never synced, never swept, written only by the
+`memory_promotion_discard` path (promote claims and evictions never write them).
+
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:146-172`
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:21-119`

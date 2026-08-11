@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
@@ -49,6 +50,8 @@ public static partial class Dependencies
             services.AddSingleton<IEvictionPolicy, UniformCountEvictionPolicy>();
             services.AddSingleton<IPromotionQueueMetrics, PromotionQueueMetrics>();
             services.AddSingleton<IPromotionQueue, PromotionQueueService>();
+            services.AddSingleton<SqliteSearchQualityService>();
+            services.AddSingleton<ISearchQualityService>(sp => sp.GetRequiredService<SqliteSearchQualityService>());
             services.AddSingleton<IChunker, TokenizerChunker>();
             services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddSingleton(sp => new SyncService(

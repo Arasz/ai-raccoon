@@ -3,8 +3,10 @@ using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -15,7 +17,9 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IMemoryStore — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class MemoryTools(
     IMemoryStore store,
-    ToolGate gate)
+    ToolGate gate,
+    ISearchQualityService qualityService,
+    ILogger<MemoryTools> logger)
 {
     private const string TnMemoryWrite = "memory_write";
     private const string TnMemorySearch = "memory_search";
@@ -102,9 +106,24 @@ public sealed class MemoryTools(
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);
+
+        var correlationId = Guid.NewGuid().ToString("N");
+        try
+        {
+            await qualityService.RecordSearchAsync(
+                correlationId, query, scope, projectId, null,
+                results.Count,
+                results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5).ToList(),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
+        }
+
         var result = new SearchResultList(results);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-        return envelope;
+        return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
 
     [McpServerTool(Name = TnMemoryList)]

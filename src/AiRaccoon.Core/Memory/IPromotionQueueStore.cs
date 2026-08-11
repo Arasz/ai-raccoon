@@ -33,4 +33,14 @@ public interface IPromotionQueueStore
     /// <summary>Deletes this project's queued rows whose scorer_version is not currentScorerVersion (ADR-0018). Returns the count removed.</summary>
     Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Persists the agent's "no" for (project_id, hash) so propose never re-queues it
+    /// (docs/adr/0026-persistent-discards-and-shared-exclusion.md). Idempotent; the tool-path
+    /// discard only — promotions, evictions and scorer clears never call this.</summary>
+    Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Removes queued rows that are already shared (exact value twin) or that a prior
+    /// discard rejected — the residue sweep of docs/adr/0026. Returns the count removed.</summary>
+    Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default);
 }

@@ -170,6 +170,35 @@ public sealed class SharedExtractionServiceTests
         result.Candidates.ShouldBeEmpty();
     }
 
+    /// <summary>G1 (mem-imp-1): the shared index carries RAW values, so the dedup must normalize
+    /// both sides — see docs/plans/2026-08-11-mem-imp-1-queue-hygiene-plan.md §G1.</summary>
+    [Fact]
+    public void Propose_RawSharedValueWithWhitespace_IsDeduplicated()
+    {
+        var rows = new[] { Row("a", sourceFile: null, value: "alpha beta gamma") };
+        var sharedValues = new HashSet<string> { "alpha beta gamma" }; // raw, as the bank returns it
+
+        var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,
+            sharedValues, [], false, 20, Now);
+
+        result.Candidates.ShouldBeEmpty();
+    }
+
+    /// <summary>G2 (mem-imp-1): a whitespace twin of a shared value is excluded when the shared
+    /// side carries the whitespace (the mirror scenario — shared side normalized — is green
+    /// today; see Propose_AlreadySharedValue_IsDeduplicated).</summary>
+    [Fact]
+    public void Propose_WhitespaceTwinOfRawSharedValue_IsDeduplicated()
+    {
+        var rows = new[] { Row("a", sourceFile: null, value: "ab") };
+        var sharedValues = new HashSet<string> { "a b" };
+
+        var result = _service.Run(ExtractMode.Propose, "ai-raccoon", AllProjects, rows,
+            sharedValues, [], false, 20, Now);
+
+        result.Candidates.ShouldBeEmpty();
+    }
+
     [Fact]
     public void Propose_SharedPath_IsDeduplicated()
     {

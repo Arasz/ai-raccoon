@@ -194,6 +194,15 @@ internal static class MemorySchema
                                    UNIQUE (project_id, hash)
                                );
 
+                               -- Agent rejections (memory_promotion_discard): a permanent per-project
+                               -- "no" for a content identity — propose never re-queues it (docs/adr/0026).
+                               CREATE TABLE IF NOT EXISTS promotion_discards (
+                                   project_id   TEXT NOT NULL,
+                                   hash         TEXT NOT NULL,
+                                   discarded_at INTEGER NOT NULL,
+                                   PRIMARY KEY (project_id, hash)
+                               );
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
@@ -201,6 +210,27 @@ internal static class MemorySchema
                                CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
+
+                               -- Search-quality metric: tracks every memory_search call with correlation-id,
+                               -- follow-through (did the agent use the result?), and usefulness grade.
+                               -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
+                               CREATE TABLE IF NOT EXISTS search_quality (
+                                   id                INTEGER PRIMARY KEY,
+                                   correlation_id    TEXT NOT NULL UNIQUE,
+                                   query             TEXT NOT NULL,
+                                   scope             TEXT,
+                                   project_id        TEXT,
+                                   session_id        TEXT,
+                                   result_count      INTEGER,
+                                   top_source_files  TEXT,       -- JSON array of SourceFile paths
+                                   follow_through_count INTEGER  DEFAULT 0,
+                                   follow_through_files TEXT,    -- JSON array of files read after search
+                                   usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
+                                   grade_note        TEXT,
+                                   created_at        INTEGER NOT NULL
+                               );
+
+                               CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
 
                                """;
 
