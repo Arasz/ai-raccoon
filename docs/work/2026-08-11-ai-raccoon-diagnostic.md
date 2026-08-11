@@ -137,10 +137,12 @@ Notes show decisive hits ("recovered prior Google OAuth work", "surfaced jsaa as
 ## 4. Perceived promotion queue ranking quality
 
 **Scorer pedigree (ADR-0018 + round 2/3):** live scorer is v2 per DB (`scorer_version=2`).
-Round-3 tournament (08-09, 406 jury-labeled rows): shipped scorer **+0.602 holdout / +0.710 vs
-owner labels** — "at the level of an independent expert rater". Winner A (recentred evidence +
-refitted priors + portability term, ADR bias +1.35 → +0.03) **never shipped** (one round only,
-owner direction).
+Round-3 tournament (08-09, 406 jury-labeled rows): the incumbent scored **+0.602 holdout / +0.710
+vs owner labels** — "at the level of an independent expert rater". Winner A (recentred evidence +
+refitted priors + portability term) scored **+0.683 holdout / +0.720 vs owner-57**, with ADR bias
+falling from **+1.35 to +0.03**. PR #249 ported winner A, and it is the scorer v2 in release 1.6.4.
+The earlier "never shipped" wording was stale and is corrected by the owner gate in
+`docs/work/2026-08-11-round3-owner-gate-feedback.md`.
 
 **Curation verdicts:**
 - 08-10 report (top-100 reviewed, 30 promoted, 27 discarded): *"the score is a decent first
@@ -176,9 +178,9 @@ owner direction).
 2. **Queue top is ~⅓ already-shared, ~⅓ previously-rejected noise** — extraction re-queues
    promoted AND discarded content (no exclusion of shared values, no discard memory); `shared:true`
    idempotency hides re-promotion (08-11 audit over-counted 17 → 5).
-3. **Scorer ceiling known and unshipped** — round-3 winner A removes the ADR bias and beats the
-   baseline on owner labels; the live queue still shows the ADR/durable-language bias
-   (superseded ADR chunk at score 4.0).
+3. **Scorer ceiling known; lane A is shipped** — round-3 winner A removes the ADR bias and beats
+   the incumbent on owner labels; the live queue still shows the ADR/durable-language bias
+   (superseded ADR chunk at score 4.0), but queue hygiene confounds a direct scorer judgment.
 4. **Search quality is perceived good (avg 4.3) but the evidence base is thin** — 88 % of
    searches ungraded; the two weak grades point at session-transcript noise (hermes/ channel),
    which also feeds 153 queue rows.
@@ -204,8 +206,10 @@ owner direction).
    `already-shared` in the row), and persist discards so extraction does not re-queue rejected
    rows — the 08-10 pass becomes meaningless the moment extraction re-runs. This is a code change
    with a clear gate: re-run the top-50 audit and expect ~0 already-shared and ~0 re-discarded.
-3. Re-evaluate shipping round-3 winner A (or a subset: the portability term + recentred evidence)
-   with the owner gate the round asked for; the ADR-bias numbers on the live queue support it.
+3. The owner gate approved retaining lane A, including recentred evidence, refitted priors, and
+   portability limited to the six considered-document channels. It deferred measurement-prior
+   retuning from the two owner-labeled rows and approved judging scorer quality only after queue
+   hygiene; see `docs/work/2026-08-11-round3-owner-gate-feedback.md`.
 4. Raise grading coverage: the 12 % rate makes "perceived quality" a 20-sample opinion. Options:
    prompt less (aggregate per-day), grade in-session (dogfood rule), or auto-grade with the
    retrieval-harness metrics.
