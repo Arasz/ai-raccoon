@@ -3,6 +3,15 @@
   "skills": [
     {
       "category": "ai-raccoon",
+      "name": "ai-raccoon-new-service",
+      "sourceHash": "096bdc74929b7b0e3791c19ec5f19716a46626797ae7c6fe4d4ba216e6b9c0dd",
+      "sourcePath": "ai-raccoon/ai-raccoon-new-service",
+      "status": "synced",
+      "syncedAt": "2026-08-11T14:54:17Z",
+      "target": ".ai-badger/skills/learned/ai-raccoon/ai-raccoon-new-service"
+    },
+    {
+      "category": "ai-raccoon",
       "name": "design-gate-audit",
       "sourceHash": "4714ed230dff232be17adcd6c1f490b917000b7d9634a80a106f696960e0870c",
       "sourcePath": "ai-raccoon/design-gate-audit",
@@ -400,10 +409,10 @@
     {
       "category": "uncategorized",
       "name": "memory-quality-logging",
-      "sourceHash": "ed150aa007f503b852e6e4970543f55e24923df1688ff0ef6c85e731fb9ed93f",
+      "sourceHash": "aa0cc90f34d610f3f2b930a3257775b371a856c630c23fafc079fdd744b5bb63",
       "sourcePath": "ai-raccoon-integration/memory-quality-logging",
       "status": "synced",
-      "syncedAt": "2026-08-11T14:15:56Z",
+      "syncedAt": "2026-08-11T15:30:24Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
     },
     {

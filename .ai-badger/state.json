@@ -1,14 +1,21 @@
 {
-  "lastUpdated": "2026-08-11T13:55:00Z",
+  "lastUpdated": "2026-08-11T15:30:46Z",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
-      "id": "ai-raccoon-diagnostic",
-      "title": "AiRaccoon diagnostic: logs/reports inventory, store copy analysis, search/promotion/usage report",
-      "finished": "2026-08-11T13:55:00Z",
-      "pr": "257 (awaiting owner merge: repo requires a review; no copilot reviewer attachable)",
-      "summary": "Diagnostic of the live bank + logs. Evidence: WAL-safe copy of ~/.ai-raccoon/memory.db (149.7MB, integrity ok) at /tmp/ai-raccoon-diagnostic/memory-copy.db; memory-operations.jsonl (818 ops, hermes channel only); memory-quality.jsonl (167 searches, 20 rated, avg 4.3). Entries 14,069 (jsaa 8037, ai-raccoon 3111, ai-badger 1764, arasz-home-page 829, hermes-default 214); shared tier 103 (44 value- + 59 legacy path-addressed); queue 1,000, 0 orphans, top-50 by score = 19 already-shared values + 19 noise-tagged (mid-sentence/changelog/status/superseded); round-3 scorer winner A never shipped. Findings incl. phantom 2026-08-11 promotion-report path (memory cites a file that was never written), extraction re-queues shared+discarded rows (08-11 audit's 17 shared:true = only 5 new rows), per-tool usage measurable for only 4 tools on the hermes channel. 8 findings + 7 recommendations in docs/work/2026-08-11-ai-raccoon-diagnostic.md (PR #257)."
+      "id": "mem-cleanup",
+      "title": "Memory cleanup: migrate 59 legacy shared rows, remove file logging (ai-raccoon provider + ai-badger), sweep stale workspaces + tombstones",
+      "finished": "2026-08-11T15:30:46Z",
+      "pr": "259 (ai-raccoon) + ai-badger 373",
+      "summary": "Recs 5-7 of the 08-11 diagnostic closed. WP1: 59 legacy shared//<path> rows migrated to value format on the live bank (scripts/migrate-shared-legacy-rows.py, TDD 7 tests; 103/103 value-addressed, integrity ok; backup /tmp/mem-cleanup/pre-migration.db). WP2: MemoryOperationLog + AIRACCOON_MEMORY_LOG removed from integrations/hermes/ai-raccoon (RED->GREEN test; live plugin synced; ops jsonl deleted). WP3 (ai-badger repo, PR 373): memory-grade feature removed (memory_grade.py, hooks wiring, manifest/hooks.json entries); gate marker moved to memory_first_gate_post_hook.py; REMOVED_MODULES in adjust_hooks; 3759 tests green; live plugin + 4 project hooks dirs cleaned. WP4: 8 stale Active workspaces discarded+deleted, 32 sync_tombstones deleted (verified via tool + SQL + integrity). WP5: outcome doc, diagnostic resolution section, ADR-0007 note, plan KPI updates. No C# change -> no version bump."
+    },
+    {
+      "id": "mem-imp-1",
+      "title": "Queue hygiene: exclude already-shared from propose, persist discards (+ de-noise e:)",
+      "finished": "2026-08-11T17:30:00Z",
+      "pr": "258 (awaiting owner merge: repo requires a review; no reviewer attachable)",
+      "summary": "Diagnostic rec-2: propose-side shared dedup now normalizes BOTH sides (was half-normalized \u2014 38/1000 queue rows duplicated shared values, 38 in the top-50 live); persistent discards (promotion_discards table, additive DDL, tool-path only \u2014 promote claims/evictions never write it); upsert refuses discarded hashes + exact shared twins (honest new-count); PruneRejectedAsync sweeps residue at propose+promote pass start; watch-replace restore excludes discards. e: per-element logs removed (701/705/706/507/509); counts metered (ai_raccoon.queue.pruned, promote_failures); one summary log per batch; sweep's per-row delete log kept as audit trail (owner ruling pending). TDD RED witnessed (2+3); full suite 2201/0/6; live gate on a faithful bank copy: top50 already-shared 38->0, discards persist across restart, discarded hash never re-queued, server 1.6.5.0. ADR-0026; plan rev 2 (APPROVE-WITH-CHANGES folded); outcome docs/work/2026-08-11-mem-imp-1-queue-hygiene.md."
     },
     {
       "id": "manual-test-1-6-3",
@@ -532,7 +539,7 @@
       "summary": "Owner decision 2026-08-08: feature will not be pursued. Research record kept at docs/work/2026-08-07-skill-discovery-mcp-server.md; experimental/skill-discovery branch deleted. Key residue: ModelContextProtocol 2.1.0 already ships the resource attributes needed if this is ever revived; the skill://index.json $schema URL (schemas.agentskills.io) had no DNS record as of 2026-08-07."
     }
   ],
-  "next": "",
+  "next": "Proxy follow-ups, unchanged in priority now the Hermes regression is closed: (1) superseded backend sessions are never disposed while the process runs - BackendSessions.OpenAsync appends and nothing removes; (2) the revision guard records the requested rather than the negotiated revision (PLAUSIBLE, unconfirmed); (3) ProxyForwarder and BackendLauncher never meet in a test; (4) guard clauses on the new entry points plus a launch-race test. Then the pre-existing C2/C1/D4/C3 queue, and the upstream issue against ModelContextProtocol. Left open by hermes-regresion: the `hermes mcp add` and `claude mcp add` routes are documented and their mechanisms measured, but neither was run end to end - both write to the operator's live client config and the task ran unattended. Three historical documents (docs/plans/2026-08-06-http-serve-mode-plan.md and two archived work records) still show the bare `hermes mcp add --url` command; they predate the token and were left as historical record. Open from the OTLP work: the background-pass span-volume fix (watch.reconcile runs at 1 Hz, ~86k spans/day of usually-no-op passes once OTLP is on \u2014 count every pass, span only work or failure); and the `dotnet-trace --providers` examples in README.md and docs/reference/agent-memory-server.md still name only AiRaccoon.MemoryTools, now three providers stale after ADR-0021, System.Net.Http and AiRaccoon.Background.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
