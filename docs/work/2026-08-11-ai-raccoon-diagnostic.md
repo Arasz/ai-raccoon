@@ -179,8 +179,9 @@ The earlier "never shipped" wording was stale and is corrected by the owner gate
    promoted AND discarded content (no exclusion of shared values, no discard memory); `shared:true`
    idempotency hides re-promotion (08-11 audit over-counted 17 → 5).
 3. **Scorer ceiling known; lane A is shipped** — round-3 winner A removes the ADR bias and beats
-   the incumbent on owner labels; the live queue still shows the ADR/durable-language bias
-   (superseded ADR chunk at score 4.0), but queue hygiene confounds a direct scorer judgment.
+   the incumbent on owner labels; the live queue contained one ADR-shaped candidate at score 4.0
+   (a superseded chunk), consistent with the historical bias pattern, but the contaminated queue
+   is not a measured live aggregate and cannot isolate a scorer defect.
 4. **Search quality is perceived good (avg 4.3) but the evidence base is thin** — 88 % of
    searches ungraded; the two weak grades point at session-transcript noise (hermes/ channel),
    which also feeds 153 queue rows.

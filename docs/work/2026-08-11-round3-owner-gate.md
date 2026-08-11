@@ -9,9 +9,9 @@
 
 PR #249 merged commit `c1535d507a93dc2bf9f91b5b18c3f54f87642605`. The commit is an ancestor of the task worktree's `main` and of the 1.6.4 release commit. The installed CLI reports `1.6.4+c72a1ded…`; the live `/observability` endpoint reports the same release; and the live bank contains 1,000 queue rows, all with `scorer_version = 2`.
 
-This supersedes the diagnostic's statement that lane A "never shipped". The diagnostic should be corrected or explicitly scoped as an older observation; it is not evidence that a second port is needed.
+This supersedes the diagnostic's original statement that lane A "never shipped" (since corrected in the diagnostic's scorer-pedigree and findings sections). The stale wording was an older observation, not evidence that a second port is needed.
 
-**Evidence:** In `/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/re-evaluate-round-3`, `git merge-base --is-ancestor c1535d50 c72a1ded` and `git merge-base --is-ancestor c72a1ded HEAD` both returned success; `gh pr view 249 --json ...` returned `state: MERGED` and merge commit `c1535d50`; `/Users/arasz/.dotnet/tools/ai-raccoon --version` returned `1.6.4+c72a1ded0b2e4d920b17aea9de375d6c04b10f9d`; `curl http://127.0.0.1:7721/observability` returned the same version; `sqlite3 ~/.ai-raccoon/memory.db "select scorer_version,count(*) from promotion_queue group by scorer_version"` returned `2|1000`. Source contradiction: `docs/work/2026-08-11-ai-raccoon-diagnostic.md:139-143`.
+**Evidence:** In the task worktree, `git merge-base --is-ancestor c1535d50 c72a1ded` and `git merge-base --is-ancestor c72a1ded HEAD` both returned success; `gh pr view 249 --json ...` returned `state: MERGED` and merge commit `c1535d50`; `/Users/arasz/.dotnet/tools/ai-raccoon --version` returned `1.6.4+c72a1ded…`; `curl http://127.0.0.1:7721/observability` returned the same version; `sqlite3 ~/.ai-raccoon/memory.db "select scorer_version,count(*) from promotion_queue group by scorer_version"` returned `2|1000`. The diagnostic's original stale wording was corrected as part of this gate (see diagnostic scorer-pedigree section and finding 3).
 
 ### F2 — Lane A remains the owner-guard winner, not the absolute holdout winner [READ]
 
@@ -35,9 +35,9 @@ After restoring the task worktree, the configured build completed with 0 warning
 
 The live bank is in propose mode with 1,000 version-2 rows. A live top-50 audit found 19 values already present in the shared tier and 19 rows carrying noise tags. A direct current-bank query also found the documented score bands: 8 rows at or above 3.5, 79 from 3.0 to 3.5, 477 from 2.5 to 3.0, 368 from 2.0 to 2.5, and 68 below 2.0.
 
-This is evidence for queue hygiene work, not a clean A/B scorer comparison: duplicate shared values and previously rejected content can make any scorer's queue look poor. Queue hygiene is active in a separate worktree and must be measured before using the queue as a scorer-quality gate.
+This is evidence for queue hygiene work, not a clean A/B scorer comparison: duplicate shared values and previously rejected content can make any scorer's queue look poor. Queue hygiene has since been implemented (PR #258) and must be re-measured on a clean queue before using it as a scorer-quality gate.
 
-**Evidence:** The read-only live query in the task worktree returned `scorer_version 2 / n 1000 / min 0.4648 / max 4.0`, the score-band counts above, and `19|50` for the top-50 shared-value audit. The canonical audit records the same contamination at `docs/work/2026-08-11-ai-raccoon-diagnostic.md:154-170` and identifies the separate queue-hygiene recommendation at `:199-207`. The direct queue-hygiene worktree remains separate: `/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/mem-imp-1`.
+**Evidence:** The read-only live query in the task worktree returned `scorer_version 2 / n 1000 / min 0.4648 / max 4.0`, the score-band counts above, and `19|50` for the top-50 shared-value audit. The canonical audit records the same contamination at `docs/work/2026-08-11-ai-raccoon-diagnostic.md:156-165` and identifies the separate queue-hygiene recommendation at `:205-208`. Queue hygiene was implemented in PR #258 and documented at `docs/work/2026-08-11-mem-imp-1-queue-hygiene.md`.
 
 ### F6 — The measurement-channel disagreement remains an owner decision, not a safe n=2 retuning target [READ]
 
@@ -51,11 +51,11 @@ F1–F6 support treating lane A as the current baseline and separating two decis
 
 **Reasoning from:** the source-selected owner guard in F2, the implementation identity in F3, the missing private fixture in F4, the queue confounding in F5, and the n=2 warning in F6.
 
-### F8 — The diagnostic contains a stale scorer-shipping claim [INFERRED]
+### F8 — The diagnostic contained a stale scorer-shipping claim (corrected) [INFERRED]
 
-The diagnostic's scorer pedigree paragraph says that lane A never shipped, while the release history, installed binary, live endpoint, live queue version, and current implementation all identify scorer version 2 from the merged lane-A port. The strongest source-backed correction is to say that lane A is shipped in 1.6.4 and that the diagnostic's queue observations were made against it.
+~~The diagnostic's scorer pedigree paragraph said that lane A never shipped.~~ This was corrected as part of this gate: the diagnostic now states that lane A is scorer v2 in release 1.6.4 (PR #249, commit c1535d50). The correction is recorded in the diagnostic's scorer-pedigree section and finding 3.
 
-**Reasoning from:** F1 and `docs/work/2026-08-11-ai-raccoon-diagnostic.md:137-143,178-181`; repository history and live process state are stronger sources for current shipping status than the stale prose in that dated report.
+**Reasoning from:** F1 and the original diagnostic wording (before correction); the diagnostic was updated to match the measured shipping evidence.
 
 ### F9 — The owner gate retains lane A and defers measurement retuning [READ]
 
