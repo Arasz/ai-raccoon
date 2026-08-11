@@ -47,6 +47,15 @@ erDiagram
         BLOB embedding
         TEXT heading_path
         BLOB structure_embedding
+        INTEGER source_id FK
+    }
+
+    memory_source {
+        INTEGER id PK
+        TEXT source_type
+        TEXT source_locator
+        TEXT section
+        TEXT heading_path
     }
 
     settings {
@@ -66,6 +75,7 @@ erDiagram
     }
 
     workspaces ||--o{ entries : "workspace_id"
+    memory_source ||--o{ entries : "source_id"
 ```
 
 ### Context partitioning
@@ -129,17 +139,20 @@ permanent, per-project "no" — never synced, never swept, written only by the
 
 Legacy banks (no `source_file`/`section` columns, single-column FTS) are migrated on
 open: the columns are added and `entries_fts` is dropped, recreated in the three-column
-shape, and repopulated from `entries` (ADR 0003).
+shape, and repopulated from `entries` (ADR 0003). V5 banks additionally carry a
+`memory_source` table (canonical source identity: type, locator, section, heading path)
+with a `source_id` FK on entries; `source_file`/`section` remain on entries as
+denormalized FTS-backing columns (see `docs/work/2026-08-11-memory-source-normalization-plan.md`).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
 
 ### Schema versioning
 
 `MemorySchema.EnsureAsync` reads `PRAGMA user_version` before the DDL runs and walks an
-ordered ladder (`MigrateToV1Async` → `MigrateToV2Async` → `MigrateToV3Async`) up to
-`CurrentVersion` (currently 3) on every read-write open (ADR 0011). A fresh bank is
-stamped at the current version directly and never walks the ladder; a stamped bank at the
-current version skips it entirely.
+ordered ladder (`MigrateToV1Async` → `MigrateToV2Async` → `MigrateToV3Async` →
+`MigrateToV4Async` → `MigrateToV5Async`) up to `CurrentVersion` (currently 5) on every
+read-write open (ADR 0011). A fresh bank is stamped at the current version directly and
+never walks the ladder; a stamped bank at the current version skips it entirely.
 
 The ladder only ever moves a bank forward. If the stored version is *ahead of* the
 binary's own `CurrentVersion` — an older binary opening a bank a newer one already
