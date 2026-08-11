@@ -63,7 +63,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
                 new Dictionary<string, object?> { ["projectId"] = "acme" },
                 cancellationToken: TestContext.Current.CancellationToken);
 
-            tools.Count.ShouldBe(24);
+            tools.Count.ShouldBe(25);
             result.IsError.ShouldNotBe(true);
             // The in-process server opened its own bank, and nothing was ever spawned on the port.
             File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeTrue();

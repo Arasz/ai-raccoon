@@ -12,6 +12,7 @@ public sealed class QualityTools(
     ToolGate gate)
 {
     private const string TnRecordFollowThrough = "memory_record_followthrough";
+    private const string TnRecordGrade = "memory_record_grade";
 
     [McpServerTool(Name = TnRecordFollowThrough)]
     [Description(
@@ -32,5 +33,25 @@ public sealed class QualityTools(
         return envelope;
     }
 
+    [McpServerTool(Name = TnRecordGrade)]
+    [Description(
+        "Records a human usefulness grade (1-5) for a prior memory_search call. " +
+        "Updates the existing quality record keyed by correlationId.")]
+    public async Task<ApiEnvelope<GradeResult>> RecordGrade(
+        [Description("The project id.")] string projectId,
+        [Description("The correlationId returned by the preceding memory_search call.")] string correlationId,
+        [Description("Usefulness grade 1-5 (5=best).")] int grade,
+        [Description("Optional note explaining the grade.")] string? note = null,
+        CancellationToken cancellationToken = default)
+    {
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordGrade, cancellationToken);
+
+        await qualityService.RecordGradeAsync(projectId, correlationId, grade, note, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId, new GradeResult(true), cancellationToken);
+
+        return envelope;
+    }
+
     public sealed record FollowThroughResult(bool Recorded);
+    public sealed record GradeResult(bool Recorded);
 }
