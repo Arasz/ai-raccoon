@@ -35,6 +35,7 @@ Grade how useful these results are for answering the agent's information need.
 
 PROMPT_TEMPLATE = """###Task Description
 An AI agent performed a memory search. Grade the usefulness of the search results.
+You MUST respond with ONLY a single digit (1-5) on the first line, followed by a brief explanation.
 
 ###Query
 {query}
@@ -46,7 +47,7 @@ An AI agent performed a memory search. Grade the usefulness of the search result
 {rubric}
 
 ###Result
-Score:"""
+Grade (1-5):"""
 
 
 def _find_db(custom_path: str | None = None) -> Path:
@@ -82,6 +83,29 @@ def _get_ungraded(db_path: Path, limit: int) -> list[dict]:
         conn.close()
 
 
+def _read_snippet(file_path: str, max_chars: int = 300) -> str:
+    """Read a short snippet from a file for grading context."""
+    try:
+        p = Path(file_path).expanduser()
+        if not p.exists():
+            return f"(file not found: {file_path})"
+        text = p.read_text(encoding="utf-8", errors="replace")[:max_chars]
+        return text.strip() + ("..." if len(text) >= max_chars else "")
+    except Exception:
+        return f"(could not read: {file_path})"
+
+
+def _build_results_summary(top_files: list[str]) -> str:
+    """Build results summary with content snippets for each file."""
+    if not top_files:
+        return "(no source files recorded)"
+    parts = []
+    for f in top_files[:5]:  # Limit to 5 files to stay within context
+        snippet = _read_snippet(f)
+        parts.append(f"- [{f}]: {snippet}")
+    return "\n".join(parts)
+
+
 def _call_prometheus(query: str, results_summary: str, result_count: int) -> tuple[int, str] | None:
     """Call Prometheus and return (grade, explanation) or None."""
     prompt = PROMPT_TEMPLATE.format(
@@ -93,7 +117,7 @@ def _call_prometheus(query: str, results_summary: str, result_count: int) -> tup
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.0,
-        "max_tokens": 128,
+        "max_tokens": 200,
     }).encode()
 
     req = urllib.request.Request(
@@ -113,9 +137,10 @@ def _call_prometheus(query: str, results_summary: str, result_count: int) -> tup
     except (KeyError, IndexError):
         return None
 
-    # Extract the first digit from the response
+    # Parse grade from first line only
+    first_line = content.split("\n")[0].strip()
     grade = None
-    for ch in content:
+    for ch in first_line:
         if ch in "12345":
             grade = int(ch)
             break
@@ -160,12 +185,12 @@ def main(argv: list[str] | None = None) -> int:
         top_files = row["top_source_files"] or "[]"
         result_count = row["result_count"] or 0
 
-        # Build a summary of results from the stored JSON
+        # Build a summary of results with content snippets
         try:
             files = json.loads(top_files) if isinstance(top_files, str) else top_files
         except (ValueError, TypeError):
             files = []
-        results_summary = "\n".join(f"- {f}" for f in files) if files else "(no source files recorded)"
+        results_summary = _build_results_summary(files)
 
         if args.dry_run:
             print(f"\n--- {cid} ---")
