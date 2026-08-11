@@ -50,6 +50,7 @@ internal static class MemorySchema
                                    structure_embedding BLOB NULL,
                                    chunk_index INTEGER NOT NULL DEFAULT 0,
                                    total_chunks INTEGER NOT NULL DEFAULT 0,
+                                   source_id INTEGER NULL,
                                    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
                                    CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                );
@@ -211,6 +212,17 @@ internal static class MemorySchema
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
 
+                               CREATE TABLE IF NOT EXISTS memory_source (
+                                   id            INTEGER PRIMARY KEY,
+                                   source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
+                                   source_locator TEXT NOT NULL,
+                                   section       TEXT NULL,
+                                   heading_path  TEXT NULL
+                               );
+
+                               CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
+                                   ON memory_source(source_type, source_locator, COALESCE(section, ''));
+
                                -- Search-quality metric: tracks every memory_search call with correlation-id,
                                -- follow-through (did the agent use the result?), and usefulness grade.
                                -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
@@ -258,7 +270,7 @@ internal static class MemorySchema
     ///     open belongs in the unconditional <see cref="Ddl"/> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 4;
+    internal const int CurrentVersion = 5;
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -299,6 +311,12 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(
                 new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            // source_id index: created here for fresh banks (DDL already has the column),
+            // and in MigrateToV5Async for v4→v5 migration banks.
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -339,6 +357,11 @@ internal static class MemorySchema
             // (unlike promotion_queue_entries_ad above, which reaches every bank on every open —
             // no version gate at all — because it reruns unconditionally inside Ddl).
             await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 5)
+        {
+            await MigrateToV5Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         if (healthy)
@@ -826,6 +849,160 @@ internal static class MemorySchema
                         "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 5 (memory source normalization): creates memory_source table, adds source_id
+    ///     FK column to entries, backfills from existing source_file/section, and rebuilds FTS.
+    /// </summary>
+    private static async Task MigrateToV5Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            // 1. Create memory_source table (idempotent via IF NOT EXISTS in Ddl, but the
+            //    migration needs it before the backfill so we ensure it here too).
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        CREATE TABLE IF NOT EXISTS memory_source (
+                            id            INTEGER PRIMARY KEY,
+                            source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
+                            source_locator TEXT NOT NULL,
+                            section       TEXT NULL,
+                            heading_path  TEXT NULL
+                        );
+
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
+                            ON memory_source(source_type, source_locator, COALESCE(section, ''));
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            // 2. Populate from existing entries (deduplicated by the unique constraint).
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                        SELECT
+                            CASE
+                                WHEN source_file LIKE 'hermes/%' OR source_file LIKE '%/hermes/%' THEN 'transcript'
+                                WHEN source_file IS NULL OR source_file = '' THEN 'manual'
+                                ELSE 'file'
+                            END,
+                            COALESCE(source_file, ''),
+                            section
+                        FROM entries
+                        WHERE source_file IS NOT NULL OR section IS NOT NULL;
+
+                        INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                        VALUES ('manual', '', NULL);
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            // 3. Add source_id column to entries.
+            var columns = (await connection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT name FROM pragma_table_info('entries')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+            if (!columns.Contains("source_id"))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "ALTER TABLE entries ADD COLUMN source_id INTEGER NULL",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            // 4. Backfill source_id.
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        UPDATE entries
+                        SET source_id = (
+                            SELECT ms.id FROM memory_source ms
+                            WHERE ms.source_locator = COALESCE(entries.source_file, '')
+                              AND ms.section IS entries.section
+                              AND ms.source_type = CASE
+                                  WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
+                                  WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
+                                  ELSE 'file'
+                              END
+                        );
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            // 5. Verify no NULL source_id remains.
+            var nullCount = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition(
+                        "SELECT count(*) FROM entries WHERE source_id IS NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (nullCount > 0)
+            {
+                throw new InvalidOperationException(
+                    $"MigrateToV5Async: {nullCount} entries still have NULL source_id after backfill");
+            }
+
+            // 6. Create source_id index.
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            // 7. Rebuild FTS (same pattern as MigrateToV1Async).
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        DROP TRIGGER IF EXISTS entries_fts_ai;
+                        DROP TRIGGER IF EXISTS entries_fts_ad;
+                        DROP TRIGGER IF EXISTS entries_fts_au;
+                        DROP TABLE IF EXISTS entries_fts;
+
+                        CREATE VIRTUAL TABLE entries_fts USING fts5(
+                            value, source_file, section, content='entries', content_rowid='id'
+                        );
+
+                        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                        END;
+
+                        CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                            INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                            INSERT INTO entries_fts(rowid, value, source_file, section)
+                            VALUES (new.id, new.value, new.source_file, new.section);
+                        END;
+
+                        INSERT INTO entries_fts(rowid, value, source_file, section)
+                        SELECT id, value, source_file, section FROM entries;
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
         }
     }
 

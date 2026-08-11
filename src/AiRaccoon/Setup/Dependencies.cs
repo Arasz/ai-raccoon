@@ -43,6 +43,8 @@ public static partial class Dependencies
             services.AddSingleton<EmbeddingAvailability>();
             services.AddSingleton<EmbeddingService>();
             services.AddSingleton<SqliteMemoryStore>();
+            services.AddSingleton<SqliteMemorySourceStore>();
+            services.AddSingleton<IMemorySourceStore>(sp => sp.GetRequiredService<SqliteMemorySourceStore>());
             services.AddSingleton<SqliteWorkspaceStore>();
             services.AddSingleton<IWorkspaceStore>(sp => sp.GetRequiredService<SqliteWorkspaceStore>());
             services.AddSingleton<SqlitePromotionQueueStore>();
