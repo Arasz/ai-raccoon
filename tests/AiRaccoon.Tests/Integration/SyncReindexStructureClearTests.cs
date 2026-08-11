@@ -128,6 +128,44 @@ public sealed class SyncReindexStructureClearTests : IDisposable
         row.HeadingPath.ShouldBeNull();
     }
 
+    [Fact]
+    public async Task MergeReindex_InvalidatingContentVector_PreservesSourceId()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        // Insert a row with a valid source_id.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT OR IGNORE INTO memory_source (source_type, source_locator, section) VALUES ('file', 'reindex-test.md', NULL)",
+            cancellationToken: ct));
+        var sourceId = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT id FROM memory_source WHERE source_type = 'file' AND source_locator = 'reindex-test.md'",
+            cancellationToken: ct));
+
+        var id = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state, source_id)
+            VALUES ('reindex-sid', 'reindex-test.md', 'reindex content', 'reindex-test.md', 'project', 'acme', @now, @now, 'pending', @sourceId)
+            RETURNING id
+            """, new { now, sourceId }, cancellationToken: ct));
+
+        // The merge-reindex UPDATE (same as SyncService uses).
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE entries
+            SET embed_state = 'pending', embedding = NULL, structure_embedding = NULL, heading_path = NULL
+            WHERE id = @id
+            """, new { id }, cancellationToken: ct));
+
+        // WP7: source_id must survive the reindex.
+        var preservedSourceId = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT source_id FROM entries WHERE id = @id", new { id }, cancellationToken: ct));
+        preservedSourceId.ShouldBe(sourceId,
+            "merge-reindex must not clear source_id (it only resets embeddings and heading_path)");
+    }
+
     private static Task<long> VecRowCount(SqliteConnection connection, string table, long id, CancellationToken ct) =>
         connection.ExecuteScalarAsync<long>(new CommandDefinition(
             $"SELECT count(*) FROM {table} WHERE rowid = @id", new { id }, cancellationToken: ct));

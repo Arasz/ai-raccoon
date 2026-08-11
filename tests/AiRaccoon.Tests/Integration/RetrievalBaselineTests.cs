@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -275,6 +276,43 @@ public sealed class RetrievalBaselineTests : IDisposable
             "AppHost configuration must stay out of the corpus (H3 non-evidential)");
         (await CountSourceFileLikeAsync(connection, "%.cs")).ShouldBe(0,
             "program-code files must stay out of the corpus (H3 non-evidential)");
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_SourceIdPopulatedForAllEntries()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        // After migration v4→v5, every entry must have a valid source_id.
+        var nullCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE source_id IS NULL", cancellationToken: TestContext.Current.CancellationToken));
+        nullCount.ShouldBe(0,
+            "every entry in the committed corpus must have source_id populated after v5 migration");
+
+        // Every source_id must reference a real memory_source row.
+        var orphanCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries e LEFT JOIN memory_source ms ON e.source_id = ms.id WHERE ms.id IS NULL",
+            cancellationToken: TestContext.Current.CancellationToken));
+        orphanCount.ShouldBe(0, "no entry may have a source_id pointing to a nonexistent memory_source row");
+    }
+
+    [Fact]
+    public async Task CorpusIntegrity_FtsSearchStillWorks_AfterSourceNormalization()
+    {
+        // FTS bm25 search must still return results after source normalization.
+        // This is a smoke test: search for a term that exists in the corpus.
+        var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
+        if (stats.EntryCount == 0)
+        {
+            return; // empty corpus can't test FTS
+        }
+
+        var results = await _store.SearchAsync(
+            new SearchQuery(ProjectId, "memory", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+        results.ShouldNotBeEmpty("FTS bm25 search must still return results after source normalization");
+        results.Any(r => r.SourceFile is not null).ShouldBeTrue(
+            "search results must still carry SourceFile from the denormalized column");
     }
 
     /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → '0011-frontend-chassis-stack.md' (the file's tail).</summary>

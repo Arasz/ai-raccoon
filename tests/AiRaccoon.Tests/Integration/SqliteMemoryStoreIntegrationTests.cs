@@ -425,5 +425,54 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldNotBeEmpty();
     }
 
+    [Fact]
+    public async Task WriteSearchRoundtrip_IncludesSourceIdentity()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "canonical source identity fact", SourceFile: "docs/architecture.md",
+                Section: "decisions"),
+            TestContext.Current.CancellationToken);
+
+        // WP7: every entry written through the store must have a valid source_id FK.
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceId = await connection.ExecuteScalarAsync<long?>(
+            "SELECT source_id FROM entries WHERE hash = @hash", new { hash = entry.Hash });
+        sourceId.ShouldNotBeNull("WriteAsync must set source_id on the entry");
+        sourceId!.Value.ShouldBeGreaterThan(0, "source_id must reference a real memory_source row");
+
+        var sourceType = await connection.ExecuteScalarAsync<string>(
+            "SELECT source_type FROM memory_source WHERE id = @id", new { id = sourceId.Value });
+        sourceType.ShouldBe("file", "a SourceFile write must resolve to source_type='file'");
+
+        // Search round-trip: the result must still carry SourceFile for backwards compatibility.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "canonical source identity"), TestContext.Current.CancellationToken);
+        results.ShouldContain(r => r.SourceFile == "docs/architecture.md");
+    }
+
+    [Fact]
+    public async Task ShareExtract_PreservesSourceIdentity()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "shareable source identity", SourceFile: "docs/guide.md"),
+            TestContext.Current.CancellationToken);
+
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        // The shared row must also carry a valid source_id.
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sharedSourceId = await connection.ExecuteScalarAsync<long?>(
+            "SELECT source_id FROM entries WHERE scope = 'shared' AND value = @value",
+            new { value = "shareable source identity" });
+        sharedSourceId.ShouldNotBeNull("the shared row must have source_id populated");
+        sharedSourceId!.Value.ShouldBeGreaterThan(0);
+
+        // The shared entry's SourceFile is carried into search results.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "shareable source identity", Scope: SearchScope.Shared),
+            TestContext.Current.CancellationToken);
+        results.ShouldContain(r => r.SourceFile == "docs/guide.md");
+    }
+
     private static string CreateTempRoot() => TestData.CreateTempRoot();
 }
