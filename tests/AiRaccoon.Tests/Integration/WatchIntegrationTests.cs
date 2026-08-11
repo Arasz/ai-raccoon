@@ -596,6 +596,34 @@ public sealed class WatchIntegrationTests
                 TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task FileIngest_CreatesSourceId_ForIngestedChunks()
+    {
+        using var stack = new Stack();
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        stack.Write("a.md", "zephyrsourceid ingest proof");
+
+        (await stack.StepUntilAsync(
+                async () => (await stack.SearchAsync("zephyrsourceid", TestContext.Current.CancellationToken))
+                    .Any(r => r.SourceFile == stack.File("a.md")), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("ingested file did not become searchable");
+
+        // WP6 acceptance: every entry produced by the ingest pipeline carries a valid source_id FK.
+        (await stack.CountEntriesWithNullSourceIdAsync(TestContext.Current.CancellationToken))
+            .ShouldBe(0, "all ingested entries must have source_id populated");
+        (await stack.CountEntriesWithValidSourceIdAsync(stack.File("a.md"), TestContext.Current.CancellationToken))
+            .ShouldBeGreaterThanOrEqualTo(1,
+                "the ingested file's entries must carry a source_id pointing to a memory_source row");
+    }
+
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
     private sealed class Stack : IDisposable
     {
@@ -723,6 +751,22 @@ public sealed class WatchIntegrationTests
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM watch_files WHERE project_id = @p AND path LIKE @prefix",
                 new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+        }
+
+        public async Task<int> CountEntriesWithNullSourceIdAsync(CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE project_id = @p AND source_id IS NULL",
+                new { p = Project }, cancellationToken: cancellationToken));
+        }
+
+        public async Task<int> CountEntriesWithValidSourceIdAsync(string sourceFile, CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @sf AND source_id IS NOT NULL",
+                new { p = Project, sf = sourceFile }, cancellationToken: cancellationToken));
         }
 
         /// <summary>
