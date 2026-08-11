@@ -47,6 +47,8 @@ public static class OtlpNames
     public const string QueueWait = "ai_raccoon.queue.wait";
     public const string QueuePromoted = "ai_raccoon.queue.promoted";
     public const string QueueDiscarded = "ai_raccoon.queue.discarded";
+    public const string QueuePruned = "ai_raccoon.queue.pruned";
+    public const string QueuePromoteFailures = "ai_raccoon.queue.promote_failures";
     public const string QueueCapacityUtilization = "ai_raccoon.queue.capacity.utilization";
 
     public const string BackgroundPasses = "ai_raccoon.background.passes";

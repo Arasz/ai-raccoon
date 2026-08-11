@@ -16,6 +16,8 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
     private readonly Histogram<double> _waitSeconds;
     private readonly Counter<long> _promoted;
     private readonly Counter<long> _discarded;
+    private readonly Counter<long> _pruned;
+    private readonly Counter<long> _promoteFailures;
     private QueueSnapshot? _snapshot;
 
     public PromotionQueueMetrics()
@@ -41,6 +43,14 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
             OtlpNames.QueueDiscarded,
             unit: "{row}",
             description: "Rows discarded from the queue by the agent");
+        _pruned = Meter.CreateCounter<long>(
+            OtlpNames.QueuePruned,
+            unit: "{row}",
+            description: "Queue rows pruned as residue — already shared or previously discarded (docs/adr/0026)");
+        _promoteFailures = Meter.CreateCounter<long>(
+            OtlpNames.QueuePromoteFailures,
+            unit: "{failure}",
+            description: "Promote candidates that failed (stale hash or share failure)");
         Meter.CreateObservableUpDownCounter(
             OtlpNames.QueueQueued,
             ObserveQueued,
@@ -80,6 +90,22 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
     {
         _discarded.Add(1, new TagList { { "project_id", projectId } });
         _waitSeconds.Record(waitSeconds, new TagList { { "outcome", "discarded" } });
+    }
+
+    public void RecordPruned(string projectId, int count)
+    {
+        if (count > 0)
+        {
+            _pruned.Add(count, new TagList { { "project_id", projectId } });
+        }
+    }
+
+    public void RecordFailed(string projectId, int count)
+    {
+        if (count > 0)
+        {
+            _promoteFailures.Add(count, new TagList { { "project_id", projectId } });
+        }
     }
 
     public void RecordSnapshot(PromotionQueueStats stats, int capacity) =>
