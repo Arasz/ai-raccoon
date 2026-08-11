@@ -83,6 +83,26 @@ Per-project opt-out later = `.ai-badger/config.json` check applied only when the
 3. Search + grade: run `memory_search`, append the JSONL line, grade it 1-5, confirm
    the line now carries query + result + projectId + workspaceId + usefulness.
 
+## Coverage audit — "what % of searches are graded?" has three answers
+
+Run `scripts/audit_coverage.py` (no args; optional paths). It joins the grade log against
+`~/.ai-raccoon/memory-operations.jsonl` and prints three denominators:
+
+- **graded/logged** — the naive figure quoted off the log alone (measured 2026-08-11:
+  21/172 = 12.2 %). This is usually what "12 % graded" means.
+- **logged/searched** — hook capture rate (168/438 = 38 %; per-day 40/24/0/22/41/71 %;
+  08-08 captured zero of 26 searches). A coverage problem that is really a capture problem
+  cannot be fixed by grading more — check hook/plugin enablement per host first (pitfall
+  above).
+- **graded/searched** — true coverage (20/438 = 4.6 %).
+
+Also check `pending.json` (stash size: 2 vs 151 ungraded on 08-11 — the stash is NOT the
+bottleneck) and the null-projectId share (56 % on 08-11 — per-project correlation is only
+possible on the rest; all null lines carry sessionId, so backfill is possible in principle).
+Voluntary grades are selection-biased upward (avg 4.29, 19/21 grades >= 4, both sub-4 grades
+from structured diagnostics): treat "perceived quality" as an upper bound, and never
+validate an auto-grader against it alone.
+
 ## Pitfalls (verified 2026-08-05)
 
 - **Empty log ≠ no usage — check host coverage first (diagnosed 2026-08-06, FIXED 0.80.0).**
@@ -127,6 +147,8 @@ Per-project opt-out later = `.ai-badger/config.json` check applied only when the
 
 ## Files
 
+- `scripts/audit_coverage.py` — three-denominator coverage audit (graded/logged vs
+  logged/searched vs graded/searched), joined against `memory-operations.jsonl`.
 - The full memory-grade-hook implementation plan lives in the ai-badger repo at
   `docs/plans/memory-grade-hook.md` (7 TDD work packages, WP1-WP7, separate PR after
   the ai-raccoon integration #302 merges).

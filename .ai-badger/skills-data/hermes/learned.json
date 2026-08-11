@@ -20,15 +20,15 @@
       "target": ".ai-badger/skills/learned/ai-raccoon/sqlite-schema-review"
     },
     {
-        "category": "ai-raccoon-ops",
-        "name": "ai-raccoon-deployment-ops",
-        "sourceHash": "45bb22bc8d6e99437a1d7364c4d138420d219747ebdd2dc7434d20d743d50a39",
-        "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
-        "status": "synced",
-        "syncedAt": "2026-08-07T06:17:00Z",
-        "target": ".ai-badger/skills/learned/ai-raccoon-ops/ai-raccoon-deployment-ops"
+      "category": "ai-raccoon-ops",
+      "name": "ai-raccoon-deployment-ops",
+      "sourceHash": "45bb22bc8d6e99437a1d7364c4d138420d219747ebdd2dc7434d20d743d50a39",
+      "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
+      "status": "synced",
+      "syncedAt": "2026-08-07T06:17:00Z",
+      "target": ".ai-badger/skills/learned/ai-raccoon-ops/ai-raccoon-deployment-ops"
     },
-      {
+    {
       "category": "data-analysis",
       "name": "memory-bank-audit",
       "sourceHash": "1ff33ae80f24c74dce34f4cc4e2a7dc082ca48085d1dbaca31be3709e89732f1",
@@ -38,15 +38,15 @@
       "target": ".ai-badger/skills/learned/data-analysis/memory-bank-audit"
     },
     {
-        "category": "data-analysis",
-        "name": "sqlite-bank-space-diagnosis",
-        "sourceHash": "98b906fb4082e012a401d032db5303f3d28233c9d3a7d9bb766d33b827384d03",
-        "sourcePath": "data-analysis/sqlite-bank-space-diagnosis",
-        "status": "synced",
-        "syncedAt": "2026-08-06T23:27:26Z",
-        "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
+      "category": "data-analysis",
+      "name": "sqlite-bank-space-diagnosis",
+      "sourceHash": "98b906fb4082e012a401d032db5303f3d28233c9d3a7d9bb766d33b827384d03",
+      "sourcePath": "data-analysis/sqlite-bank-space-diagnosis",
+      "status": "synced",
+      "syncedAt": "2026-08-06T23:27:26Z",
+      "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
     },
-      {
+    {
       "category": "hermes",
       "name": "hermes-memory-provider-development",
       "sourceHash": "da1e52e8323a74ff265095be3a67433a93932233264b42da0fb9979e1d352412",
@@ -101,15 +101,15 @@
       "target": ".ai-badger/skills/learned/software-development/dotnet-logger-message-design"
     },
     {
-        "category": "software-development",
-        "name": "dotnext-library",
-        "sourceHash": "a49fa02f2d48995153fed77303d09baec392a5399f275fc0e22dca311ccf29ad",
-        "sourcePath": "software-development/dotnext-library",
-        "status": "synced",
-        "syncedAt": "2026-08-06T16:57:31Z",
-        "target": ".ai-badger/skills/learned/software-development/dotnext-library"
+      "category": "software-development",
+      "name": "dotnext-library",
+      "sourceHash": "a49fa02f2d48995153fed77303d09baec392a5399f275fc0e22dca311ccf29ad",
+      "sourcePath": "software-development/dotnext-library",
+      "status": "synced",
+      "syncedAt": "2026-08-06T16:57:31Z",
+      "target": ".ai-badger/skills/learned/software-development/dotnext-library"
     },
-      {
+    {
       "category": "software-development",
       "name": "observability-contract-review",
       "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
@@ -119,15 +119,15 @@
       "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
     },
     {
-        "category": "software-development",
-        "name": "red-proof",
-        "sourceHash": "c61738f8e3d00a699a890c7b1384a9c062ecba683a1916caf7ed07287d556bb1",
-        "sourcePath": "software-development/red-proof",
-        "status": "synced",
-        "syncedAt": "2026-08-09T20:42:42Z",
-        "target": ".ai-badger/skills/learned/software-development/red-proof"
+      "category": "software-development",
+      "name": "red-proof",
+      "sourceHash": "c61738f8e3d00a699a890c7b1384a9c062ecba683a1916caf7ed07287d556bb1",
+      "sourcePath": "software-development/red-proof",
+      "status": "synced",
+      "syncedAt": "2026-08-09T20:42:42Z",
+      "target": ".ai-badger/skills/learned/software-development/red-proof"
     },
-      {
+    {
       "category": "software-development",
       "name": "scripts-tooling-refactor",
       "sourceHash": "52def0f92cf4b7552c7414823739e7b5c8399de9751f7a11344fa92b3647c7c8",
@@ -139,10 +139,10 @@
     {
       "category": "uncategorized",
       "name": "ai-badger-contribution",
-        "sourceHash": "1c0f728f8e55c9cd44da3cebda1af666889cbfd389516d9d9d9bf5fb800397b8",
+      "sourceHash": "1c0f728f8e55c9cd44da3cebda1af666889cbfd389516d9d9d9bf5fb800397b8",
       "sourcePath": "software-development/ai-badger-contribution",
       "status": "synced",
-        "syncedAt": "2026-08-06T20:54:59Z",
+      "syncedAt": "2026-08-06T20:54:59Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-contribution"
     },
     {
@@ -174,6 +174,15 @@
     },
     {
       "category": "uncategorized",
+      "name": "ai-raccoon-retrieval-analysis",
+      "sourceHash": "07b0ad18bbe50a03ce68fa84808888ac80006503e9eb5e40c9d3c574b97444aa",
+      "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
+      "status": "synced",
+      "syncedAt": "2026-08-11T14:15:57Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
+    },
+    {
+      "category": "uncategorized",
       "name": "artifact-verification",
       "sourceHash": "c7278df53e31be91dd487c2a5378aae34b3fa1ddb9397b06d4a234fd83bd109d",
       "sourcePath": "artifact-verification",
@@ -191,15 +200,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/code-review-evidence"
     },
     {
-        "category": "uncategorized",
-        "name": "cron-watchdog-authoring",
-        "sourceHash": "a3ab59306902b119941b948280bfce1c143f5f945b62c30204bf272b7c0ac00f",
-        "sourcePath": "cron-watchdog-authoring",
-        "status": "synced",
-        "syncedAt": "2026-08-07T05:47:00Z",
-        "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
+      "category": "uncategorized",
+      "name": "cron-watchdog-authoring",
+      "sourceHash": "a3ab59306902b119941b948280bfce1c143f5f945b62c30204bf272b7c0ac00f",
+      "sourcePath": "cron-watchdog-authoring",
+      "status": "synced",
+      "syncedAt": "2026-08-07T05:47:00Z",
+      "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "design-gate-audit",
       "sourceHash": "33ccc233b4b7a963a699f2f66f90c2f8230241446967a6cfb1621e5a39abcd87",
@@ -229,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-cli-parsing",
-        "sourceHash": "17c8ec3363cd169b510d897f538ef2d9eb625d453502acc6009994c93e4d0087",
+      "sourceHash": "17c8ec3363cd169b510d897f538ef2d9eb625d453502acc6009994c93e4d0087",
       "sourcePath": "dotnet-cli-parsing",
       "status": "synced",
-        "syncedAt": "2026-08-06T16:49:43Z",
+      "syncedAt": "2026-08-06T16:49:43Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-cli-parsing"
     },
     {
@@ -247,10 +256,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-flaky-test-diagnosis",
-        "sourceHash": "1e2580460aac73bc2043741c07c55a994b1049eefc02097eb02b93efe00c87ae",
+      "sourceHash": "1e2580460aac73bc2043741c07c55a994b1049eefc02097eb02b93efe00c87ae",
       "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
       "status": "synced",
-        "syncedAt": "2026-08-07T05:47:50Z",
+      "syncedAt": "2026-08-07T05:47:50Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
     },
     {
@@ -265,10 +274,10 @@
     {
       "category": "uncategorized",
       "name": "dotnet-hosted-service-testing",
-        "sourceHash": "2c862aacdc09f61e49d11537b46b8c9d184be99a5f3135ec99e074a0d0551c6d",
+      "sourceHash": "2c862aacdc09f61e49d11537b46b8c9d184be99a5f3135ec99e074a0d0551c6d",
       "sourcePath": "software-development/dotnet-hosted-service-testing",
       "status": "synced",
-        "syncedAt": "2026-08-07T07:52:40Z",
+      "syncedAt": "2026-08-07T07:52:40Z",
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
     },
     {
@@ -299,15 +308,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
     },
     {
-        "category": "uncategorized",
-        "name": "dotnet-sqlcipher-encryption",
-        "sourceHash": "361e27d01d7551d4d1ac7628095583d68f189dd9a3462fa3fef2361a2741bc40",
-        "sourcePath": "software-development/dotnet-sqlcipher-encryption",
-        "status": "synced",
-        "syncedAt": "2026-08-06T22:23:34Z",
-        "target": ".ai-badger/skills/learned/uncategorized/dotnet-sqlcipher-encryption"
+      "category": "uncategorized",
+      "name": "dotnet-sqlcipher-encryption",
+      "sourceHash": "361e27d01d7551d4d1ac7628095583d68f189dd9a3462fa3fef2361a2741bc40",
+      "sourcePath": "software-development/dotnet-sqlcipher-encryption",
+      "status": "synced",
+      "syncedAt": "2026-08-06T22:23:34Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-sqlcipher-encryption"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "dotnet-tool-publishing",
       "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
@@ -317,21 +326,21 @@
       "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
     },
     {
-        "category": "uncategorized",
-        "name": "framework-development",
-        "sourceHash": "1f52ffe450ee01f6fdece39f128d068af1d06c366aeb4c4f1a94412c34cbd118",
-        "sourcePath": "ai-badger/framework-development",
-        "status": "synced",
-        "syncedAt": "2026-08-06T21:09:12Z",
-        "target": ".ai-badger/skills/learned/uncategorized/framework-development"
+      "category": "uncategorized",
+      "name": "framework-development",
+      "sourceHash": "1f52ffe450ee01f6fdece39f128d068af1d06c366aeb4c4f1a94412c34cbd118",
+      "sourcePath": "ai-badger/framework-development",
+      "status": "synced",
+      "syncedAt": "2026-08-06T21:09:12Z",
+      "target": ".ai-badger/skills/learned/uncategorized/framework-development"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "git-worktree-isolation",
-          "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
+      "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
       "sourcePath": "git-worktree-isolation",
       "status": "synced",
-          "syncedAt": "2026-08-06T16:51:43Z",
+      "syncedAt": "2026-08-06T16:51:43Z",
       "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
     },
     {
@@ -382,19 +391,19 @@
     {
       "category": "uncategorized",
       "name": "memory-bank-audit",
-        "sourceHash": "03b648b31190db9ab1c6a03c4f97d5d9ca657b851a96855fd7de6c993005476c",
+      "sourceHash": "03b648b31190db9ab1c6a03c4f97d5d9ca657b851a96855fd7de6c993005476c",
       "sourcePath": "data-analysis/memory-bank-audit",
       "status": "synced",
-        "syncedAt": "2026-08-09T20:26:10Z",
+      "syncedAt": "2026-08-09T20:26:10Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
     },
     {
       "category": "uncategorized",
       "name": "memory-quality-logging",
-      "sourceHash": "6e0769a964865462c2a771e2818d50ca630079e17e68db584ce9f89175a51a42",
+      "sourceHash": "ed150aa007f503b852e6e4970543f55e24923df1688ff0ef6c85e731fb9ed93f",
       "sourcePath": "ai-raccoon-integration/memory-quality-logging",
       "status": "synced",
-      "syncedAt": "2026-08-06T11:21:35Z",
+      "syncedAt": "2026-08-11T14:15:56Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
     },
     {
@@ -418,10 +427,10 @@
     {
       "category": "uncategorized",
       "name": "observability-contract-review",
-        "sourceHash": "fe7f03c188c0909feb0f5ba1178f17e8a2da80c69d1f6e6ee613c559523e156a",
+      "sourceHash": "fe7f03c188c0909feb0f5ba1178f17e8a2da80c69d1f6e6ee613c559523e156a",
       "sourcePath": "software-development/observability-contract-review",
       "status": "synced",
-        "syncedAt": "2026-08-06T16:50:07Z",
+      "syncedAt": "2026-08-06T16:50:07Z",
       "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
     },
     {
@@ -443,15 +452,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/pre-push-gate-debugging"
     },
     {
-        "category": "uncategorized",
-        "name": "red-proof",
-        "sourceHash": "20a795ca73fbfd36cfb071b5beb5eaef8668ed80e9b8062f846de6321ff040ee",
-        "sourcePath": "software-development/red-proof",
-        "status": "synced",
-        "syncedAt": "2026-08-09T20:43:04Z",
-        "target": ".ai-badger/skills/learned/uncategorized/red-proof"
+      "category": "uncategorized",
+      "name": "red-proof",
+      "sourceHash": "20a795ca73fbfd36cfb071b5beb5eaef8668ed80e9b8062f846de6321ff040ee",
+      "sourcePath": "software-development/red-proof",
+      "status": "synced",
+      "syncedAt": "2026-08-09T20:43:04Z",
+      "target": ".ai-badger/skills/learned/uncategorized/red-proof"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "research-record-audit",
       "sourceHash": "d3b64168934a3273b5b898d4af4e5c1d6e74f934f73476a040efe6d92a372900",
@@ -472,10 +481,10 @@
     {
       "category": "uncategorized",
       "name": "scripts-tooling-refactor",
-        "sourceHash": "be0dfd1ef1ca076e266c15fb2810505747a7860d79d65830b0949e87464ae9a0",
+      "sourceHash": "be0dfd1ef1ca076e266c15fb2810505747a7860d79d65830b0949e87464ae9a0",
       "sourcePath": "software-development/scripts-tooling-refactor",
       "status": "synced",
-        "syncedAt": "2026-08-06T16:48:53Z",
+      "syncedAt": "2026-08-06T16:48:53Z",
       "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
     },
     {
