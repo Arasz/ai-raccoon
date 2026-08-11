@@ -1,8 +1,8 @@
 """Shared memory-first gate module: tool matchers, session markers, per-host deny builders.
 
 The gate blocks repo text-search tools (grep/find/search_files) until the session has
-consulted AiRaccoon memory. Pure functions plus marker-file IO, mirroring memory_grade.py;
-a hook must never raise, and Copilot's fail-closed preToolUse means exit 0 on every path.
+consulted AiRaccoon memory. Pure functions plus marker-file IO. A hook must never
+raise, and Copilot's fail-closed preToolUse means exit 0 on every path.
 """
 from __future__ import annotations
 
@@ -42,6 +42,21 @@ _SEARCH_COMMANDS = ("grep", "rg", "find", "rg.exe")
 _SEARCH_TOOLS = ("search_files", "grep", "rg", "glob")
 
 MAX_DENIALS = 3
+
+_MCP_PREFIX = "mcp__"
+_DOUBLE_UNDERSCORE = "__"
+
+
+def is_memory_search(tool_name: Any) -> bool:
+    """True for any naming spelling of the memory_search tool; never matches other tools."""
+    if not isinstance(tool_name, str):
+        return False
+    name = tool_name
+    if name.startswith(_MCP_PREFIX):
+        name = name[len(_MCP_PREFIX):].split(_DOUBLE_UNDERSCORE, 1)[-1]
+    if ":" in name:
+        name = name.rsplit(":", 1)[-1]
+    return name == "memory_search"
 
 _REASON = (
     "Memory-first gate: run memory_search (project_id={project_id}) before repo text "

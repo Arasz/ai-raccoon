@@ -3,10 +3,10 @@
 
 Deny text-search tool calls until the session consulted memory_search, with a
 3-strike pass-through so an agent cannot stall. The consulted marker is recorded by
-memory_grade_hook.py (the PostToolUse entry both hosts already run) so one process
-serves each memory_search. Exit 0 on every path — Copilot's command preToolUse hooks
-are fail-closed, so a crash here would deny the very tool call the gate only meant to
-gate. All logic lives in memory_first_gate.py; this entry only transports.
+memory_first_gate_post_hook.py (the PostToolUse entry both hosts already run) so one
+process serves each memory_search. Exit 0 on every path — Copilot's command preToolUse
+hooks are fail-closed, so a crash here would deny the very tool call the gate only meant
+to gate. All logic lives in memory_first_gate.py; this entry only transports.
 """
 from __future__ import annotations
 

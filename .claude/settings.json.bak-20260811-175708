@@ -102,15 +102,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "memory_search",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; elif [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py not found - hook skipped\"}'; fi"
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -124,7 +115,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\"; elif [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py not found - hook skipped\"}'; fi"
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; elif [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py not found - hook skipped\"}'; fi"
           }
         ]
       }

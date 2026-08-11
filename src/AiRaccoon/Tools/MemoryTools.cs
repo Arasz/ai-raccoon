@@ -107,7 +107,7 @@ public sealed class MemoryTools(
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);
 
-        var correlationId = Guid.NewGuid().ToString("N");
+        var correlationId = Guid.CreateVersion7().ToString("N");
         try
         {
             await qualityService.RecordSearchAsync(
