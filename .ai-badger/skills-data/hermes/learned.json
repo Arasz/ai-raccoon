@@ -535,10 +535,10 @@
     {
         "category": "uncategorized",
         "name": "sqlite-schema-review",
-        "sourceHash": "92b95ccd8e912e14fb68da8a5c2c2615c0eeb4eb665030bdf97b9740925508e6",
+        "sourceHash": "73476bcf6ae0cb012ac03cccfb431100fcd16990d1638ade5d6712d658ad0c6d",
         "sourcePath": "ai-raccoon/sqlite-schema-review",
         "status": "synced",
-        "syncedAt": "2026-08-11T17:59:08Z",
+        "syncedAt": "2026-08-11T19:24:11Z",
         "target": ".ai-badger/skills/learned/uncategorized/sqlite-schema-review"
     },
       {

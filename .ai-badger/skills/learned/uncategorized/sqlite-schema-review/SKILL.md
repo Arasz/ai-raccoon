@@ -59,12 +59,30 @@ from the plan, the PR, or the docs** — the docs are ambiguous on `ON CONFLICT`
   (SELECT id FROM parent)` should be 0).
 - **Expression UNIQUE in CREATE TABLE**: if the plan puts `UNIQUE(... COALESCE(col, ''))`
   inline in CREATE TABLE, it will fail. Check for expression UNIQUE constraints and require a separate `CREATE UNIQUE INDEX IF NOT EXISTS` statement.
+- **FTS5 external-content normalization**: when normalizing columns out of a table that backs an FTS5 external-content index (e.g. `entries_fts` with `content='entries'`), the indexed columns MUST stay on the content table because triggers
+  reference `new.column_name` directly. Removing them breaks triggers at FIRE time, not creation time. The pattern: create a canonical identity table, add FK column on the content table, but KEEP the original columns as denormalized
+  write-through mirrors. Write path populates both; read paths JOIN for full identity. Triggers remain untouched. Measured 2026-08-11: JOIN is faster than CASE/WHEN for source-type queries (-40.9% chunk recompute, -100% delete_by_source).
+  Design:
+  `docs/work/2026-08-11-memory-source-normalization-plan.md`.
+- **ALTER TABLE ADD COLUMN in test helpers called via factory delegates**: include the column in CREATE TABLE instead. SQLite has no `IF NOT EXISTS` for ALTER TABLE, so a helper called twice per test cycle fails on the second call. Verified
+  2026-08-11.
 - **Scope-of-coverage claims**: check that the rows the plan says are protected are actually inside the index partials — e.g. chunk rows are only covered if the ingest path resolves to a committed scope (context null → project scope), not a
   workspace scope. Trace the caller, don't take the plan's word.
 
 ## Scratch-verification recipe (5 min)
 
 See `references/migration-sql-testing-recipe.md` for the full workflow (copy real bank → strip target objects → run migration step-by-step → verify invariants).
+
+## FTS5 external-content normalization
+
+When normalizing columns out of a table that backs FTS5 external content, the indexed columns MUST stay as denormalized write-through mirrors. Triggers reference `new.column_name` directly and break at FIRE time if the column is removed.
+Full pattern + measured performance:
+`ai-raccoon-development` → `references/fts5-external-content-normalization.md`.
+
+## Dapper/SQLite testing gotchas
+
+See `references/dapper-sqlite-testing-gotchas.md` for compilation pitfalls when writing integration tests against SqliteMemoryStore (missing `using Dapper;`, `CommandDefinition` wrapper, Shouldly expression-tree restrictions,
+verification-test TDD shape).
 
 Quick inline version:
 
