@@ -1,13 +1,12 @@
-"""Behavior tests for the caller-side observability: status words + operation log.
+"""Behavior tests for the caller-side observability: status words.
 
 The server cannot attribute calls to a client; the provider emits one-word
-status cues on stderr and JSONL rows (with agent/session attribution) to the
-AIRACCOON_MEMORY_LOG file.
+status cues on stderr. The JSONL operation log (AIRACCOON_MEMORY_LOG) was
+removed 2026-08-11 (task mem-cleanup) — the env var is inert.
 """
 
 from __future__ import annotations
 
-import json
 import pytest
 
 
@@ -51,7 +50,8 @@ def test_status_words_disabled_prints_nothing(make_provider, capsys):
     assert capsys.readouterr().err.strip() == ""
 
 
-def test_operation_log_rows_carry_caller_attribution(make_provider, tmp_path, monkeypatch):
+def test_no_operation_log_file_created_when_env_set(make_provider, tmp_path, monkeypatch):
+    """File-based op logging is removed: AIRACCOON_MEMORY_LOG is inert."""
     log_path = tmp_path / "memory-log.jsonl"
     monkeypatch.setenv("AIRACCOON_MEMORY_LOG", str(log_path))
     provider, fake = make_provider()
@@ -61,50 +61,7 @@ def test_operation_log_rows_carry_caller_attribution(make_provider, tmp_path, mo
     provider.prefetch("q", session_id="abc")
     provider.handle_tool_call("memory_stats", {})
 
-    rows = [json.loads(l) for l in log_path.read_text().splitlines()]
-    assert len(rows) == 2
-    assert [r["tool"] for r in rows] == ["memory_search", "memory_stats"]
-    assert all(r["status"] == "ok" for r in rows)
-    assert all(r["project_id"] == "hermes-coder" for r in rows)
-    assert all(r["agent_id"] == "hermes-coder" for r in rows)
-    assert all(r["session_id"] == "abc" for r in rows)
-    assert all("ts" in r and "duration_ms" in r for r in rows)
-
-
-def test_operation_log_records_errors(make_provider, tmp_path, monkeypatch):
-    log_path = tmp_path / "memory-log.jsonl"
-    monkeypatch.setenv("AIRACCOON_MEMORY_LOG", str(log_path))
-    provider, fake = make_provider()
-
-    def boom(project_id, query, **kwargs):
-        raise RuntimeError("server unreachable")
-
-    fake.search = boom
-    _init(provider, session_id="abc")
-    provider.prefetch("q", session_id="abc")
-
-    rows = [json.loads(l) for l in log_path.read_text().splitlines()]
-    assert len(rows) == 1
-    assert rows[0]["status"] == "error"
-    assert rows[0]["error_type"] == "RuntimeError"
-
-
-def test_operation_log_not_created_without_env(make_provider, tmp_path, monkeypatch):
-    monkeypatch.delenv("AIRACCOON_MEMORY_LOG", raising=False)
-    provider, fake = make_provider()
-    _init(provider)
-    provider.handle_tool_call("memory_stats", {})
-    assert not (tmp_path / "memory-log.jsonl").exists()
-
-
-def test_operation_log_blank_env_treated_as_unset(make_provider, tmp_path, monkeypatch):
-    """A set-but-empty AIRACCOON_MEMORY_LOG must not break calls (old-review finding)."""
-    monkeypatch.setenv("AIRACCOON_MEMORY_LOG", "")
-    provider, fake = make_provider()
-    _init(provider)
-    result = provider.handle_tool_call("memory_stats", {})
-    assert '"entries"' in result  # call succeeded, log silently off
-    assert provider._op_log is None
+    assert not log_path.exists()
 
 
 def test_all_provider_tools_have_status_words(provider_module, status_module):
