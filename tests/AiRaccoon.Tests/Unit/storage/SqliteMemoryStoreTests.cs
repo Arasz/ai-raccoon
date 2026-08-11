@@ -1035,6 +1035,51 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         public string EmbedState { get; set; } = "";
     }
 
+    [Fact]
+    public async Task SelectSourceByHashAndProject_ReturnsSourceType()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "conversation fragment", SourceFile: "hermes/20260809_125502_abc123"),
+            TestContext.Current.CancellationToken);
+
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceType = await connection.ExecuteScalarAsync<string>(
+            new CommandDefinition(
+                """
+                SELECT ms.source_type FROM entries e
+                JOIN memory_source ms ON ms.id = e.source_id
+                WHERE e.hash = @hash AND e.scope = 'shared'
+                """,
+                new { hash = shared.Entry.Hash },
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceType.ShouldBe("transcript",
+            "SelectSourceByHashAndProject must resolve source_type via the memory_source JOIN");
+    }
+
+    [Fact]
+    public async Task SelectExtractionCandidates_IncludesSourceType()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "architecture decision record content", SourceFile: "docs/adr/0001-decision.md"),
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE entries SET embed_state = 'embedded' WHERE hash = @hash",
+                new { hash = entry.Hash },
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        var candidates = await _store.ExtractCandidatesAsync("acme", includeTtlRows: true, TestContext.Current.CancellationToken);
+
+        var candidate = candidates.ShouldHaveSingleItem();
+        candidate.Hash.ShouldBe(entry.Hash);
+        candidate.SourceType.ShouldBe("file",
+            "ExtractCandidatesAsync must return source_type from the memory_source JOIN");
+    }
+
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>
     private sealed class StubChunker : IChunker
     {

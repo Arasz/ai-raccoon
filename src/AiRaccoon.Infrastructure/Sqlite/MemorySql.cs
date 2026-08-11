@@ -100,21 +100,25 @@ internal static class MemorySql
                                           WHERE id = @id
                                           """;
 
-    public const string SelectSourceByHashAndProject = """"
-                                                        SELECT path AS Path, value AS Value, source_file AS SourceFile, section AS Section
-                                                       FROM entries
-                                                       WHERE hash = @hash AND scope = 'project' AND project_id = @projectId
+    public const string SelectSourceByHashAndProject = """"""
+                                                        SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
+                                                               ms.source_type AS SourceType, ms.heading_path AS HeadingPath
+                                                       FROM entries e
+                                                       LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                       WHERE e.hash = @hash AND e.scope = 'project' AND e.project_id = @projectId
                                                        LIMIT 1
-                                                       """";
+                                                       """""";
 
-    public const string SelectExtractionCandidates = """"
-                                                      SELECT hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile,
-                                                             rating AS Rating, access_count AS AccessCount, created_at AS CreatedAt,
-                                                             ttl_days AS TtlDays
-                                                      FROM entries
-                                                      WHERE scope = 'project' AND project_id = @projectId AND embed_state = 'embedded'
-                                                        AND (@includeTtlRows = 1 OR ttl_days IS NULL)
-                                                      """";
+    public const string SelectExtractionCandidates = """"""
+                                                      SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                             ms.source_type AS SourceType,
+                                                             e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
+                                                             e.ttl_days AS TtlDays
+                                                      FROM entries e
+                                                      LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                      WHERE e.scope = 'project' AND e.project_id = @projectId AND e.embed_state = 'embedded'
+                                                        AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
+                                                      """""";
 
     public const string SelectSharedIndex = """"
                                              SELECT path AS Path, value AS Value

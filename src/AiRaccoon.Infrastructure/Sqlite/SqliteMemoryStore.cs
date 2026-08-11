@@ -1255,7 +1255,7 @@ public sealed partial class SqliteMemoryStore(
         public int TotalChunks { get; set; }
     }
 
-    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section);
+    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
 
     private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
 
@@ -1266,6 +1266,7 @@ public sealed partial class SqliteMemoryStore(
         string Path,
         string Value,
         string? SourceFile,
+        string? SourceType,
         double Rating,
         long AccessCount,
         long CreatedAt,
@@ -1273,7 +1274,7 @@ public sealed partial class SqliteMemoryStore(
     {
         public ExtractionCandidateRow ToCandidate() =>
             new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,
-                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays);
+                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
 
     private sealed record SettingRow(string Key, string Value);
