@@ -11,6 +11,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md WP3.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SearchQualityServiceTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot();

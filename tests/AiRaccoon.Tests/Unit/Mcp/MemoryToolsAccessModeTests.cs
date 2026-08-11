@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
@@ -40,7 +41,7 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(access, queue);
-        _tools = new MemoryTools(_store, gate);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
                 new FakeTimeProvider(FixedNow)), queue);

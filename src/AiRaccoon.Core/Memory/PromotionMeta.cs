@@ -11,4 +11,7 @@ public sealed record PromotionMeta(
     /// <summary>The project's single stalest queued row's age — nothing else drains a propose-only queue, and
     /// an average wait can hide one very old row once enough fresh rows join the same queue.</summary>
     public double? OldestWaitSeconds { get; init; }
+
+    /// <summary>Correlation id linking this search response to its quality record; set only on memory_search.</summary>
+    public string? CorrelationId { get; init; }
 }

@@ -30,13 +30,13 @@ public class ToolInventoryTests
     }
 
     [Fact]
-    public void ToolsNamespace_ExposesAll23SpecTools()
+    public void ToolsNamespace_ExposesAll24SpecTools()
     {
         var tools = ToolMethods()
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.Count.ShouldBe(23);
+        tools.Count.ShouldBe(24);
         tools.ShouldContain("memory_write");
         tools.ShouldContain("memory_search");
         tools.ShouldContain("memory_list");
@@ -60,6 +60,7 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_watch_add");
         tools.ShouldContain("memory_watch_status");
         tools.ShouldContain("memory_watch_remove");
+        tools.ShouldContain("memory_record_followthrough");
     }
 
     /// <summary>Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>

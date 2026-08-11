@@ -10,6 +10,7 @@ using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -41,7 +42,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue);
-        _tools = new MemoryTools(_store, gate);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue);
