@@ -6,7 +6,7 @@ An MCP server that gives AI agents persistent, project-scoped memory. It runs lo
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.6.3)
+## What's new (from 1.2.0 to 1.6.4)
 
 - **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that probes port 7721 and starts the backend itself, so every client on the machine shares one embedding model and one bank instead of paying for its own.
   [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
@@ -16,15 +16,12 @@ sync to S3 or Azure Blob. Built on the
   [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
 - **Talking to the server directly works again.** The loopback token that ADR-0020 put in front of `/mcp` left every non-proxy caller unable to authenticate. `/mcp`
   now also accepts `Authorization: Bearer <token>`, `serve --mcp-entry` prints the
-  `headers` map a client needs, and a 401 says whether the credential was missing or wrong. [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
+  `headers` map a client needs, and 401 says whether the credential was missing or wrong. [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
 - **Search got faster — about 10× on the vector path, 4× on FTS.** Persisted chunk columns and partition-key KNN took a vector batch from 32.20 ms to 3.05 ms, and an FTS batch from 41.23 ms to 9.60 ms. One bank, 4,423 entries, a 2,065-row
   project context, k=300, warm, median of 20 reps. The FTS half is the smaller win and most of what remains is `snippet()`.
   [measurements](docs/plans/2026-08-08-search-knn-perf.md)
 - **The shared tier proposes better memories.** Promotion scoring v3 routes each candidate through its own channel — an ADR section and a scratch note are no longer judged by the same yardstick. (The ADR is filed under v2; v3 is a later
-  section in it.) [ADR-0018 § v3](docs/adr/0018-promotion-scoring-v2.md#v3--channel-routed-prior--bounded-evidence-2026-08-08)
-- **Promotion stopped losing candidates.** The queue used to hold hashes whose entry had been re-ingested, and promoting one destroyed the candidate while reporting the whole call as failed. Deleting an entry now clears its queue row, and
-  `ai-raccoon extract prune` reports what already leaked (`--apply` removes it).
-  [ADR-0023](docs/adr/0023-promotion-queue-entries-delete-invalidation.md)
+  section in it.) [ADR-0018 § v3](docs/adr/0018-promotion-scoring-v2.md#v3-channel-routed-prior-bounded-evidence-2026-08-08)
 - **Errors tell your agent what to fix.** A wrong or blank argument now comes back as
   `invalid-argument:` naming the parameter, instead of the opaque
   `An error occurred invoking '<tool>'`.
@@ -32,10 +29,6 @@ sync to S3 or Azure Blob. Built on the
 - **Headings count, not just words.** A second structure vector ranks a match by where it sits in a document. [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
 - **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy scheme, with a migration that moves an existing bank across without a re-import.
   [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
-- **Tracing now covers the HTTP hop, and you control the sampling.** OTLP export gained the ASP.NET request span, so a tool call is traceable from the request in, and the tool span moved onto the MCP semantic conventions.
-  `OTEL_TRACES_SAMPLER` is live configuration again — a hardcoded always-on sampler had been overriding it. The background services are traced too, but only the passes that did something: the watch loop polls every second, so spanning every
-  no-op would have been ~86,400 spans a day.
-  [ADR-0021](docs/adr/0021-export-the-aspnet-request-span.md)
 - **An old build can't corrupt a newer bank.** The schema is stamped and writes are refused when the binary is behind it — which matters now that one bank is shared by every project on the machine.
   [ADR-0019](docs/adr/0019-forward-version-write-guard.md)
 
@@ -60,7 +53,7 @@ dotnet tool install -g ai-raccoon
 Run the server:
 
 ```bash
-ai-raccoon                    # proxy (default): relays to one HTTP backend, autostarting it
+ai-raccoon                    # proxy (default): relays to one HTTP backend, auto starting it
 ai-raccoon --transport stdio  # complete in-process server, no backend, no autostart
 ai-raccoon --transport http   # Streamable HTTP at /mcp
 ```
@@ -108,8 +101,8 @@ The full contract (23 tools, 2 prompts, parameters, error shapes) is in [docs/re
 
 Plus the `OTEL_*` variables the OpenTelemetry SDK itself reads for OTLP export (serve mode only, opt-in — see [OTLP export](#otlp-export) below).
 
-Everything else lives in the settings table of the install's `memory.db` and is changed with `ai-raccoon` verb commands. The CLI is the single config channel. Secrets (OpenAI key, S3 access/secret keys, Azure connection string) are stored
-there, encrypted at rest when a passphrase is set, never in the environment and never in tracked files.
+Everything else lives in the settings table of the installation's `memory.db` and is changed with `ai-raccoon` verb commands. The CLI is the single config channel. Secrets (OpenAI key, S3 access/secret keys, Azure connection string) are
+stored there, encrypted at rest when a passphrase is set, never in the environment and never in tracked files.
 
 Launch flags (startup-scoped only):
 
@@ -171,7 +164,7 @@ harness: [docs/reference/embedding-benchmark.md](docs/reference/embedding-benchm
 ## Observability
 
 Every tool call records OpenTelemetry-compatible metrics and traces through the
-`AiRaccoon.MemoryTools` meter. The diagnostic tools need the server's process id, and a backgrounded `serve` does not tell you what it is — so ask it:
+`AiRaccoon.MemoryTools` meter. The diagnostic tools need the server's process id, and a background `serve` does not tell you what it is — so ask it:
 
 ```bash
 ai-raccoon serve observability counters   # dotnet-counters monitor -p 4711

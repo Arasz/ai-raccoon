@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class VersionContractTests
 {
-    private const string ExpectedVersion = "1.6.3";
+    private const string ExpectedVersion = "1.6.4";
 
     [Fact]
     public void PackageMetadata_IsStable_OnePointZero()
@@ -86,5 +86,4 @@ public class VersionContractTests
             version.Contains('-').ShouldBeFalse($"prerelease suffix not allowed: {version}");
         }
     }
-
 }
