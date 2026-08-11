@@ -3,6 +3,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -26,6 +27,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 11, 0, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-queue-discard");
+    private readonly string _contentRoot = TestData.CreateTempRoot("ai-raccoon-queue-discard-content");
     private readonly SqliteConnectionFactory _factory;
     private readonly FakeTimeProvider _clock;
     private readonly SqliteMemoryStore _store;
@@ -46,9 +48,12 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dataRoot))
+        foreach (var root in new[] { _dataRoot, _contentRoot })
         {
-            Directory.Delete(_dataRoot, true);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
         }
     }
 
@@ -94,9 +99,10 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "durable shared fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
-        await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        // Pre-fix residue order: the twin is queued FIRST, then the content gets shared.
         await _queueStore.UpsertAsync("acme", [Candidate("fresh-hash-1", "durable shared fact", 2.0)],
             TestContext.Current.CancellationToken);
+        await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate("fresh-hash-2", "rejected fact", 1.5)],
             TestContext.Current.CancellationToken);
         await _queueStore.RememberDiscardsAsync("acme", ["fresh-hash-2"], TestContext.Current.CancellationToken);
@@ -123,6 +129,151 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         added.ShouldBe(1);
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldBe(["fresh-hash"]);
+    }
+
+    /// <summary>G5 pin: PromoteAsync claims rows through the store's DiscardAsync but must never
+    /// remember those claims as rejections — a promotion is not a "no".</summary>
+    [Fact]
+    public async Task Promote_DoesNotRememberClaimsAsDiscards()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "promotable fact", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "promotable fact", 2.0)],
+            TestContext.Current.CancellationToken);
+
+        var outcome = await CreateService().PromoteAsync(["acme"], 20, TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldContain(entry.Hash);
+        (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(0,
+            "a promotion claim must not be recorded as a discard");
+    }
+
+    /// <summary>G6 pin: capacity eviction removes queue rows without remembering them — only an
+    /// agent's explicit discard is a rejection.</summary>
+    [Fact]
+    public async Task Eviction_DoesNotRememberVictimsAsDiscards()
+    {
+        await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "3",
+            TestContext.Current.CancellationToken);
+        var service = CreateService();
+
+        var outcome = await service.ProposeAsync("acme",
+            [Candidate("h-1", "fact one", 1.0), Candidate("h-2", "fact two", 1.0),
+             Candidate("h-3", "fact three", 1.0), Candidate("h-4", "fact four", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        outcome.Evicted.Count.ShouldBe(1);
+        (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(0,
+            "capacity eviction must not be recorded as a rejection");
+    }
+
+    /// <summary>G8: the tool-equivalent round trip — discard via the service, propose again — the
+    /// hash stays out of the queue and the rejection is persisted.</summary>
+    [Fact]
+    public async Task DiscardThenPropose_DoesNotReQueueTheHash()
+    {
+        var service = CreateService();
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "rejected fact", null, null, null, null, null),
+            TestContext.Current.CancellationToken);
+        await service.ProposeAsync("acme", [Candidate(entry.Hash, "rejected fact", 1.0)],
+            TestContext.Current.CancellationToken);
+        await service.DiscardAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        await service.ProposeAsync("acme", [Candidate(entry.Hash, "rejected fact", 1.0)],
+            TestContext.Current.CancellationToken);
+
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldNotContain(entry.Hash, "a discarded hash must not be re-queued");
+        (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(1);
+    }
+
+    /// <summary>G9: the replace round-trip (watch re-ingest) must not restore a discarded
+    /// candidate whose unchanged chunk returns under the same hash — the mirror of
+    /// PromotionQueueInvalidationTests.ReplacingAWatchedFile_KeepsCandidatesForUnchangedChunks.</summary>
+    [Fact]
+    public async Task ReplaceFile_DoesNotRestoreDiscardedCandidate()
+    {
+        await SetScopeAsync("acme");
+        var path = Path.Combine(_contentRoot, "adr.md");
+        await File.WriteAllTextAsync(path, "stable adr content", TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", path, null, TestContext.Current.CancellationToken);
+        var hash = await SingleEntryHashAsync("acme", path);
+        await _queueStore.UpsertAsync("acme", [Candidate(hash, "stable adr content", 1.0)],
+            TestContext.Current.CancellationToken);
+        await _queueStore.RememberDiscardsAsync("acme", [hash], TestContext.Current.CancellationToken);
+
+        // Unchanged content: the chunk returns under the same hash after the replace.
+        await File.WriteAllTextAsync(path, "stable adr content", TestContext.Current.CancellationToken);
+        await _store.ReplaceFileAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
+
+        (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldNotContain(hash,
+                "a discarded candidate must not return through the replace round-trip");
+    }
+
+    /// <summary>The table is additive DDL in the unconditional Ddl (docs/adr/0026): dropping it
+    /// must be healed by the next bank open, not require a schema-version ladder step.</summary>
+    [Fact]
+    public async Task FreshBank_RecreatesPromotionDiscardsAfterDrop()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition("DROP TABLE IF EXISTS promotion_discards",
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await using var reopened = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await reopened.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO promotion_discards (project_id, hash, discarded_at) VALUES ('acme', 'h', 0)",
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private PromotionQueueService CreateService() =>
+        new(_queueStore, _store, new UniformCountEvictionPolicy(), new NoopMetrics(),
+            NullLogger<PromotionQueueService>.Instance, _clock);
+
+    private async Task<long> DiscardCountAsync(string projectId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT count(*) FROM promotion_discards WHERE project_id = @ProjectId",
+                    new { ProjectId = projectId },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    private async Task<string> SingleEntryHashAsync(string projectId, string sourceFile)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleAsync<string>(
+            "SELECT hash FROM entries WHERE project_id = @projectId AND source_file = @sourceFile",
+            new { projectId, sourceFile });
+    }
+
+    private Task SetScopeAsync(string projectId) =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.Serialize([_contentRoot]),
+            TestContext.Current.CancellationToken);
+
+    private sealed class NoopMetrics : IPromotionQueueMetrics
+    {
+        public void RecordEviction(string projectId, double victimScore, string reason)
+        {
+        }
+
+        public void RecordPromoted(string projectId, double waitSeconds)
+        {
+        }
+
+        public void RecordDiscarded(string projectId, double waitSeconds)
+        {
+        }
+
+        public void RecordSnapshot(PromotionQueueStats stats, int capacity)
+        {
+        }
     }
 
     private sealed class StubChunker : IChunker

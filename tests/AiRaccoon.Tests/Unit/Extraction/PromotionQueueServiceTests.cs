@@ -201,18 +201,21 @@ public sealed class PromotionQueueServiceTests : IDisposable
             .Select(r => r.Hash).ShouldBe([low.Hash]);
     }
 
+    /// <summary>The layered dedup contract (docs/adr/0026): propose refuses EXACT shared twins at
+    /// upsert; a whitespace twin still queues (exact values differ) and promote skips it via its
+    /// NORMALIZED twin check — so skip accounting survives with the persistence-layer refusal.</summary>
     [Fact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
         var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
-        var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared fact", null, null, null, null, null),
+        var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
         var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
 
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
-            // Seed the shared tier with the same value as the dup candidate.
+            // Seed the shared tier with a whitespace twin of the dup candidate's value.
             await connection.ExecuteAsync(
                 """
                 INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at, embed_state)
@@ -221,7 +224,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         }
 
         await _service.ProposeAsync("acme",
-            [Candidate(dup.Hash, "shared fact", 5.0), Candidate(fresh.Hash, "fresh fact", 4.0)],
+            [Candidate(dup.Hash, "shared  fact", 5.0), Candidate(fresh.Hash, "fresh fact", 4.0)],
             TestContext.Current.CancellationToken);
 
         var outcome = await _service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);

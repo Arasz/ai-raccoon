@@ -23,6 +23,14 @@ public sealed partial class PromotionQueueService(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(candidates);
 
+        // Residue sweep first (docs/adr/0026): rows that became shared or were rejected by an
+        // earlier discard leave the queue before this pass re-ranks and re-inserts anything.
+        var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (pruned > 0)
+        {
+            Log.Pruned(logger, projectId, pruned);
+        }
+
         var upserted = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
 
         var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
@@ -74,6 +82,14 @@ public sealed partial class PromotionQueueService(
         var absorbed = 0;
         foreach (var projectId in projectIds)
         {
+            // Residue sweep (docs/adr/0026): a row rejected by an earlier discard must not be
+            // promotable — the mode flip to promote happens after propose-only queues grew.
+            var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
+            if (pruned > 0)
+            {
+                Log.Pruned(logger, projectId, pruned);
+            }
+
             var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
                 .Take(limit).ToList();
             foreach (var row in rows)
@@ -161,6 +177,13 @@ public sealed partial class PromotionQueueService(
                 var wait = Math.Max(0, timeProvider.GetUtcNow().ToUnixTimeSeconds() - row.CreatedAt);
                 metrics.RecordDiscarded(projectId, wait);
             }
+
+            // The agent's "no" is permanent: propose must never re-queue these hashes
+            // (docs/adr/0026). The claim path of PromoteAsync shares this store method and
+            // never calls RememberDiscardsAsync — promotions are not rejections.
+            await queue.RememberDiscardsAsync(projectId, removed.Select(r => r.Hash).ToList(),
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
             metrics.RecordSnapshot(stats, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
@@ -265,5 +288,9 @@ public sealed partial class PromotionQueueService(
         [LoggerMessage(EventId = 707, Level = LogLevel.Information,
             Message = "Cleared {Count} stale-scored queue row(s) for {ProjectId}")]
         public static partial void StaleCleared(ILogger logger, string projectId, int count);
+
+        [LoggerMessage(EventId = 708, Level = LogLevel.Debug,
+            Message = "Pruned {Count} rejected queue row(s) for {ProjectId} (already shared or discarded)")]
+        public static partial void Pruned(ILogger logger, string projectId, int count);
     }
 }
