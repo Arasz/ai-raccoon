@@ -83,25 +83,48 @@ def _get_ungraded(db_path: Path, limit: int) -> list[dict]:
         conn.close()
 
 
-def _read_snippet(file_path: str, max_chars: int = 300) -> str:
-    """Read a short snippet from a file for grading context."""
+def _read_snippet_from_db(db_path: Path, source_file: str, max_chars: int = 300) -> str:
+    """Read a snippet from memory.db entries table for a given source_file."""
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT value FROM entries WHERE source_file = ? LIMIT 1",
+                (source_file,),
+            ).fetchone()
+            if row and row["value"]:
+                text = row["value"][:max_chars]
+                return text.strip() + ("..." if len(row["value"]) >= max_chars else "")
+            return f"(no entry found for: {source_file})"
+        finally:
+            conn.close()
+    except Exception:
+        return f"(db read failed for: {source_file})"
+
+
+def _read_snippet(file_path: str, db_path: Path | None = None, max_chars: int = 300) -> str:
+    """Read a short snippet — from disk for files, from DB for transcripts."""
     try:
         p = Path(file_path).expanduser()
-        if not p.exists():
-            return f"(file not found: {file_path})"
-        text = p.read_text(encoding="utf-8", errors="replace")[:max_chars]
-        return text.strip() + ("..." if len(text) >= max_chars else "")
+        if p.exists():
+            text = p.read_text(encoding="utf-8", errors="replace")[:max_chars]
+            return text.strip() + ("..." if len(text) >= max_chars else "")
     except Exception:
-        return f"(could not read: {file_path})"
+        pass
+    # Fall back to memory.db for transcripts and non-file entries
+    if db_path and file_path:
+        return _read_snippet_from_db(db_path, file_path, max_chars)
+    return f"(file not found: {file_path})"
 
 
-def _build_results_summary(top_files: list[str]) -> str:
+def _build_results_summary(top_files: list[str], db_path: Path | None = None) -> str:
     """Build results summary with content snippets for each file."""
     if not top_files:
         return "(no source files recorded)"
     parts = []
     for f in top_files[:5]:  # Limit to 5 files to stay within context
-        snippet = _read_snippet(f)
+        snippet = _read_snippet(f, db_path)
         parts.append(f"- [{f}]: {snippet}")
     return "\n".join(parts)
 
@@ -190,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             files = json.loads(top_files) if isinstance(top_files, str) else top_files
         except (ValueError, TypeError):
             files = []
-        results_summary = _build_results_summary(files)
+        results_summary = _build_results_summary(files, db_path)
 
         if args.dry_run:
             print(f"\n--- {cid} ---")

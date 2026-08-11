@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import time
 import logging
 import os
 import sys
@@ -611,14 +610,6 @@ def pre_llm_inject_context(
     if pending_reminder:
         parts.append(pending_reminder)
 
-    pending_grade = _pop_pending_grade(project)
-    if pending_grade:
-        cid = pending_grade.get("correlationId", "")
-        parts.append(
-            f"[ai-badger] Rate that memory_search's usefulness 1-5 (5=best, or skip): "
-            f"python3 {Path(__file__).resolve().parent / 'memory_grade.py'} grade {cid} <1-5> [note]"
-        )
-
     # Framework version — see `versions_diverge`; a patch-only bump is silent (B10).
     fw_version = _read_framework_version()
     if fw_version:
@@ -726,13 +717,60 @@ def _sync_learned_skill(args: Dict[str, Any], status: str, cwd: str) -> None:
 # pre_llm_inject_context surfaces on the very next turn (docs: commit-reminder skill).
 # ---------------------------------------------------------------------------
 
-PENDING_GRADE_FILE = Path.home() / ".ai-badger" / "memory-grade" / "pending.json"
+COMMIT_REMINDER_MODULE_NAME = "ai_badger_commit_reminder"
+IMPACT_ESTIMATOR_MODULE_NAME = "ai_badger_impact_estimator"
+COMMIT_REMINDER_THRESHOLD_ENV = "AI_BADGER_COMMIT_REMINDER_THRESHOLD"
+COMMIT_ESCALATE_AFTER_ENV = "AI_BADGER_COMMIT_ESCALATE_AFTER"
+COMMIT_REMINDER_IMPACT_ENV = "AI_BADGER_COMMIT_REMINDER_IMPACT"
+DEFAULT_COMMIT_REMINDER_THRESHOLD = 5
+# Mirrors commit_reminder.ESCALATE_AFTER; kept as a literal because the module is
+# loaded lazily and may be absent, and a hook must not fail to read a default.
+DEFAULT_COMMIT_ESCALATE_AFTER = 3
+
+# Deliberately separate from commit_reminder.py's own STATE_FILE (the per-project marker
+# ratchet): a pending nudge is Hermes-only and clears the moment it is surfaced, a
+# different lifecycle from the marker's threshold-crossing debounce. Keeping them apart
+# means this addition can never corrupt the marker schema the Claude/Copilot hook depends on.
+PENDING_REMINDER_FILE = Path.home() / ".ai-badger" / "commit-reminder" / "pending.json"
 
 
-def _load_pending_grades() -> Dict[str, Dict[str, str]]:
-    """Load the pending-grade file; `{}` on missing/read/malformed."""
+def _load_commit_reminder() -> Optional[Any]:
+    """Import the sibling commit_reminder module lazily; None when absent, or it's broken."""
+    return _load_sibling_module(COMMIT_REMINDER_MODULE_NAME, "commit_reminder.py",
+                                "commit reminder")
+
+
+def _load_impact_estimator() -> Optional[Any]:
+    """Import the sibling impact_estimator module lazily; None when absent, or it's broken."""
+    return _load_sibling_module(IMPACT_ESTIMATOR_MODULE_NAME, "impact_estimator.py",
+                                "impact estimator")
+
+
+def _commit_reminder_threshold() -> int:
+    """Read the threshold from env, guarded int-parse; default 5."""
     try:
-        raw = PENDING_GRADE_FILE.read_text(encoding="utf-8")
+        return int(os.environ.get(COMMIT_REMINDER_THRESHOLD_ENV, ""))
+    except ValueError:
+        return DEFAULT_COMMIT_REMINDER_THRESHOLD
+
+
+def _commit_escalate_after() -> int:
+    """Unanswered commands before work is reported at risk; guarded int-parse."""
+    try:
+        return int(os.environ.get(COMMIT_ESCALATE_AFTER_ENV, ""))
+    except ValueError:
+        return DEFAULT_COMMIT_ESCALATE_AFTER
+
+
+def _now_iso() -> str:
+    """UTC timestamp for the moment a command first went unanswered."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _load_pending_reminders() -> Dict[str, str]:
+    """Load the pending-reminder file; `{}` on missing file, read error, or malformed JSON."""
+    try:
+        raw = PENDING_REMINDER_FILE.read_text(encoding="utf-8")
     except OSError:
         return {}
     try:
@@ -742,174 +780,27 @@ def _load_pending_grades() -> Dict[str, Dict[str, str]]:
     return data if isinstance(data, dict) else {}
 
 
-def _save_pending_grades(pending: Dict[str, Dict[str, str]]) -> None:
-    """Persist the pending-grade file, creating parent directories as needed."""
-    PENDING_GRADE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PENDING_GRADE_FILE.write_text(json.dumps(pending), encoding="utf-8")
+def _save_pending_reminders(pending: Dict[str, str]) -> None:
+    """Persist the pending-reminder file, creating parent directories as needed."""
+    PENDING_REMINDER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PENDING_REMINDER_FILE.write_text(json.dumps(pending), encoding="utf-8")
 
 
-def _set_pending_grade(project: str, correlation_id: str, query: str) -> None:
-    """Stash a grade ask for `project` keyed by its resolved absolute path."""
-    pending = _load_pending_grades()
-    pending[str(Path(project).resolve())] = {
-        "correlationId": correlation_id,
-        "query": query[:200],
-    }
-    _save_pending_grades(pending)
+def _set_pending_reminder(project: str, message: str) -> None:
+    """Stash ``message`` for ``project``, keyed by its resolved absolute path."""
+    pending = _load_pending_reminders()
+    pending[str(Path(project).resolve())] = message
+    _save_pending_reminders(pending)
 
 
-def _pop_pending_grade(project: str) -> Optional[Dict[str, str]]:
-    """Return and clear the pending grade for `project`, or None."""
-    pending = _load_pending_grades()
+def _pop_pending_reminder(project: str) -> Optional[str]:
+    """Return and clear the pending reminder for ``project``, or None if there isn't one."""
+    pending = _load_pending_reminders()
     key = str(Path(project).resolve())
-    entry = pending.pop(key, None)
-    if entry is not None:
-        _save_pending_grades(pending)
-    return entry
-
-
-def _is_read_file(tool_name: Any) -> bool:
-    """True for file-reading tool names across agents (Hermes/Claude/Copilot)."""
-    if not isinstance(tool_name, str):
-        return False
-    name = tool_name
-    if name.startswith("mcp__"):
-        name = name[len("mcp__"):].split("__", 1)[-1]
-    if ":" in name:
-        name = name.rsplit(":", 1)[-1]
-    return name in ("read_file", "Read", "ReadFile", "readfile")
-
-
-# In-memory stash of recent search results for follow-through correlation.
-# Keyed by project path; entries expire after FOLLOW_THROUGH_WINDOW seconds.
-_RECENT_SEARCHES: Dict[str, list] = {}
-FOLLOW_THROUGH_WINDOW = 60  # seconds
-
-
-def _stash_search_sources(tool_name: str, result: str, cwd: str) -> None:
-    """After memory_search, stash {correlationId, sourceFiles, timestamp} for follow-through."""
-    if not _is_memory_search(tool_name):
-        return
-    try:
-        data = json.loads(result) if isinstance(result, str) else result
-    except (ValueError, TypeError):
-        return
-    if not isinstance(data, dict):
-        return
-    # Extract correlationId from envelope meta
-    meta = data.get("meta") or data.get("Meta") or {}
-    corr_id = meta.get("correlationId") or meta.get("CorrelationId") or ""
-    if not corr_id:
-        return
-    # Extract sourceFile paths from search results
-    search_results = data.get("results") or data.get("data") or []
-    source_files = []
-    for r in search_results:
-        sf = r.get("sourceFile") or r.get("SourceFile")
-        if sf and sf not in source_files:
-            source_files.append(sf)
-    if not source_files:
-        return
-    project = _project_cwd(cwd)
-    now = time.time()
-    entry = {"correlationId": corr_id, "sourceFiles": source_files, "ts": now}
-    _RECENT_SEARCHES.setdefault(project, []).append(entry)
-    # Prune old entries
-    _RECENT_SEARCHES[project] = [
-        e for e in _RECENT_SEARCHES[project] if now - e["ts"] < FOLLOW_THROUGH_WINDOW * 2
-    ]
-    _debug("ai_badger_hooks/follow_through", "stashed",
-           project=project, corr_id=corr_id, files=len(source_files))
-
-
-def _maybe_record_follow_through(tool_name: str, result: str, cwd: str) -> None:
-    """After read_file, check if the path matches a recent search result's sourceFile."""
-    if not _is_read_file(tool_name):
-        return
-    try:
-        data = json.loads(result) if isinstance(result, str) else result
-    except (ValueError, TypeError):
-        data = {}
-    if not isinstance(data, dict):
-        data = {}
-    # Extract file path from args or result
-    file_path = data.get("path") or data.get("filePath") or data.get("file_path") or ""
-    if not file_path:
-        return
-    file_path = str(Path(file_path).resolve())
-    project = _project_cwd(cwd)
-    now = time.time()
-    entries = _RECENT_SEARCHES.get(project, [])
-    for entry in entries:
-        if now - entry["ts"] > FOLLOW_THROUGH_WINDOW:
-            continue
-        for sf in entry["sourceFiles"]:
-            try:
-                sf_resolved = str(Path(sf).resolve())
-            except (ValueError, OSError):
-                continue
-            if file_path == sf_resolved or file_path.startswith(sf_resolved + "/"):
-                # Match — write follow-through to search_quality table
-                _record_follow_through_sql(entry["correlationId"], sf)
-                _debug("ai_badger_hooks/follow_through", "recorded",
-                       project=project, corr_id=entry["correlationId"], file=sf)
-                return  # first match wins
-
-
-def _record_follow_through_sql(correlation_id: str, file_path: str) -> None:
-    """Write follow-through directly to the search_quality table via SQLite."""
-    db_path = Path.home() / ".ai-raccoon" / "memory.db"
-    if not db_path.exists():
-        return
-    try:
-        conn = sqlite3.connect(str(db_path))
-        try:
-            row = conn.execute(
-                "SELECT follow_through_files FROM search_quality WHERE correlation_id = ?",
-                (correlation_id,)
-            ).fetchone()
-            if row is None:
-                return
-            existing = row[0] or "[]"
-            try:
-                files = json.loads(existing)
-            except (ValueError, TypeError):
-                files = []
-            if not isinstance(files, list):
-                files = []
-            if file_path not in files:
-                files.append(file_path)
-            conn.execute(
-                "UPDATE search_quality SET follow_through_count = ?, follow_through_files = ? WHERE correlation_id = ?",
-                (len(files), json.dumps(files), correlation_id)
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
-
-
-def _maybe_stash_grade_ask(tool_name: str, result: str, cwd: str) -> None:
-    """After a memory_search call, stash a grade ask with the correlationId from the response."""
-    if not _is_memory_search(tool_name):
-        return
-    if not result:
-        return
-    try:
-        data = json.loads(result) if isinstance(result, str) else result
-    except (ValueError, TypeError):
-        return
-    if not isinstance(data, dict):
-        return
-    meta = data.get("meta") or data.get("Meta") or {}
-    correlation_id = meta.get("correlationId") or meta.get("CorrelationId")
-    if not correlation_id:
-        return
-    project = _project_cwd(cwd)
-    _set_pending_grade(project, correlation_id, "")
-    _debug("ai_badger_hooks/memory_grade", "stashed", project=project,
-           correlation_id=correlation_id)
+    message = pending.pop(key, None)
+    if message is not None:
+        _save_pending_reminders(pending)
+    return message
 
 
 def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
@@ -949,6 +840,34 @@ def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
     _set_pending_reminder(project, message)
     _debug("ai_badger_hooks/commit_reminder", "fire", project=project,
            count=count, threshold=threshold)
+
+
+# ---------------------------------------------------------------------------
+# Follow-through detection — passive implicit-feedback measurement.
+# Logic lives in the sibling follow_through.py module (lazy-loaded).
+# ---------------------------------------------------------------------------
+
+FOLLOW_THROUGH_MODULE_NAME = "ai_badger_follow_through"
+
+
+def _load_follow_through() -> Optional[Any]:
+    """Import the sibling follow_through module lazily; None when absent, or it's broken."""
+    return _load_sibling_module(FOLLOW_THROUGH_MODULE_NAME, "follow_through.py",
+                                "follow-through detection")
+
+
+def _stash_search_sources(tool_name: str, result: str, cwd: str) -> None:
+    """After memory_search, stash results for follow-through correlation."""
+    ft = _load_follow_through()
+    if ft is not None:
+        ft.stash_search_sources(tool_name, result, cwd, debug_fn=_debug)
+
+
+def _maybe_record_follow_through(tool_name: str, result: str, cwd: str) -> None:
+    """After read_file, check for follow-through matches."""
+    ft = _load_follow_through()
+    if ft is not None:
+        ft.maybe_record_follow_through(tool_name, result, cwd, debug_fn=_debug)
 
 
 # ---------------------------------------------------------------------------
@@ -999,11 +918,6 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         _maybe_record_memory_consult(tool_name, args, cwd, session_id)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("memory-first gate record failed", exc_info=True)
-
-    try:
-        _maybe_stash_grade_ask(tool_name, result, cwd)
-    except Exception:  # pylint: disable=broad-exception-caught
-        logger.warning("memory-grade stash failed", exc_info=True)
 
     try:
         _stash_search_sources(tool_name, result, cwd)
