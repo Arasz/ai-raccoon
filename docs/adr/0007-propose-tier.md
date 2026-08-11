@@ -4,6 +4,11 @@ Date: 2026-08-06
 
 Status: Accepted
 
+> **Amendment (2026-08-11, ADR-0026):** the queue now refuses already-shared values at the
+> propose upsert and never re-queues a discarded hash — `memory_promotion_discard` is a
+> permanent, persisted rejection (`promotion_discards`), and every propose/promote pass
+> prunes residue. See [0026](0026-persistent-discards-and-shared-exclusion.md).
+
 ## Context
 
 `memory_share_extract` propose mode returned ranked candidates ephemerally — the agent
@@ -39,6 +44,11 @@ common response envelope that surfaces what is waiting.
   twins are skipped at the pre-check. `absorbed` counts claimed chunks whose identical value was
   already shared (or an insert-race loss); the accounting invariant is
   claimed = promoted + absorbed + skipped + failures.
+  **Legacy format gone (2026-08-11):** the pre-1.6.3 path-addressed shared rows
+  (`shared/` + absolute source path, e.g. `shared//Users/...`) were migrated to the value
+  format in one pass (`scripts/migrate-shared-legacy-rows.py`); the shared tier is
+  value-addressed only. `SharedExtractionService.IsDuplicate`'s legacy
+  `shared/{row.Path}` branch is dead-but-harmless and kept for defence.
 - **Capacity.** Total cap `extract.queue-capacity.global` (default 1000, guarded parse).
   `PromotionCapacityPolicy` splits it into per-project reservations (cap ÷ project
   count); `IEvictionPolicy`/`UniformCountEvictionPolicy` pick the victim project (the
