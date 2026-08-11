@@ -229,6 +229,41 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         }
     }
 
+    /// <summary>
+    ///     After source normalization, entries have both source_id and the denormalized source_file column.
+    ///     Chunk recompute still partitions by (ctx, source_file) — the denormalized column — not by source_id.
+    /// </summary>
+    [Fact]
+    public async Task RecomputeChunkColumns_AfterSourceNormalization_PartitionsBySourceFile()
+    {
+        // Write two groups with different source_files — the write path now also sets source_id.
+        var first = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "alpha one", SourceFile: "alpha.md"),
+            TestContext.Current.CancellationToken);
+        var second = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "alpha two", SourceFile: "alpha.md"),
+            TestContext.Current.CancellationToken);
+        var third = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "beta one", SourceFile: "beta.md"),
+            TestContext.Current.CancellationToken);
+
+        var alphaRows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", "alpha.md");
+        alphaRows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 2), (1, 2)]);
+
+        var betaRows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", "beta.md");
+        betaRows.Single().ChunkIndex.ShouldBe(0);
+        betaRows.Single().TotalChunks.ShouldBe(1);
+
+        // Verify each entry also has source_id set (normalized).
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceIds = (await connection.QueryAsync<long>(
+                new CommandDefinition(
+                    "SELECT source_id FROM entries WHERE project_id = 'acme' AND source_file IS NOT NULL ORDER BY id",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        sourceIds.ShouldAllBe(id => id > 0, "every source_file-bearing entry must have a source_id");
+    }
+
     private static string ContextStringOf(GroupRow row)
     {
         if (row.WorkspaceId is not null)
