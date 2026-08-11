@@ -28,6 +28,7 @@ public sealed partial class PromotionQueueService(
         var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
         if (pruned > 0)
         {
+            metrics.RecordPruned(projectId, pruned);
             Log.Pruned(logger, projectId, pruned);
         }
 
@@ -52,7 +53,6 @@ public sealed partial class PromotionQueueService(
 
             evicted.Add(new EvictedRow(target, victim.Hash, victim.Score, EvictionReason));
             metrics.RecordEviction(target, victim.Score, EvictionReason);
-            Log.Evicted(logger, target, victim.Hash, victim.Score, EvictionReason);
             stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -87,6 +87,7 @@ public sealed partial class PromotionQueueService(
             var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
             if (pruned > 0)
             {
+                metrics.RecordPruned(projectId, pruned);
                 Log.Pruned(logger, projectId, pruned);
             }
 
@@ -144,22 +145,21 @@ public sealed partial class PromotionQueueService(
                     // The row is already claimed off the queue by this point; re-queuing it would
                     // reopen the discard-before-share race and reset CreatedAt. Drop it and report
                     // why instead — the rest of this batch, and the trailing snapshot, still run.
-                    if (ex is UnknownHashException)
-                    {
-                        failures.Add(new PromoteFailure(projectId, row.Hash, "stale-hash"));
-                        Log.StaleHash(logger, projectId, row.Hash, ex);
-                    }
-                    else
-                    {
-                        failures.Add(new PromoteFailure(projectId, row.Hash, "share-failed"));
-                        Log.ShareFailed(logger, projectId, row.Hash, ex);
-                    }
+                    // Per-row failure detail is not logged (per-element log noise rule): the count
+                    // is metered and the batch summary is logged by the caller.
+                    failures.Add(new PromoteFailure(projectId, row.Hash,
+                        ex is UnknownHashException ? "stale-hash" : "share-failed"));
                 }
             }
         }
 
         var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
+        foreach (var group in failures.GroupBy(f => f.ProjectId))
+        {
+            metrics.RecordFailed(group.Key, group.Count());
+        }
+
         Log.Promoted(logger, string.Join(",", projectIds), promoted.Count, absorbed, skipped);
         return new PromoteOutcome(promoted, skipped, remaining.PerProject, absorbed) { Failures = failures };
     }
@@ -259,11 +259,6 @@ public sealed partial class PromotionQueueService(
             Message = "Propose for {ProjectId}: {Upserted} upserted, {Evicted} evicted")]
         public static partial void Proposed(ILogger logger, string projectId, int upserted, int evicted);
 
-        [LoggerMessage(EventId = 701, Level = LogLevel.Warning,
-            Message = "Propose-tier eviction from {ProjectId}: {VictimHash} (score {Score}, {Reason})")]
-        public static partial void Evicted(ILogger logger, string projectId, string victimHash, double score,
-            string reason);
-
         [LoggerMessage(EventId = 702, Level = LogLevel.Information,
             Message = "Promoted from the queue for {ProjectIds}: {Promoted} shared, {Absorbed} absorbed (already shared), {Skipped} duplicate-skipped")]
         public static partial void Promoted(ILogger logger, string projectIds, int promoted, int absorbed,
@@ -276,14 +271,6 @@ public sealed partial class PromotionQueueService(
         [LoggerMessage(EventId = 704, Level = LogLevel.Warning,
             Message = "Queue-capacity read failed; falling back to the default")]
         public static partial void CapReadFailed(ILogger logger, Exception exception);
-
-        [LoggerMessage(EventId = 705, Level = LogLevel.Debug,
-            Message = "Promote candidate stale for {ProjectId}: {Hash} (claimed but no longer resolves)")]
-        public static partial void StaleHash(ILogger logger, string projectId, string hash, Exception exception);
-
-        [LoggerMessage(EventId = 706, Level = LogLevel.Warning,
-            Message = "Promote candidate failed to share for {ProjectId}: {Hash}")]
-        public static partial void ShareFailed(ILogger logger, string projectId, string hash, Exception exception);
 
         [LoggerMessage(EventId = 707, Level = LogLevel.Information,
             Message = "Cleared {Count} stale-scored queue row(s) for {ProjectId}")]

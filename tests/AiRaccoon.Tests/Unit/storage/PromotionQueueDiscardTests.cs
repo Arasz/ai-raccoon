@@ -271,6 +271,14 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         {
         }
 
+        public void RecordPruned(string projectId, int count)
+        {
+        }
+
+        public void RecordFailed(string projectId, int count)
+        {
+        }
+
         public void RecordSnapshot(PromotionQueueStats stats, int capacity)
         {
         }

@@ -159,6 +159,10 @@ public sealed class PromotionQueueServiceGuardTests
 
         public void RecordDiscarded(string projectId, double waitSeconds) => throw new NotSupportedException();
 
+        public void RecordPruned(string projectId, int count) => throw new NotSupportedException();
+
+        public void RecordFailed(string projectId, int count) => throw new NotSupportedException();
+
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => throw new NotSupportedException();
     }
 }

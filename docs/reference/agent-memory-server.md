@@ -68,6 +68,14 @@ verbs are the single config channel (see [Command-line options](#command-line-op
   per-project queue (`promotion_queue`) ranked by score; `memory_promotion_list`
   reads it (omit `projectId` to see every project's queue); `memory_promotion_discard`
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
+  **A discard is permanent** (ADR-0026): the rejected hash is recorded in
+  `promotion_discards`, and propose will never re-queue it — not on the next pass, not
+  after a watch re-ingest, not after a mode flip to promote (a discarded row is pruned
+  before it could be promoted). Only the tool path writes discards: promote claims,
+  capacity evictions and scorer-version clears are never recorded as rejections. There
+  is no un-discard; changed content produces a new hash and is re-eligible. The propose
+  upsert also refuses rows whose exact value is already in the shared tier, so the
+  queue never holds shared content.
   `memory_share_extract` in `mode=promote` drains the top queued candidates into
   `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
   in `meta`, scoped to the project the call named; once that project holds queued rows,

@@ -333,6 +333,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public void RecordEviction(string projectId, double victimScore, string reason) { }
         public void RecordPromoted(string projectId, double waitSeconds) { }
         public void RecordDiscarded(string projectId, double waitSeconds) { }
+        public void RecordPruned(string projectId, int count) { }
+        public void RecordFailed(string projectId, int count) { }
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 
@@ -360,6 +362,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public void RecordEviction(string projectId, double victimScore, string reason) { }
         public void RecordPromoted(string projectId, double waitSeconds) { }
         public void RecordDiscarded(string projectId, double waitSeconds) { }
+        public void RecordPruned(string projectId, int count) { }
+        public void RecordFailed(string projectId, int count) { }
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 }

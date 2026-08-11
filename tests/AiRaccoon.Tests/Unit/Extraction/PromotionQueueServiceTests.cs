@@ -453,7 +453,12 @@ public sealed class PromotionQueueServiceTests : IDisposable
             Evictions.Add((projectId, victimScore, reason));
         public void RecordPromoted(string projectId, double waitSeconds) => Promoted.Add((projectId, waitSeconds));
         public void RecordDiscarded(string projectId, double waitSeconds) => Discarded.Add((projectId, waitSeconds));
+        public void RecordPruned(string projectId, int count) => Pruned.Add((projectId, count));
+        public void RecordFailed(string projectId, int count) => Failed.Add((projectId, count));
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
+
+        public List<(string ProjectId, int Count)> Pruned { get; } = [];
+        public List<(string ProjectId, int Count)> Failed { get; } = [];
     }
 
     private sealed class StubChunker : IChunker
