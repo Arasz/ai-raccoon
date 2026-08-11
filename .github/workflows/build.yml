@@ -3,7 +3,31 @@ name: build
 on:
   push:
     branches: [main]
+    paths:
+        - 'src/**/*.cs'
+        - 'tests/**/*.cs'
+        - '**/*.csproj'
+        - '**/*.sln'
+        - '**/Directory.Build.props'
+        - '**/Directory.Packages.props'
+        - '**/*.feature'
+        - '**/*.onnx'
+        - 'nuget.config'
+        - 'scripts/verify-tool-package.py'
+        - '.github/workflows/build.yml'
   pull_request:
+      paths:
+          - 'src/**/*.cs'
+          - 'tests/**/*.cs'
+          - '**/*.csproj'
+          - '**/*.sln'
+          - '**/Directory.Build.props'
+          - '**/Directory.Packages.props'
+          - '**/*.feature'
+          - '**/*.onnx'
+          - 'nuget.config'
+          - 'scripts/verify-tool-package.py'
+          - '.github/workflows/build.yml'
 
 permissions:
   contents: read
