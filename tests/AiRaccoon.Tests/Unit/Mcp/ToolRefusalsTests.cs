@@ -11,12 +11,10 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tools;
 using Dapper;
 using FluentValidation;
@@ -42,6 +40,94 @@ public sealed class ToolRefusalsTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("tool-refusals-tests");
 
+    /// <summary>
+    ///     Only path-outside-scope was ever proven through a real McpServer; access-denied (project
+    ///     set read-only, then a write tool) and unknown-workspace (unknown workspaceId) now are too.
+    ///     Sync prefixes are skipped here — they need real cloud config, not just a local bank.
+    /// </summary>
+    public static TheoryData<string, Dictionary<string, object?>, string, string?, string?> RealServerRefusalCases =>
+        new()
+        {
+            {
+                "memory_write",
+                new Dictionary<string, object?> { ["projectId"] = "acme-ro", ["content"] = "x" },
+                "access-denied",
+                "acme-ro",
+                "ro"
+            },
+            {
+                "memory_write",
+                new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
+                "unknown-workspace",
+                null,
+                null
+            },
+            {
+                // D1: 'keep' is documented as accepting the scalar "all", but the schema declares
+                // string[] — the SDK's argument marshaller throws a raw JsonException instead of a
+                // typed refusal (docs/reference/agent-memory-server.md Error shapes).
+                "memory_workspace_consolidate",
+                new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
+                "invalid-argument",
+                null,
+                null
+            },
+            {
+                "memory_share",
+                new Dictionary<string, object?>
+                {
+                    ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+                },
+                "unknown-hash",
+                null,
+                null
+            },
+            {
+                // Binding-time failure: 'value' isn't a declared parameter, so the required 'content'
+                // is missing and the SDK's reflection marshaller throws a plain ArgumentException.
+                "memory_write",
+                new Dictionary<string, object?> { ["projectId"] = "acme", ["value"] = "x" },
+                "invalid-argument",
+                null,
+                null
+            },
+            {
+                // In-body guard-clause failure: ArgumentException.ThrowIfNullOrWhiteSpace(hash) in
+                // MemoryTools.cs. Delete requires the "full" access mode, so the project is seeded
+                // that way — otherwise the access-denied check fires first and the guard clause is
+                // never reached.
+                "memory_delete",
+                new Dictionary<string, object?> { ["projectId"] = "acme-full", ["hash"] = "" },
+                "invalid-argument",
+                "acme-full",
+                "full"
+            }
+        };
+
+    public static TheoryData<Exception, string> MappedRefusals =>
+        new()
+        {
+            { new PathOutsideScopeException("/etc"), "path-outside-scope" },
+            { new PathNotFoundException("/missing"), "path-not-found" },
+            { new UnknownWorkspaceException("ws-1", "acme"), "unknown-workspace" },
+            { new WatchDisabledException("acme"), "watching-disabled" },
+            { new SyncNotConfiguredException(), "sync-not-configured" },
+            { new SyncAuthFailedException("bad creds"), "sync-auth-failed" },
+            { new SyncConflictException("remote changed"), "sync-conflict" },
+            { new SyncNetworkException("timed out"), "sync-network" },
+            { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
+            { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
+            { new ValidationException("projectId is required"), "invalid-params" },
+            { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
+            { new ArgumentException("The arguments dictionary is missing a value for the required parameter 'content'."), "invalid-argument" },
+            { new ArgumentNullException("projectIds"), "invalid-argument" },
+            { new UnknownHashException("deadbeef", "acme"), "unknown-hash" },
+            {
+                new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
+                "schema-version-unsupported"
+            }
+        };
+
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
@@ -49,69 +135,6 @@ public sealed class ToolRefusalsTests : IDisposable
         AssertRefusalOverRealServerAsync(_dataRoot, "memory_ingest_file",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
             "path-outside-scope");
-
-    /// <summary>
-    ///     Only path-outside-scope was ever proven through a real McpServer; access-denied (project
-    ///     set read-only, then a write tool) and unknown-workspace (unknown workspaceId) now are too.
-    ///     Sync prefixes are skipped here — they need real cloud config, not just a local bank.
-    /// </summary>
-    public static TheoryData<string, Dictionary<string, object?>, string, string?, string?> RealServerRefusalCases => new()
-    {
-        {
-            "memory_write",
-            new Dictionary<string, object?> { ["projectId"] = "acme-ro", ["content"] = "x" },
-            "access-denied",
-            "acme-ro",
-            "ro"
-        },
-        {
-            "memory_write",
-            new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
-            "unknown-workspace",
-            null,
-            null
-        },
-        {
-            // D1: 'keep' is documented as accepting the scalar "all", but the schema declares
-            // string[] — the SDK's argument marshaller throws a raw JsonException instead of a
-            // typed refusal (docs/reference/agent-memory-server.md Error shapes).
-            "memory_workspace_consolidate",
-            new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
-            "invalid-argument",
-            null,
-            null
-        },
-        {
-            "memory_share",
-            new Dictionary<string, object?>
-            {
-                ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
-            },
-            "unknown-hash",
-            null,
-            null
-        },
-        {
-            // Binding-time failure: 'value' isn't a declared parameter, so the required 'content'
-            // is missing and the SDK's reflection marshaller throws a plain ArgumentException.
-            "memory_write",
-            new Dictionary<string, object?> { ["projectId"] = "acme", ["value"] = "x" },
-            "invalid-argument",
-            null,
-            null
-        },
-        {
-            // In-body guard-clause failure: ArgumentException.ThrowIfNullOrWhiteSpace(hash) in
-            // MemoryTools.cs. Delete requires the "full" access mode, so the project is seeded
-            // that way — otherwise the access-denied check fires first and the guard clause is
-            // never reached.
-            "memory_delete",
-            new Dictionary<string, object?> { ["projectId"] = "acme-full", ["hash"] = "" },
-            "invalid-argument",
-            "acme-full",
-            "full"
-        }
-    };
 
     /// <summary>
     ///     D7: a bank stamped ahead of CurrentVersion (MemorySchema.cs) is refused by EnsureAsync on
@@ -253,7 +276,7 @@ public sealed class ToolRefusalsTests : IDisposable
                 [new EnvEncryptionKeyProvider()]));
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
-            $"PRAGMA user_version = {MemorySchema.CurrentVersion + 1}", cancellationToken: cancellationToken))
+                $"PRAGMA user_version = {MemorySchema.CurrentVersion + 1}", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
 
@@ -266,33 +289,9 @@ public sealed class ToolRefusalsTests : IDisposable
         return port;
     }
 
-    public static TheoryData<Exception, string> MappedRefusals => new()
-    {
-        { new PathOutsideScopeException("/etc"), "path-outside-scope" },
-        { new PathNotFoundException("/missing"), "path-not-found" },
-        { new UnknownWorkspaceException("ws-1", "acme"), "unknown-workspace" },
-        { new WatchDisabledException("acme"), "watching-disabled" },
-        { new SyncNotConfiguredException(), "sync-not-configured" },
-        { new SyncAuthFailedException("bad creds"), "sync-auth-failed" },
-        { new SyncConflictException("remote changed"), "sync-conflict" },
-        { new SyncNetworkException("timed out"), "sync-network" },
-        { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
-        { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
-        { new ValidationException("projectId is required"), "invalid-params" },
-        { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
-        { new ArgumentException("The arguments dictionary is missing a value for the required parameter 'content'."), "invalid-argument" },
-        { new ArgumentNullException("projectIds"), "invalid-argument" },
-        { new UnknownHashException("deadbeef", "acme"), "unknown-hash" },
-        {
-            new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
-            "schema-version-unsupported"
-        }
-    };
-
     [Theory]
     [MemberData(nameof(MappedRefusals))]
-    public void PrefixFor_MapsEachKnownRefusalType(Exception exception, string expectedPrefix) =>
-        ToolRefusals.PrefixFor(exception).ShouldBe(expectedPrefix);
+    public void PrefixFor_MapsEachKnownRefusalType(Exception exception, string expectedPrefix) => ToolRefusals.PrefixFor(exception).ShouldBe(expectedPrefix);
 
     [Fact]
     public void PrefixFor_RejectsAnUnlistedType()
@@ -305,15 +304,70 @@ public sealed class ToolRefusalsTests : IDisposable
         ToolRefusals.PrefixFor(new ArgumentOutOfRangeException("limit")).ShouldBeNull();
     }
 
+    [Fact]
+    public async Task KnownRefusal_IsWarningWithoutExceptionDetails()
+    {
+        var dataRoot = TestData.CreateTempRoot("tool-refusals-warning");
+        try
+        {
+            var port = FreePort();
+            var host = McpServerSetup.CreateServerHost(
+                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+            var fakeLogs = new FakeLoggerProvider();
+            host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
+
+            await host.StartAsync(TestContext.Current.CancellationToken);
+            try
+            {
+                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+                var transport = new HttpClientTransport(
+                    new HttpClientTransportOptions
+                    {
+                        Name = "tool-refusals-warning-test",
+                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
+                        TransportMode = HttpTransportMode.StreamableHttp
+                    },
+                    httpClient,
+                    NullLoggerFactory.Instance,
+                    true);
+                await using var client = await McpClient.CreateAsync(transport,
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                var result = await client.CallToolAsync("memory_share",
+                    new Dictionary<string, object?>
+                    {
+                        ["projectId"] = "acme",
+                        ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+                    },
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                result.IsError.ShouldBe(true);
+                var record = fakeLogs.Collector.GetSnapshot()
+                    .Single(r => r.Message.Contains("unknown-hash", StringComparison.Ordinal));
+                record.Level.ShouldBe(LogLevel.Warning);
+                record.Exception.ShouldBeNull();
+                record.Message.ShouldNotContain("No entry with hash");
+            }
+            finally
+            {
+                await host.StopAsync(TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            Directory.Delete(dataRoot, true);
+        }
+    }
+
     [Theory]
     [InlineData("sync-network", LogLevel.Warning)]
     [InlineData("sync-corrupt-file", LogLevel.Warning)]
+    [InlineData("unknown-hash", LogLevel.Warning)]
     [InlineData("path-outside-scope", LogLevel.Information)]
     [InlineData("access-denied", LogLevel.Information)]
     [InlineData("invalid-params", LogLevel.Information)]
     [InlineData("confirm-required", LogLevel.Information)]
-    public void LevelFor_LogsInfrastructureFaultsAtWarning(string prefix, LogLevel expectedLevel) =>
-        ToolRefusals.LevelFor(prefix).ShouldBe(expectedLevel);
+    public void LevelFor_LogsInfrastructureFaultsAtWarning(string prefix, LogLevel expectedLevel) => ToolRefusals.LevelFor(prefix).ShouldBe(expectedLevel);
 
     /// <summary>
     ///     Doc/code drift guard, both directions: every prefix the reference doc's error-shapes table
@@ -352,5 +406,4 @@ public sealed class ToolRefusalsTests : IDisposable
         var end = doc.IndexOf("\n## ", start + heading.Length, StringComparison.Ordinal);
         return end < 0 ? doc[start..] : doc[start..end];
     }
-
 }

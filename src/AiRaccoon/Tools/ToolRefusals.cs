@@ -52,8 +52,9 @@ internal static partial class ToolRefusals
     /// </summary>
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params", "confirm-required"];
 
-    /// <summary>Prefixes that are infrastructure faults (remote corruption, transport failure) rather than user mistakes; kept out of Information so log-based alerting still fires.</summary>
-    private static readonly HashSet<string> WarningPrefixes = ["sync-network", "sync-corrupt-file"];
+    /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
+    private static readonly HashSet<string> WarningPrefixes =
+        ["sync-network", "sync-corrupt-file", "unknown-hash"];
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.
@@ -61,8 +62,7 @@ internal static partial class ToolRefusals
     ///     arithmetic going wrong, so laundering it into "invalid-argument" would both mute
     ///     Error-level alerting and tell the caller to retry arguments that were never at fault.
     /// </summary>
-    internal static string? PrefixFor(Exception exception) =>
-        RefusalPrefixes.GetValueOrDefault(exception.GetType());
+    internal static string? PrefixFor(Exception exception) => RefusalPrefixes.GetValueOrDefault(exception.GetType());
 
     /// <summary>The log level for a refused prefix: <see cref="WarningPrefixes" /> log at Warning, everything else at Information.</summary>
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
@@ -90,29 +90,29 @@ internal static partial class ToolRefusals
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {
-                return Refused(request, $"{prefix}: {ex.Message}", ex, LevelFor(prefix));
+                return Refused(request, $"{prefix}: {ex.Message}", prefix, LevelFor(prefix));
             }
             catch (McpException ex)
             {
                 // Every prefix thrown directly as a bare McpException (invalid-params,
                 // confirm-required) is a user-input mistake, never an infrastructure fault.
-                return Refused(request, ex.Message, ex, LogLevel.Information);
+                return Refused(request, ex.Message, "refused", LogLevel.Information);
             }
         };
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
-        Exception exception, LogLevel level)
+        string prefix, LogLevel level)
     {
         var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
         if (logger is not null)
         {
             if (level == LogLevel.Warning)
             {
-                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, message, exception);
+                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, prefix);
             }
             else
             {
-                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, message, exception);
+                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, prefix);
             }
         }
 
@@ -122,9 +122,9 @@ internal static partial class ToolRefusals
     internal static partial class Log
     {
         [LoggerMessage(EventId = 910, Level = LogLevel.Information, Message = "\"{ToolName}\" refused: {Reason}")]
-        public static partial void ToolRefused(ILogger logger, string toolName, string reason, Exception exception);
+        public static partial void ToolRefused(ILogger logger, string toolName, string reason);
 
         [LoggerMessage(EventId = 911, Level = LogLevel.Warning, Message = "\"{ToolName}\" refused: {Reason}")]
-        public static partial void ToolRefusedAtWarning(ILogger logger, string toolName, string reason, Exception exception);
+        public static partial void ToolRefusedAtWarning(ILogger logger, string toolName, string reason);
     }
 }
