@@ -65,7 +65,7 @@ public sealed class SharedExtractionService
         bool includeTtlRows,
         DateTimeOffset now)
     {
-        var sharedValueSet = sharedValues.ToHashSet(StringComparer.Ordinal);
+        var sharedValueSet = sharedValues.Select(v => NormalizeWhitespace(v)).ToHashSet(StringComparer.Ordinal);
         var sharedPathSet = sharedPaths.ToHashSet(StringComparer.Ordinal);
         var scored = new List<(ExtractionCandidateRow Row, double Score, List<string> Reasons)>();
         foreach (var row in rows)

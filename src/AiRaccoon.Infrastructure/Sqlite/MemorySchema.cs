@@ -194,6 +194,15 @@ internal static class MemorySchema
                                    UNIQUE (project_id, hash)
                                );
 
+                               -- Agent rejections (memory_promotion_discard): a permanent per-project
+                               -- "no" for a content identity — propose never re-queues it (docs/adr/0026).
+                               CREATE TABLE IF NOT EXISTS promotion_discards (
+                                   project_id   TEXT NOT NULL,
+                                   hash         TEXT NOT NULL,
+                                   discarded_at INTEGER NOT NULL,
+                                   PRIMARY KEY (project_id, hash)
+                               );
+
                                CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
                                CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);

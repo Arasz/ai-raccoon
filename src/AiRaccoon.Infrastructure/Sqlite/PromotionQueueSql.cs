@@ -5,7 +5,11 @@ internal static class PromotionQueueSql
 {
     public const string Upsert = """
                                  INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, scorer_version, created_at, updated_at)
-                                 VALUES (@ProjectId, @Hash, @Path, @Value, @SourceFile, @Score, @Reasons, @ScorerVersion, @CreatedAt, @UpdatedAt)
+                                 SELECT @ProjectId, @Hash, @Path, @Value, @SourceFile, @Score, @Reasons, @ScorerVersion, @CreatedAt, @UpdatedAt
+                                 WHERE NOT EXISTS (SELECT 1 FROM promotion_discards d
+                                                   WHERE d.project_id = @ProjectId AND d.hash = @Hash)
+                                   AND NOT EXISTS (SELECT 1 FROM entries e
+                                                   WHERE e.scope = 'shared' AND e.value = @Value)
                                  ON CONFLICT(project_id, hash) DO UPDATE SET
                                      path = excluded.path,
                                      value = excluded.value,
@@ -15,6 +19,24 @@ internal static class PromotionQueueSql
                                      scorer_version = excluded.scorer_version,
                                      updated_at = excluded.updated_at
                                  """;
+
+    /// <summary>One agent rejection (docs/adr/0026): permanent per (project_id, hash), idempotent.</summary>
+    public const string RememberDiscard = """
+                                           INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
+                                           VALUES (@ProjectId, @Hash, @DiscardedAt)
+                                           """;
+
+    /// <summary>Residue sweep (docs/adr/0026): queued rows that are already shared (exact value
+    /// twin) or were rejected by a prior discard leave the queue.</summary>
+    public const string PruneRejected = """
+                                        DELETE FROM promotion_queue
+                                        WHERE project_id = @ProjectId
+                                          AND (EXISTS (SELECT 1 FROM entries e
+                                                       WHERE e.scope = 'shared' AND e.value = promotion_queue.value)
+                                               OR EXISTS (SELECT 1 FROM promotion_discards d
+                                                          WHERE d.project_id = promotion_queue.project_id
+                                                            AND d.hash = promotion_queue.hash))
+                                        """;
 
     /// <summary>Hashes already queued for this project, restricted to the candidate batch — the pre-upsert snapshot UpsertAsync diffs against to report a genuine insert count.</summary>
     public const string ExistingHashes = """

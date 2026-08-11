@@ -37,9 +37,10 @@ public sealed class SqlitePromotionQueueStore(
                     cancellationToken: cancellationToken)).ConfigureAwait(false))
             .ToHashSet(StringComparer.Ordinal);
 
+        var refused = new HashSet<string>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            await connection.ExecuteAsync(
+            var affected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     PromotionQueueSql.Upsert,
                     new
@@ -57,10 +58,18 @@ public sealed class SqlitePromotionQueueStore(
                     },
                     transaction,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            // The WHERE clauses refused this row (discarded hash or shared value twin): an
+            // affected count of 0 means nothing was inserted AND nothing was refreshed, so a
+            // hash absent from the pre-snapshot was genuinely refused, not newly queued.
+            if (affected == 0 && !existing.Contains(row.Hash))
+            {
+                refused.Add(row.Hash);
+            }
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return hashes.Count(h => !existing.Contains(h));
+        return hashes.Count(h => !existing.Contains(h)) - refused.Count;
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
@@ -167,6 +176,39 @@ public sealed class SqlitePromotionQueueStore(
                 new CommandDefinition(
                     PromotionQueueSql.ClearStale,
                     new { ProjectId = projectId, CurrentVersion = currentScorerVersion },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    public async Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+        CancellationToken cancellationToken = default)
+    {
+        if (hashes.Count == 0)
+        {
+            return;
+        }
+
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var hash in hashes.Distinct(StringComparer.Ordinal))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        PromotionQueueSql.RememberDiscard,
+                        new { ProjectId = projectId, Hash = hash, DiscardedAt = now },
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+    }
+
+    public async Task<int> PruneRejectedAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(
+                new CommandDefinition(
+                    PromotionQueueSql.PruneRejected,
+                    new { ProjectId = projectId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }

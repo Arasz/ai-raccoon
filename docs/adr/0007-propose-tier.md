@@ -4,6 +4,11 @@ Date: 2026-08-06
 
 Status: Accepted
 
+> **Amendment (2026-08-11, ADR-0026):** the queue now refuses already-shared values at the
+> propose upsert and never re-queues a discarded hash — `memory_promotion_discard` is a
+> permanent, persisted rejection (`promotion_discards`), and every propose/promote pass
+> prunes residue. See [0026](0026-persistent-discards-and-shared-exclusion.md).
+
 ## Context
 
 `memory_share_extract` propose mode returned ranked candidates ephemerally — the agent

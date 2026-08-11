@@ -269,8 +269,11 @@ public sealed class ExtractionHostedServiceTests
         logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 503 && r.Level == LogLevel.Warning);
     }
 
+    /// <summary>Per-element candidate logging is gone (per-element log noise rule, 2026-08-11):
+    /// propose mode emits the per-pass summary only; the candidate detail lives in the tool
+    /// outcome, and counts are metered.</summary>
     [Fact]
-    public async Task RunOnce_ProposeMode_LogsRankedCandidateDetails()
+    public async Task RunOnce_ProposeMode_LogsPassSummaryOnly_NoPerCandidateDetails()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
         var (store, _, service, _) = NewStack(logger);
@@ -296,26 +299,16 @@ public sealed class ExtractionHostedServiceTests
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
-        var records = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 507).ToList();
-        records.Count.ShouldBe(2);
-        // Debug, not Information: the detail survives for local debugging, but a
-        // default-level serve.log no longer carries it (counted by metrics instead).
-        records.ShouldAllBe(r => r.Level == LogLevel.Debug);
-        records[0].Message.ShouldContain("#1");
-        records[0].Message.ShouldContain("acme");
-        records[0].Message.ShouldContain("h1");
-        records[0].Message.ShouldContain("h1.md");
-        records[0].Message.ShouldContain("organic-note");
-        records[0].Message.ShouldContain("foreign-subject");
-        records[0].Message.ShouldContain("durable-fact-language");
-        // The content preview is dropped from the message (a data-leak into logs otherwise).
-        records[0].Message.ShouldNotContain("must never drop a message silently");
-        // Rank ordering: the pre-sorted-by-score list emits rank one before rank two.
-        records[1].Message.ShouldContain("#2");
-        // Counts line still emitted alongside the details, also demoted to Debug.
-        var passRecords = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 502).ToList();
-        passRecords.ShouldNotBeEmpty();
-        passRecords.ShouldAllBe(r => r.Level == LogLevel.Debug);
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 507,
+            "no per-candidate detail lines (removed 2026-08-11)");
+        // The per-pass summary carries the claimed count (h3 is below the floor).
+        var pass = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 502 && r.Message.Contains("acme"));
+        pass.Level.ShouldBe(LogLevel.Debug);
+        pass.Message.ShouldContain("acme");
+        pass.Message.ShouldContain("2 claimed");
+        // The content preview must never leak into logs either.
+        logger.Collector.GetSnapshot().ShouldNotContain(r =>
+            r.Message.Contains("must never drop a message silently"));
     }
 
     /// <summary>The per-pass summary is the operator-facing survivor of the quiet-down: unlike
@@ -336,8 +329,10 @@ public sealed class ExtractionHostedServiceTests
         summary.Level.ShouldBe(LogLevel.Information);
     }
 
+    /// <summary>Failures get ONE warning summary per batch (per-element log noise rule,
+    /// 2026-08-11); the per-failure detail lives in the outcome and the count is metered.</summary>
     [Fact]
-    public async Task RunOnce_PromoteMode_WithFailures_LogsWarningAndDebugDetail()
+    public async Task RunOnce_PromoteMode_WithFailures_LogsOneWarningSummary()
     {
         var logger = new FakeLogger<ExtractionHostedService>();
         var (store, _, service, queue) = NewStack(logger);
@@ -357,11 +352,8 @@ public sealed class ExtractionHostedServiceTests
         warning.Level.ShouldBe(LogLevel.Warning);
         warning.Message.ShouldContain("acme");
         warning.Message.ShouldContain("1");
-
-        var detail = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 509);
-        detail.Level.ShouldBe(LogLevel.Debug);
-        detail.Message.ShouldContain("h2");
-        detail.Message.ShouldContain("stale-hash");
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 509,
+            "no per-failure detail lines (removed 2026-08-11)");
     }
 
     [Fact]

@@ -302,6 +302,8 @@ internal static class MemorySql
                                                        WHERE EXISTS (SELECT 1 FROM entries e
                                                                      WHERE e.project_id = r.project_id AND e.hash = r.hash
                                                                        AND e.scope = 'project')
+                                                         AND NOT EXISTS (SELECT 1 FROM promotion_discards d
+                                                                         WHERE d.project_id = r.project_id AND d.hash = r.hash)
                                                        ON CONFLICT(project_id, hash) DO NOTHING;
                                                        DELETE FROM queue_restore;
                                                        """;

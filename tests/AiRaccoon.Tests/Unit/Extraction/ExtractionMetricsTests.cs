@@ -157,5 +157,25 @@ public sealed class ExtractionMetricsTests
             var removed = _rows.RemoveAll(r => r.ProjectId == projectId && r.ScorerVersion != currentScorerVersion);
             return Task.FromResult(removed);
         }
+
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var hash in hashes)
+            {
+                _discarded.Add((projectId, hash));
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default)
+        {
+            var removed = _rows.RemoveAll(r => r.ProjectId == projectId && _discarded.Contains((r.ProjectId, r.Hash)));
+            return Task.FromResult(removed);
+        }
+
+        private readonly HashSet<(string ProjectId, string Hash)> _discarded = new();
     }
 }

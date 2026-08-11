@@ -6,7 +6,12 @@ An MCP server that gives AI agents persistent, project-scoped memory. It runs lo
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.6.4)
+## What's new (from 1.2.0 to 1.6.5)
+
+- **The propose queue stays honest (1.6.5).** `memory_promotion_discard` is now a permanent
+  "no": the rejected hash can never be re-queued by extraction, and propose refuses rows whose
+  value is already in the shared tier — no more déjà-vu candidates at the top of the queue.
+  [ADR-0026](docs/adr/0026-persistent-discards-and-shared-exclusion.md)
 
 - **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that probes port 7721 and starts the backend itself, so every client on the machine shares one embedding model and one bank instead of paying for its own.
   [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
