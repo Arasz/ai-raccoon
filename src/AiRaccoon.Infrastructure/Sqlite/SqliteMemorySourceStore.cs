@@ -17,7 +17,26 @@ public sealed class SqliteMemorySourceStore(SqliteConnectionFactory factory) : I
         string? headingPath,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourceLocator);
+        ArgumentNullException.ThrowIfNull(sourceLocator);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await ResolveOrCreateOnConnectionAsync(connection, sourceType, sourceLocator, section, headingPath,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Resolves or creates a source row using an already-open connection. Use this overload
+    ///     when the caller already holds a write lock (e.g. inside a BEGIN IMMEDIATE transaction).
+    /// </summary>
+    public async Task<MemorySource> ResolveOrCreateOnConnectionAsync(
+        SqliteConnection connection,
+        SourceType sourceType,
+        string sourceLocator,
+        string? section,
+        string? headingPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceLocator);
 
         var sourceTypeText = sourceType switch
         {
@@ -26,8 +45,6 @@ public sealed class SqliteMemorySourceStore(SqliteConnectionFactory factory) : I
             SourceType.Manual => "manual",
             _ => throw new ArgumentOutOfRangeException(nameof(sourceType), sourceType, "Invalid SourceType")
         };
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         await connection.ExecuteAsync(
                 new CommandDefinition(

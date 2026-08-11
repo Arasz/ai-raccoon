@@ -30,7 +30,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -944,6 +944,66 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "SELECT count(*) FROM entries WHERE path = @file",
             new { file });
         count.ShouldBe(3, "one ingest's chunk set, not two");
+    }
+
+    // ── WP2: source_id on write path ──
+
+    [Fact]
+    public async Task WriteAsync_SetsSourceId_OnEntry()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "some fact about SQLite", SourceFile: "docs/db.md", Section: "## Storage"),
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceId = await connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT source_id FROM entries WHERE hash = @hash",
+                new { hash = entry.Hash },
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceId.ShouldNotBeNull("WriteAsync must set source_id on the entry");
+        sourceId!.Value.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task WriteAsync_NullSourceFile_SetsManualSource()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "a manual note"),
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceId = await connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT source_id FROM entries WHERE hash = @hash",
+                new { hash = entry.Hash },
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceId.ShouldNotBeNull("WriteAsync must set source_id even for null source_file");
+
+        var sourceType = await connection.ExecuteScalarAsync<string>(
+            new CommandDefinition(
+                "SELECT source_type FROM memory_source WHERE id = @id",
+                new { id = sourceId },
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceType.ShouldBe("manual");
+    }
+
+    [Fact]
+    public async Task AddContentAsync_SetsSourceId_OnEntry()
+    {
+        var result = await _store.AddContentAsync(
+            "acme", "shared/test.md", "shared content fact", ContextNaming.SharedContext,
+            "docs/shared.md", "## Shared",
+            TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var sourceId = await connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT source_id FROM entries WHERE hash = @hash",
+                new { hash = result.Entry.Hash },
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceId.ShouldNotBeNull("AddContentAsync must set source_id on the entry");
+        sourceId!.Value.ShouldBeGreaterThan(0);
     }
 
     private sealed class EntryRow

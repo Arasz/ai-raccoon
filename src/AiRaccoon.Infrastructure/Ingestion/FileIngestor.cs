@@ -13,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     Takes an already-open connection rather than opening its own — every caller has already
 ///     opened the bank once for the whole walk, so the compiler enforces one-bank-open-per-ingest.
 /// </summary>
-internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, TimeProvider timeProvider)
+internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, TimeProvider timeProvider, SqliteMemorySourceStore sourceStore)
 {
     // Chunk bounds (see docs/work/archive/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
     // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
@@ -83,6 +83,10 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
+        // Resolve source once for all chunks from this file.
+        var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
+            connection, SourceType.File, path, null, null, cancellationToken).ConfigureAwait(false);
+
         var inserted = 0;
         foreach (var chunk in chunks)
         {
@@ -119,7 +123,8 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
                             workspaceId = bucket.WorkspaceId,
                             agentId = (string?)null,
                             createdAt = now,
-                            updatedAt = now
+                            updatedAt = now,
+                            sourceId = source.Id
                         },
                         cancellationToken))
                 .ConfigureAwait(false);

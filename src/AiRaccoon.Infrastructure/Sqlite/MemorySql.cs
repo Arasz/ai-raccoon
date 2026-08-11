@@ -86,9 +86,9 @@ internal static class MemorySql
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
-                                                           workspace_id, agent_id, created_at, updated_at)
+                                                           workspace_id, agent_id, created_at, updated_at, source_id)
                                       VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
-                                              @workspaceId, @agentId, @createdAt, @updatedAt)
+                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId)
                                       ON CONFLICT DO NOTHING
                                       """;
 

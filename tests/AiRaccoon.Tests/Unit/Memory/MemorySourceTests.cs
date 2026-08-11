@@ -28,10 +28,10 @@ public sealed class MemorySourceTests
     }
 
     [Fact]
-    public void SourceLocator_Empty_Throws()
+    public void SourceLocator_Null_Throws()
     {
-        Should.Throw<ArgumentException>(() =>
-            new MemorySource { Id = 1, SourceType = SourceType.File, SourceLocator = "" });
+        Should.Throw<ArgumentNullException>(() =>
+            new MemorySource { Id = 1, SourceType = SourceType.File, SourceLocator = null! });
     }
 
     [Fact]

@@ -34,7 +34,7 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), _logger);
+            new EmbeddingService(), _logger, new SqliteMemorySourceStore(_factory));
     }
 
     public void Dispose()

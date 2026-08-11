@@ -184,7 +184,7 @@ public sealed class WatchDigestConcurrencyTests
             Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var time = new FakeTimeProvider(FixedNow);
             Memory = new SqliteMemoryStore(Factory, time, Gate, new EmbeddingService(),
-                NullLogger<SqliteMemoryStore>.Instance);
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory));
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time,
                 NullLogger<WatchDigestExecutor>.Instance);

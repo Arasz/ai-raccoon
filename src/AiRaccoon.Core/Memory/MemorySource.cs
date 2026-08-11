@@ -9,14 +9,12 @@ public sealed record MemorySource
     private static readonly HashSet<SourceType> ValidTypes =
         [SourceType.File, SourceType.Transcript, SourceType.Manual];
 
-    private SourceType _sourceType;
-    private string _sourceLocator = "";
-
     /// <summary>Database row id; not part of equality.</summary>
     public long Id { get; init; }
 
     public required SourceType SourceType
     {
+        get;
         init
         {
             if (!ValidTypes.Contains(value))
@@ -24,16 +22,17 @@ public sealed record MemorySource
                 throw new ArgumentException($"Invalid SourceType value: {value}.", nameof(SourceType));
             }
 
-            _sourceType = value;
+            field = value;
         }
     }
 
     public required string SourceLocator
     {
+        get;
         init
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(SourceLocator));
-            _sourceLocator = value;
+            ArgumentNullException.ThrowIfNull(value);
+            field = value;
         }
     }
 
@@ -44,9 +43,9 @@ public sealed record MemorySource
     // Equality: natural key only (SourceType, SourceLocator, Section).
     public bool Equals(MemorySource? other) =>
         other is not null
-        && _sourceType == other._sourceType
-        && string.Equals(_sourceLocator, other._sourceLocator, StringComparison.Ordinal)
+        && SourceType == other.SourceType
+        && string.Equals(SourceLocator, other.SourceLocator, StringComparison.Ordinal)
         && string.Equals(Section, other.Section, StringComparison.Ordinal);
 
-    public override int GetHashCode() => HashCode.Combine(_sourceType, _sourceLocator, Section);
+    public override int GetHashCode() => HashCode.Combine(SourceType, SourceLocator, Section);
 }

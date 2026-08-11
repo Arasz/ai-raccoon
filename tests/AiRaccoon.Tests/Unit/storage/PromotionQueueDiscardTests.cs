@@ -42,7 +42,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
         _store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance);
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 

@@ -36,7 +36,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new ParagraphChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
         _workspaces = new SqliteWorkspaceStore(_factory);
         await AllowIngestScopeAsync(_dataRoot);
     }
