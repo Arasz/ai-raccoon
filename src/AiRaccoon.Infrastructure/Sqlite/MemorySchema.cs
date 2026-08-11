@@ -202,6 +202,27 @@ internal static class MemorySchema
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
                                CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
 
+                               -- Search-quality metric: tracks every memory_search call with correlation-id,
+                               -- follow-through (did the agent use the result?), and usefulness grade.
+                               -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
+                               CREATE TABLE IF NOT EXISTS search_quality (
+                                   id                INTEGER PRIMARY KEY,
+                                   correlation_id    TEXT NOT NULL UNIQUE,
+                                   query             TEXT NOT NULL,
+                                   scope             TEXT,
+                                   project_id        TEXT,
+                                   session_id        TEXT,
+                                   result_count      INTEGER,
+                                   top_source_files  TEXT,       -- JSON array of SourceFile paths
+                                   follow_through_count INTEGER  DEFAULT 0,
+                                   follow_through_files TEXT,    -- JSON array of files read after search
+                                   usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
+                                   grade_note        TEXT,
+                                   created_at        INTEGER NOT NULL
+                               );
+
+                               CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
+
                                """;
 
 
