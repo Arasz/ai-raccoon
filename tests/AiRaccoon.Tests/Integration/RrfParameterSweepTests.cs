@@ -79,7 +79,7 @@ public sealed class RrfParameterSweepTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
 
         _hashMap = LoadChunkHashMap();
         _fileHashes = GroupByFile(_hashMap);

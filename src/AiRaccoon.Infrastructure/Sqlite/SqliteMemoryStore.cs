@@ -24,7 +24,8 @@ public sealed partial class SqliteMemoryStore(
     TimeProvider timeProvider,
     IChunker chunker,
     EmbeddingService embeddings,
-    ILogger<SqliteMemoryStore> logger)
+    ILogger<SqliteMemoryStore> logger,
+    IMemorySourceStore sourceStore)
     : IMemoryStore
 {
     private readonly EntryEmbedder _embedder = new(embeddings);
@@ -32,7 +33,7 @@ public sealed partial class SqliteMemoryStore(
     // A field initializer can't reference another instance field (CS0236), so the shared
     // _embedder is wired in lazily on first use rather than duplicated via a second `new`.
     private FileIngestor? _ingestorInstance;
-    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider);
+    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider, (SqliteMemorySourceStore)sourceStore);
 
     // The remote API key is a settings row (embedding.apiKey) — the single-channel ruling moved it
     // out of process memory and environment.
@@ -75,6 +76,9 @@ public sealed partial class SqliteMemoryStore(
             }
         }
 
+        var source = await ResolveSourceAsync(connection, request.SourceFile, request.Section, cancellationToken)
+            .ConfigureAwait(false);
+
         await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
                     new
@@ -82,7 +86,7 @@ public sealed partial class SqliteMemoryStore(
                         hash,
                         path,
                         value = request.Content,
-                        sourceFile = request.SourceFile,
+                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : (string?)null,
                         section = request.Section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
@@ -90,7 +94,8 @@ public sealed partial class SqliteMemoryStore(
                         workspaceId = bucket.WorkspaceId,
                         agentId = request.AgentId,
                         createdAt = now,
-                        updatedAt = now
+                        updatedAt = now,
+                        sourceId = source.Id
                     },
                     cancellationToken))
             .ConfigureAwait(false);
@@ -649,6 +654,10 @@ public sealed partial class SqliteMemoryStore(
 
         var hash = ContentHash.Of(path, content);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        var source = await ResolveSourceAsync(connection, sourceFile, section, cancellationToken)
+            .ConfigureAwait(false);
+
         // Created from the ACTUAL insert outcome: Dapper's ExecuteAsync returns SQLite's change
         // count, so the ON CONFLICT DO NOTHING loser (a concurrent same-(path,hash) writer) gets
         // affected == 0 and reports Created=false — the only formula that keeps "promoted"
@@ -660,7 +669,7 @@ public sealed partial class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
-                        sourceFile,
+                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : (string?)null,
                         section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
@@ -668,7 +677,8 @@ public sealed partial class SqliteMemoryStore(
                         workspaceId = bucket.WorkspaceId,
                         agentId = (string?)null,
                         createdAt = now,
-                        updatedAt = now
+                        updatedAt = now,
+                        sourceId = source.Id
                     },
                     cancellationToken))
             .ConfigureAwait(false);
@@ -1120,6 +1130,33 @@ public sealed partial class SqliteMemoryStore(
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
     private static string WritePathFor(string value) => $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
+    /// <summary>Resolves the memory source for a write, creating the source row if needed.</summary>
+    private async Task<MemorySource> ResolveSourceAsync(
+        SqliteConnection connection, string? sourceFile, string? section, CancellationToken cancellationToken)
+    {
+        var (sourceType, locator) = ClassifySource(sourceFile);
+        return await ((SqliteMemorySourceStore)sourceStore).ResolveOrCreateOnConnectionAsync(
+            connection, sourceType, locator, section, null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Classifies source_file into a SourceType and normalized locator.</summary>
+    private static (SourceType Type, string Locator) ClassifySource(string? sourceFile)
+    {
+        if (sourceFile is null || sourceFile.Length == 0)
+        {
+            return (SourceType.Manual, "");
+        }
+
+        if (sourceFile.StartsWith("hermes/", StringComparison.Ordinal) ||
+            sourceFile.Contains("/hermes/", StringComparison.Ordinal))
+        {
+            return (SourceType.Transcript, sourceFile);
+        }
+
+        return (SourceType.File, sourceFile);
+    }
+
     private static string BuildJsonTree(IEnumerable<string> paths)
     {
         var root = new SortedDictionary<string, object>(StringComparer.Ordinal);
@@ -1218,7 +1255,7 @@ public sealed partial class SqliteMemoryStore(
         public int TotalChunks { get; set; }
     }
 
-    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section);
+    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
 
     private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
 
@@ -1229,6 +1266,7 @@ public sealed partial class SqliteMemoryStore(
         string Path,
         string Value,
         string? SourceFile,
+        string? SourceType,
         double Rating,
         long AccessCount,
         long CreatedAt,
@@ -1236,7 +1274,7 @@ public sealed partial class SqliteMemoryStore(
     {
         public ExtractionCandidateRow ToCandidate() =>
             new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,
-                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays);
+                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
 
     private sealed record SettingRow(string Key, string Value);

@@ -34,7 +34,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
         _workspaces = new SqliteWorkspaceStore(factory);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);

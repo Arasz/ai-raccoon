@@ -77,7 +77,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var store = new SqliteMemoryStore(factory, TimeProvider.System, new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.

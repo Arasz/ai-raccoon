@@ -61,7 +61,8 @@ public class SyncServiceTests : IDisposable
                               heading_path TEXT NULL,
                               structure_embedding BLOB NULL,
                               chunk_index INTEGER NOT NULL DEFAULT 0,
-                              total_chunks INTEGER NOT NULL DEFAULT 0
+                              total_chunks INTEGER NOT NULL DEFAULT 0,
+                              source_id INTEGER NULL
                           );
                           CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
@@ -69,6 +70,15 @@ public class SyncServiceTests : IDisposable
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS sync_tombstones (hash TEXT NOT NULL, scope TEXT NOT NULL,
                               deleted_at INTEGER NOT NULL, PRIMARY KEY (hash, scope));
+                          CREATE TABLE IF NOT EXISTS memory_source (
+                              id INTEGER PRIMARY KEY,
+                              source_type TEXT NOT NULL,
+                              source_locator TEXT NOT NULL,
+                              section TEXT NULL,
+                              heading_path TEXT NULL);
+                          CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
+                              ON memory_source(source_type, source_locator, COALESCE(section, ''));
+                          CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
                           """;
         await cmd.ExecuteNonQueryAsync(ct);
         return conn;
@@ -1323,6 +1333,112 @@ public class SyncServiceTests : IDisposable
             countScalar.ShouldNotBeNull();
             ((long)countScalar).ShouldBe(0, "a forward-version remote snapshot must never be merged.");
         }
+    }
+
+    [Fact]
+    public async Task MergeAsync_SetsSourceId_OnMergedEntries()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at)
+                                 VALUES ('r1', 'doc.md#0', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1),
+                                        ('r2', 'doc.md#1', 'chunk two', 'doc.md', 'Body', 'project', 'acme', 2, 2),
+                                        ('r3', 'note.md', 'manual note', NULL, NULL, 'project', 'acme', 3, 3)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using var select = check.CreateCommand();
+        select.CommandText =
+            "SELECT hash, source_id, source_file FROM entries WHERE workspace_id IS NULL ORDER BY hash";
+        var rows = new List<(string Hash, long? SourceId, string? SourceFile)>();
+        await using (var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken))
+        {
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                rows.Add((reader.GetString(0),
+                    reader.IsDBNull(1) ? null : reader.GetInt64(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2)));
+            }
+        }
+
+        rows.ShouldAllBe(r => r.SourceId != null && r.SourceId > 0,
+            "every merged entry must have source_id resolved");
+
+        var fileSources = rows.Where(r => r.SourceFile == "doc.md").ToList();
+        fileSources.ShouldAllBe(r => r.SourceId > 0);
+
+        var manualSources = rows.Where(r => r.SourceFile is null).ToList();
+        manualSources.ShouldAllBe(r => r.SourceId > 0);
+
+        await using var srcCount = check.CreateCommand();
+        srcCount.CommandText = "SELECT COUNT(*) FROM memory_source";
+        var count = (long)(await srcCount.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+        count.ShouldBeGreaterThanOrEqualTo(2, "at least file and manual sources must exist");
+    }
+
+    [Fact]
+    public async Task MergeAsync_PreservesSourceFile_Section_ForFTS()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at)
+                                 VALUES ('r1', 'doc.md#0', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT source_file, section FROM entries WHERE hash = 'r1'";
+        await using var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        await reader.ReadAsync(TestContext.Current.CancellationToken);
+        reader.GetString(0).ShouldBe("doc.md",
+            "source_file must survive the merge for FTS backing");
+        reader.GetString(1).ShouldBe("Intro",
+            "section must survive the merge for FTS backing");
     }
 
     [Fact]

@@ -43,7 +43,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
         var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance);
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
@@ -162,7 +162,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         var service = new PromotionQueueService(
             new SqlitePromotionQueueStore(_factory, _clock),
             new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-                NullLogger<SqliteMemoryStore>.Instance),
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory)),
             new UniformCountEvictionPolicy(), new SpyMetrics(), logger, _clock);
         await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
         await SeedChunkAsync("acme", "h2", "docs/a.md", "chunk two", TestContext.Current.CancellationToken);

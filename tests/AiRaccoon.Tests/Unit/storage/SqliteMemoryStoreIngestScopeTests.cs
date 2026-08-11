@@ -38,7 +38,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
     }
 
     public void Dispose()

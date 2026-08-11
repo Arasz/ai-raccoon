@@ -18,7 +18,8 @@ public sealed record ExtractionCandidateRow(
     double Rating,
     int AccessCount,
     DateTimeOffset CreatedAt,
-    int? TtlDays);
+    int? TtlDays,
+    string? SourceType = null);
 
 /// <summary>A ranked candidate with the mechanical reasons it scored. Only Score and Reasons fed
 /// the ranking — Rating/AccessCount are informational context v3 does not read (ADR-0018).</summary>

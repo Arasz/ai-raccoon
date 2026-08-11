@@ -283,6 +283,43 @@ public partial class SyncService(
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                // Resolve source_id for newly merged rows: populate the memory_source table
+                // and backfill the FK, mirroring the migration's classification logic.
+                await using (var resolveSource = conn.CreateCommand())
+                {
+                    resolveSource.CommandText = """
+                                                 INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                                                 SELECT CASE
+                                                         WHEN e.source_file LIKE 'hermes/%' OR e.source_file LIKE '%/hermes/%' THEN 'transcript'
+                                                         WHEN e.source_file IS NULL OR e.source_file = '' THEN 'manual'
+                                                         ELSE 'file'
+                                                     END,
+                                                     COALESCE(e.source_file, ''),
+                                                     e.section
+                                                 FROM entries e
+                                                 WHERE e.source_id IS NULL AND e.workspace_id IS NULL
+                                                 """;
+                    await resolveSource.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                await using (var backfillSourceId = conn.CreateCommand())
+                {
+                    backfillSourceId.CommandText = """
+                                                    UPDATE entries SET source_id = (
+                                                        SELECT ms.id FROM memory_source ms
+                                                        WHERE ms.source_locator = COALESCE(entries.source_file, '')
+                                                          AND (ms.section IS entries.section OR (ms.section IS NULL AND entries.section IS NULL))
+                                                          AND ms.source_type = CASE
+                                                              WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
+                                                              WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
+                                                              ELSE 'file'
+                                                          END
+                                                    )
+                                                    WHERE source_id IS NULL AND workspace_id IS NULL
+                                                    """;
+                    await backfillSourceId.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 // Settings are per-machine (cloud credentials, embedding endpoint/key) and never
                 // cross the sync boundary in either direction — push already strips them, and
                 // pull must not read remote.settings at all.

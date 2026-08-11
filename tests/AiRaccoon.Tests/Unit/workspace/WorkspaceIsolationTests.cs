@@ -34,7 +34,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private SqliteMemoryStore CreateStore() => new(_factory, new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance);
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
 
     [Fact]
     public async Task XORCheck_InsertWithWorkspaceIdAndCommittedScope_Fails()

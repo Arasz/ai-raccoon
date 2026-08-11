@@ -33,7 +33,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
     }
 
     public ValueTask DisposeAsync()

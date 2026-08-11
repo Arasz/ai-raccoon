@@ -185,11 +185,11 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     private async Task SeedWatchConfigAsync(string tempDir)
     {
         var options = new InfrastructureOptions { DataRoot = _factory.DataRoot, Scope = InstallScope.User };
-        var store = new SqliteMemoryStore(
-            new SqliteConnectionFactory(options,
-                new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
-                    [new EnvEncryptionKeyProvider()])),
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+        var factory = new SqliteConnectionFactory(options,
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                [new EnvEncryptionKeyProvider()]));
+        var store = new SqliteMemoryStore(factory,
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
         await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([tempDir]));
     }

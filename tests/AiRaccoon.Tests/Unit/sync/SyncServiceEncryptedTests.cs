@@ -56,7 +56,8 @@ public class SyncServiceEncryptedTests : IDisposable
                               heading_path TEXT NULL,
                               structure_embedding BLOB NULL,
                               chunk_index INTEGER NOT NULL DEFAULT 0,
-                              total_chunks INTEGER NOT NULL DEFAULT 0
+                              total_chunks INTEGER NOT NULL DEFAULT 0,
+                              source_id INTEGER NULL
                           );
                           CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
@@ -64,6 +65,15 @@ public class SyncServiceEncryptedTests : IDisposable
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS sync_tombstones (hash TEXT NOT NULL, scope TEXT NOT NULL,
                               deleted_at INTEGER NOT NULL, PRIMARY KEY (hash, scope));
+                          CREATE TABLE IF NOT EXISTS memory_source (
+                              id INTEGER PRIMARY KEY,
+                              source_type TEXT NOT NULL,
+                              source_locator TEXT NOT NULL,
+                              section TEXT NULL,
+                              heading_path TEXT NULL);
+                          CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
+                              ON memory_source(source_type, source_locator, COALESCE(section, ''));
+                          CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
                           """;
         await cmd.ExecuteNonQueryAsync(ct);
         return conn;

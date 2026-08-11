@@ -41,11 +41,11 @@ internal static class TelemetryServerHost
         CancellationToken cancellationToken)
     {
         var options = TestData.CreateInfrastructureOptions(dataRoot);
-        var store = new SqliteMemoryStore(
-            new SqliteConnectionFactory(options,
-                new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
-                    [new EnvEncryptionKeyProvider()])),
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+        var factory = new SqliteConnectionFactory(options,
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                [new EnvEncryptionKeyProvider()]));
+        var store = new SqliteMemoryStore(factory,
+            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
     }
 

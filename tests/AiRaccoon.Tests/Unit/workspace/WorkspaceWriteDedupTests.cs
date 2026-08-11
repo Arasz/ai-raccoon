@@ -33,7 +33,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);

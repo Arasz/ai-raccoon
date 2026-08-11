@@ -33,7 +33,7 @@ internal static class CliCommandRunner
         var env = new EnvEncryptionKeyProvider();
         var bank = new SqliteConnectionFactory(config.Options, resolver);
         var store = new SqliteMemoryStore(bank, TimeProvider.System, new TokenizerChunker(), new EmbeddingService(),
-            loggerFactory.CreateLogger<SqliteMemoryStore>());
+            loggerFactory.CreateLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(bank));
 
         var encryptionCommands = new EncryptionCommands(bank, bws, env, sidecar, logger);
 

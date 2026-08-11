@@ -317,6 +317,89 @@ public sealed class MemorySchemaVersionTests
         rows.ShouldBe([("h1", 0, 2), ("h2", 1, 2)]);
     }
 
+    // ── WP1: memory_source table + source_id migration (v4→v5) ──
+
+    [Fact]
+    public async Task EnsureAsync_FromV4_CreatesMemorySourceTable()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV4BankAsync(connection,
+            ("h1", "doc.md", "project", "acme", null, "doc.md"),
+            ("h2", "doc.md", "project", "acme", null, "doc.md"));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(connection, "memory_source")).ShouldBeTrue(
+            "migration from v4 must create the memory_source table");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_FromV4_EntriesHaveSourceId()
+    {
+        await using var connection = await OpenAsync();
+        await SeedV4BankAsync(connection,
+            ("h1", "doc.md", "project", "acme", null, "doc.md"),
+            ("h2", "doc.md", "project", "acme", null, null));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await ColumnsAsync(connection, "entries");
+        columns.ShouldContain("source_id");
+
+        var sourceIds = (await connection.QueryAsync<long?>(
+                new CommandDefinition(
+                    "SELECT source_id FROM entries ORDER BY id",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        sourceIds.ShouldAllBe(id => id.HasValue && id.Value > 0,
+            "every entry must have a non-null source_id after migration");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_FreshBank_HasMemorySourceTable()
+    {
+        await using var connection = await OpenAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(connection, "memory_source")).ShouldBeTrue(
+            "a fresh bank must have the memory_source table");
+        var columns = await ColumnsAsync(connection, "entries");
+        columns.ShouldContain("source_id");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_V5Bank_SkipsMigration()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        // Insert a source and entry to verify they survive a second EnsureAsync untouched.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO memory_source (source_type, source_locator, section)
+            VALUES ('file', 'test.md', '## A');
+            INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, source_id,
+                                 created_at, updated_at, embed_state)
+            VALUES ('hx', 'test.md', 'v', 'test.md', '## A', 'project', 'acme', 1, 1, 1, 'pending');
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var sourceCount = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT count(*) FROM memory_source",
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceCount.ShouldBe(1, "a v5 bank must not re-run the migration");
+
+        var sourceId = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT source_id FROM entries WHERE hash = 'hx'",
+                cancellationToken: TestContext.Current.CancellationToken));
+        sourceId.ShouldBe(1, "the existing source_id must survive a second EnsureAsync");
+    }
+
     /// <summary>
     ///     ADR-0018: promotion_queue rows carry the version of the scorer that produced them, so a
     ///     retired scorer's rows can be told apart from current ones. DEFAULT 0 is deliberate — every
@@ -612,4 +695,108 @@ public sealed class MemorySchemaVersionTests
         await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
             "SELECT 1 FROM settings WHERE key = @key",
             new { key }, cancellationToken: TestContext.Current.CancellationToken)) is not null;
+
+    private static async Task<bool> TableExistsAsync(SqliteConnection connection, string name) =>
+        await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = @name",
+            new { name }, cancellationToken: TestContext.Current.CancellationToken)) is not null;
+
+    /// <summary>Builds a v4-shaped bank (stamped user_version = 4) with the given entries.
+    /// The schema has no memory_source table and no source_id column on entries — exactly
+    /// what a bank opened by a pre-v5 binary looks like.</summary>
+    private static async Task SeedV4BankAsync(SqliteConnection connection,
+        params (string Hash, string Path, string Scope, string ProjectId, string? WorkspaceId, string? SourceFile)[] rows)
+    {
+        // v4 schema: everything through MigrateToV4Async, but no memory_source / source_id.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            CREATE TABLE workspaces (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                closed_at INTEGER NULL
+            );
+
+            CREATE TABLE entries (
+                id INTEGER PRIMARY KEY,
+                hash TEXT,
+                path TEXT,
+                value TEXT,
+                source_file TEXT,
+                section TEXT,
+                scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                project_id TEXT NULL,
+                context_label TEXT NULL,
+                workspace_id TEXT NULL,
+                agent_id TEXT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                access_count INTEGER NOT NULL DEFAULT 0,
+                last_accessed_at INTEGER NULL,
+                rating REAL NOT NULL DEFAULT 0.5,
+                ttl_days INTEGER NULL,
+                embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                embedding BLOB NULL,
+                heading_path TEXT NULL,
+                structure_embedding BLOB NULL,
+                chunk_index INTEGER NOT NULL DEFAULT 0,
+                total_chunks INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+                CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
+            );
+
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+            CREATE VIRTUAL TABLE entries_fts USING fts5(
+                value, source_file, section, content='entries', content_rowid='id'
+            );
+
+            CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                INSERT INTO entries_fts(rowid, value, source_file, section)
+                VALUES (new.id, new.value, new.source_file, new.section);
+            END;
+
+            CREATE TABLE IF NOT EXISTS promotion_queue (
+                id INTEGER PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                path TEXT NULL,
+                value TEXT NOT NULL,
+                source_file TEXT NULL,
+                score REAL NOT NULL,
+                reasons TEXT NOT NULL DEFAULT '[]',
+                scorer_version INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE (project_id, hash)
+            );
+
+            CREATE UNIQUE INDEX uq_entries_shared_bucket
+                ON entries(path, hash) WHERE scope = 'shared';
+            CREATE UNIQUE INDEX uq_entries_committed_bucket
+                ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                WHERE scope IN ('project', 'custom');
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        foreach (var row in rows)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, source_file, scope, project_id, workspace_id,
+                                      created_at, updated_at, embed_state)
+                VALUES (@hash, @path, 'seeded', @sourceFile, @scope, @projectId, @workspaceId, 1, 1, 'pending')
+                """,
+                new
+                {
+                    hash = row.Hash, path = row.Path, sourceFile = row.SourceFile,
+                    scope = row.Scope, projectId = row.ProjectId, workspaceId = row.WorkspaceId
+                },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 4", cancellationToken: TestContext.Current.CancellationToken));
+    }
 }

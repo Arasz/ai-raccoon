@@ -20,7 +20,7 @@ public class MemoryFeatureContext : IDisposable
             new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         Store = new SqliteMemoryStore(Factory, TimeProvider, new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance);
+            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory));
     }
 
     public string DataRoot { get; }
