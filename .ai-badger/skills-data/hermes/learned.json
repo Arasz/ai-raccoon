@@ -119,6 +119,15 @@
       "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
     },
     {
+        "category": "software-development",
+        "name": "red-proof",
+        "sourceHash": "c61738f8e3d00a699a890c7b1384a9c062ecba683a1916caf7ed07287d556bb1",
+        "sourcePath": "software-development/red-proof",
+        "status": "synced",
+        "syncedAt": "2026-08-09T20:42:42Z",
+        "target": ".ai-badger/skills/learned/software-development/red-proof"
+    },
+      {
       "category": "software-development",
       "name": "scripts-tooling-refactor",
       "sourceHash": "52def0f92cf4b7552c7414823739e7b5c8399de9751f7a11344fa92b3647c7c8",
@@ -373,10 +382,10 @@
     {
       "category": "uncategorized",
       "name": "memory-bank-audit",
-        "sourceHash": "9b0d5c88584db323ad710fcfe78c68d30a3e6ad9560e1359a289f80e736e146c",
+        "sourceHash": "03b648b31190db9ab1c6a03c4f97d5d9ca657b851a96855fd7de6c993005476c",
       "sourcePath": "data-analysis/memory-bank-audit",
       "status": "synced",
-        "syncedAt": "2026-08-06T22:30:15Z",
+        "syncedAt": "2026-08-09T20:26:10Z",
       "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
     },
     {
@@ -434,6 +443,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/pre-push-gate-debugging"
     },
     {
+        "category": "uncategorized",
+        "name": "red-proof",
+        "sourceHash": "20a795ca73fbfd36cfb071b5beb5eaef8668ed80e9b8062f846de6321ff040ee",
+        "sourcePath": "software-development/red-proof",
+        "status": "synced",
+        "syncedAt": "2026-08-09T20:43:04Z",
+        "target": ".ai-badger/skills/learned/uncategorized/red-proof"
+    },
+      {
       "category": "uncategorized",
       "name": "research-record-audit",
       "sourceHash": "d3b64168934a3273b5b898d4af4e5c1d6e74f934f73476a040efe6d92a372900",

@@ -4,51 +4,51 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Application">
-    <PackageVersion Include="DotNext" Version="6.6.0"/>
-    <PackageVersion Include="DotNext.Threading" Version="6.6.0"/>
-    <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.10"/>
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10"/>
-    <PackageVersion Include="ModelContextProtocol" Version="2.1.0"/>
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.1.0"/>
-    <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0"/>
+      <PackageVersion Include="DotNext" Version="6.6.0"/>
+      <PackageVersion Include="DotNext.Threading" Version="6.6.0"/>
+      <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.10"/>
+      <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10"/>
+      <PackageVersion Include="ModelContextProtocol" Version="2.1.0"/>
+      <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.1.0"/>
+      <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0"/>
     <!-- encryption-at-rest: SQLitePCLRaw's own encryption bundles (e_sqlite3mc) are deprecated since 3.0;
          SQLite3MC.PCLRaw.bundle (utelle) is the maintained train and needs core >= 3.0.2. The provider is
          set explicitly in SqliteEncryptionInit; Microsoft.Data.Sqlite.Core (not the full package, which
          drags the deprecated bundle_e_sqlite3) is used so this bundle is the only native SQLite in the graph. -->
-    <PackageVersion Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0"/>
-    <PackageVersion Include="SQLitePCLRaw.core" Version="3.0.5"/>
-    <PackageVersion Include="Dapper" Version="2.1.79"/>
+      <PackageVersion Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0"/>
+      <PackageVersion Include="SQLitePCLRaw.core" Version="3.0.5"/>
+      <PackageVersion Include="Dapper" Version="2.1.79"/>
     <!-- sqlite-vec pre-v1 (vec0 virtual table); pinned — re-run the retrieval harness on upgrade (plan §6). -->
-    <PackageVersion Include="HiraokaHyperTools.sqlite-vec" Version="0.1.9"/>
-    <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.4.2"/>
-    <PackageVersion Include="FluentValidation" Version="12.1.1"/>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
-    <PackageVersion Include="LLamaSharp" Version="0.27.0"/>
-    <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0"/>
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3"/>
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3"/>
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3"/>
+      <PackageVersion Include="HiraokaHyperTools.sqlite-vec" Version="0.1.9"/>
+      <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.4.2"/>
+      <PackageVersion Include="FluentValidation" Version="12.1.1"/>
+      <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
+      <PackageVersion Include="LLamaSharp" Version="0.27.0"/>
+      <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0"/>
+      <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3"/>
+      <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3"/>
+      <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3"/>
     <!-- WatchHostedService (BackgroundService) lives in Hosting.Abstractions; 10.0.3 is the
          version already flowing transitively into Infrastructure. -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10"/>
+      <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10"/>
     <!-- In-process local embedding engine (P4): pinned; re-run the retrieval harness on upgrade. -->
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0"/>
+      <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0"/>
     <!-- Microsoft.ML.Tokenizers.Data.O200kBase pulls Bcl.Memory 9.0.4 transitively; 9.0.14 patches GHSA-73j8-2gch-69rq. -->
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.10"/>
-    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0"/>
-    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0"/>
-    <PackageVersion Include="OpenAI" Version="2.12.0"/>
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.101.7"/>
-    <PackageVersion Include="Azure.Identity" Version="1.21.0"/>
-    <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.1"/>
+      <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.10"/>
+      <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0"/>
+      <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0"/>
+      <PackageVersion Include="OpenAI" Version="2.12.0"/>
+      <PackageVersion Include="AWSSDK.S3" Version="4.0.102"/>
+      <PackageVersion Include="Azure.Identity" Version="1.21.0"/>
+      <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.1"/>
     <!-- OTLP export (ADR 0009): pinned to 1.17.0, confirmed resolvable on nuget.org at that version. -->
-    <PackageVersion Include="OpenTelemetry" Version="1.17.0"/>
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
-    <PackageVersion Include="System.CommandLine" Version="2.0.10"/>
+      <PackageVersion Include="OpenTelemetry" Version="1.17.0"/>
+      <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
+      <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
+      <PackageVersion Include="System.CommandLine" Version="2.0.10"/>
     <!-- Not in-box in .NET 10 despite stable tensor APIs; 10.0.10 matches the version
          already resolving transitively into AiRaccoon.Benchmarks via Microsoft.Extensions.AI
          (ADR 0017). -->
-    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.10"/>
+      <PackageVersion Include="System.Numerics.Tensors" Version="10.0.10"/>
   </ItemGroup>
 </Project>
