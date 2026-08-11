@@ -220,3 +220,26 @@ owner direction).
 
 — Evidence files: `/tmp/ai-raccoon-diagnostic/memory-copy.db` (integrity ok),
 `analysis-output.txt`, `analysis-output2.txt`. All counts re-derivable from the copy.
+
+## Resolution (2026-08-11, task mem-cleanup, PR #259)
+
+Recommendations 5–7 are closed by `docs/work/2026-08-11-mem-cleanup.md`:
+
+1. **Rec 5 — shared-row migration done.** All 59 legacy `shared//<path>` rows were
+   re-addressed to the value format (`shared/<sha256(value)>.md`, hash recomputed) on the
+   live bank via `scripts/migrate-shared-legacy-rows.py` (dry-run + apply + verify; backup
+   at `/tmp/mem-cleanup/pre-migration.db`). The tier is 103/103 value-addressed,
+   `integrity_check` ok, formula holds on every row. Documented in ADR-0007.
+2. **Rec 6 — file logging removed, not widened.** Owner decision: remove memory logging to
+   file from ai-raccoon and ai-badger (approach changes later). The provider's
+   `memory-operations.jsonl` writer (`MemoryOperationLog` + `AIRACCOON_MEMORY_LOG`) is
+   deleted from `integrations/hermes/ai-raccoon/` and the live plugin; the file was
+   deleted (backup at `/tmp/mem-cleanup/memory-operations.jsonl.bak`). ai-badger's
+   `memory-grade` feature (`memory-quality.jsonl`/`pending.json`, `AI_BADGER_MEMORY_GRADE`)
+   is removed in its repo (PR #373). Per-tool usage is no longer recorded anywhere —
+   the tool table in this report is historical (hermes-provider-only by construction).
+   The search-quality-metric plan is the replacement.
+3. **Rec 7 — debris swept.** The 8 stale Active workspaces (acme ×2, manual-13x-probe ×5,
+   manual-d1d2d3-verify ×1) were discarded via `memory_workspace_discard` and their rows
+   deleted (3 workspace entries removed with them); the 32 `sync_tombstones` rows deleted.
+   `workspaces` is now 24 Closed + 4 Discarded; `sync_tombstones` 0; integrity ok.

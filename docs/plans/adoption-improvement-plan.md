@@ -6,7 +6,11 @@
 
 **Goal:** measurable growth of organic search (K1), grade coverage (K2), organic writes (K4), and shared-tier size + consumption (K5/K6) over a 30-day sprint, with a self-correcting weekly report loop.
 
-## KPIs (sources: memory-quality.jsonl, memory.db read-only, mcp-stderr.log; reader: owner weekly)
+## KPIs (sources: memory.db read-only, mcp-stderr.log; reader: owner weekly)
+
+> Note 2026-08-11: the `memory-quality.jsonl` KPI source was REMOVED with the
+> memory-grade hook (task mem-cleanup) — the search-quality-metric plan's server-side
+> table is its replacement. The KPI list below awaits that plan.
 
 | KPI | Metric | Baseline | Target (30d) |
 |---|---|---|---|
@@ -54,7 +58,7 @@ Hermes plugin `on_session_start` (drift_notice pattern) + Claude `SessionStart` 
 Ask line gains a week-stats fragment ("week: 9 searches, 3 graded, avg 4.3"); auto-judge backfill writes `usefulness_auto` (never overwrites human grades, labeled separately in the report). Gate: pytest; ask format test; ≥3 graded searches in the following week. Effort: S–M.
 
 ### WP8 — Weekly adoption report + KPI visibility — ai-raccoon
-`scripts/adoption-report.py` reading memory-quality.jsonl + memory.db (read-only) + mcp-stderr.log; cron weekly; writes `docs/work/adoption-weekly.md` + digest; lists share candidates (accessed from ≥2 projects or rating > 0.6 recent) for owner review, never auto-promoted; K10 health guard (WARN when env var lost or log stale). `memory_stats` gains sharedCount + recent search/share counts. Gate: script fixture tests; one generated issue. Effort: M.
+`scripts/adoption-report.py` reading memory.db (read-only) + mcp-stderr.log; cron weekly; writes `docs/work/adoption-weekly.md` + digest; lists share candidates (accessed from ≥2 projects or rating > 0.6 recent) for owner review, never auto-promoted; K10 health guard (WARN when env var lost or log stale). `memory_stats` gains sharedCount + recent search/share counts. Gate: script fixture tests; one generated issue. Effort: M.
 
 ### WP9 — `mem:` / `remember:` prompt marker — ai-badger
 Markers-context.json (no-code) + tests: "treat this as a durable fact — memory_write it with a source". Targets K4. Gate: marker test passes; one manual marker prompt produces a memory_write with a source path. Effort: S.

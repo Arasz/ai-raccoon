@@ -44,6 +44,11 @@ common response envelope that surfaces what is waiting.
   twins are skipped at the pre-check. `absorbed` counts claimed chunks whose identical value was
   already shared (or an insert-race loss); the accounting invariant is
   claimed = promoted + absorbed + skipped + failures.
+  **Legacy format gone (2026-08-11):** the pre-1.6.3 path-addressed shared rows
+  (`shared/` + absolute source path, e.g. `shared//Users/...`) were migrated to the value
+  format in one pass (`scripts/migrate-shared-legacy-rows.py`); the shared tier is
+  value-addressed only. `SharedExtractionService.IsDuplicate`'s legacy
+  `shared/{row.Path}` branch is dead-but-harmless and kept for defence.
 - **Capacity.** Total cap `extract.queue-capacity.global` (default 1000, guarded parse).
   `PromotionCapacityPolicy` splits it into per-project reservations (cap ÷ project
   count); `IEvictionPolicy`/`UniformCountEvictionPolicy` pick the victim project (the

@@ -16,7 +16,7 @@ All three signals land in the same `search_quality` row.
 
 ## Background
 
-The current grading system (`memory-quality.jsonl`) captures only 4.6% of searches (20 graded out of 438 ops). The grade log itself misses 62% of hermes searches (instrumentation gap). The 21 existing grades avg 4.29 with selection bias. This plan replaces the JSONL hook with a server-side quality table that captures 100% of searches and adds follow-through measurement (did the agent use the result?).
+The current grading system (`memory-quality.jsonl`) captures only 4.6% of searches (20 graded out of 438 ops). The grade log itself misses 62% of hermes searches (instrumentation gap). The 21 existing grades avg 4.29 with selection bias. **The JSONL hook was REMOVED 2026-08-11 (task mem-cleanup)** — the `memory-quality.jsonl`/`pending.json` writers and `AI_BADGER_MEMORY_GRADE` are gone from ai-badger and the ai-raccoon provider's `memory-operations.jsonl` is gone too; the pre-migration file (167+ lines, 20 graded) survives only as historical data on the machine. This plan replaces the (now absent) JSONL hook with a server-side quality table that captures 100% of searches and adds follow-through measurement (did the agent use the result?).
 
 ## Architecture decisions (from expert review)
 
@@ -232,7 +232,7 @@ Option B: Direct Python → SQLite write. Simpler for the hook but couples the P
 - **Agent-side follow-through hook**: ai-badger plugin hooks `read_file` on hermes, auto-detects follow-through (60s window, no explicit tool call)
 - **LLM-as-judge auto-grading**: ARES/PPI calibration on human grades, needs a generative model
 - **nDCG on live queries**: needs per-query relevance sets, which the quality table + human grades will provide
-- **Backfill**: correlate existing `memory-quality.jsonl` grades with quality table via query+timestamp match
+- **Backfill**: correlate existing `memory-quality.jsonl` grades with quality table via query+timestamp match — possible only from the pre-removal file if it is still on the machine (the writer was removed 2026-08-11)
 
 ## Effort summary
 
