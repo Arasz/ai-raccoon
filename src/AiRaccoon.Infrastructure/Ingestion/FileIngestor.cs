@@ -13,16 +13,36 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     Takes an already-open connection rather than opening its own — every caller has already
 ///     opened the bank once for the whole walk, so the compiler enforces one-bank-open-per-ingest.
 /// </summary>
-internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, TimeProvider timeProvider, SqliteMemorySourceStore sourceStore)
+internal sealed class FileIngestor
 {
-    // Chunk bounds (see docs/work/archive/2026-08-03-native-memory-plan.md §8): 512 tokens exceeded the bundled all-MiniLM-L6-v2's
-    // 256-token window, diluting embeddings via truncation; defaults are now 256/48 and the
-    // chunk size is clamped to the configured engine's window where the engine knows it.
     private const int DefaultMaxTokens = 256;
     private const int DefaultOverlayTokens = 48;
 
-    private static readonly HashSet<string> IndexableExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".txt" };
+    private readonly IFileTypeMatcher _fileTypeMatcher;
+    private readonly EntryEmbedder _embedder;
+    private readonly TimeProvider _timeProvider;
+    private readonly SqliteMemorySourceStore _sourceStore;
+
+    public FileIngestor(
+        IFileTypeMatcher? fileTypeMatcher,
+        EntryEmbedder embedder,
+        TimeProvider timeProvider,
+        SqliteMemorySourceStore sourceStore)
+    {
+        _fileTypeMatcher = fileTypeMatcher ?? new FileTypeMatcher([new MarkdownFileTypeHandler(), new JsonFileTypeHandler()]);
+        _embedder = embedder;
+        _timeProvider = timeProvider;
+        _sourceStore = sourceStore;
+    }
+
+    public FileIngestor(
+        IChunker chunker,
+        EntryEmbedder embedder,
+        TimeProvider timeProvider,
+        SqliteMemorySourceStore sourceStore)
+        : this(new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler()]), embedder, timeProvider, sourceStore)
+    {
+    }
 
     /// <summary>Set <paramref name="embedInline"/> false when the caller holds a write transaction: embedding
     /// runs the engine per chunk, and a lock held that long stalls another process's first bank open.</summary>
@@ -31,13 +51,13 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
-        if (!IsIndexableFile(path))
+        if (!IsIndexableFile(path, out var handler))
         {
             return 0;
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return await InsertChunksAsync(connection, projectId, path, content, context, cancellationToken, embedInline)
+        return await InsertChunksAsync(connection, projectId, path, content, handler, context, cancellationToken, embedInline)
             .ConfigureAwait(false);
     }
 
@@ -47,20 +67,21 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        // Directory.EnumerateFiles descends into directory symlinks, so a link inside the scoped
-        // root can point anywhere on disk; a per-file recheck against the scope list is what
-        // actually enforces containment. A file resolving outside scope is skipped, not a reason
-        // to refuse the whole directory — one stray link must not DoS an otherwise legitimate ingest.
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => !IsHidden(file) && IsIndexableFile(file) && IsInScope(scope, file))
+            .Where(file => !IsHidden(file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!IsIndexableFile(file, out var handler))
+            {
+                continue;
+            }
+
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-            indexed += await InsertChunksAsync(connection, projectId, file, content, context, cancellationToken)
+            indexed += await InsertChunksAsync(connection, projectId, file, content, handler, context, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -69,22 +90,22 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
     private async Task<int> InsertChunksAsync(SqliteConnection connection, string projectId, string path,
-        string content, string? context, CancellationToken cancellationToken, bool embedInline = true)
+        string content, IFileTypeHandler handler, string? context, CancellationToken cancellationToken, bool embedInline = true)
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
         var (chunkMaxTokens, chunkOverlayTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
-        var chunks = chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens);
+        var chunks = handler.Chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens);
         if (chunks.Count == 0)
         {
             return 0;
         }
 
-        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
         // Resolve source once for all chunks from this file.
-        var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
+        var source = await _sourceStore.ResolveOrCreateOnConnectionAsync(
             connection, SourceType.File, path, null, null, cancellationToken).ConfigureAwait(false);
 
         var inserted = 0;
@@ -128,8 +149,7 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
                         },
                         cancellationToken))
                 .ConfigureAwait(false);
-            // Re-select by bucket key: a concurrent same-file ingest may have won this chunk's
-            // insert (ON CONFLICT DO NOTHING), and last_insert_rowid is stale on a lost race.
+
             var chunkId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
@@ -149,17 +169,13 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
 
             if (embedInline)
             {
-                await embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
+                await _embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
                     .ConfigureAwait(false);
             }
 
             inserted++;
         }
 
-        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputed once
-        // after the loop, unconditionally, since a re-ingest that hits the exists-skip for every
-        // chunk still needs numbering intact. The loop has no chunk ordinal to compute this in C#
-        // (existing chunks are skipped, so loop position isn't row position) — hence the SQL recompute.
         var ctx = MemorySql.ContextKeyFor(resolvedContext, projectId);
         await connection.ExecuteAsync(
                 Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile = path }, cancellationToken))
@@ -168,10 +184,6 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
         return inserted > 0 ? 1 : 0;
     }
 
-    /// <summary>
-    ///     Chunk bounds tied to the configured engine's token window; the chunk size never
-    ///     exceeds the engine's max input tokens (avoids truncation dilution at embed time).
-    /// </summary>
     private static async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
         SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -191,11 +203,6 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
             Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
     }
 
-    /// <summary>
-    ///     Ingest reads whatever path it is handed, so the project's declared scope contains it —
-    ///     the same rule memory_watch_add uses, deny-by-default so no caller can read any file the
-    ///     server can reach. Enforced here, not in the tool, so every client is bound.
-    /// </summary>
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
@@ -231,7 +238,16 @@ internal sealed class FileIngestor(IChunker chunker, EntryEmbedder embedder, Tim
                 Def(MemorySql.SelectSetting, new { key }, cancellationToken))
             .ConfigureAwait(false);
 
-    private static bool IsIndexableFile(string path) => !IsHidden(path) && IndexableExtensions.Contains(Path.GetExtension(path));
+    private bool IsIndexableFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IFileTypeHandler? handler)
+    {
+        if (IsHidden(path))
+        {
+            handler = null;
+            return false;
+        }
+
+        return _fileTypeMatcher.TryGetHandler(path, out handler);
+    }
 
     private static bool IsHidden(string path)
     {
