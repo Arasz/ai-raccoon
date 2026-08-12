@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Chunking;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 

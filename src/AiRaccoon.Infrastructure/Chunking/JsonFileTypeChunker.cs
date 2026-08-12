@@ -2,9 +2,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Chunking;
-using AiRaccoon.Infrastructure.Chunking;
+using CommunityToolkit.Diagnostics;
 
-namespace AiRaccoon.Infrastructure.Ingestion;
+namespace AiRaccoon.Infrastructure.Chunking;
 
 /// <summary>
 /// Token-bounded chunker for JSON files. Preserves key structure and schema context for objects/arrays,
@@ -12,6 +12,23 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// </summary>
 public sealed class JsonFileTypeChunker : IChunker
 {
+    private readonly Func<string, int> _countTokens;
+    private readonly IChunker _fallbackChunker;
+
+    public JsonFileTypeChunker(Func<string, int>? countTokens = null, IChunker? fallbackChunker = null)
+    {
+        var defaultTokenizer = new TokenizerChunker();
+        _countTokens = countTokens ?? defaultTokenizer.CountTokens;
+        _fallbackChunker = fallbackChunker ?? defaultTokenizer;
+    }
+
+    public JsonFileTypeChunker(TokenizerChunker tokenizer)
+    {
+        Guard.IsNotNull(tokenizer);
+        _countTokens = tokenizer.CountTokens;
+        _fallbackChunker = tokenizer;
+    }
+
     public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -91,9 +108,9 @@ public sealed class JsonFileTypeChunker : IChunker
         };
     }
 
-    private static IReadOnlyList<string> ChunkObject(JsonElement root, int maxTokens, int overlayTokens, string rawText)
+    private IReadOnlyList<string> ChunkObject(JsonElement root, int maxTokens, int overlayTokens, string rawText)
     {
-        var rawTokens = TokenizerChunker.CountTokens(rawText);
+        var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {
             return [rawText.Trim()];
@@ -101,18 +118,18 @@ public sealed class JsonFileTypeChunker : IChunker
 
         List<string> chunks = [];
         var currentProps = new List<JsonProperty>();
-        var currentTokens = TokenizerChunker.CountTokens("{\n}");
+        var currentTokens = _countTokens("{\n}");
 
         foreach (var prop in root.EnumerateObject())
         {
             var propText = $"  \"{prop.Name}\": {prop.Value.GetRawText()}";
-            var propTokens = TokenizerChunker.CountTokens(propText);
+            var propTokens = _countTokens(propText);
 
             if (currentProps.Count > 0 && currentTokens + propTokens + 1 > maxTokens)
             {
                 chunks.Add(BuildObjectChunk(currentProps));
                 currentProps.Clear();
-                currentTokens = TokenizerChunker.CountTokens("{\n}");
+                currentTokens = _countTokens("{\n}");
             }
 
             if (propTokens + currentTokens > maxTokens)
@@ -136,9 +153,9 @@ public sealed class JsonFileTypeChunker : IChunker
         return chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens, overlayTokens);
     }
 
-    private static IReadOnlyList<string> ChunkArray(JsonElement root, int maxTokens, int overlayTokens, string rawText)
+    private IReadOnlyList<string> ChunkArray(JsonElement root, int maxTokens, int overlayTokens, string rawText)
     {
-        var rawTokens = TokenizerChunker.CountTokens(rawText);
+        var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {
             return [rawText.Trim()];
@@ -146,18 +163,18 @@ public sealed class JsonFileTypeChunker : IChunker
 
         List<string> chunks = [];
         var currentItems = new List<string>();
-        var currentTokens = TokenizerChunker.CountTokens("[\n]");
+        var currentTokens = _countTokens("[\n]");
 
         foreach (var item in root.EnumerateArray())
         {
             var itemText = item.GetRawText();
-            var itemTokens = TokenizerChunker.CountTokens(itemText);
+            var itemTokens = _countTokens(itemText);
 
             if (currentItems.Count > 0 && currentTokens + itemTokens + 1 > maxTokens)
             {
                 chunks.Add("[\n  " + string.Join(",\n  ", currentItems) + "\n]");
                 currentItems.Clear();
-                currentTokens = TokenizerChunker.CountTokens("[\n]");
+                currentTokens = _countTokens("[\n]");
             }
 
             if (itemTokens + currentTokens > maxTokens)
@@ -198,6 +215,6 @@ public sealed class JsonFileTypeChunker : IChunker
         return sb.ToString();
     }
 
-    private static IReadOnlyList<string> ChunkFallback(string text, int maxTokens, int overlayTokens) =>
-        MarkdownChunker.Split(text, maxTokens, overlayTokens, TokenizerChunker.CountTokens);
+    private IReadOnlyList<string> ChunkFallback(string text, int maxTokens, int overlayTokens) =>
+        _fallbackChunker.Chunk(text, maxTokens, overlayTokens);
 }
