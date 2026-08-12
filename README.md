@@ -6,7 +6,9 @@ An MCP server that gives AI agents persistent, project-scoped memory. It runs lo
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.7.0)
+## What's new (from 1.2.0 to 1.8.0)
+
+- **Extensible FileType Handlers & Native JSON Support (1.8.0).** File ingestion now uses extensible file type handlers (`IFileTypeHandler`, `IFileTypeMatcher`). Added native `.json` file support via `JsonFileTypeChunker`, which parses JSON object and array key structures into token-bounded chunks and extracts JSON schema summaries, falling back safely to line chunking on malformed files. Sets the foundation for upcoming `.xml`, `.yaml`, and `.html` handlers. [ADR-0027](docs/adr/0027-extensible-file-type-handlers-and-json-support.md)
 
 - **Search-quality metric system (1.7.0).** Every `memory_search` call creates a row in the `search_quality` table with a v7 correlation-id, query, results, and project context. `memory_record_followthrough` and `memory_record_grade` MCP tools record follow-through (did the agent use the result?) and human usefulness grades. An agent-side hook auto-detects follow-through when `read_file` matches a search result's source file within 60s. Prometheus 7B auto-grading runs every 6h via cron. See `docs/plans/2026-08-11-search-quality-metric-plan.md`.
 
