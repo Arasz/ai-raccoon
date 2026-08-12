@@ -33,3 +33,7 @@ tests/AiRaccoon.Tests/Unit/Retrieval/Managed/
 
 # Rider per-user IDE state (decompiled-source inclusions, unit-test sessions) — machine-specific.
 *.DotSettings.user
+
+# Backup files
+*.bak-*
+*.bak
