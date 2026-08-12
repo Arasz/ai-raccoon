@@ -1,0 +1,5 @@
+# Runtime dependencies for ai-badger scripts.
+# Install once before running welcome-ai-badger / feed-badger / index_build:
+#   python3 -m pip install -r engine/requirements.txt
+jsonschema>=4.26.0
+pyyaml>=6.0.3

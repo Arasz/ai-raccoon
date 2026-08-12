@@ -1,0 +1,44 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/Arasz/ai-badger/schemas/stack.schema.json",
+    "title": "ai-badger stack metadata",
+    "description": "Optional per-stack metadata (<stack>/stack.json): detection signals and default commands used by detect.py, folded into index.json.stacks[stack].meta.",
+    "type": "object",
+    "required": [
+        "name"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "description": {
+            "type": "string"
+        },
+        "detectionSignals": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Machine-matchable glob signals ONLY (e.g. '*.tsx', 'angular.json') that detect.py's _has() rglobs for. A signal containing a space is prose, not a glob -- detect.py silently drops it and it will never fire. Dependency facts (e.g. a package.json dependency name) or file-content facts belong in detect.py's _dependency_stacks() instead, not here."
+        },
+        "requires": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Other stacks implied by this one (e.g. react requires ts+node)."
+        },
+        "commands": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            },
+            "description": "Default build/test/lint/run commands this stack contributes to config.json."
+        }
+    }
+}

@@ -1,0 +1,77 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/Arasz/ai-badger/schemas/hooks-manifest.schema.json",
+    "title": "ai-badger hooks manifest",
+    "description": "Maps hooks to agents and their implementation. Lives at features/common/hooks/hooks-manifest.json. Read by scaffold.py to determine which hooks to install.",
+    "type": "object",
+    "required": [
+        "hooks"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "hooks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "agents"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "agents": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "required": [
+                                "type",
+                                "entry"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                                "type": {
+                                    "enum": [
+                                        "hooks-json",
+                                        "plugin-hooks-json",
+                                        "plugin"
+                                    ],
+                                    "description": "hooks-json: wired into the consumer's own settings from the hooks.json template. plugin-hooks-json: registered by the plugin's own hooks/hooks.json and never wired into a consumer (it needs ${CLAUDE_PLUGIN_ROOT}). plugin: a method on the agent's plugin module."
+                                },
+                                "entry": {
+                                    "type": "string",
+                                    "description": "Filename in the hooks/ directory."
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "description": "Plugin method name (for type=plugin)."
+                                },
+                                "event": {
+                                    "type": "string",
+                                    "description": "Hook event name (for type=hooks-json)."
+                                },
+                                "script": {
+                                    "type": "string",
+                                    "description": "Filename of this hook's script; selects its command from hooks.json when an event carries more than one."
+                                },
+                                "matcher": {
+                                    "type": "string",
+                                    "description": "Optional per-agent matcher override. Copilot matches runtime tool names case-sensitively (grep/bash vs Claude's Grep/Bash), so a copilot arm may spell its own matcher."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github
-> Scaffolded by ai-badger 0.116.3. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.116.5. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Non-negotiable invariants
 
@@ -174,7 +174,6 @@ facts. Keep the docs directory searchable: check `memory_watch_status`, then `me
 (project_id + absolute path) when no watch exists.
 
 <!-- semantica MCP tools -->
-
 ## MCP Tools: semantica
 
 Semantica is the project knowledge graph. It complements AiRaccoon: AiRaccoon answers

@@ -409,10 +409,10 @@
     {
       "category": "uncategorized",
       "name": "mcp-tool-indexing",
-      "sourceHash": "26fb00beb67b41bb8c50dfd80eca48b332d2ab86c267c275952f6951831b1a51",
+        "sourceHash": "6c6ecd31d88392d0a3fd50a326d8f0368f684a89f81c98459269d8af0c2f0af3",
       "sourcePath": "mcp/mcp-tool-indexing",
       "status": "synced",
-      "syncedAt": "2026-08-06T12:47:43Z",
+        "syncedAt": "2026-08-12T11:08:22Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-indexing"
     },
     {

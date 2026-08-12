@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+
 def _bootstrap_lib() -> Path:
     """Put the framework's engine/ and tooling/ on sys.path and return its root.
 
@@ -146,11 +147,6 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _shared import (  # noqa: E402 — re-exported for backward compatibility
-    _test_ignore, PROJECT_LOCAL_FILE, MANAGED_HEADER, _MANAGED_PREFIX,
-    cfg_get, requirement_met, _condition_met, _within,
-)
-
 # Read from each skill's own `scope:` frontmatter (ADR-0018), against the catalog
 # scaffold_skills actually reads, so a default-scope skill shipped from another stack is
 # not offered here and then reported as missing.
@@ -219,14 +215,14 @@ def demote_headings(text: str, levels: int = 2) -> str:
 # The shared context, the manifest's generated-config ledger, and the seven collaborators
 from scaffold_context import ScaffoldContext  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
-from hook_wiring import HookWiring, merge_hooks  # noqa: E402
+from hook_wiring import HookWiring  # noqa: E402
 from template_rendering import TemplateRendering, invariant_summary  # noqa: E402
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
-from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills  # noqa: E402
+from skill_delivery import SkillDelivery  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 
@@ -563,6 +559,13 @@ class Scaffolder:
             self.notes.append(f"venv python: {venv_python}")
         return result
 
+    def copy_engine_and_schemas(self) -> None:
+        """Copy engine/ and schemas/ into .ai-badger/ for self-contained validation."""
+        for sub in ("schemas", "engine"):
+            src, dst = self.root / sub, self.aib / sub
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".*", "*.pyc", "__pycache__"))
+
     # -- adjustments ----------------------------------------------------------------
     def run_adjustments(self) -> None:
         """Run agent-specific adjustments declared in features/<agent>/adjustments/.
@@ -715,23 +718,17 @@ class Scaffolder:
         self.run_adjustments()
         self._record_progress("hooks")
         plugin_cmds = self.install_plugins()
-
-        # Check and install feature dependencies
         dep_result = self._check_dependencies()
-
-        # copy the config into place (source of truth for the skills), stamped with the
-        # version that actually wrote it — the incoming value describes an earlier run.
         written_config = dict(self.config)
         written_config["frameworkVersion"] = self.index["frameworkVersion"]
         bl.dump_json(self.aib / "config.json", written_config)
-
         self.mcp.generate_mcp_json()
         self._record_progress("config-and-mcp")
-
         project_servers, user_servers = self.mcp.split_servers_by_scope(
             self.mcp.declared_servers())
         self.mcp.propose_claude_mcp_user(user_servers)
         self.mcp.generate_copilot_mcp_json(project_servers)
+        self.copy_engine_and_schemas()
 
         manifest = {
             "$schema": "../schemas/manifest.schema.json",
@@ -813,10 +810,7 @@ def main(argv=None) -> int:
                 )
             except (ValueError, OSError) as exc:
                 skills = []
-                cli_notes.append(
-                    f"--skills was empty and the manifest at {manifest_path} could not be read "
-                    f"({exc}) — scaffolding no skills; nothing already linked was removed"
-                )
+                cli_notes.append(f"--skills empty, manifest at {manifest_path} could not be read ({exc})")
     scaf = Scaffolder(root, target, config, skills, install=not args.no_install,
                       overwrite=args.overwrite_agent_files,
                       reset_seed_files=args.reset_seed_files,
@@ -829,8 +823,7 @@ def main(argv=None) -> int:
     if result["availableOptIn"]:
         print("  opt-in skills available (not installed):")
         for skill in result["availableOptIn"]:
-            print(f"    - {skill['name']}: {skill['description']}")
-            print(f"      add it with: {skill['configEdit']}")
+            print(f"    - {skill['name']}: {skill['description']}\n      add it with: {skill['configEdit']}")
     if result["pluginCommands"]:
         import install_plugins as ip_lib  # pylint: disable=import-outside-toplevel
         print("  plugin setup commands (run per chosen scope):")

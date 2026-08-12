@@ -59,6 +59,9 @@ MCP catalog in the system prompt names every tool as `mcp__<server>__<tool>`.
 - **Never omit an index source from a tools-carrying document.** `carries_tool_detail()`
   is true as soon as ANY server has `tools_known: true`; an omitted source then hits
   `_update_source(source, None)` → status `absent` + ALL its tools marked removed.
+- **Python environment and schema validation**: `mcp_index.py` requires `jsonschema` for schema validation. Run using the framework's virtual environment (`<framework>/.venv/bin/python`) and pass `--root <framework checkout>` if
+  `mcp_index.py` reports `cannot validate against schemas/mcp-tools.schema.json`.
+- **Tool Intent Length Limit**: Tool `intent` strings in `mcp-tools.json` must be between 10 and 200 characters (`maxLength: 200`). Truncate verbose descriptions when setting intent via `mcp_index.py intent`.
 - `tools_known: false` sources are left completely untouched (status restated as
   `unknown`) — that is the safe shape for anything the session cannot see.
 - **Status fidelity**: `server_status()` reads, in order: `host_status` phrase

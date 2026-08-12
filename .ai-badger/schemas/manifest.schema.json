@@ -1,0 +1,207 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/Arasz/ai-badger/schemas/manifest.schema.json",
+    "title": "ai-badger project manifest",
+    "description": "Provenance record written by scaffold.py: exactly what the framework placed into the target repo, so feed-badger can diff project vs framework.",
+    "type": "object",
+    "required": [
+        "frameworkVersion",
+        "frameworkCommit",
+        "frameworkDirty",
+        "agents",
+        "entries"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "frameworkVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "frameworkCommit": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "pattern": "^[0-9a-f]{40}$",
+            "description": "Framework git HEAD at scaffold time; null when scaffolded from a plugin cache, which has no .git. The version resolves to the commit in that case (ADR-0001 decision 2)."
+        },
+        "frameworkDirty": {
+            "type": "boolean",
+            "description": "True when scaffolded from a working tree with uncommitted changes: provenance that is not reproducible. False from a plugin cache, where local edits are impossible."
+        },
+        "frameworkRoot": {
+            "type": "string",
+            "description": "Where the framework was when this scaffold was written — the pointer a copied file otherwise lacks (ADR-0007). Relative to the project when the framework is inside it (a self-hosted repo records '.'), absolute otherwise. A machine-local hint, always re-validated against the root predicate before use, so a value from another machine is ignored rather than trusted."
+        },
+        "generatedAt": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "ISO timestamp stamped by the orchestrator after scaffold (scripts avoid nondeterministic clocks)."
+        },
+        "agents": {
+            "type": "array",
+            "items": {
+                "enum": [
+                    "claude",
+                    "copilot",
+                    "hermes"
+                ]
+            }
+        },
+        "pluginScope": {
+            "enum": [
+                "default",
+                "local"
+            ]
+        },
+        "skillScope": {
+            "enum": [
+                "default",
+                "local"
+            ],
+            "description": "Renamed from pluginScope in v0.7.0. scaffold.py still writes both keys so pre-0.7.0 manifests stay readable; pluginScope is deprecated and read by nothing."
+        },
+        "configHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "sha256 of the config.json this scaffold was built from, canonicalized and minus $schema/frameworkVersion. Absent on manifests written before 0.46.0: refresh re-scaffolds once to record it."
+        },
+        "generatedConfig": {
+            "type": "array",
+            "description": "Config files a scaffold run generated or merged into but does not own — `.mcp.json`, `.github/mcp.json`, `.claude/settings.json` (issue #194). Bookkeeping, not ownership: nothing reads a record back to overwrite, delete or drift-check the file, so a path listed here is still the project's to edit. A record outlives the run that wrote it while the file is on disk, and dies with the file; it says only \"ai-badger wrote here, at this version\". Absent on manifests written before 0.52.0, where authorship could only be inferred from key shape (mcp_tools.only_generated_entries).",
+            "items": {
+                "type": "object",
+                "required": [
+                    "path",
+                    "destination",
+                    "frameworkVersion"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path within the target repo, recorded whether or not the file is tracked: the record is of writes, not of version control."
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "The label ai-badger knows the destination by — `mcp_tools.McpDestination.label` for the MCP configs, the file's own path for the rest. A destination whose label is not a project path is proposal-only (ADR-0014 decision 6) and is never recorded, because nothing is written."
+                    },
+                    "frameworkVersion": {
+                        "type": "string",
+                        "description": "The version that last wrote this path; carried forward unchanged from an earlier run's record when this run did not write the file."
+                    }
+                }
+            }
+        },
+        "entries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "feature",
+                    "stack",
+                    "name",
+                    "source",
+                    "target",
+                    "frameworkVersion",
+                    "hash"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "feature": {
+                        "enum": [
+                            "skills",
+                            "personas",
+                            "invariants",
+                            "instructions",
+                            "templates",
+                            "hooks",
+                            "adjustments",
+                            "mcp"
+                        ]
+                    },
+                    "stack": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Path within the framework repo."
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Path within the target repo."
+                    },
+                    "frameworkVersion": {
+                        "type": "string"
+                    },
+                    "hash": {
+                        "type": "string",
+                        "description": "sha256 of the source content at scaffold time. For directory entries this covers the written target, so it answers whether the project edited its own copy — see sourceHash for framework drift."
+                    },
+                    "seedOnce": {
+                        "type": "boolean",
+                        "description": "True where the scaffolder seeds this target once and never rewrites it (.ai-badger/state.json, .ai-badger/agent-instructions/model.json, any scaffolding.json entry marked seedOnce), so the project owns it thereafter. Every other entry is rewritten on the next run, which is what generated_file_guard.py refuses an edit to. Absent on manifests written before 0.101.0: the guard reads absence as regenerated and refuses, because a wrong refusal is loud, overridable and healed by one re-scaffold, while a wrong exemption is the silent loss this guard exists to prevent."
+                    },
+                    "projectOwned": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "description": "Skill directory entries only: the paths inside this delivered skill that the scaffolder stashes and restores across a re-scaffold rather than rewriting — `project-local.md` plus that skill's SEED_ONCE_SKILL_FILES. A skill is one entry for a whole directory, so without this list generated_file_guard.py cannot tell a copied file from a preserved one, and refuses the edit scaffold_freshness_guard.py accepts. Written from the same list the preservation reads, so a newly preserved name needs no second edit. Absent on manifests written before 0.107.0: the guard reads absence as regenerated and refuses, for the reason seedOnce gives."
+                    },
+                    "sourceHash": {
+                        "type": "string",
+                        "description": "Directory entries only: sha256 of the framework source directory at scaffold time. The only hash that can answer whether the framework has moved ahead, because the target is rendered output (#110)."
+                    },
+                    "dirMeta": {
+                        "type": "object",
+                        "description": "Directory entries only: structural fingerprint drift.py compares before the content hash.",
+                        "required": [
+                            "file_count",
+                            "dir_count"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "file_count": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "dir_count": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        }
+                    },
+                    "sourceMeta": {
+                        "type": "object",
+                        "description": "Directory entries only: the same structural pre-check for the framework source directory.",
+                        "required": [
+                            "file_count",
+                            "dir_count"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "file_count": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "dir_count": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

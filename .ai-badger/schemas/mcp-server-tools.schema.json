@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/Arasz/ai-badger/schemas/mcp-server-tools.schema.json",
+    "title": "Curated MCP tool intents",
+    "description": "features/<stack>/mcp/<server>/tools.json — hand-written intent and tags per tool, for a host that shows the model tool NAMES with no descriptions once definitions are deferred (ADR-0014 §1). Distinct from schemas/mcp-tools.schema.json, which is the per-project generated index this catalog seeds.",
+    "type": "object",
+    "required": [
+        "server",
+        "tools"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "server": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The owning server's name, matching its meta.json."
+        },
+        "tools": {
+            "type": "array",
+            "description": "Curated tools only. Absence is not a claim that a tool does not exist.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "intent"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The tool name as the host exposes it, without the mcp__<server>__ prefix."
+                    },
+                    "intent": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "When to reach for this tool — the thing a model cannot derive from the name alone. The generated index copies this verbatim, so it is bound by that schema's own 200-character limit."
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Tags from the closed vocabulary in features/common/mcp-tags.json. Grouping and display vocabulary, never a matching key on their own (ADR-0012)."
+                    }
+                }
+            }
+        }
+    }
+}

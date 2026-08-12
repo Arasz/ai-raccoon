@@ -204,9 +204,65 @@ def detect_stacks(target: Path, index: Dict) -> List[str]:
         if globs and _has(target, *globs):
             stacks.append(stack)
     stacks.extend(_dependency_stacks(target))
+
+    # Handle .venv signal: if .venv contains user packages, signal python stack;
+    # if .venv is tool-only and no user Python manifest exists, suppress false-positive python stack.
+    has_venv = (target / ".venv").is_dir() or (target / "venv").is_dir()
+    if has_venv:
+        has_user_manifest = _has(target, "pyproject.toml", "requirements.txt", "setup.py", "setup.cfg", "Pipfile", "tox.ini")
+        is_tool_venv = _is_tool_only_venv(target, index)
+        if not is_tool_venv and "python" not in stacks:
+            stacks.append("python")
+        elif is_tool_venv and not has_user_manifest and "python" in stacks:
+            stacks.remove("python")
+
     # de-dupe preserving order
     seen: set = set()
     return [s for s in stacks if not (s in seen or seen.add(s))]
+
+
+def _is_tool_only_venv(target: Path, index: Dict) -> bool:
+    """True if .venv/venv exists but contains ONLY packages for catalog MCP tools + standard venv tooling."""
+    venv_dirs = [target / ".venv", target / "venv"]
+    found_venv = None
+    for vd in venv_dirs:
+        if vd.is_dir():
+            found_venv = vd
+            break
+    if not found_venv:
+        return False
+
+    # Standard venv + common transitive MCP tool packages
+    allowed_packages = {
+        "pip", "setuptools", "wheel", "_virtualenv", "distutils",
+        "mcp", "pydantic", "pydantic_core", "typing_extensions", "annotated_types",
+        "starlette", "uvicorn", "httpx", "anyio", "sniffio", "idna", "certifi",
+        "tree_sitter", "tree_sitter_python", "htbuilder"
+    }
+
+    # Add packages declared in MCP catalog meta.json files
+    features_dir = FRAMEWORK_ROOT / "features"
+    for meta_file in features_dir.glob("*/mcp/*/meta.json"):
+        try:
+            meta_data = json.loads(_read(meta_file))
+            pkg = meta_data.get("package")
+            if pkg:
+                allowed_packages.add(pkg.lower().replace("-", "_"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # Scan site-packages dist-info
+    installed = set()
+    for site_pkg in found_venv.glob("**/site-packages"):
+        for dist in site_pkg.glob("*.dist-info"):
+            clean_name = dist.name.split("-")[0].lower().replace("-", "_")
+            installed.add(clean_name)
+
+    if not installed:
+        return True
+
+    # If all installed packages are allowed, it's an MCP tool venv
+    return installed.issubset(allowed_packages)
 
 
 def expand_requires(stacks: List[str], index: Dict) -> List[str]:
