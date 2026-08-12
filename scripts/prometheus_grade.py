@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import urllib.request
@@ -129,6 +130,22 @@ def _build_results_summary(top_files: list[str], db_path: Path | None = None) ->
     return "\n".join(parts)
 
 
+def _parse_grade(content: str) -> int | None:
+    """Extract the 1-5 grade from a Prometheus response.
+
+    The model states the grade on the first line, or in a trailing
+    "grade/score is N" sentence when the response runs longer.
+    """
+    first_line = content.split("\n")[0].strip()
+    for ch in first_line:
+        if ch in "12345":
+            return int(ch)
+    matches = re.findall(r"(?:grade|score)[^\d]{0,25}([1-5])", content)
+    if matches:
+        return int(matches[-1])
+    return None
+
+
 def _call_prometheus(query: str, results_summary: str, result_count: int) -> tuple[int, str] | None:
     """Call Prometheus and return (grade, explanation) or None."""
     prompt = PROMPT_TEMPLATE.format(
@@ -140,7 +157,7 @@ def _call_prometheus(query: str, results_summary: str, result_count: int) -> tup
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.0,
-        "max_tokens": 200,
+        "max_tokens": 512,
     }).encode()
 
     req = urllib.request.Request(
@@ -160,13 +177,7 @@ def _call_prometheus(query: str, results_summary: str, result_count: int) -> tup
     except (KeyError, IndexError):
         return None
 
-    # Parse grade from first line only
-    first_line = content.split("\n")[0].strip()
-    grade = None
-    for ch in first_line:
-        if ch in "12345":
-            grade = int(ch)
-            break
+    grade = _parse_grade(content)
     if grade is None:
         return None
     return grade, content
