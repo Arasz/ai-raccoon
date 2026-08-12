@@ -62,6 +62,7 @@ public static partial class Dependencies
             services.AddSingleton<FileTypeMatcher>(sp => new FileTypeMatcher(sp.GetServices<IFileTypeHandler>()));
             services.AddSingleton<IFileTypeMatcher>(sp => sp.GetRequiredService<FileTypeMatcher>());
             services.AddSingleton<SqliteMemoryStore>();
+            services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddSingleton(sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
