@@ -1,5 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
@@ -10,6 +11,7 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
@@ -55,6 +57,9 @@ public static partial class Dependencies
             services.AddSingleton<SqliteSearchQualityService>();
             services.AddSingleton<ISearchQualityService>(sp => sp.GetRequiredService<SqliteSearchQualityService>());
             services.AddSingleton<IChunker, TokenizerChunker>();
+            services.AddSingleton<IFileTypeHandler, MarkdownFileTypeHandler>();
+            services.AddSingleton<IFileTypeHandler, JsonFileTypeHandler>();
+            services.AddSingleton<IFileTypeMatcher, FileTypeMatcher>();
             services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddSingleton(sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
