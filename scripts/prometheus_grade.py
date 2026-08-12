@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
-MODEL = "prometheus-7b-v2.0"
+MODEL = "m-prometheus-14b"
 
 RUBRIC = """You are grading the usefulness of memory search results for an AI agent.
 
