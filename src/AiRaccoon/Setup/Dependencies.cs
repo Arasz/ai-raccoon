@@ -59,8 +59,9 @@ public static partial class Dependencies
             services.AddSingleton<IChunker, TokenizerChunker>();
             services.AddSingleton<IFileTypeHandler, MarkdownFileTypeHandler>();
             services.AddSingleton<IFileTypeHandler, JsonFileTypeHandler>();
-            services.AddSingleton<IFileTypeMatcher, FileTypeMatcher>();
-            services.AddSingleton<IMemoryStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
+            services.AddSingleton<FileTypeMatcher>(sp => new FileTypeMatcher(sp.GetServices<IFileTypeHandler>()));
+            services.AddSingleton<IFileTypeMatcher>(sp => sp.GetRequiredService<FileTypeMatcher>());
+            services.AddSingleton<SqliteMemoryStore>();
             services.AddSingleton(sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),

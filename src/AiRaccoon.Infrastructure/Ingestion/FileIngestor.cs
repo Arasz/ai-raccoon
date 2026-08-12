@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -25,14 +26,24 @@ internal sealed class FileIngestor
 
     public FileIngestor(
         IFileTypeMatcher? fileTypeMatcher,
+        IChunker chunker,
         EntryEmbedder embedder,
         TimeProvider timeProvider,
         SqliteMemorySourceStore sourceStore)
     {
-        _fileTypeMatcher = fileTypeMatcher ?? new FileTypeMatcher([new MarkdownFileTypeHandler(), new JsonFileTypeHandler()]);
+        _fileTypeMatcher = fileTypeMatcher ?? new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler()]);
         _embedder = embedder;
         _timeProvider = timeProvider;
         _sourceStore = sourceStore;
+    }
+
+    public FileIngestor(
+        IFileTypeMatcher? fileTypeMatcher,
+        EntryEmbedder embedder,
+        TimeProvider timeProvider,
+        SqliteMemorySourceStore sourceStore)
+        : this(fileTypeMatcher, new TokenizerChunker(), embedder, timeProvider, sourceStore)
+    {
     }
 
     public FileIngestor(
@@ -40,7 +51,7 @@ internal sealed class FileIngestor
         EntryEmbedder embedder,
         TimeProvider timeProvider,
         SqliteMemorySourceStore sourceStore)
-        : this(new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler()]), embedder, timeProvider, sourceStore)
+        : this(null, chunker, embedder, timeProvider, sourceStore)
     {
     }
 

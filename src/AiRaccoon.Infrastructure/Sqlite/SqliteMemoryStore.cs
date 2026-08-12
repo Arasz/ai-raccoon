@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Watch;
@@ -25,7 +26,8 @@ public sealed partial class SqliteMemoryStore(
     IChunker chunker,
     EmbeddingService embeddings,
     ILogger<SqliteMemoryStore> logger,
-    IMemorySourceStore sourceStore)
+    IMemorySourceStore sourceStore,
+    IFileTypeMatcher? fileTypeMatcher = null)
     : IMemoryStore
 {
     private readonly EntryEmbedder _embedder = new(embeddings);
@@ -33,7 +35,7 @@ public sealed partial class SqliteMemoryStore(
     // A field initializer can't reference another instance field (CS0236), so the shared
     // _embedder is wired in lazily on first use rather than duplicated via a second `new`.
     private FileIngestor? _ingestorInstance;
-    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(chunker, _embedder, timeProvider, (SqliteMemorySourceStore)sourceStore);
+    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(fileTypeMatcher, chunker, _embedder, timeProvider, (SqliteMemorySourceStore)sourceStore);
 
     // The remote API key is a settings row (embedding.apiKey) — the single-channel ruling moved it
     // out of process memory and environment.
