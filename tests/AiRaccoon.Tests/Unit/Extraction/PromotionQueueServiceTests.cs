@@ -1,14 +1,11 @@
 using System.Text.Json;
-using AiRaccoon.Core;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -28,9 +25,11 @@ public sealed class PromotionQueueServiceTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
+    private static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web);
+    private readonly FakeTimeProvider _clock;
+
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-queue-svc");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _clock;
     private readonly RecordingMetrics _metrics;
     private readonly PromotionQueueService _service;
 
@@ -42,7 +41,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
@@ -51,13 +50,9 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private static QueueCandidate Candidate(string hash, string value, double score) =>
-        new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
+    private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
-    private Task<PromotionMeta> MetaFor(string? projectId) =>
-        _service.GetMetaAsync(projectId, TestContext.Current.CancellationToken);
-
-    private static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web);
+    private Task<PromotionMeta> MetaFor(string? projectId) => _service.GetMetaAsync(projectId, TestContext.Current.CancellationToken);
 
     private static string Json(PromotionMeta meta) => JsonSerializer.Serialize(meta, WireJson);
 
@@ -152,8 +147,10 @@ public sealed class PromotionQueueServiceTests : IDisposable
     {
         await SetCapAsync(3, TestContext.Current.CancellationToken);
         var outcome = await _service.ProposeAsync("acme",
-            [Candidate("h1", "one", 1.0), Candidate("h2", "two", 2.0),
-             Candidate("h3", "three", 3.0), Candidate("h4", "four", 4.0), Candidate("h5", "five", 5.0)],
+            [
+                Candidate("h1", "one", 1.0), Candidate("h2", "two", 2.0),
+                Candidate("h3", "three", 3.0), Candidate("h4", "four", 4.0), Candidate("h5", "five", 5.0)
+            ],
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(2, "5 inserted into a cap of 3 → two evictions");
@@ -166,9 +163,10 @@ public sealed class PromotionQueueServiceTests : IDisposable
     public async Task Propose_DefaultsCap_WhenNoSetting()
     {
         var outcome = await _service.ProposeAsync("acme",
-            Enumerable.Range(0, ExtractionConfigKeys.DefaultQueueCapacity + 5)
-                .Select(i => Candidate($"h{i:000}", $"fact {i}", i))
-                .ToList(),
+            [
+                .. Enumerable.Range(0, ExtractionConfigKeys.DefaultQueueCapacity + 5)
+                    .Select(i => Candidate($"h{i:000}", $"fact {i}", i))
+            ],
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(5);
@@ -178,7 +176,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SharesTopNFromTheQueue_AndDrains()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         // Queue candidates are committed entries by construction (propose extracts from the
         // project context), so the hashes must exist there for ShareAsync.
         var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact", null, null, null, null, null),
@@ -188,8 +186,10 @@ public sealed class PromotionQueueServiceTests : IDisposable
         var mid = await store.WriteAsync(new MemoryWriteRequest("acme", "mid fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
         await _service.ProposeAsync("acme",
-            [Candidate(low.Hash, "low fact", 1.0), Candidate(high.Hash, "high fact", 5.0),
-             Candidate(mid.Hash, "mid fact", 3.0)],
+            [
+                Candidate(low.Hash, "low fact", 1.0), Candidate(high.Hash, "high fact", 5.0),
+                Candidate(mid.Hash, "mid fact", 3.0)
+            ],
             TestContext.Current.CancellationToken);
 
         var outcome = await _service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
@@ -207,7 +207,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact", null, null, null, null, null),
             TestContext.Current.CancellationToken);
         var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact", null, null, null, null, null),
@@ -239,8 +239,10 @@ public sealed class PromotionQueueServiceTests : IDisposable
     public async Task ClearStaleAsync_RemovesRowsOnAnOlderScorerVersion_ReportsTheCount()
     {
         await _service.ProposeAsync("acme",
-            [new QueueCandidate("stale", "stale.md", "old value", null, 2.5, [], ScorerVersion: 0),
-             new QueueCandidate("current", "current.md", "new value", null, 1.0, [], ScorerVersion: 1)],
+            [
+                new QueueCandidate("stale", "stale.md", "old value", null, 2.5, [], ScorerVersion: 0),
+                new QueueCandidate("current", "current.md", "new value", null, 1.0, [], ScorerVersion: 1)
+            ],
             TestContext.Current.CancellationToken);
 
         var cleared = await _service.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
@@ -419,7 +421,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Sweep_DropsQueueRowsForTheEntriesItDeleted_AndLeavesTheRest()
     {
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry", null, null, null, null, null),
             TestContext.Current.CancellationToken);
@@ -429,8 +431,10 @@ public sealed class PromotionQueueServiceTests : IDisposable
             TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromDays(2)); // older than the TTL, rating below any threshold
         await _service.ProposeAsync("acme",
-            [Candidate(doomed.Hash, "doomed entry", 1.0), Candidate("fake-hash", "queued row", 2.0),
-             Candidate(healthy.Hash, "healthy entry", 3.0)],
+            [
+                Candidate(doomed.Hash, "doomed entry", 1.0), Candidate("fake-hash", "queued row", 2.0),
+                Candidate(healthy.Hash, "healthy entry", 3.0)
+            ],
             TestContext.Current.CancellationToken);
 
         var sweeper = new SweepService(store, _clock);
@@ -438,8 +442,8 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldBe([healthy.Hash, "fake-hash"],
-            "the doomed entry's row is gone with it; a candidate with no backing entry and one backed " +
-            "by an entry sweep left alone both survive");
+                "the doomed entry's row is gone with it; a candidate with no backing entry and one backed " +
+                "by an entry sweep left alone both survive");
     }
 
     private sealed class RecordingMetrics : IPromotionQueueMetrics
@@ -449,21 +453,19 @@ public sealed class PromotionQueueServiceTests : IDisposable
         public List<(string ProjectId, double Wait)> Discarded { get; } = [];
         public List<(PromotionQueueStats Stats, int Capacity)> Snapshots { get; } = [];
 
-        public void RecordEviction(string projectId, double victimScore, string reason) =>
-            Evictions.Add((projectId, victimScore, reason));
+        public List<(string ProjectId, int Count)> Pruned { get; } = [];
+        public List<(string ProjectId, int Count)> Failed { get; } = [];
+
+        public void RecordEviction(string projectId, double victimScore, string reason) => Evictions.Add((projectId, victimScore, reason));
         public void RecordPromoted(string projectId, double waitSeconds) => Promoted.Add((projectId, waitSeconds));
         public void RecordDiscarded(string projectId, double waitSeconds) => Discarded.Add((projectId, waitSeconds));
         public void RecordPruned(string projectId, int count) => Pruned.Add((projectId, count));
         public void RecordFailed(string projectId, int count) => Failed.Add((projectId, count));
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
-
-        public List<(string ProjectId, int Count)> Pruned { get; } = [];
-        public List<(string ProjectId, int Count)> Failed { get; } = [];
     }
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

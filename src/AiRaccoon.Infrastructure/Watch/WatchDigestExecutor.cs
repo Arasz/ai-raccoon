@@ -1,8 +1,7 @@
-using AiRaccoon.Core.Ingestion;
 using System.Security.Cryptography;
 using System.Text;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -16,7 +15,7 @@ public sealed partial class WatchDigestExecutor(
     IMemoryStore store,
     IWatchStore watchStore,
     TimeProvider timeProvider,
-    ILogger<WatchDigestExecutor> logger)
+    ILogger<WatchDigestExecutor> logger) : IWatchDigestExecutor
 {
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)

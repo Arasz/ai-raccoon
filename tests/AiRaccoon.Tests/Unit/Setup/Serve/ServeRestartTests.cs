@@ -1,11 +1,12 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using Shouldly;
 using Xunit;
+using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
@@ -190,8 +191,7 @@ public sealed class ServeRestartTests : IDisposable
         (await StopAsync(old)).ShouldBe(ExitCode.Success);
     }
 
-    private static Task<bool> ProbeAsync(int port) =>
-        ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+    private static Task<bool> ProbeAsync(int port) => ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
 
     private static ServeRun Start(string[] args)
     {
@@ -201,7 +201,7 @@ public sealed class ServeRestartTests : IDisposable
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-        return new ServeRun(ServeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), stdout, stderr, cts.Token),
+        return new ServeRun(NodeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), stdout, stderr, cts.Token),
             stdout, stderr, cts);
     }
 

@@ -1,18 +1,17 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
-using AiRaccoon.Core.Ingestion;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-/// Immutable matcher linking file extensions to registered <see cref="IFileTypeHandler"/> instances.
+///     Immutable matcher linking file extensions to registered <see cref="IFileTypeHandler" /> instances.
 /// </summary>
 public sealed class FileTypeMatcher : IFileTypeMatcher
 {
     private readonly FrozenDictionary<string, IFileTypeHandler> _handlersByExtension;
 
-    public FileTypeMatcher(IEnumerable<IFileTypeHandler> handlers)
+    public FileTypeMatcher(IReadOnlyCollection<IFileTypeHandler> handlers)
     {
         Guard.IsNotNull(handlers);
 
@@ -32,6 +31,8 @@ public sealed class FileTypeMatcher : IFileTypeMatcher
         _handlersByExtension = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 
+    public IReadOnlySet<string> SupportedExtensions => _handlersByExtension.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     public bool TryGetHandler(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -45,8 +46,6 @@ public sealed class FileTypeMatcher : IFileTypeMatcher
     }
 
     public bool IsSupported(string path) => TryGetHandler(path, out _);
-
-    public IReadOnlySet<string> SupportedExtensions => _handlersByExtension.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static string NormalizeExtension(string ext)
     {

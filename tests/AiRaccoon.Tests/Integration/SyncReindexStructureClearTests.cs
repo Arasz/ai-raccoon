@@ -1,5 +1,4 @@
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;

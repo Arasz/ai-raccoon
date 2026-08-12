@@ -1,16 +1,16 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -29,8 +29,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -1006,35 +1006,6 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         sourceId!.Value.ShouldBeGreaterThan(0);
     }
 
-    private sealed class EntryRow
-    {
-        public string Hash { get; set; } = "";
-
-        public string Path { get; set; } = "";
-
-        public string? Scope { get; set; }
-
-        public string ProjectId { get; set; } = "";
-
-        public string? ContextLabel { get; set; }
-
-        public string? WorkspaceId { get; set; }
-
-        public string? AgentId { get; set; }
-
-        public long CreatedAt { get; set; }
-
-        public int AccessCount { get; set; }
-
-        public long? LastAccessedAt { get; set; }
-
-        public double Rating { get; set; }
-
-        public int? TtlDays { get; set; }
-
-        public string EmbedState { get; set; } = "";
-    }
-
     [Fact]
     public async Task SelectSourceByHashAndProject_ReturnsSourceType()
     {
@@ -1080,14 +1051,43 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "ExtractCandidatesAsync must return source_type from the memory_source JOIN");
     }
 
+    /// <summary>Ingest is deny-by-default; these tests exercise chunking, not containment.</summary>
+    private Task AllowIngestScopeAsync(string path) =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
+            TestContext.Current.CancellationToken);
+
+    private sealed class EntryRow
+    {
+        public string Hash { get; set; } = "";
+
+        public string Path { get; set; } = "";
+
+        public string? Scope { get; set; }
+
+        public string ProjectId { get; set; } = "";
+
+        public string? ContextLabel { get; set; }
+
+        public string? WorkspaceId { get; set; }
+
+        public string? AgentId { get; set; }
+
+        public long CreatedAt { get; set; }
+
+        public int AccessCount { get; set; }
+
+        public long? LastAccessedAt { get; set; }
+
+        public double Rating { get; set; }
+
+        public int? TtlDays { get; set; }
+
+        public string EmbedState { get; set; } = "";
+    }
+
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>
     private sealed class StubChunker : IChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
-
-    /// <summary>Ingest is deny-by-default; these tests exercise chunking, not containment.</summary>
-    private Task AllowIngestScopeAsync(string path) =>
-        _store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([path]),
-            TestContext.Current.CancellationToken);
 }

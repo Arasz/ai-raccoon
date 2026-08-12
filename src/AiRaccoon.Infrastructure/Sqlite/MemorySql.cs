@@ -5,82 +5,6 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
-    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1). Length-prefixed, not
-    // ':'-joined, because the naive join collides across project id/label boundaries.
-    public static string ContextKeyExpression(string prefix) => $"""
-                                                                  CASE
-                                                                      WHEN {prefix}workspace_id IS NOT NULL
-                                                                           THEN 'workspace:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || {prefix}workspace_id
-                                                                      WHEN {prefix}scope = 'shared'  THEN 'shared'
-                                                                      WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id
-                                                                      ELSE 'custom:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || COALESCE({prefix}context_label, '')
-                                                                  END
-                                                                  """;
-
-    /// <summary>
-    ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
-    ///     into the same key. Mirrors FilterFor's branches, including reading the project id from the
-    ///     context string rather than <paramref name="projectId" />, so the two never diverge.
-    /// </summary>
-    public static string ContextKeyFor(string context, string projectId)
-    {
-        if (context == ContextNaming.SharedContext)
-        {
-            return "shared";
-        }
-
-        if (context.StartsWith("project:", StringComparison.Ordinal))
-        {
-            return $"project:{context["project:".Length..]}";
-        }
-
-        if (context.StartsWith("workspace:", StringComparison.Ordinal))
-        {
-            return $"workspace:{projectId.Length}:{projectId}:{context["workspace:".Length..]}";
-        }
-
-        if (context.StartsWith("label:", StringComparison.Ordinal))
-        {
-            var rest = context["label:".Length..];
-            var colon = rest.IndexOf(':');
-            if (colon > 0)
-            {
-                return $"custom:{projectId.Length}:{projectId}:{rest[(colon + 1)..]}";
-            }
-        }
-
-        return $"custom:{projectId.Length}:{projectId}:{context}";
-    }
-
-    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputes
-    // chunk_index/total_chunks for one (ctx, source_file) group after a membership-changing write.
-    public static readonly string RecomputeChunkColumnsForContext = $"""
-                                                                      WITH numbered AS (
-                                                                          SELECT id,
-                                                                                 ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
-                                                                                 COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
-                                                                          FROM entries
-                                                                          WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile)
-                                                                      UPDATE entries
-                                                                         SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                             total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                       WHERE entries.id IN (SELECT id FROM numbered)
-                                                                      """;
-
-    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2 migration backfill and after a sync merge.</summary>
-    public static readonly string RecomputeChunkColumnsBankWide = $"""
-                                                                    WITH numbered AS (
-                                                                        SELECT id,
-                                                                               ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
-                                                                               COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
-                                                                        FROM entries
-                                                                        WHERE source_file IS NOT NULL)
-                                                                    UPDATE entries
-                                                                       SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                           total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                     WHERE entries.id IN (SELECT id FROM numbered)
-                                                                    """;
-
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
@@ -110,28 +34,28 @@ internal static class MemorySql
                                                        """""";
 
     public const string SelectExtractionCandidates = """"""
-                                                      SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
-                                                             ms.source_type AS SourceType,
-                                                             e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
-                                                             e.ttl_days AS TtlDays
-                                                      FROM entries e
-                                                      LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                      WHERE e.scope = 'project' AND e.project_id = @projectId AND e.embed_state = 'embedded'
-                                                        AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
-                                                      """""";
+                                                     SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                            ms.source_type AS SourceType,
+                                                            e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
+                                                            e.ttl_days AS TtlDays
+                                                     FROM entries e
+                                                     LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                     WHERE e.scope = 'project' AND e.project_id = @projectId AND e.embed_state = 'embedded'
+                                                       AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
+                                                     """""";
 
     public const string SelectSharedIndex = """"
-                                             SELECT path AS Path, value AS Value
-                                             FROM entries
-                                             WHERE scope = 'shared'
-                                             """";
+                                            SELECT path AS Path, value AS Value
+                                            FROM entries
+                                            WHERE scope = 'shared'
+                                            """";
 
     public const string SelectProjectIds = """"
-                                             SELECT DISTINCT project_id AS ProjectId
-                                             FROM entries
-                                             WHERE scope = 'project'
-                                             ORDER BY project_id
-                                             """";
+                                           SELECT DISTINCT project_id AS ProjectId
+                                           FROM entries
+                                           WHERE scope = 'project'
+                                           ORDER BY project_id
+                                           """";
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
@@ -251,12 +175,12 @@ internal static class MemorySql
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
     // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
     public const string SelectDeleteRecomputeContext = """
-                                                        SELECT scope AS Scope, context_label AS ContextLabel,
-                                                               workspace_id AS WorkspaceId, source_file AS SourceFile
-                                                        FROM entries
-                                                        WHERE hash = @hash AND project_id = @projectId
-                                                          AND (@scope IS NULL OR scope IS @scope)
-                                                        """;
+                                                       SELECT scope AS Scope, context_label AS ContextLabel,
+                                                              workspace_id AS WorkspaceId, source_file AS SourceFile
+                                                       FROM entries
+                                                       WHERE hash = @hash AND project_id = @projectId
+                                                         AND (@scope IS NULL OR scope IS @scope)
+                                                       """;
 
     public const string UpsertTombstone =
         "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
@@ -300,17 +224,17 @@ internal static class MemorySql
                                                         """;
 
     public const string RestoreQueueRowsStillBacked = """
-                                                       INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                                       SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
-                                                       FROM queue_restore r
-                                                       WHERE EXISTS (SELECT 1 FROM entries e
-                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash
-                                                                       AND e.scope = 'project')
-                                                         AND NOT EXISTS (SELECT 1 FROM promotion_discards d
-                                                                         WHERE d.project_id = r.project_id AND d.hash = r.hash)
-                                                       ON CONFLICT(project_id, hash) DO NOTHING;
-                                                       DELETE FROM queue_restore;
-                                                       """;
+                                                      INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                      SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
+                                                      FROM queue_restore r
+                                                      WHERE EXISTS (SELECT 1 FROM entries e
+                                                                    WHERE e.project_id = r.project_id AND e.hash = r.hash
+                                                                      AND e.scope = 'project')
+                                                        AND NOT EXISTS (SELECT 1 FROM promotion_discards d
+                                                                        WHERE d.project_id = r.project_id AND d.hash = r.hash)
+                                                      ON CONFLICT(project_id, hash) DO NOTHING;
+                                                      DELETE FROM queue_restore;
+                                                      """;
 
     public const string DeleteWatchFilesByProjectPathCascade = """
                                                                DELETE FROM watch_files
@@ -520,4 +444,81 @@ internal static class MemorySql
                                                       AND context_label IS @contextLabel AND workspace_id IS @workspaceId
                                                     LIMIT 1
                                                     """;
+
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputes
+    // chunk_index/total_chunks for one (ctx, source_file) group after a membership-changing write.
+    public static readonly string RecomputeChunkColumnsForContext = $"""
+                                                                     WITH numbered AS (
+                                                                         SELECT id,
+                                                                                ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
+                                                                                COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                         FROM entries
+                                                                         WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile)
+                                                                     UPDATE entries
+                                                                        SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                            total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                      WHERE entries.id IN (SELECT id FROM numbered)
+                                                                     """;
+
+    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2 migration backfill and after a sync merge.</summary>
+    public static readonly string RecomputeChunkColumnsBankWide = $"""
+                                                                   WITH numbered AS (
+                                                                       SELECT id,
+                                                                              ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
+                                                                              COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                       FROM entries
+                                                                       WHERE source_file IS NOT NULL)
+                                                                   UPDATE entries
+                                                                      SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                          total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                    WHERE entries.id IN (SELECT id FROM numbered)
+                                                                   """;
+
+    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1). Length-prefixed, not
+    // ':'-joined, because the naive join collides across project id/label boundaries.
+    public static string ContextKeyExpression(string prefix) =>
+        $"""
+         CASE
+             WHEN {prefix}workspace_id IS NOT NULL
+                  THEN 'workspace:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || {prefix}workspace_id
+             WHEN {prefix}scope = 'shared'  THEN 'shared'
+             WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id
+             ELSE 'custom:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || COALESCE({prefix}context_label, '')
+         END
+         """;
+
+    /// <summary>
+    ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
+    ///     into the same key. Mirrors FilterFor's branches, including reading the project id from the
+    ///     context string rather than <paramref name="projectId" />, so the two never diverge.
+    /// </summary>
+    public static string ContextKeyFor(string context, string projectId)
+    {
+        if (context == ContextNaming.SharedContext)
+        {
+            return "shared";
+        }
+
+        if (context.StartsWith("project:", StringComparison.Ordinal))
+        {
+            return $"project:{context["project:".Length..]}";
+        }
+
+        if (context.StartsWith("workspace:", StringComparison.Ordinal))
+        {
+            return $"workspace:{projectId.Length}:{projectId}:{context["workspace:".Length..]}";
+        }
+
+        if (context.StartsWith("label:", StringComparison.Ordinal))
+        {
+            var rest = context["label:".Length..];
+            var colon = rest.IndexOf(':');
+            if (colon > 0)
+            {
+                return $"custom:{projectId.Length}:{projectId}:{rest[(colon + 1)..]}";
+            }
+        }
+
+        return $"custom:{projectId.Length}:{projectId}:{context}";
+    }
 }

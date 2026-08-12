@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Tests.E2E;
 using Shouldly;
 using Xunit;

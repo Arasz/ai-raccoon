@@ -8,10 +8,10 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Retrieval;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -60,8 +60,8 @@ public sealed class BaselineMetricsTests : IDisposable
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow),
-            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        _store = new SqliteMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -460,15 +460,9 @@ public sealed class BaselineMetricsTests : IDisposable
     ///     per-query relevance sets from expectedSource: file-level = every hash whose path starts
     ///     with the file part before '#'.
     /// </summary>
-    private sealed class RelevanceSets
+    private sealed class RelevanceSets(Dictionary<string, string> hashByPath)
     {
         private readonly Dictionary<string, IReadOnlySet<string>> _cache = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> _hashByPath;
-
-        public RelevanceSets(Dictionary<string, string> hashByPath)
-        {
-            _hashByPath = hashByPath;
-        }
 
         public static IReadOnlySet<string> Empty { get; } = new HashSet<string>(StringComparer.Ordinal);
 
@@ -487,7 +481,7 @@ public sealed class BaselineMetricsTests : IDisposable
             var filePart = expectedSource.Contains('#')
                 ? expectedSource[..expectedSource.IndexOf('#')]
                 : expectedSource;
-            var hashes = _hashByPath
+            var hashes = hashByPath
                 .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
                 .Select(pair => pair.Value)
                 .ToHashSet(StringComparer.Ordinal);

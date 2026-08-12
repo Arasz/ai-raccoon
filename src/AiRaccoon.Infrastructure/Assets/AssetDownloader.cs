@@ -14,9 +14,9 @@ public sealed class AssetDownloader
 {
     private const int DefaultAttempts = 3;
     private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromMilliseconds(250);
+    private readonly int _attempts;
 
     private readonly HttpClient _http;
-    private readonly int _attempts;
     private readonly TimeSpan _retryDelay;
 
     public AssetDownloader(HttpClient http, int? attempts = null, TimeSpan? retryDelay = null)
@@ -37,7 +37,7 @@ public sealed class AssetDownloader
     {
         Guard.IsNotNullOrWhiteSpace(url);
 
-        for (var attempt = 1; ; attempt++)
+        for (var attempt = 1;; attempt++)
         {
             var lastAttempt = attempt >= _attempts;
             using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
@@ -69,9 +69,7 @@ public sealed class AssetDownloader
         }
     }
 
-    private static string ContentLength(HttpResponseMessage response) =>
-        response.Content.Headers.ContentLength?.ToString() ?? "absent";
+    private static string ContentLength(HttpResponseMessage response) => response.Content.Headers.ContentLength?.ToString() ?? "absent";
 
-    private static bool IsWorthRetrying(HttpStatusCode status) =>
-        status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)status >= 500;
+    private static bool IsWorthRetrying(HttpStatusCode status) => status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)status >= 500;
 }

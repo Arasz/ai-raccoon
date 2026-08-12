@@ -31,8 +31,8 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -109,7 +109,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
             ORDER BY id
             """,
             new { hash });
-        return rows.ToList();
+        return [.. rows];
     }
 
     private sealed class SiblingRow
@@ -127,7 +127,6 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

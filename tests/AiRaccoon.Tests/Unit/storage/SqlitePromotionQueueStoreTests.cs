@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
@@ -20,10 +19,10 @@ namespace AiRaccoon.Tests.Unit.storage;
 public sealed class SqlitePromotionQueueStoreTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+    private readonly FakeTimeProvider _clock;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-queue");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _clock;
     private readonly SqlitePromotionQueueStore _store;
 
     public SqlitePromotionQueueStoreTests()
@@ -43,8 +42,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         string? sourceFile = null, params string[] reasons) =>
         new(hash, $"{hash}.md", value, sourceFile, score, reasons);
 
-    private static QueueCandidate CandidateWithVersion(string hash, string value, double score, int scorerVersion) =>
-        new(hash, $"{hash}.md", value, null, score, [], scorerVersion);
+    private static QueueCandidate CandidateWithVersion(string hash, string value, double score, int scorerVersion) => new(hash, $"{hash}.md", value, null, score, [], scorerVersion);
 
     // ------------------------------------------------------------------ schema
     [Fact]
@@ -166,10 +164,10 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     public async Task ClearStaleAsync_RemovesRowsWithADifferentScorerVersion_KeepsTheCurrentOne()
     {
         await _store.UpsertAsync("acme",
-            [
-                CandidateWithVersion("stale", "old value", 2.5, scorerVersion: 0),
-                CandidateWithVersion("current", "new value", 1.0, scorerVersion: 1)
-            ], TestContext.Current.CancellationToken);
+        [
+            CandidateWithVersion("stale", "old value", 2.5, scorerVersion: 0),
+            CandidateWithVersion("current", "new value", 1.0, scorerVersion: 1)
+        ], TestContext.Current.CancellationToken);
 
         var cleared = await _store.ClearStaleAsync("acme", currentScorerVersion: 1, TestContext.Current.CancellationToken);
 
@@ -334,11 +332,11 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     public async Task EvictVictim_RemovesLowestScoreOldestOfTheProject()
     {
         await _store.UpsertAsync("acme",
-            [
-                Candidate("h1", "low-old", 1.0),
-                Candidate("h2", "low-new", 1.0),
-                Candidate("h3", "high", 5.0)
-            ], TestContext.Current.CancellationToken);
+        [
+            Candidate("h1", "low-old", 1.0),
+            Candidate("h2", "low-new", 1.0),
+            Candidate("h3", "high", 5.0)
+        ], TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromMinutes(5));
         await _store.UpsertAsync("acme",
             [Candidate("h2", "low-new refreshed", 1.0)], TestContext.Current.CancellationToken);
@@ -355,7 +353,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     public async Task EvictVictim_TiedScoreAndCreatedAt_BreaksTieByInsertionOrder()
     {
         await _store.UpsertAsync("acme",
-            Enumerable.Range(0, 20).Select(i => Candidate($"h{i:00}", $"fact {i}", 2.0)).ToList(),
+            [.. Enumerable.Range(0, 20).Select(i => Candidate($"h{i:00}", $"fact {i}", 2.0))],
             TestContext.Current.CancellationToken);
 
         var victim = await _store.EvictVictimAsync("acme", TestContext.Current.CancellationToken);

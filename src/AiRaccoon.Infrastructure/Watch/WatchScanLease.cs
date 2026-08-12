@@ -3,9 +3,11 @@ using Dapper;
 
 namespace AiRaccoon.Infrastructure.Watch;
 
-/// <summary>Cross-process mutual exclusion for a (projectId, path) scan
-/// (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-2/D-3): only the holder may scan; the
-/// holder renews on an interval or loses the lease to a live process.</summary>
+/// <summary>
+///     Cross-process mutual exclusion for a (projectId, path) scan
+///     (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-2/D-3): only the holder may scan; the
+///     holder renews on an interval or loses the lease to a live process.
+/// </summary>
 public interface IWatchScanLease
 {
     Task<bool> TryAcquireAsync(string projectId, string path, CancellationToken cancellationToken = default);
@@ -27,8 +29,10 @@ public sealed class SqliteWatchScanLease(SqliteConnectionFactory factory, TimePr
     /// <summary>Renew cadence — a third of the TTL, so two missed renewals still keep the lease.</summary>
     public static TimeSpan HeartbeatInterval { get; } = TimeSpan.FromSeconds(20);
 
-    /// <summary>Per-process identity. The Guid matters: PIDs are recycled, and without it a fresh
-    /// process could inherit a dead one's lease and skip recovery entirely.</summary>
+    /// <summary>
+    ///     Per-process identity. The Guid matters: PIDs are recycled, and without it a fresh
+    ///     process could inherit a dead one's lease and skip recovery entirely.
+    /// </summary>
     internal string Owner { get; } = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
 
     public async Task<bool> TryAcquireAsync(string projectId, string path,

@@ -1,8 +1,7 @@
-using System.Text;
 using AiRaccoon.Core.Encryption;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Encryption;
 
@@ -17,8 +16,8 @@ public sealed class OpenSshPrivateKeyParserTests
 {
     // Synthetic bytes, not real ssh-keygen output — replaces a genuine ed25519 key once committed
     // here; a pinned vector's point is determinism, not provenance.
-    private static readonly byte[] SecondSeed = "FAKE-PARSER-TEST-SEED-NOT-REAL00"u8.ToArray();
-    private static readonly byte[] SecondPublicKey = "FAKE-PARSER-TEST-PUBKEY-NOTREAL0"u8.ToArray();
+    private static readonly byte[] SecondSeed = [.. "FAKE-PARSER-TEST-SEED-NOT-REAL00"u8];
+    private static readonly byte[] SecondPublicKey = [.. "FAKE-PARSER-TEST-PUBKEY-NOTREAL0"u8];
 
     private static readonly byte[] Seed00To1F = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
     private static readonly byte[] PublicKey01To20 = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];

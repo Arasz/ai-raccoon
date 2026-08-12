@@ -1,10 +1,8 @@
 using System.ComponentModel;
-using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Workspace;
 using JetBrains.Annotations;
-using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument
@@ -97,7 +95,10 @@ public sealed class WorkspaceTools(
     public sealed record WorkspaceBeginResult(string WorkspaceId, string Context);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record WorkspaceStatusResult(IReadOnlyList<MemoryEntry> Entries, int Count, string? AgentId,
+    public sealed record WorkspaceStatusResult(
+        IReadOnlyList<MemoryEntry> Entries,
+        int Count,
+        string? AgentId,
         string? Name);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

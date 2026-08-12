@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
-using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -12,50 +11,50 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     channel for the maintenance service. list additionally reports live bank disk stats
 ///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar).
 /// </summary>
-public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
+public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
 {
     private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(factory.BankPath)!, "maintenance-stats.json");
 
     public async Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var minutes = parseResult.GetValue<string>("minutes");
         if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
         {
-            await stderr.WriteLineAsync("ai-raccoon: checkpoint interval must be a positive number of minutes");
+            await streams.WriteErrorLineAsync("ai-raccoon: checkpoint interval must be a positive number of minutes");
             return 1;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, parsed.ToString(),
             cancellationToken);
-        await stdout.WriteLineAsync($"checkpoint interval: {parsed} min");
+        await streams.WriteOutputLineAsync($"checkpoint interval: {parsed} min");
         return 0;
     }
 
     public async Task<int> SetVacuumIntervalAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var days = parseResult.GetValue<string>("days");
         if (!int.TryParse(days, out var parsed) || parsed <= 0)
         {
-            await stderr.WriteLineAsync("ai-raccoon: vacuum interval must be a positive number of days");
+            await streams.WriteErrorLineAsync("ai-raccoon: vacuum interval must be a positive number of days");
             return 1;
         }
 
         if (parsed > BankMaintenanceConfigKeys.MaxVacuumIntervalDays)
         {
-            await stderr.WriteLineAsync(
+            await streams.WriteErrorLineAsync(
                 $"ai-raccoon: vacuum interval must be at most {BankMaintenanceConfigKeys.MaxVacuumIntervalDays} days");
             return 1;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, parsed.ToString(),
             cancellationToken);
-        await stdout.WriteLineAsync($"vacuum interval: {parsed} days");
+        await streams.WriteOutputLineAsync($"vacuum interval: {parsed} days");
         return 0;
     }
 
-    public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout, CancellationToken cancellationToken)
+    public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
     {
         var checkpoint = BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, cancellationToken));
@@ -68,16 +67,16 @@ public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
             ? "no previous measurement"
             : FormatDelta(current.TotalBytes - previous.Value.TotalBytes, previous.Value.TotalBytes);
 
-        await stdout.WriteLineAsync($"checkpoint interval: {checkpoint} min");
-        await stdout.WriteLineAsync($"vacuum interval: {vacuum} days");
-        await stdout.WriteLineAsync($"db file: {FormatBytes(current.DbBytes)}");
-        await stdout.WriteLineAsync($"wal: {FormatBytes(current.WalBytes)}");
-        await stdout.WriteLineAsync($"shm: {FormatBytes(current.ShmBytes)}");
-        await stdout.WriteLineAsync($"on-disk total: {FormatBytes(current.TotalBytes)}");
-        await stdout.WriteLineAsync(
+        await streams.WriteOutputLineAsync($"checkpoint interval: {checkpoint} min");
+        await streams.WriteOutputLineAsync($"vacuum interval: {vacuum} days");
+        await streams.WriteOutputLineAsync($"db file: {FormatBytes(current.DbBytes)}");
+        await streams.WriteOutputLineAsync($"wal: {FormatBytes(current.WalBytes)}");
+        await streams.WriteOutputLineAsync($"shm: {FormatBytes(current.ShmBytes)}");
+        await streams.WriteOutputLineAsync($"on-disk total: {FormatBytes(current.TotalBytes)}");
+        await streams.WriteOutputLineAsync(
             $"reclaimable: {FormatBytes(current.ReclaimableBytes)} (freelist {FormatBytes(current.FreelistBytes)}, " +
             $"uncheckpointed wal {FormatBytes(current.UncheckpointedWalBytes)})");
-        await stdout.WriteLineAsync($"since last check: {delta}");
+        await streams.WriteOutputLineAsync($"since last check: {delta}");
 
         WriteSidecar(current);
         return 0;
@@ -87,9 +86,20 @@ public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        long PageSize() => Convert.ToInt64(Scalar("PRAGMA page_size"));
-        long PageCount() => Convert.ToInt64(Scalar("PRAGMA page_count"));
-        long FreelistCount() => Convert.ToInt64(Scalar("PRAGMA freelist_count"));
+        long PageSize()
+        {
+            return Convert.ToInt64(Scalar("PRAGMA page_size"));
+        }
+
+        long PageCount()
+        {
+            return Convert.ToInt64(Scalar("PRAGMA page_count"));
+        }
+
+        long FreelistCount()
+        {
+            return Convert.ToInt64(Scalar("PRAGMA freelist_count"));
+        }
 
         object? Scalar(string sql)
         {
@@ -117,11 +127,11 @@ public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
         var walPath = dbPath + "-wal";
         var shmPath = dbPath + "-shm";
         return new BankStats(
-            DbBytes: pageCount * pageSize,
-            WalBytes: File.Exists(walPath) ? new FileInfo(walPath).Length : 0,
-            ShmBytes: File.Exists(shmPath) ? new FileInfo(shmPath).Length : 0,
-            FreelistBytes: freelistCount * pageSize,
-            UncheckpointedWalBytes: uncheckpointedFrames * pageSize);
+            pageCount * pageSize,
+            File.Exists(walPath) ? new FileInfo(walPath).Length : 0,
+            File.Exists(shmPath) ? new FileInfo(shmPath).Length : 0,
+            freelistCount * pageSize,
+            uncheckpointedFrames * pageSize);
     }
 
     private (long TotalBytes, string Timestamp)? ReadPreviousStats()
@@ -167,20 +177,25 @@ public sealed class MaintenanceCommands(SqliteConnectionFactory factory)
             ? 0
             : Math.Abs(deltaBytes) * 100.0 / previousTotalBytes;
         return $"{FormatBytes(Math.Abs(deltaBytes))} {direction} " +
-            $"({percent.ToString("0.0", CultureInfo.InvariantCulture)}%)";
+               $"({percent.ToString("0.0", CultureInfo.InvariantCulture)}%)";
     }
 
-    private static string FormatBytes(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{(bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture)} KB",
-        < 1024L * 1024 * 1024 =>
-            $"{(bytes / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MB",
-        _ => $"{(bytes / (1024.0 * 1024 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} GB"
-    };
+    private static string FormatBytes(long bytes) =>
+        bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{(bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture)} KB",
+            < 1024L * 1024 * 1024 =>
+                $"{(bytes / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MB",
+            _ => $"{(bytes / (1024.0 * 1024 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} GB"
+        };
 
     private sealed record BankStats(
-        long DbBytes, long WalBytes, long ShmBytes, long FreelistBytes, long UncheckpointedWalBytes)
+        long DbBytes,
+        long WalBytes,
+        long ShmBytes,
+        long FreelistBytes,
+        long UncheckpointedWalBytes)
     {
         public long TotalBytes => DbBytes + WalBytes + ShmBytes;
         public long ReclaimableBytes => FreelistBytes + UncheckpointedWalBytes;

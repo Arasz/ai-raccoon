@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Threading.Channels;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
@@ -9,30 +9,62 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>Runtime (non-persisted) status of one registered watch.</summary>
 internal sealed record WatchRuntimeState(WatchState State, string? LastError, DateTimeOffset? LastSync);
 
+public interface IWatchPipeline
+{
+    /// <summary>
+    ///     Raised synchronously from <see cref="WatchPipeline.UnregisterWatch" /> — the one removal choke point
+    ///     (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1) every removal inherits, so callers with
+    ///     their own liveness bookkeeping can invalidate it at the same instant instead of waiting for a poll.
+    /// </summary>
+    event Action<string, string>? Unregistered;
+
+    /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
+    void Enqueue(WatchEvent evt);
+
+    /// <summary>Registers a watch's runtime state (Scanning); idempotent — a re-add never resets state.</summary>
+    void RegisterWatch(string projectId, string path);
+
+    /// <summary>
+    ///     Drops a watch's runtime state and any pending digests under it (remove must not resurrect),
+    ///     and cancels its in-flight catch-up scan (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1).
+    /// </summary>
+    void UnregisterWatch(string projectId, string path);
+
+    /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
+    void MarkScanning(string projectId, string path);
+
+    IReadOnlyList<WatchStatus> GetStatuses(string projectId);
+
+    /// <summary>Loop: tick every second until cancelled; a failing iteration never kills the loop.</summary>
+    Task RunAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>
 ///     Mirror pipeline core: one channel of filesystem events, per-path pending aggregation,
 ///     a 1s tick (injected TimeProvider), drain to the scheduler. Every iteration is contained —
 ///     errors land in status, nothing escapes the MCP server (docs/features/file-watcher/file-watcher.feature rule 13).
 /// </summary>
 public sealed partial class WatchPipeline(
-    WatchScheduler scheduler,
-    WatchDigestExecutor executor,
-    WatchRetryPolicy retryPolicy,
+    IWatchScheduler scheduler,
+    IWatchDigestExecutor executor,
+    IWatchRetryPolicy retryPolicy,
+    IWatchScanGuard scanGuard,
     IMemoryStore memoryStore,
     TimeProvider timeProvider,
-    WatchScanGuard scanGuard,
-    ILogger<WatchPipeline> logger)
+    ILogger<WatchPipeline> logger) : IWatchPipeline
 {
     private readonly Channel<WatchEvent> _events = Channel.CreateUnbounded<WatchEvent>();
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<(string ProjectId, string Path), WatchEvent> _pending = new(WatchKeyComparer.Instance);
     private readonly Dictionary<(string ProjectId, string Path), WatchRuntimeState> _runtime = new(WatchKeyComparer.Instance);
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>Raised synchronously from <see cref="UnregisterWatch"/> — the one removal choke point
-    /// (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1) every removal inherits, so callers with
-    /// their own liveness bookkeeping can invalidate it at the same instant instead of waiting for a poll.</summary>
+    /// <summary>
+    ///     Raised synchronously from <see cref="UnregisterWatch" /> — the one removal choke point
+    ///     (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1) every removal inherits, so callers with
+    ///     their own liveness bookkeeping can invalidate it at the same instant instead of waiting for a poll.
+    /// </summary>
     public event Action<string, string>? Unregistered;
 
     /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
@@ -65,8 +97,10 @@ public sealed partial class WatchPipeline(
         }
     }
 
-    /// <summary>Drops a watch's runtime state and any pending digests under it (remove must not resurrect),
-    /// and cancels its in-flight catch-up scan (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1).</summary>
+    /// <summary>
+    ///     Drops a watch's runtime state and any pending digests under it (remove must not resurrect),
+    ///     and cancels its in-flight catch-up scan (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1).
+    /// </summary>
     public void UnregisterWatch(string projectId, string path)
     {
         var normalized = IngestPath.Normalize(path);

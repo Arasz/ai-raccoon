@@ -3,8 +3,8 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Time.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -19,8 +19,7 @@ public class MemoryFeatureContext : IDisposable
         Factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        Store = new SqliteMemoryStore(Factory, TimeProvider, new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory));
+        Store = new SqliteMemoryStore(Factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), new StubChunker(), TimeProvider, new EmbeddingService());
     }
 
     public string DataRoot { get; }

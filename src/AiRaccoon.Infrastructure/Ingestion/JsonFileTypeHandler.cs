@@ -1,13 +1,11 @@
 using AiRaccoon.Core.Chunking;
-using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Chunking;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-/// File type handler for JSON files (.json).
+///     File type handler for JSON files (.json).
 /// </summary>
-public sealed class JsonFileTypeHandler : IFileTypeHandler
+public sealed class JsonFileTypeHandler(IChunker chunker) : IFileTypeHandler
 {
     public string Name => "Json";
 
@@ -16,10 +14,5 @@ public sealed class JsonFileTypeHandler : IFileTypeHandler
         ".json"
     };
 
-    public IChunker Chunker { get; }
-
-    public JsonFileTypeHandler(IChunker? chunker = null)
-    {
-        Chunker = chunker ?? new JsonFileTypeChunker();
-    }
+    public IChunker Chunker { get; } = chunker;
 }

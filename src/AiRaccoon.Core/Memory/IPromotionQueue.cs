@@ -26,9 +26,11 @@ public interface IPromotionQueue
     /// <summary>What is waiting for one project right now — the whole bank when projectId is null (the envelope meta).</summary>
     Task<PromotionMeta> GetMetaAsync(string? projectId, CancellationToken cancellationToken = default);
 
-    /// <summary>Deletes this project's queued rows carrying a retired scorer_version (ADR-0018) —
-    /// deletion, not re-scoring in place, since a stale row may no longer be a candidate at all; the
-    /// normal propose path re-admits anything still eligible on merit. Returns the count removed.</summary>
+    /// <summary>
+    ///     Deletes this project's queued rows carrying a retired scorer_version (ADR-0018) —
+    ///     deletion, not re-scoring in place, since a stale row may no longer be a candidate at all; the
+    ///     normal propose path re-admits anything still eligible on merit. Returns the count removed.
+    /// </summary>
     Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
         CancellationToken cancellationToken = default);
 }

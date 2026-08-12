@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using JetBrains.Annotations;
@@ -41,7 +40,7 @@ public sealed class PromotionTools(
         }
 
         var rows = await queue.ListAsync(projectId, limit, cancellationToken);
-        var result = new PromotionListResult(rows.Select(r => ToView(r, includeFullValue)).ToList());
+        var result = new PromotionListResult([.. rows.Select(r => ToView(r, includeFullValue))]);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
@@ -78,8 +77,15 @@ public sealed class PromotionTools(
     /// <summary>A queued row for review — Value is a preview unless includeFullValue was set.</summary>
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionQueueRowView(
-        string ProjectId, string Hash, string Path, string Value, string? SourceFile,
-        double Score, IReadOnlyList<string> Reasons, long CreatedAt, long UpdatedAt);
+        string ProjectId,
+        string Hash,
+        string Path,
+        string Value,
+        string? SourceFile,
+        double Score,
+        IReadOnlyList<string> Reasons,
+        long CreatedAt,
+        long UpdatedAt);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record PromotionDiscardResult(int Discarded);

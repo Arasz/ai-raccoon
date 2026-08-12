@@ -1,12 +1,10 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
-using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -113,7 +111,7 @@ public sealed class MemoryTools(
             await qualityService.RecordSearchAsync(
                 correlationId, query, scope, projectId, null,
                 results.Count,
-                results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5).ToList(),
+                [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)],
                 cancellationToken);
         }
         catch (Exception ex)
@@ -208,7 +206,8 @@ public sealed class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestDirectory)]
-    [Description("Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
+    [Description(
+        "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
         [Description("The project id.")] string projectId,
         [Description("Path of the directory to index.")]

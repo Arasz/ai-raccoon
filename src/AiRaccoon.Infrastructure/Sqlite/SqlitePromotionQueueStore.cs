@@ -82,7 +82,7 @@ public sealed class SqlitePromotionQueueStore(
                     new { ProjectId = projectId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return rows.Select(ToRow).ToList();
+        return [.. rows.Select(ToRow)];
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
@@ -95,7 +95,7 @@ public sealed class SqlitePromotionQueueStore(
                     new { ProjectId = projectId, Hash = hash },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return removed.Select(ToRow).ToList();
+        return [.. removed.Select(ToRow)];
     }
 
     public async Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default)
@@ -217,7 +217,7 @@ public sealed class SqlitePromotionQueueStore(
     ///     Rows whose backing entries row was deleted before the promotion_queue_entries_ad
     ///     trigger existed (ADR-0023) — the trigger covers everything from here on; this is the
     ///     one-shot catch-up for a bank that already accumulated dead rows. Reports without
-    ///     deleting unless <paramref name="apply"/> is true; idempotent either way (a second call
+    ///     deleting unless <paramref name="apply" /> is true; idempotent either way (a second call
     ///     after apply finds nothing left to report). Count and delete run inside one transaction
     ///     so nothing can change the queue between them, and the reported total is the DELETE's own
     ///     affected-row count, not the earlier count query's snapshot.
@@ -273,6 +273,14 @@ public sealed class SqlitePromotionQueueStore(
 
     // Dapper mapping target: TEXT columns map to string, REAL to double, INTEGER to long.
     private sealed record PromotionQueueRowRow(
-        string ProjectId, string Hash, string Path, string Value, string? SourceFile,
-        double Score, string? Reasons, long CreatedAt, long UpdatedAt, long ScorerVersion);
+        string ProjectId,
+        string Hash,
+        string Path,
+        string Value,
+        string? SourceFile,
+        double Score,
+        string? Reasons,
+        long CreatedAt,
+        long UpdatedAt,
+        long ScorerVersion);
 }

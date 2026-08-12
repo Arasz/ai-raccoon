@@ -25,7 +25,7 @@ public sealed class ExtractionHostedServiceTests
 
     private static (FakeExtractionStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
         FakePromotionQueue Queue) NewStack(ILogger<ExtractionHostedService> logger,
-        IOperationTelemetry? telemetry = null)
+            IOperationTelemetry? telemetry = null)
     {
         var store = new FakeExtractionStore();
         var time = new FakeTimeProvider(FixedNow);
@@ -121,7 +121,7 @@ public sealed class ExtractionHostedServiceTests
         // Promote-from-queue: the loop no longer shares directly — dedup and sharing
         // live in PromotionQueueService (covered by its own integration tests).
         store.Shared.ShouldBeEmpty();
-        queue.PromoteCalls.ShouldBe([new[] { "acme" }, new[] { "beta" }]);
+        queue.PromoteCalls.ShouldBe([["acme"], ["beta"]]);
     }
 
     [Fact]
@@ -130,9 +130,11 @@ public sealed class ExtractionHostedServiceTests
         var (store, _, service, queue) = NewStack();
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
-        store.Candidates["acme"] = Enumerable.Range(0, 25)
-            .Select(i => Row($"h{i:00}", null, $"organic fact number {i}"))
-            .ToList();
+        store.Candidates["acme"] =
+        [
+            .. Enumerable.Range(0, 25)
+                .Select(i => Row($"h{i:00}", null, $"organic fact number {i}"))
+        ];
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
@@ -152,7 +154,7 @@ public sealed class ExtractionHostedServiceTests
 
         await service.RunOnceAsync(TestContext.Current.CancellationToken);
 
-        queue.PromoteCalls.ShouldBe([new[] { "acme" }, new[] { "beta" }]);
+        queue.PromoteCalls.ShouldBe([["acme"], ["beta"]]);
         store.Shared.ShouldBeEmpty();
     }
 
@@ -394,8 +396,7 @@ public sealed class ExtractionHostedServiceTests
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
         store.ProjectListError = new InvalidOperationException("zephyrone");
 
-        await Should.ThrowAsync<InvalidOperationException>(
-            () => service.RunOnceAsync(TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<InvalidOperationException>(() => service.RunOnceAsync(TestContext.Current.CancellationToken));
 
         probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
         var duration = probe.Durations.ShouldHaveSingleItem();

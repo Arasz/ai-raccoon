@@ -2,8 +2,10 @@ using System.Text.RegularExpressions;
 
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>Shape-level evidence extracted once per candidate and shared by every scoring branch
-/// (ported from scorer.py's features(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).</summary>
+/// <summary>
+///     Shape-level evidence extracted once per candidate and shared by every scoring branch
+///     (ported from scorer.py's features(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).
+/// </summary>
 internal readonly record struct CandidateFeatures(
     double RuleDensity,
     int MeasureWords,
@@ -44,9 +46,11 @@ internal static partial class CandidateFeatureExtractor
     private const int StatusOpenerHeadChars = 80;
     private const int DatedFactWindowChars = 120;
 
-    /// <summary>Alternate spellings a project's id is written under in free text — content matching
-    /// is otherwise a bare-substring check that misses e.g. "airaccoon" for "ai-raccoon" (ported from
-    /// scorer.py's PROJECT_ALIASES).</summary>
+    /// <summary>
+    ///     Alternate spellings a project's id is written under in free text — content matching
+    ///     is otherwise a bare-substring check that misses e.g. "airaccoon" for "ai-raccoon" (ported from
+    ///     scorer.py's PROJECT_ALIASES).
+    /// </summary>
     private static readonly IReadOnlyDictionary<string, string[]> ProjectAliases =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -57,8 +61,7 @@ internal static partial class CandidateFeatureExtractor
             ["arasz-home-page"] = ["arasz-home-page", "arasz.dev", "home-page"]
         };
 
-    private static IReadOnlyList<string> AliasesFor(string projectId) =>
-        ProjectAliases.TryGetValue(projectId, out var aliases) ? aliases : [projectId];
+    private static IReadOnlyList<string> AliasesFor(string projectId) => ProjectAliases.TryGetValue(projectId, out var aliases) ? aliases : [projectId];
 
     internal static CandidateFeatures Extract(string value, string projectId, IReadOnlyList<string> allProjectIds)
     {
@@ -85,39 +88,39 @@ internal static partial class CandidateFeatureExtractor
         var firstChar = stripped.Length > 0 ? stripped[0] : '\0';
 
         return new CandidateFeatures(
-            RuleDensity: Per100(RuleLanguage().Matches(v).Count, nWords),
-            MeasureWords: MeasureWordsRegex().Matches(v).Count,
-            NumUnit: NumberWithUnit().Matches(v).Count,
-            Ephemera: Per100(Ephemera().Matches(v).Count, nWords),
-            Superseded: Superseded().IsMatch(v),
-            FindingRows: FindingRow().Matches(v).Count,
-            TableFrac: (double)tableRowCount / lineCount,
-            LinkDensity: Per100(MarkdownLink().Matches(v).Count, nWords),
-            DocnameDensity: Per100(DocFilename().Matches(v).Count, nWords),
-            VersionRows: VersionRow().Matches(v).Count,
-            Frontmatter: Frontmatter().IsMatch(v.TrimStart()),
-            NChars: v.Length,
-            NWords: nWords,
-            MidSentence: char.IsLower(firstChar) || firstChar is ')' or ',' or ';',
-            TechBreadth: TechVocabulary().Matches(v).Select(m => m.Value.ToLowerInvariant()).Distinct().Count(),
-            XrefDensity: Per100(CrossReference().Matches(v).Count, nWords),
-            ImpRuleDensity: Per100(ImpersonalRule().Matches(v).Count, nWords),
-            ForeignSubject: others.Any(id =>
+            Per100(RuleLanguage().Matches(v).Count, nWords),
+            MeasureWordsRegex().Matches(v).Count,
+            NumberWithUnit().Matches(v).Count,
+            Per100(Ephemera().Matches(v).Count, nWords),
+            Superseded().IsMatch(v),
+            FindingRow().Matches(v).Count,
+            (double)tableRowCount / lineCount,
+            Per100(MarkdownLink().Matches(v).Count, nWords),
+            Per100(DocFilename().Matches(v).Count, nWords),
+            VersionRow().Matches(v).Count,
+            Frontmatter().IsMatch(v.TrimStart()),
+            v.Length,
+            nWords,
+            char.IsLower(firstChar) || firstChar is ')' or ',' or ';',
+            TechVocabulary().Matches(v).Select(m => m.Value.ToLowerInvariant()).Distinct().Count(),
+            Per100(CrossReference().Matches(v).Count, nWords),
+            Per100(ImpersonalRule().Matches(v).Count, nWords),
+            others.Any(id =>
                 AliasesFor(id).Any(alias => head.Contains(alias, StringComparison.Ordinal))),
-            HeadingStart: stripped.StartsWith('#'),
-            StatusOpener: StatusOpener().IsMatch(openerHead),
-            StatusVocab: StatusVocabulary().Matches(v).Count,
-            SecondPerson: SecondPerson().IsMatch(v),
-            CommitHashes: CommitHash().Matches(v).Count,
-            RealMeasures: MeasureUnitsLoose().Matches(withoutTestCounts).Count,
-            DurableLoose: DurableLoose().Matches(v).Count,
-            DatedFact: DatedFact().IsMatch(datedWindow),
-            FirstPerson: Per100(FirstPerson().Matches(v).Count, nWords),
-            MetaHeader: MetaHeaderLine().Matches(v).Count,
-            Imperatives: ImperativeItem().Matches(v).Count,
-            Urls: Url().Matches(v).Count,
-            ContentsIndex: ContentsHeader().IsMatch(v),
-            DirReadme: DirReadme().IsMatch(v.TrimStart()));
+            stripped.StartsWith('#'),
+            StatusOpener().IsMatch(openerHead),
+            StatusVocabulary().Matches(v).Count,
+            SecondPerson().IsMatch(v),
+            CommitHash().Matches(v).Count,
+            MeasureUnitsLoose().Matches(withoutTestCounts).Count,
+            DurableLoose().Matches(v).Count,
+            DatedFact().IsMatch(datedWindow),
+            Per100(FirstPerson().Matches(v).Count, nWords),
+            MetaHeaderLine().Matches(v).Count,
+            ImperativeItem().Matches(v).Count,
+            Url().Matches(v).Count,
+            ContentsHeader().IsMatch(v),
+            DirReadme().IsMatch(v.TrimStart()));
     }
 
     private static double Per100(int count, int nWords) => 100.0 * count / Math.Max(nWords, 1);
@@ -168,20 +171,26 @@ internal static partial class CandidateFeatureExtractor
     [GeneratedRegex(@"^\s*\|\s*\d+\.\d+", RegexOptions.Multiline)]
     private static partial Regex VersionRow();
 
-    /// <summary>Named third-party technology: the vocabulary of things that exist outside any one
-    /// repo (ported from scorer.py's TECH_RE). Breadth here is the portability signal.</summary>
+    /// <summary>
+    ///     Named third-party technology: the vocabulary of things that exist outside any one
+    ///     repo (ported from scorer.py's TECH_RE). Breadth here is the portability signal.
+    /// </summary>
     [GeneratedRegex(
         """\b(sqlite|sqlite-vec|vec0|wal|pragma|vacuum|fts5?|bm25|hnsw|cosine|embedding|dotnet|\.net|c#|msbuild|nuget|roslyn|xunit|nunit|mstest|asp\.net|kestrel|entity ?framework|ef core|aspire|serilog|opentelemetry|otel|azure|cosmos ?db|blob storage|application insights|launchd|systemd|angular|typescript|javascript|node\.?js|npm|bun|vite|eslint|prettier|lighthouse|python|pytest|pip|jsonschema|regex|ruff|mypy|git|github|gitlab|github actions|dependabot|lefthook|husky|semver|cron|crontab|docker|kubernetes|terraform|linux|macos|windows|bash|zsh|posix|json|yaml|toml|markdown|http|https|rest|grpc|websocket|sse|oauth|jwt|tls|ssh|hkdf|sha-?256|aes|argon2|gmail|slack|discord|telegram|whatsapp|imap|smtp|graph api|mcp|model context protocol|openai|anthropic|claude|llm|token(?:iser|izer)|stryker|mutation testing|playwright|selenium|wiremock|testcontainers)\b""",
         RegexOptions.IgnoreCase)]
     private static partial Regex TechVocabulary();
 
-    /// <summary>Intra-repo bookkeeping: pointers to this project's own decisions, issues and
-    /// sections (ported from scorer.py's XREF_RE) — the mirror image of tech breadth.</summary>
+    /// <summary>
+    ///     Intra-repo bookkeeping: pointers to this project's own decisions, issues and
+    ///     sections (ported from scorer.py's XREF_RE) — the mirror image of tech breadth.
+    /// </summary>
     [GeneratedRegex(@"\bADR-?\d|§|\bissues? #\d|\bPRs? #\d|\b#\d{2,}\b|\bNFR-[A-Z]|\bWave \d|\bD\d\b")]
     private static partial Regex CrossReference();
 
-    /// <summary>An impersonal statement of what always/never holds — a rule, not a report (ported
-    /// from scorer.py's IMPERSONAL_RULE_RE).</summary>
+    /// <summary>
+    ///     An impersonal statement of what always/never holds — a rule, not a report (ported
+    ///     from scorer.py's IMPERSONAL_RULE_RE).
+    /// </summary>
     [GeneratedRegex(
         """\b(?:is|are|means|implies|requires|holds|applies)\b[^.\n]{0,50}\b(?:never|always|only|not)\b""",
         RegexOptions.IgnoreCase)]

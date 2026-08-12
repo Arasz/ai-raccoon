@@ -1,4 +1,4 @@
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Common;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;

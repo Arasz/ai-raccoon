@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Globalization;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
@@ -79,7 +79,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await new ConfigCommands(new SettingsCommands(), new SyncCommands(), new WatchCommands(Ctx.WatchStore))
-            .RunAsync(parsed.CommandPath, parsed.ParseResult, Ctx.Store, stdout, stderr, TextReader.Null);
+            .RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, Ctx.Store, stdout, stderr, TextReader.Null);
         _lastCliMessage = stdout.ToString() + stderr.ToString();
         if (exit != 0)
         {

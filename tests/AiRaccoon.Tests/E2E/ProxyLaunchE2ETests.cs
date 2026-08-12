@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;

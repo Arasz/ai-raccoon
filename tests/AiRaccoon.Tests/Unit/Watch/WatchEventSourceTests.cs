@@ -1,8 +1,9 @@
-using AiRaccoon.Core.Ingestion;
+using System.Diagnostics;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using Xunit.Sdk;
 
 namespace AiRaccoon.Tests.Unit.Watch;
 
@@ -291,7 +292,7 @@ public sealed class WatchEventSourceTests
 
     private static void WaitFor(Func<bool> condition, string what, int timeoutMs = 3000)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             if (condition())
@@ -302,6 +303,6 @@ public sealed class WatchEventSourceTests
             Thread.Sleep(25);
         }
 
-        throw new Xunit.Sdk.XunitException($"Timed out after {timeoutMs} ms waiting for {what}.");
+        throw new XunitException($"Timed out after {timeoutMs} ms waiting for {what}.");
     }
 }

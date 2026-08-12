@@ -2,13 +2,15 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -141,7 +143,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             Port = FreePort();
             CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
             parsed.Errors.ShouldBeEmpty();
-            _serve = ServeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), _stdout, _stderr, _cts.Token);
+            _serve = NodeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), _stdout, _stderr, _cts.Token);
             await WaitForListeningAsync();
         }
 

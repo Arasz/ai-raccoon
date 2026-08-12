@@ -6,9 +6,9 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Retrieval;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -55,9 +55,8 @@ public sealed class ManagedHarness
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        var store = new SqliteMemoryStore(factory,
-            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)),
-            new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        var store = new SqliteMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(),
+            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), new EmbeddingService());
 
         await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken)
             .ConfigureAwait(false);

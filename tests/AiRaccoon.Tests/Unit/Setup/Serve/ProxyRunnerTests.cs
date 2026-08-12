@@ -1,8 +1,9 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Shouldly;
 using Xunit;
+using ProxyRunner = AiRaccoon.Hosting.Proxy.ProxyRunner;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 

@@ -11,21 +11,21 @@ internal static class ModalityCandidates
 {
     public static IReadOnlyList<MemorySearchResult> ByBm25(
         IEnumerable<IReadOnlyList<MemorySearchResult>> perContext) =>
-        [
-            .. perContext
-                .SelectMany(list => list)
-                .GroupBy(result => result.Hash, StringComparer.Ordinal)
-                .Select(group => group.OrderBy(result => result.Ranking).First())
-                .OrderBy(result => result.Ranking)
-        ];
+    [
+        .. perContext
+            .SelectMany(list => list)
+            .GroupBy(result => result.Hash, StringComparer.Ordinal)
+            .Select(group => group.OrderBy(result => result.Ranking).First())
+            .OrderBy(result => result.Ranking)
+    ];
 
     public static IReadOnlyList<MemorySearchResult> ByCosine(
         IEnumerable<IReadOnlyList<MemorySearchResult>> perContext) =>
-        [
-            .. perContext
-                .SelectMany(list => list)
-                .GroupBy(result => result.Hash, StringComparer.Ordinal)
-                .Select(group => group.OrderByDescending(result => result.Ranking).First())
-                .OrderByDescending(result => result.Ranking)
-        ];
+    [
+        .. perContext
+            .SelectMany(list => list)
+            .GroupBy(result => result.Hash, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(result => result.Ranking).First())
+            .OrderByDescending(result => result.Ranking)
+    ];
 }

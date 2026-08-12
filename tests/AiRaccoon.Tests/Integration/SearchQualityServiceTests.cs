@@ -1,4 +1,3 @@
-using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
@@ -40,7 +39,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(
             "corr-001", "test query", "all", "proj-a", "session-1",
-            5, new[] { "/path/a.md", "/path/b.md" }, TestContext.Current.CancellationToken);
+            5, ["/path/a.md", "/path/b.md"], TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.TotalSearches.ShouldBe(1);
@@ -55,7 +54,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(
             "corr-002", "query", "all", "proj-a", null,
-            3, new[] { "/file.md" }, TestContext.Current.CancellationToken);
+            3, ["/file.md"], TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-002", "/file.md", TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("corr-002", "/other.md", TestContext.Current.CancellationToken);
@@ -71,7 +70,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(
             "corr-003", "query", "all", "proj-a", null,
-            1, new[] { "/file.md" }, TestContext.Current.CancellationToken);
+            1, ["/file.md"], TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
@@ -87,7 +86,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(
             "corr-004", "query", "all", "proj-a", null,
-            5, new[] { "/file.md" }, TestContext.Current.CancellationToken);
+            5, ["/file.md"], TestContext.Current.CancellationToken);
 
         await _sut.RecordGradeAsync("proj-a", "corr-004", 5, "great result", TestContext.Current.CancellationToken);
 
@@ -102,8 +101,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, Array.Empty<string>(), TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-b", null, 1, Array.Empty<string>(), TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-b", null, 1, [], TestContext.Current.CancellationToken);
 
         var metricsA = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metricsA.TotalSearches.ShouldBe(1);
@@ -117,8 +116,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, Array.Empty<string>(), TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-a", null, 1, Array.Empty<string>(), TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("c1", "/file.md", TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
@@ -132,7 +131,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(
             "corr-null", "query", null, null, null,
-            0, Array.Empty<string>(), TestContext.Current.CancellationToken);
+            0, [], TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync(null, DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.TotalSearches.ShouldBe(1);

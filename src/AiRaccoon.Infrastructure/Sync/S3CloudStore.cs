@@ -1,3 +1,4 @@
+using System.Net;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Options;
 using Amazon;
@@ -5,15 +6,16 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>S3-compatible object store for memory.db snapshots using AWS SDK.</summary>
 public sealed partial class S3CloudStore : ICloudStore
 {
-    private readonly IAmazonS3 _s3;
     private readonly string _bucket;
     private readonly ILogger<S3CloudStore> _logger;
+    private readonly IAmazonS3 _s3;
 
     public S3CloudStore(SyncOptions options, ILogger<S3CloudStore>? logger = null)
     {
@@ -26,7 +28,7 @@ public sealed partial class S3CloudStore : ICloudStore
         }
 
         _bucket = options.Bucket;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<S3CloudStore>.Instance;
+        _logger = logger ?? NullLogger<S3CloudStore>.Instance;
         _s3 = CreateClient(options);
     }
 
@@ -38,32 +40,7 @@ public sealed partial class S3CloudStore : ICloudStore
 
         _s3 = s3;
         _bucket = bucket;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<S3CloudStore>.Instance;
-    }
-
-    /// <summary>
-    ///     Builds the S3 client for the configured mode: persisted keys when present
-    ///     (tie-break), else the AWS default credential chain (--cli mode; resolved lazily).
-    /// </summary>
-    internal static IAmazonS3 CreateClient(SyncOptions options)
-    {
-        var config = new AmazonS3Config
-        {
-            ServiceURL = options.Endpoint,
-            ForcePathStyle = true
-        };
-
-        if (!string.IsNullOrWhiteSpace(options.Region))
-        {
-            config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region);
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.AccessKey) && !string.IsNullOrWhiteSpace(options.SecretKey))
-        {
-            return new AmazonS3Client(new BasicAWSCredentials(options.AccessKey, options.SecretKey), config);
-        }
-
-        return new AmazonS3Client(config);
+        _logger = logger ?? NullLogger<S3CloudStore>.Instance;
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
@@ -78,7 +55,7 @@ public sealed partial class S3CloudStore : ICloudStore
             var etag = response.ETag?.Trim('"');
             return new CloudObject(ms.ToArray(), etag);
         }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
@@ -88,7 +65,7 @@ public sealed partial class S3CloudStore : ICloudStore
             throw new SyncAuthFailedException(
                 "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
         }
-        catch (AmazonServiceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
@@ -129,7 +106,7 @@ public sealed partial class S3CloudStore : ICloudStore
             // S3 returns ETag quoted; strip for storage compatibility.
             return response.ETag?.Trim('"') ?? "";
         }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
         {
             throw new SyncConflictException("Remote changed since last pull — If-Match precondition failed.");
         }
@@ -139,7 +116,7 @@ public sealed partial class S3CloudStore : ICloudStore
             throw new SyncAuthFailedException(
                 "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
         }
-        catch (AmazonServiceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
@@ -155,6 +132,31 @@ public sealed partial class S3CloudStore : ICloudStore
             Log.PushFailed(_logger, ex.Message);
             throw new SyncNetworkException($"S3 push failed: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    ///     Builds the S3 client for the configured mode: persisted keys when present
+    ///     (tie-break), else the AWS default credential chain (--cli mode; resolved lazily).
+    /// </summary>
+    internal static IAmazonS3 CreateClient(SyncOptions options)
+    {
+        var config = new AmazonS3Config
+        {
+            ServiceURL = options.Endpoint,
+            ForcePathStyle = true
+        };
+
+        if (!string.IsNullOrWhiteSpace(options.Region))
+        {
+            config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.AccessKey) && !string.IsNullOrWhiteSpace(options.SecretKey))
+        {
+            return new AmazonS3Client(new BasicAWSCredentials(options.AccessKey, options.SecretKey), config);
+        }
+
+        return new AmazonS3Client(config);
     }
 
     private static partial class Log

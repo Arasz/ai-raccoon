@@ -25,9 +25,9 @@ public class SyncCommandsTests
         var commands = new SyncCommands();
         var exit = parsed.CommandPath switch
         {
-            ["sync", "add", "s3"] => await commands.AddS3Async(parsed.ParseResult, store, stdout, stderr,
+            ["sync", "add", "s3"] => await commands.AddS3Async(parsed.ParsedCliArgs, store, stdout, stderr,
                 stdin ?? TextReader.Null, TestContext.Current.CancellationToken),
-            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed.ParseResult, store, stdout, stderr,
+            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed.ParsedCliArgs, store, stdout, stderr,
                 stdin ?? TextReader.Null, TestContext.Current.CancellationToken),
             ["sync", "remove"] => await commands.RemoveAsync(store, stdout, TestContext.Current.CancellationToken),
             ["sync", "show"] => await commands.ShowAsync(store, stdout, TestContext.Current.CancellationToken),

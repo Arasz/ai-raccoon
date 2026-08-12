@@ -1,8 +1,8 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
-using Microsoft.Extensions.Hosting;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Shouldly;

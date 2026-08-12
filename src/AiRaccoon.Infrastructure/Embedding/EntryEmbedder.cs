@@ -12,7 +12,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-internal sealed class EntryEmbedder(EmbeddingService embeddings)
+public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
 {
     private const int BatchSize = 32;
     private const string BundledModel = "bundled";
@@ -116,6 +116,30 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
         return processed;
     }
 
+    /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
+    public async Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
+        CancellationToken cancellationToken)
+    {
+        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(settings.Provider))
+        {
+            return null;
+        }
+
+        var generator = embeddings.CreateGenerator(settings);
+        var embedding = await generator.GenerateAsync([query], cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return EmbeddingBlob.ToBytes(embedding[0].Vector);
+    }
+
+    public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
+                .ConfigureAwait(false) ?? "",
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken).ConfigureAwait(false),
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken).ConfigureAwait(false),
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken).ConfigureAwait(false));
+
     /// <summary>Embeds a set of rows with the configured engine; missing rows are skipped.</summary>
     private async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
         CancellationToken cancellationToken)
@@ -161,7 +185,7 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
 
     /// <summary>
     ///     Backfills structure vectors for rows embedded before the structure writer existed, up
-    ///     to <paramref name="budget"/> candidates: every candidate a batch touches gets a real
+    ///     to <paramref name="budget" /> candidates: every candidate a batch touches gets a real
     ///     heading path or the '' sentinel, which removes it from SelectStructureHealCandidates'
     ///     WHERE clause, so each iteration shrinks the candidate set and the loop terminates.
     /// </summary>
@@ -219,30 +243,6 @@ internal sealed class EntryEmbedder(EmbeddingService embeddings)
 
         return vectors;
     }
-
-    /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
-    public async Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
-        CancellationToken cancellationToken)
-    {
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(settings.Provider))
-        {
-            return null;
-        }
-
-        var generator = embeddings.CreateGenerator(settings);
-        var embedding = await generator.GenerateAsync([query], cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        return EmbeddingBlob.ToBytes(embedding[0].Vector);
-    }
-
-    public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
-        CancellationToken cancellationToken) =>
-        new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
-                .ConfigureAwait(false) ?? "",
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken).ConfigureAwait(false),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken).ConfigureAwait(false),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken).ConfigureAwait(false));
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>

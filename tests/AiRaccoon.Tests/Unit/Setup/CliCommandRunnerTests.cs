@@ -1,6 +1,6 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;

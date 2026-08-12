@@ -1,5 +1,5 @@
 using System.Text.Json;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Node;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
 using Xunit;
@@ -155,11 +155,12 @@ public sealed class McpTokenGateTests
         absentBody.ShouldContain(McpTokenGate.HeaderName);
     }
 
-    public static TheoryData<string, string> MismatchCases() => new()
-    {
-        { McpTokenGate.HeaderName, "wrong" },
-        { "Authorization", "Bearer wrong" }
-    };
+    public static TheoryData<string, string> MismatchCases() =>
+        new()
+        {
+            { McpTokenGate.HeaderName, "wrong" },
+            { "Authorization", "Bearer wrong" }
+        };
 
     [Fact]
     public async Task Absent_Is401AndCarriesJsonRpcAndTokenPath()

@@ -29,14 +29,14 @@ public class SettingsCommandsTests
         {
             ["access", "default", "show"] => await commands.AccessDefaultShowAsync(store, stdout, TestContext.Current.CancellationToken),
             ["access", "list"] => await commands.AccessListAsync(store, stdout, TestContext.Current.CancellationToken),
-            ["model", "set", "local"] => await commands.ModelSetLocalAsync(parsed.ParseResult, store, stdout, TestContext.Current.CancellationToken),
+            ["model", "set", "local"] => await commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, stdout, TestContext.Current.CancellationToken),
             ["model", "show"] => await commands.ModelShowAsync(store, stdout, TestContext.Current.CancellationToken),
-            ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
+            ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "show"] => await commands.RetrievalAlphaShowAsync(store, stdout, TestContext.Current.CancellationToken),
             ["sweep", "enable"] => await commands.SweepEnabledSetAsync(true, store, stdout, TestContext.Current.CancellationToken),
             ["sweep", "disable"] => await commands.SweepEnabledSetAsync(false, store, stdout, TestContext.Current.CancellationToken),
-            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
-            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParseResult, store, stdout, stderr, TestContext.Current.CancellationToken),
+            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, stdout, stderr, TestContext.Current.CancellationToken),
+            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, stdout, stderr, TestContext.Current.CancellationToken),
             ["sweep", "show"] => await commands.SweepShowAsync(store, stdout, TestContext.Current.CancellationToken),
             _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };

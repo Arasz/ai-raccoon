@@ -1,17 +1,19 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
 using Xunit;
+using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
+using ObservabilityRunner = AiRaccoon.Hosting.Node.ObservabilityRunner;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -253,8 +255,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    private ServerConfig Config(int port) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
+    private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
 
     private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port)
     {
@@ -276,7 +277,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
-        var exit = ServeRunner.RunAsync(parsed, config, stdout, stderr, cts.Token);
+        var exit = NodeRunner.RunAsync(parsed, config, stdout, stderr, cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

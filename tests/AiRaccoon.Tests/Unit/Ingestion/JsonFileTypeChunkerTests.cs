@@ -1,5 +1,4 @@
 using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Ingestion;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Ingestion;
@@ -13,12 +12,12 @@ public class JsonFileTypeChunkerTests
     {
         var chunker = new JsonFileTypeChunker();
         var json = """
-        {
-          "name": "ai-raccoon",
-          "version": "1.7.0",
-          "description": "C# .NET 10 MCP server exposing agent memory management"
-        }
-        """;
+                   {
+                     "name": "ai-raccoon",
+                     "version": "1.7.0",
+                     "description": "C# .NET 10 MCP server exposing agent memory management"
+                   }
+                   """;
 
         var chunks = chunker.Chunk(json, maxTokens: 256, overlayTokens: 0);
 
@@ -30,13 +29,13 @@ public class JsonFileTypeChunkerTests
     public void ExtractSchemaSummary_ExtractsNodeSchema()
     {
         var json = """
-        {
-          "name": "ai-raccoon",
-          "version": "1.7.0",
-          "enabled": true,
-          "tags": ["memory", "mcp"]
-        }
-        """;
+                   {
+                     "name": "ai-raccoon",
+                     "version": "1.7.0",
+                     "enabled": true,
+                     "tags": ["memory", "mcp"]
+                   }
+                   """;
 
         var schema = JsonFileTypeChunker.ExtractSchemaSummary(json);
 
@@ -55,6 +54,7 @@ public class JsonFileTypeChunkerTests
         {
             properties.Add($"\"key_{i}\": \"This is value number {i} with a detailed description to exceed token budget\"");
         }
+
         var json = "{\n" + string.Join(",\n", properties) + "\n}";
 
         var chunks = chunker.Chunk(json, maxTokens: 60, overlayTokens: 0);

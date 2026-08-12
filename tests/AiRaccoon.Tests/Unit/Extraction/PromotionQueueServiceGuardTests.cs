@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Promotion;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -16,13 +17,13 @@ namespace AiRaccoon.Tests.Unit.Extraction;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PromotionQueueServiceGuardTests
 {
+    private static readonly IReadOnlyList<QueueCandidate> OneCandidate =
+        [new("h1", "h1.md", "a fact", null, 3.0, ["organic-write"])];
+
     private static PromotionQueueService NewService() =>
         new(new UnreachableQueueStore(), new FakeExtractionStore(), new UniformCountEvictionPolicy(),
             new UnreachableMetrics(), NullLogger<PromotionQueueService>.Instance,
             new FakeTimeProvider(DateTimeOffset.UnixEpoch));
-
-    private static readonly IReadOnlyList<QueueCandidate> OneCandidate =
-        [new("h1", "h1.md", "a fact", null, 3.0, ["organic-write"])];
 
     [Theory]
     [InlineData("")]
@@ -90,31 +91,38 @@ public sealed class PromotionQueueServiceGuardTests
     private sealed class UnreachableQueueStore : IPromotionQueueStore
     {
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> PruneRejectedAsync(string projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>Simulates a store that found nothing to discard — every other member is unreachable
@@ -122,38 +130,43 @@ public sealed class PromotionQueueServiceGuardTests
     private sealed class EmptyDiscardQueueStore : IPromotionQueueStore
     {
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
 
-        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> PruneRejectedAsync(string projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class UnreachableMetrics : IPromotionQueueMetrics
     {
-        public void RecordEviction(string projectId, double victimScore, string reason) =>
-            throw new NotSupportedException();
+        public void RecordEviction(string projectId, double victimScore, string reason) => throw new NotSupportedException();
 
         public void RecordPromoted(string projectId, double waitSeconds) => throw new NotSupportedException();
 

@@ -1,10 +1,15 @@
 using System.Collections;
 using System.Net;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Node;
+using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
+using CommunityToolkit.Diagnostics;
 using DotNext.Collections.Generic;
+using ShutdownEndpoint = AiRaccoon.Hosting.Node.ShutdownEndpoint;
 
 namespace AiRaccoon.Setup;
 
@@ -15,21 +20,22 @@ namespace AiRaccoon.Setup;
 /// </summary>
 internal static partial class McpServerSetup
 {
-    /// <summary>Flips ASP.NET Core 10's default off so the hosting request Activity carries OTel
-    /// HTTP semconv tags — what ASP.NET Core 11 does by default (docs/adr/0021).</summary>
+    /// <summary>
+    ///     Flips ASP.NET Core 10's default off so the hosting request Activity carries OTel
+    ///     HTTP semconv tags — what ASP.NET Core 11 does by default (docs/adr/0021).
+    /// </summary>
     private const string AspNetCoreHostingOpenTelemetryDataSwitch =
         "Microsoft.AspNetCore.Hosting.SuppressActivityOpenTelemetryData";
 
     /// <summary>Creates the server host for the config's single transport.</summary>
-    internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport]);
+    internal static IHost CreateServerHost(ServerConfig config) => CreateServerHost(config, [config.Transport], TimeProvider.System);
 
     /// <summary>
     ///     Creates the server host for transport set: stdio-only launches a plain app host; any
     ///     HTTP/S presence uses a web host on the configured port, with stdio attached too when
     ///     both are selected. timeProvider is a test seam for the watchdog tests; null keeps TimeProvider.System.
     /// </summary>
-    internal static IHost CreateServerHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
-        TimeProvider? timeProvider = null)
+    internal static IHost CreateServerHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports, TimeProvider timeProvider)
     {
         if (transports.Count == 1 && transports.Contains(McpTransport.Stdio))
         {
@@ -37,6 +43,16 @@ internal static partial class McpServerSetup
         }
 
         return CreateWebHost(config, transports, timeProvider);
+    }
+
+    public static WebApplication CreateWebHost(ServerConfig serverConfig)
+    {
+        if (serverConfig.Transport == McpTransport.Stdio)
+        {
+            ThrowHelper.ThrowArgumentException<McpTransport>($"{McpTransport.Stdio} can't be used to create a WebHost");
+        }
+
+        return CreateWebHost(serverConfig, [serverConfig.Transport], TimeProvider.System);
     }
 
     private static IHost CreateAppHost(ServerConfig config)
@@ -61,49 +77,33 @@ internal static partial class McpServerSetup
         return builder.Build();
     }
 
-    private static IHost CreateWebHost(ServerConfig config, IReadOnlyCollection<McpTransport> transports,
-        TimeProvider? timeProvider = null)
+    private static WebApplication CreateWebHost(ServerConfig serverConfig, IReadOnlyCollection<McpTransport> transports, TimeProvider timeProvider)
     {
-        // Must run before any ASP.NET Core hosting type is touched, and only when OTLP is enabled
-        // (docs/adr/0021): HostingApplicationDiagnostics reads the switch once, at host startup,
-        // from its own constructor — well after this point either way.
         if (OtlpExportState.Resolve().Enabled)
         {
             AppContext.SetSwitch(AspNetCoreHostingOpenTelemetryDataSwitch, false);
         }
 
-        var builder = WebApplication.CreateBuilder([]); // args already consumed by CliArgs
-        builder.Configuration.Sources.Clear(); // Ruling 3: the settings table is the only runtime channel
-        // Re-admits OTEL_*-prefixed env vars only (ADR-0009): the OTel SDK reads its entire OTEL_*
-        // surface through IConfiguration, not hand-rolled reads; this keeps Ruling 3 intact otherwise.
+        var builder = WebApplication.CreateBuilder([]);
+        builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(
             Environment.GetEnvironmentVariables()
                 .Cast<DictionaryEntry>()
-                .Where(e => e.Key.ToString()!.StartsWith("OTEL_", StringComparison.Ordinal))
-                .ToDictionary(e => e.Key.ToString()!, e => (string?)e.Value?.ToString()));
-        builder.Services.RegisterMemoryServices(config.Options, transports);
-        // Web host only (docs/adr/0009-otlp-export.md): stdio hosts recycle too often to pay
-        // the exporter's batch delay / provider shutdown grace.
-        builder.Services.AddOtlpExport(config.Options);
-        builder.Services.AddSingleton(timeProvider ?? TimeProvider.System); // test seam: fake clock for the watchdog
-        HostLogging.Configure(builder.Logging, transports, config.Options);
+                .Select(entry => new KeyValuePair<string, string?>(entry.Key.ToString() ?? "", entry.Value?.ToString()))
+                .Where(kv => !string.IsNullOrEmpty(kv.Key) && kv.Key.StartsWith("OTEL_", StringComparison.Ordinal))
+                .ToDictionary(kv => kv.Key, kv => kv.Value));
 
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, config.Port));
-        // Stated rather than inherited (ADR-0022): a restart waits on this port freeing, so how
-        // long a stopping host may drain in-flight requests has to be a number we own.
+        builder.Services.RegisterMemoryServices(serverConfig.Options, transports);
+        builder.Services.AddOtlpExport(serverConfig.Options);
+        builder.Services.AddSingleton(timeProvider);
+        HostLogging.Configure(builder.Logging, transports, serverConfig.Options);
+
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, serverConfig.Port));
         builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = ShutdownEndpoint.DrainWindow);
-        if (config.IdleTimeout > TimeSpan.Zero)
-        {
-            // Three registrations, one instance (docs/plans/2026-08-06-http-serve-mode-plan.md R1):
-            // AddHostedService<T> only registers IHostedService→T, so the middleware's DI lookup would fail otherwise.
-            builder.Services.AddSingleton(typeof(TimeSpan), config.IdleTimeout);
-            builder.Services.AddSingleton<IdleWatchdog>();
-            builder.Services.AddSingleton<IActivitySignaler>(sp => sp.GetRequiredService<IdleWatchdog>());
-            builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleWatchdog>());
-        }
+        builder.Services.RegisterWatchdogServices(serverConfig);
 
         builder.ConfigureMcpServer(transports);
-        return builder.Build().ConfigureMcpEndpoints(config, transports);
+        return builder.Build().ConfigureMcpEndpoints(serverConfig, transports);
     }
 
     extension(WebApplication webApplication)
@@ -115,31 +115,27 @@ internal static partial class McpServerSetup
                 Log.HttpsTransportNotSupported(webApplication.Logger);
             }
 
-            // One read, two branches: /shutdown is mapped iff the gate is installed, and that has
-            // to stay one condition — an unauthenticated shutdown is worse than no restart (ADR-0022).
             var gated = config.McpToken;
-            if (gated is { } mcpToken)
+            if (gated != null)
             {
-                // Ahead of the watchdog: an unauthorized caller must not keep the daemon alive
-                // (docs/plans/2026-08-09-mcp-loopback-token-flow.md).
-                webApplication.UseMiddleware<McpTokenGate>(mcpToken, new McpTokenFile(config.Options.DataRoot).Path);
+                webApplication.UseMiddleware<McpTokenGate>(gated, new McpTokenFile(config.Options.DataRoot).Path);
             }
 
             if (config.IdleTimeout > TimeSpan.Zero)
             {
-                // Spliced between routing and endpoints (.NET 10): branches on /mcp so 404s on
-                // other paths never signal (docs/plans/2026-08-06-http-serve-mode-plan.md R4).
                 webApplication.UseMiddleware<McpActivityMiddleware>();
             }
 
-            if (transports.Contains(McpTransport.Http))
+            if (!transports.Contains(McpTransport.Http))
             {
-                webApplication.MapMcp("/mcp");
-                webApplication.MapObservability();
-                if (gated is not null)
-                {
-                    webApplication.MapShutdown();
-                }
+                return webApplication;
+            }
+
+            webApplication.MapMcp("/mcp");
+            webApplication.MapObservability();
+            if (gated is not null)
+            {
+                webApplication.MapShutdown();
             }
 
             return webApplication;
@@ -168,9 +164,6 @@ internal static partial class McpServerSetup
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
-            // Order is load-bearing, not registration luck: the first filter added is the outermost,
-            // so telemetry sits inside the refusal mapper and still sees the raw exception type.
-            // Pinned by ToolTelemetryFilterTests.RefusedCall_RecordsTheExceptionType.
             mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f
                 .AddCallToolFilter(ToolRefusals.Filter)
                 .AddCallToolFilter(ToolTelemetry.Filter));
@@ -204,14 +197,4 @@ internal static partial class McpServerSetup
         [LoggerMessage(EventId = 30, Level = LogLevel.Warning, Message = "ai-raccoon: https transport is not supported")]
         public static partial void HttpsTransportNotSupported(ILogger logger);
     }
-}
-
-public enum McpTransport
-{
-    Stdio = 0,
-    Http = 1,
-    Https = 2,
-
-    /// <summary>A stdio front end that relays every message to one HTTP backend (ADR-0020).</summary>
-    Proxy = 3
 }

@@ -16,19 +16,17 @@ public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    private readonly string _path;
-
     public EncryptionSourceSidecar(string encryptionDataFilePath)
     {
         Guard.IsNotNullOrWhiteSpace(encryptionDataFilePath);
-        _path = PathFor(encryptionDataFilePath);
+        FilePath = PathFor(encryptionDataFilePath);
     }
 
-    public string FilePath => _path;
+    public string FilePath { get; }
 
     public EncryptionData Read()
     {
-        if (!File.Exists(_path))
+        if (!File.Exists(FilePath))
         {
             return EncryptionData.None;
         }
@@ -36,7 +34,7 @@ public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
         EncryptionData config;
         try
         {
-            config = JsonSerializer.Deserialize<EncryptionData>(File.ReadAllText(_path), JsonOptions)
+            config = JsonSerializer.Deserialize<EncryptionData>(File.ReadAllText(FilePath), JsonOptions)
                      ?? throw new JsonException("the sidecar is empty");
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -57,19 +55,19 @@ public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
             throw new ArgumentException($"source must be \"env\" or \"bitwarden\", was \"{config.Source}\"", nameof(config));
         }
 
-        var tempPath = $"{_path}.{Guid.NewGuid():N}.tmp";
+        var tempPath = $"{FilePath}.{Guid.NewGuid():N}.tmp";
         File.WriteAllText(tempPath, JsonSerializer.Serialize(config, JsonOptions));
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
 
-        File.Move(tempPath, _path, true);
+        File.Move(tempPath, FilePath, true);
     }
 
-    public void Delete() => File.Delete(_path);
+    public void Delete() => File.Delete(FilePath);
 
     public static string PathFor(string encryptionDataFilePath) => $"{encryptionDataFilePath}.source";
 
-    private EncryptionSourceException Corrupt(string reason) => new($"encryption source sidecar '{_path}' is corrupt: {reason}");
+    private EncryptionSourceException Corrupt(string reason) => new($"encryption source sidecar '{FilePath}' is corrupt: {reason}");
 }

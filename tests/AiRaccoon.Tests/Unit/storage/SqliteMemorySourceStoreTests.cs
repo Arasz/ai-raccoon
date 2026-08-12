@@ -28,8 +28,8 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _sourceStore = new SqliteMemorySourceStore(_factory);
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -101,7 +101,6 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

@@ -3,11 +3,13 @@ using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter;
@@ -39,14 +41,14 @@ public sealed class OtlpExportTests : IDisposable
     private const int SdkDefaultExportIntervalMilliseconds = 60_000;
     private const int SdkDefaultExportTimeoutMilliseconds = 30_000;
 
+    private static readonly OtlpExportState Disabled = new(false, null, null);
+    private static readonly OtlpExportState Enabled = new(true, "http://127.0.0.1:4317", "grpc");
+
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-export");
 
     private InfrastructureOptions TestOptions => new() { DataRoot = _dataRoot, Scope = InstallScope.User };
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
-
-    private static readonly OtlpExportState Disabled = new(false, null, null);
-    private static readonly OtlpExportState Enabled = new(true, "http://127.0.0.1:4317", "grpc");
 
     [Fact]
     public void NoEndpoint_RegistersNoTracerProviderOrMeterProvider()
@@ -684,8 +686,13 @@ public sealed class OtlpExportTests : IDisposable
     }
 
     private sealed class EnvRestore(
-        string? originalEndpoint, string? originalProtocol, string? originalInterval, string? originalTimeout,
-        string? originalServiceName, string? originalResourceAttributes, string? originalPassphrase)
+        string? originalEndpoint,
+        string? originalProtocol,
+        string? originalInterval,
+        string? originalTimeout,
+        string? originalServiceName,
+        string? originalResourceAttributes,
+        string? originalPassphrase)
         : IDisposable
     {
         public void Dispose()

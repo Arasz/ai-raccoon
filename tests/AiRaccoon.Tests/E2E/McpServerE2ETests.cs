@@ -8,11 +8,11 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Unit.Embedding;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -255,10 +255,9 @@ public class McpServerE2ETests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = new SqliteMemoryStore(factory,
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        var store = new SqliteMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
         var exit = await new ConfigCommands(new SettingsCommands(), new SyncCommands())
-            .RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, CancellationToken.None);
+            .RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null, CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

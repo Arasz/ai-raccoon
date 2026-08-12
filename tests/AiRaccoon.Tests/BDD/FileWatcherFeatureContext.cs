@@ -1,11 +1,10 @@
-using AiRaccoon.Core.Ingestion;
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -201,8 +200,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         WatchStore = new WatchStore(Factory);
         var scanGuard = new WatchScanGuard();
         Pipeline = new WatchPipeline(new WatchScheduler(),
-            new WatchDigestExecutor(Store, WatchStore, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Store,
-            TimeProvider, scanGuard, NullLogger<WatchPipeline>.Instance);
+            new WatchDigestExecutor(Store, WatchStore, TimeProvider, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
+            NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
         CatchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance);

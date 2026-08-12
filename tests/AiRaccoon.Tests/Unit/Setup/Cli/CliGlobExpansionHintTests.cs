@@ -1,4 +1,5 @@
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Render;
 using Shouldly;
 using Xunit;
 

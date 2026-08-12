@@ -1,5 +1,4 @@
 using AiRaccoon.Observability;
-using AiRaccoon.Tests;
 using Shouldly;
 using Xunit;
 

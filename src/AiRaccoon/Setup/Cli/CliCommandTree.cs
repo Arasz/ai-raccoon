@@ -1,6 +1,6 @@
 using System.CommandLine;
+using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Setup.Serve;
 
 namespace AiRaccoon.Setup.Cli;
 
@@ -14,13 +14,15 @@ internal static class CliCommandTree
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
     /// <summary>Derived from McpTransport so a new transport cannot leave the help name stale.</summary>
-    internal static readonly string TransportHelpName =
+    private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
     internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
-    /// <summary>The root launch --port (shared with the bare launch root); serve reads it instance-based
-    /// as its fallback when serve's own --port is absent (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
+    /// <summary>
+    ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
+    ///     as its fallback when serve's own --port is absent (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).
+    /// </summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
         Description = "HTTP backend port the proxy dials or starts (1-65535); 0 is serve-only",
@@ -50,9 +52,11 @@ internal static class CliCommandTree
 
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
 
-    /// <summary>observability's own --port, read instance-based like ServePortOption
-    /// (docs/plans/2026-08-06-http-serve-mode-plan.md R12): unlike serve's --port, 0 is not
-    /// legal here — there is no "any free port" to dial.</summary>
+    /// <summary>
+    ///     observability's own --port, read instance-based like ServePortOption
+    ///     (docs/plans/2026-08-06-http-serve-mode-plan.md R12): unlike serve's --port, 0 is not
+    ///     legal here — there is no "any free port" to dial.
+    /// </summary>
     internal static readonly Option<int> ObservabilityPortOption = CreateObservabilityPortOption();
 
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
@@ -74,8 +78,10 @@ internal static class CliCommandTree
         return root;
     }
 
-    /// <summary>Launch-only root for bare server invocations (no verb): System.CommandLine
-    /// treats a root with subcommands as requiring one, so verb-less flag sets re-parse here.</summary>
+    /// <summary>
+    ///     Launch-only root for bare server invocations (no verb): System.CommandLine
+    ///     treats a root with subcommands as requiring one, so verb-less flag sets re-parse here.
+    /// </summary>
     internal static RootCommand BuildLaunchRootCommand()
     {
         var root = new RootCommand(Description);
@@ -148,11 +154,13 @@ internal static class CliCommandTree
     private static Command SweepCommand()
     {
         var sweep = new Command("sweep",
-            "Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.");
-        sweep.Add(new Command("enable", "Arms the background reaper (the default: it deletes expired entries on its cadence)"));
-        sweep.Add(new Command("disable", "Disarms the background reaper — nothing is deleted until it is enabled again"));
-        sweep.Add(new Command("interval-hours", "Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed")
-            { new Argument<string>("hours") { HelpName = "1..8760" } });
+            "Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.")
+        {
+            new Command("enable", "Arms the background reaper (the default: it deletes expired entries on its cadence)"),
+            new Command("disable", "Disarms the background reaper — nothing is deleted until it is enabled again"),
+            new Command("interval-hours", "Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed")
+                { new Argument<string>("hours") { HelpName = "1..8760" } }
+        };
         var threshold = new Command("threshold", "Sweep rating threshold")
         {
             new Command("set", "Sets sweep.threshold (0..1, default 0.3)") { new Argument<string>("threshold") { HelpName = "0..1" } }
@@ -218,8 +226,8 @@ internal static class CliCommandTree
     private static Command IngestCommand()
     {
         var ingest = new Command("ingest",
-            "Ingestion configuration (CLI-only channel). The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.");
-        ingest.Add(ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read"));
+                "Ingestion configuration (CLI-only channel). The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.")
+            { ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read") };
         return ingest;
     }
 
@@ -230,18 +238,18 @@ internal static class CliCommandTree
         {
             new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
-            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } }
+            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
+            // Kept as a deprecated alias: the scope moved to `ingest scope` when it stopped being
+            // watch-only, and breaking every existing setup script at the same time is gratuitous.
+            ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"),
+            new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } },
+            new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those"),
+            new Command("registered",
+                    "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
+                { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } },
+            new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } }
         };
-        // Kept as a deprecated alias: the scope moved to `ingest scope` when it stopped being
-        // watch-only, and breaking every existing setup script at the same time is gratuitous.
-        watch.Add(ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"));
-        watch.Add(new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
-            { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } });
-        watch.Add(new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those"));
-        watch.Add(new Command("registered",
-                "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
-            { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } });
-        watch.Add(new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } });
         return watch;
     }
 
@@ -268,7 +276,7 @@ internal static class CliCommandTree
             },
             new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)"),
             new Command("prune",
-                "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
+                    "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
                 { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
         };
         return extract;
@@ -285,7 +293,7 @@ internal static class CliCommandTree
         option.Validators.Add(result =>
         {
             var value = result.GetValueOrDefault<string>();
-            if (value is not null && value is not ("hermes" or "claude" or "all"))
+            if (value is not ("hermes" or "claude" or "all"))
             {
                 result.AddError($"Cannot parse argument '{value}' as an entry format: expected hermes|claude|all.");
             }
@@ -303,7 +311,7 @@ internal static class CliCommandTree
         option.Validators.Add(result =>
         {
             var value = result.GetValueOrDefault<string>();
-            if (value is not null && !IdleTimeoutParser.TryParse(value, out _))
+            if (!IdleTimeoutParser.TryParse(value, out _))
             {
                 result.AddError($"Cannot parse argument '{value}' as an idle timeout: expected 90s/30m/4h/1d or 0 (disabled).");
             }
@@ -349,7 +357,7 @@ internal static class CliCommandTree
         kind.Validators.Add(result =>
         {
             var value = result.GetValueOrDefault<string>();
-            if (value is not null && value is not ("counters" or "trace" or "otlp" or "pid"))
+            if (value is not ("counters" or "trace" or "otlp" or "pid"))
             {
                 result.AddError($"Cannot parse argument '{value}' as an observability kind: expected counters|trace|otlp|pid.");
             }
@@ -373,13 +381,14 @@ internal static class CliCommandTree
         option.Validators.Add(result =>
         {
             var value = result.GetValueOrDefault<int>();
-            if (value == 0)
+            switch (value)
             {
-                result.AddError("Cannot parse argument '0' as --port: 0 means \"any free port\" and cannot be dialled; pass the port of the running serve process.");
-            }
-            else if (value is < 1 or > 65535)
-            {
-                result.AddError($"Cannot parse argument '{value}' as --port: expected 1-65535.");
+                case 0:
+                    result.AddError("Cannot parse argument '0' as --port: 0 means \"any free port\" and cannot be dialled; pass the port of the running serve process.");
+                    break;
+                case < 1 or > 65535:
+                    result.AddError($"Cannot parse argument '{value}' as --port: expected 1-65535.");
+                    break;
             }
         });
         return option;

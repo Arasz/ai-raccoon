@@ -3,11 +3,13 @@ namespace AiRaccoon.Core.Memory;
 /// <summary>Bounded content-shape adjustment plus the plain-name reason tags that fired.</summary>
 internal readonly record struct ContentEvidence(double Adjustment, IReadOnlyList<string> Reasons);
 
-/// <summary>Bounded content-shape evidence that moves a doc-channel candidate off its channel prior, plus
-/// the bespoke auto-memory-note evidence and the three centred terms (substance, durability, portability)
-/// shared with <see cref="OrganicRefinement" /> (ported from scorer.py's doc_adjust(), organic_adjust()'s
-/// shared helpers, and the auto_memory_note branch of score_candidate(), see
-/// docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).</summary>
+/// <summary>
+///     Bounded content-shape evidence that moves a doc-channel candidate off its channel prior, plus
+///     the bespoke auto-memory-note evidence and the three centred terms (substance, durability, portability)
+///     shared with <see cref="OrganicRefinement" /> (ported from scorer.py's doc_adjust(), organic_adjust()'s
+///     shared helpers, and the auto_memory_note branch of score_candidate(), see
+///     docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).
+/// </summary>
 internal static class PromotionContentEvidence
 {
     private const double Lo = -1.60;
@@ -234,18 +236,22 @@ internal static class PromotionContentEvidence
         return new ContentEvidence(Clamp(adj, AutoMemoryNoteLo, AutoMemoryNoteHi), reasons);
     }
 
-    /// <summary>Chunk-length ramp shared by every non-hard-noise branch (ported from scorer.py's
-    /// substance()).</summary>
-    internal static double Substance(CandidateFeatures f) =>
-        SubstanceGain * Clamp((f.NWords - SubstancePivot) / SubstanceSpan, -1.0, 1.0);
+    /// <summary>
+    ///     Chunk-length ramp shared by every non-hard-noise branch (ported from scorer.py's
+    ///     substance()).
+    /// </summary>
+    internal static double Substance(CandidateFeatures f) => SubstanceGain * Clamp((f.NWords - SubstancePivot) / SubstanceSpan, -1.0, 1.0);
 
-    /// <summary>Impersonal-rule-language term shared by every non-hard-noise branch (ported from
-    /// scorer.py's durability()).</summary>
-    internal static double Durability(CandidateFeatures f) =>
-        Clamp(ImpRuleGain * f.ImpRuleDensity, 0.0, ImpRuleCap) - DurabilityCentre;
+    /// <summary>
+    ///     Impersonal-rule-language term shared by every non-hard-noise branch (ported from
+    ///     scorer.py's durability()).
+    /// </summary>
+    internal static double Durability(CandidateFeatures f) => Clamp(ImpRuleGain * f.ImpRuleDensity, 0.0, ImpRuleCap) - DurabilityCentre;
 
-    /// <summary>Breadth of outside-world technology minus density of inside-repo bookkeeping;
-    /// applied to considered technical documents only (ported from scorer.py's portability()).</summary>
+    /// <summary>
+    ///     Breadth of outside-world technology minus density of inside-repo bookkeeping;
+    ///     applied to considered technical documents only (ported from scorer.py's portability()).
+    /// </summary>
     private static double Portability(CandidateFeatures f)
     {
         var lift = TechGain * Math.Min(f.TechBreadth, TechCap) - TechCentre;

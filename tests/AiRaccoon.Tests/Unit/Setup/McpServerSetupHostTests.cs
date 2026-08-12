@@ -1,12 +1,12 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +18,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 

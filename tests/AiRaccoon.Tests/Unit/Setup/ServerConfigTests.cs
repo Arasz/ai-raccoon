@@ -1,3 +1,4 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
@@ -142,7 +143,7 @@ public class ServerConfigTests
         printed.ShouldContain("7721");
     }
 
-    private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
+    private static RootCliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
         int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>
         new()
         {

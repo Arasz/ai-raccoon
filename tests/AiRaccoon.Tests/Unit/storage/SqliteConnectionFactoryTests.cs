@@ -1,5 +1,4 @@
 using System.Data;
-using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -129,8 +128,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    private static string CreateTempRoot() =>
-        TestData.CreateTempRoot("airaccoon-store-tests");
+    private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     private static async Task<string> QueryStringAsync(SqliteConnection connection, string sql)
     {

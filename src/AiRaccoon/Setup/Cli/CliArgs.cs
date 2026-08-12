@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Help;
 using System.CommandLine.Parsing;
-using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup.Cli.Options;
 
 namespace AiRaccoon.Setup.Cli;
 
@@ -16,7 +16,7 @@ internal static class CliArgs
     private static readonly ParserConfiguration ParserConfiguration = new() { EnablePosixBundling = true };
 
     /// <summary>Parses args; never writes anything (stdout stays reserved for the stdio protocol).</summary>
-    internal static bool TryParse(string[] args, out CliParseResult result)
+    internal static bool TryParse(string[] args, out CliInput? result)
     {
         var parseResult = CliCommandTree.BuildFullRootCommand().Parse(args, ParserConfiguration);
         var errors = parseResult.Errors.Select(e => e.Message).ToList();
@@ -29,10 +29,15 @@ internal static class CliArgs
         }
 
         var commandPath = CommandPathOf(parseResult);
-        var options = ReadOptions(parseResult, out var optionErrors);
-        var allErrors = errors.Union(optionErrors).ToList();
-        result = new CliParseResult(options, commandPath, showHelp, showVersion, allErrors, parseResult);
-        return result.Errors.Count <= 0 && result is { ShowHelp: false, ShowVersion: false };
+        var optionReadResult = ReadRootOptions(parseResult);
+        if (optionReadResult.IsSuccess)
+        {
+            result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult);
+            return true;
+        }
+
+        result = new CliInput(RootCliOptions.Null, commandPath, showHelp, showVersion, [.. errors.Union(optionReadResult.Errors)], parseResult);
+        return result is { ShowHelp: false, ShowVersion: false };
     }
 
     /// <summary>True when the args name one of the config verbs (skipping options and their values).</summary>
@@ -77,48 +82,14 @@ internal static class CliArgs
         return path.Count <= 1 ? [] : [.. path.Skip(1)];
     }
 
-    /// <summary>
-    ///     Reads launch options, one at a time: a bad value on one option falls back to that
-    ///     option's own default and is recorded in <paramref name="errors"/> — it can never
-    ///     discard a sibling option that parsed fine (H1). System.CommandLine 2.0.10 does not
-    ///     reliably surface a coercion failure via <c>parseResult.Errors</c> once a subcommand is
-    ///     present (verified against the raw ParseResult); <see cref="OptionResult.GetValueOrDefault{T}"/>
-    ///     throws <see cref="InvalidOperationException"/> instead, which this catches per option.
-    /// </summary>
-    private static CliOptions ReadOptions(ParseResult parseResult, out IReadOnlyList<string> errors)
-    {
-        var collectedErrors = new List<string>();
-        var options = new CliOptions
+    private static OptionReadResult<RootCliOptions> ReadRootOptions(ParseResult result) =>
+        result.ReadOptions((parseResult, collectedErrors) => new RootCliOptions
         {
-            Transport = ReadOption(parseResult, "--transport", DefaultOptions.Transport, collectedErrors),
-            DataRoot = ReadOption(parseResult, "--data-root", DefaultOptions.DataRoot, collectedErrors),
-            InstallScope = ReadOption(parseResult, "--install-scope", DefaultOptions.InstallScope, collectedErrors),
-            Port = ReadOption(parseResult, "--port", DefaultOptions.Port, collectedErrors),
+            Transport = parseResult.ReadOption("--transport", DefaultOptions.Transport, collectedErrors),
+            DataRoot = parseResult.ReadOption("--data-root", DefaultOptions.DataRoot, collectedErrors),
+            InstallScope = parseResult.ReadOption("--install-scope", DefaultOptions.InstallScope, collectedErrors),
+            Port = parseResult.ReadOption("--port", DefaultOptions.Port, collectedErrors),
             IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
-            Quiet = ReadOption(parseResult, "--quiet", false, collectedErrors, requireTokens: false)
-        };
-        errors = collectedErrors;
-        return options;
-    }
-
-    /// <summary>Reads one option's value; a missing option (or one requiring tokens that has
-    /// none) returns <paramref name="defaultValue"/>, and a coercion failure records its message
-    /// in <paramref name="errors"/> and also returns <paramref name="defaultValue"/>.</summary>
-    private static T ReadOption<T>(ParseResult parseResult, string optionName, T defaultValue, List<string> errors, bool requireTokens = true)
-    {
-        if (parseResult.GetResult(optionName) is not OptionResult result || (requireTokens && result.Tokens.Count == 0))
-        {
-            return defaultValue;
-        }
-
-        try
-        {
-            return result.GetValueOrDefault<T>();
-        }
-        catch (InvalidOperationException ex)
-        {
-            errors.Add(ex.Message);
-            return defaultValue;
-        }
-    }
+            Quiet = parseResult.ReadOption("--quiet", false, collectedErrors, false)
+        });
 }

@@ -19,10 +19,10 @@ public static class SshKeyDerivation
 
     public static string DeriveRawKey(ReadOnlySpan<byte> seed)
     {
-        Guard.HasSizeEqualTo(seed, SeedLength, nameof(seed));
+        Guard.HasSizeEqualTo(seed, SeedLength);
 
         Span<byte> key = stackalloc byte[KeyLength];
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, seed, key, salt: default, info: LabelBytes);
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, seed, key, default, LabelBytes);
 
         return Format(key);
     }
@@ -33,7 +33,7 @@ public static class SshKeyDerivation
     /// </summary>
     public static string DeriveLegacyRawKey(ReadOnlySpan<byte> seed)
     {
-        Guard.HasSizeEqualTo(seed, SeedLength, nameof(seed));
+        Guard.HasSizeEqualTo(seed, SeedLength);
 
         Span<byte> input = stackalloc byte[LabelBytes.Length + seed.Length];
         LabelBytes.CopyTo(input);
@@ -45,6 +45,5 @@ public static class SshKeyDerivation
         return Format(key);
     }
 
-    private static string Format(ReadOnlySpan<byte> key) =>
-        string.Concat("x'", Convert.ToHexString(key).ToLowerInvariant(), "'");
+    private static string Format(ReadOnlySpan<byte> key) => string.Concat("x'", Convert.ToHexString(key).ToLowerInvariant(), "'");
 }

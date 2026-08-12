@@ -13,8 +13,11 @@ public partial class SyncService(
     Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
-    ILogger<SyncService> logger)
+    ILogger<SyncService> logger) : ISyncService
 {
+    private const int MaxPushRetries = 3;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
     public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
         Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
@@ -23,9 +26,6 @@ public partial class SyncService(
         : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger)
     {
     }
-
-    private const int MaxPushRetries = 3;
-    private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Defaults <paramref name="objectKey" /> to "memory-{projectId}.db" when the caller has none configured — the naming convention is the service's concern, not the caller's.</summary>
     public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
@@ -288,35 +288,35 @@ public partial class SyncService(
                 await using (var resolveSource = conn.CreateCommand())
                 {
                     resolveSource.CommandText = """
-                                                 INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
-                                                 SELECT CASE
-                                                         WHEN e.source_file LIKE 'hermes/%' OR e.source_file LIKE '%/hermes/%' THEN 'transcript'
-                                                         WHEN e.source_file IS NULL OR e.source_file = '' THEN 'manual'
-                                                         ELSE 'file'
-                                                     END,
-                                                     COALESCE(e.source_file, ''),
-                                                     e.section
-                                                 FROM entries e
-                                                 WHERE e.source_id IS NULL AND e.workspace_id IS NULL
-                                                 """;
+                                                INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                                                SELECT CASE
+                                                        WHEN e.source_file LIKE 'hermes/%' OR e.source_file LIKE '%/hermes/%' THEN 'transcript'
+                                                        WHEN e.source_file IS NULL OR e.source_file = '' THEN 'manual'
+                                                        ELSE 'file'
+                                                    END,
+                                                    COALESCE(e.source_file, ''),
+                                                    e.section
+                                                FROM entries e
+                                                WHERE e.source_id IS NULL AND e.workspace_id IS NULL
+                                                """;
                     await resolveSource.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 await using (var backfillSourceId = conn.CreateCommand())
                 {
                     backfillSourceId.CommandText = """
-                                                    UPDATE entries SET source_id = (
-                                                        SELECT ms.id FROM memory_source ms
-                                                        WHERE ms.source_locator = COALESCE(entries.source_file, '')
-                                                          AND (ms.section IS entries.section OR (ms.section IS NULL AND entries.section IS NULL))
-                                                          AND ms.source_type = CASE
-                                                              WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
-                                                              WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
-                                                              ELSE 'file'
-                                                          END
-                                                    )
-                                                    WHERE source_id IS NULL AND workspace_id IS NULL
-                                                    """;
+                                                   UPDATE entries SET source_id = (
+                                                       SELECT ms.id FROM memory_source ms
+                                                       WHERE ms.source_locator = COALESCE(entries.source_file, '')
+                                                         AND (ms.section IS entries.section OR (ms.section IS NULL AND entries.section IS NULL))
+                                                         AND ms.source_type = CASE
+                                                             WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
+                                                             WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
+                                                             ELSE 'file'
+                                                         END
+                                                   )
+                                                   WHERE source_id IS NULL AND workspace_id IS NULL
+                                                   """;
                     await backfillSourceId.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 

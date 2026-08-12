@@ -1,7 +1,6 @@
 using AiRaccoon.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
-using Microsoft.Extensions.Hosting;
 using Shouldly;
 using Xunit;
 

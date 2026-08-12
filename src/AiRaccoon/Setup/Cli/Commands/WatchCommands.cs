@@ -1,10 +1,9 @@
-using AiRaccoon.Core.Ingestion;
 using System.CommandLine;
 using System.Globalization;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
-using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -13,10 +12,9 @@ public sealed class WatchCommands(IWatchStore watchStore)
 {
     // The ?? reads as redundant to the analyzer, but WatchCommandsTests proves the guard: the
     // CLI composes this by hand, outside DI, where a null can genuinely arrive.
-    private readonly IWatchStore _watchStore = watchStore ?? ThrowHelper.ThrowArgumentNullException<IWatchStore>(nameof(watchStore));
 
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         var enabled = parseResult.GetValue<bool>("enabled");
@@ -26,16 +24,16 @@ public sealed class WatchCommands(IWatchStore watchStore)
         if (target == "*" && enabled &&
             IngestScopeList.Parse(await store.GetSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken)).Count == 0)
         {
-            await stderr.WriteLineAsync(
+            await streams.WriteErrorLineAsync(
                 "ai-raccoon: warning — no ingest scope configured; add at least one scope with 'ai-raccoon ingest scope add '*' <path>'. Nothing can be ingested or watched until you do.");
         }
 
-        await stdout.WriteLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");
+        await streams.WriteOutputLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");
         return 0;
     }
 
     public async Task<int> ScopeAddAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
@@ -43,12 +41,12 @@ public sealed class WatchCommands(IWatchStore watchStore)
         var current = IngestScopeList.Parse(await store.GetSettingAsync(key, cancellationToken));
         var updated = IngestScopeList.Add(current, path);
         await store.SetSettingAsync(key, IngestScopeList.ToJson(updated), cancellationToken);
-        await stdout.WriteLineAsync($"added {Path.GetFullPath(path)} to ingest scope for {target}");
+        await streams.WriteOutputLineAsync($"added {Path.GetFullPath(path)} to ingest scope for {target}");
         return 0;
     }
 
     public async Task<int> ScopeRemoveAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         var path = parseResult.GetValue<string>("path")!;
@@ -64,41 +62,41 @@ public sealed class WatchCommands(IWatchStore watchStore)
             await store.SetSettingAsync(key, IngestScopeList.ToJson(updated), cancellationToken);
         }
 
-        await stdout.WriteLineAsync($"removed {Path.GetFullPath(path)} from ingest scope for {target}");
+        await streams.WriteOutputLineAsync($"removed {Path.GetFullPath(path)} from ingest scope for {target}");
         return 0;
     }
 
     public async Task<int> ScopeListAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         var key = target == "*" ? IngestScopeKeys.ScopeGlobal : IngestScopeKeys.ScopeProject(target);
         foreach (var path in IngestScopeList.Parse(await store.GetSettingAsync(key, cancellationToken)))
         {
-            await stdout.WriteLineAsync(path);
+            await streams.WriteOutputLineAsync(path);
         }
 
         return 0;
     }
 
     public async Task<int> ConcurrencyAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         var value = parseResult.GetValue<int>("value");
         if (value is < 1 or > 16)
         {
-            await stderr.WriteLineAsync($"ai-raccoon: invalid-value: concurrency {value} (expected 1..16)");
+            await streams.WriteErrorLineAsync($"ai-raccoon: invalid-value: concurrency {value} (expected 1..16)");
             return 1;
         }
 
         var key = target == "*" ? WatchConfigKeys.ConcurrencyGlobal : WatchConfigKeys.ConcurrencyProject(target);
         await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
-        await stdout.WriteLineAsync($"watch concurrency set to {value} for {target}");
+        await streams.WriteOutputLineAsync($"watch concurrency set to {value} for {target}");
         return 0;
     }
 
-    public async Task<int> ListAsync(IMemoryStore store, TextWriter stdout,
+    public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
         // Two prefixes since the scope moved out of watch.*: enabled/concurrency stay watch-only,
@@ -126,17 +124,17 @@ public sealed class WatchCommands(IWatchStore watchStore)
         {
             // target "global" maps to the global keys by construction (Project("global") == Global).
             var config = WatchConfig.Resolve(target, key => rows.GetValueOrDefault(key));
-            await stdout.WriteLineAsync(WatchListFormat.Render(target, config));
+            await streams.WriteOutputLineAsync(WatchListFormat.Render(target, config));
         }
 
         return 0;
     }
 
-    public async Task<int> RegisteredAsync(ParseResult parseResult, TextWriter stdout,
+    public async Task<int> RegisteredAsync(ParseResult parseResult, StandardStreams streams,
         CancellationToken cancellationToken)
     {
         var filter = parseResult.GetValue<string?>("project-id");
-        var watches = await _watchStore.ListWatchesAsync(cancellationToken);
+        var watches = await watchStore.ListWatchesAsync(cancellationToken);
         var rows = watches
             .Where(w => filter is null || w.ProjectId == filter)
             .OrderBy(w => w.ProjectId, StringComparer.Ordinal)
@@ -144,7 +142,7 @@ public sealed class WatchCommands(IWatchStore watchStore)
             .ToArray();
         if (rows.Length == 0)
         {
-            await stdout.WriteLineAsync("no registered watches");
+            await streams.WriteOutputLineAsync("no registered watches");
             return 0;
         }
 
@@ -152,14 +150,14 @@ public sealed class WatchCommands(IWatchStore watchStore)
         {
             var registered = FormatTimestamp(row.CreatedAt);
             var lastChange = row.LastChangeTs == 0 ? "never" : FormatTimestamp(row.LastChangeTs);
-            await stdout.WriteLineAsync($"project: {row.ProjectId}  path: {row.Path}  registered: {registered}  lastChange: {lastChange}");
+            await streams.WriteOutputLineAsync($"project: {row.ProjectId}  path: {row.Path}  registered: {registered}  lastChange: {lastChange}");
         }
 
         return 0;
     }
 
     public async Task<int> RemoveAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, CancellationToken cancellationToken)
+        StandardStreams streams, CancellationToken cancellationToken)
     {
         var target = parseResult.GetValue<string>("target")!;
         string[] keys = target == "*"
@@ -170,7 +168,7 @@ public sealed class WatchCommands(IWatchStore watchStore)
             await store.DeleteSettingAsync(key, cancellationToken);
         }
 
-        await stdout.WriteLineAsync($"removed watch config for {target}");
+        await streams.WriteOutputLineAsync($"removed watch config for {target}");
         return 0;
     }
 

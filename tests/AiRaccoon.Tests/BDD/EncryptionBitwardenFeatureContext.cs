@@ -1,4 +1,3 @@
-using System.Text;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Embedding;
@@ -11,8 +10,8 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -86,7 +85,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         Resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
-        ConfigStore = new SqliteMemoryStore(Bank, TimeProvider, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank));
+        ConfigStore = new SqliteMemoryStore(Bank, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank), new StubChunker(), TimeProvider, new EmbeddingService());
     }
 
     /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
@@ -193,7 +192,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         var envProvider = new StubEnvProvider(EnvPassphrase);
         var encryptionState = new EncryptionSourceSidecar(BankPath);
         var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger());
-        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParseResult, ConfigStore, stdout, stderr, new StringReader(stdin), cancellationToken: CancellationToken.None);
+        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, ConfigStore, stdout, stderr, new StringReader(stdin),
+            ctx: CancellationToken.None);
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 

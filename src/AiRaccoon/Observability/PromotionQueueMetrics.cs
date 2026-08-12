@@ -11,13 +11,13 @@ namespace AiRaccoon.Observability;
 /// </summary>
 public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
 {
-    private readonly Counter<long> _evictions;
-    private readonly Histogram<double> _evictedScore;
-    private readonly Histogram<double> _waitSeconds;
-    private readonly Counter<long> _promoted;
     private readonly Counter<long> _discarded;
-    private readonly Counter<long> _pruned;
+    private readonly Histogram<double> _evictedScore;
+    private readonly Counter<long> _evictions;
     private readonly Counter<long> _promoteFailures;
+    private readonly Counter<long> _promoted;
+    private readonly Counter<long> _pruned;
+    private readonly Histogram<double> _waitSeconds;
     private QueueSnapshot? _snapshot;
 
     public PromotionQueueMetrics()
@@ -25,51 +25,53 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         Meter = new Meter(OtlpNames.PromotionQueueScope, ServerInfo.BinaryVersion);
         _evictions = Meter.CreateCounter<long>(
             OtlpNames.QueueEvictions,
-            unit: "{eviction}",
-            description: "Propose-tier evictions (reason tag: capacity)");
+            "{eviction}",
+            "Propose-tier evictions (reason tag: capacity)");
         _evictedScore = Meter.CreateHistogram<double>(
             OtlpNames.QueueEvictedScore,
-            unit: "1",
-            description: "Score of the evicted row");
+            "1",
+            "Score of the evicted row");
         _waitSeconds = Meter.CreateHistogram<double>(
             OtlpNames.QueueWait,
-            unit: "s",
-            description: "Seconds a row waited before leaving the queue (promoted or discarded)");
+            "s",
+            "Seconds a row waited before leaving the queue (promoted or discarded)");
         _promoted = Meter.CreateCounter<long>(
             OtlpNames.QueuePromoted,
-            unit: "{row}",
-            description: "Rows promoted from the queue into the shared tier");
+            "{row}",
+            "Rows promoted from the queue into the shared tier");
         _discarded = Meter.CreateCounter<long>(
             OtlpNames.QueueDiscarded,
-            unit: "{row}",
-            description: "Rows discarded from the queue by the agent");
+            "{row}",
+            "Rows discarded from the queue by the agent");
         _pruned = Meter.CreateCounter<long>(
             OtlpNames.QueuePruned,
-            unit: "{row}",
-            description: "Queue rows pruned as residue — already shared or previously discarded (docs/adr/0026)");
+            "{row}",
+            "Queue rows pruned as residue — already shared or previously discarded (docs/adr/0026)");
         _promoteFailures = Meter.CreateCounter<long>(
             OtlpNames.QueuePromoteFailures,
-            unit: "{failure}",
-            description: "Promote candidates that failed (stale hash or share failure)");
+            "{failure}",
+            "Promote candidates that failed (stale hash or share failure)");
         Meter.CreateObservableUpDownCounter(
             OtlpNames.QueueQueued,
             ObserveQueued,
-            unit: "{item}",
-            description: "Queued promotions per project, read from the store's current state. "
-                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process. "
-                + "A project's series stops reporting rather than reporting 0 once it drains to empty — it retires, "
-                + "it is not a confident 0.");
+            "{item}",
+            "Queued promotions per project, read from the store's current state. "
+            + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process. "
+            + "A project's series stops reporting rather than reporting 0 once it drains to empty — it retires, "
+            + "it is not a confident 0.");
         Meter.CreateObservableGauge(
             OtlpNames.QueueCapacityUtilization,
             ObserveUtilization,
-            unit: "1",
-            description: "Queue occupancy against the cap (1.0 = full). "
-                + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process — "
-                + "a gap, not a confident 0.0, until then.");
+            "1",
+            "Queue occupancy against the cap (1.0 = full). "
+            + "No measurement is published until the first propose/promote/discard/RecordSnapshot call in this process — "
+            + "a gap, not a confident 0.0, until then.");
     }
 
     /// <summary>Meter named "AiRaccoon.PromotionQueue" — discoverable by dotnet-counters via EventPipe.</summary>
     public Meter Meter { get; }
+
+    public void Dispose() => Meter.Dispose();
 
     public void RecordEviction(string projectId, double victimScore, string reason)
     {
@@ -108,8 +110,7 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         }
     }
 
-    public void RecordSnapshot(PromotionQueueStats stats, int capacity) =>
-        Volatile.Write(ref _snapshot, QueueSnapshot.From(stats, capacity));
+    public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Volatile.Write(ref _snapshot, QueueSnapshot.From(stats, capacity));
 
     private IEnumerable<Measurement<long>> ObserveQueued()
     {
@@ -125,15 +126,14 @@ public sealed class PromotionQueueMetrics : IPromotionQueueMetrics, IDisposable
         return snapshot is null ? [] : [new Measurement<double>(snapshot.Utilization)];
     }
 
-    public void Dispose() => Meter.Dispose();
-
-    /// <summary>Immutable, so a single Volatile field swap is enough to publish it (ADR-0009's
-    /// zero-background-threads guarantee — no timer, the writers publish on the request path).
-    /// A <see langword="null" /> <see cref="_snapshot" /> means "never published" and must yield
-    /// no measurement, not a measured zero.</summary>
+    /// <summary>
+    ///     Immutable, so a single Volatile field swap is enough to publish it (ADR-0009's
+    ///     zero-background-threads guarantee — no timer, the writers publish on the request path).
+    ///     A <see langword="null" /> <see cref="_snapshot" /> means "never published" and must yield
+    ///     no measurement, not a measured zero.
+    /// </summary>
     private sealed record QueueSnapshot(IReadOnlyDictionary<string, int> PerProject, double Utilization)
     {
-        public static QueueSnapshot From(PromotionQueueStats stats, int capacity) =>
-            new(stats.PerProject, stats.TotalCount / (double)Math.Max(1, capacity));
+        public static QueueSnapshot From(PromotionQueueStats stats, int capacity) => new(stats.PerProject, stats.TotalCount / (double)Math.Max(1, capacity));
     }
 }

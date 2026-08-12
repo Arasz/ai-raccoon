@@ -71,7 +71,7 @@ public sealed class SqliteSearchQualityService(SqliteConnectionFactory factory) 
             new
             {
                 Id = correlationId,
-                Count = files.Count,
+                files.Count,
                 Files = JsonSerializer.Serialize(files)
             }).ConfigureAwait(false);
     }
@@ -118,17 +118,17 @@ public sealed class SqliteSearchQualityService(SqliteConnectionFactory factory) 
         var total = (int)(row?.TotalSearches ?? 0);
         var followThrough = (int)(row?.FollowThroughSearches ?? 0);
         var graded = (int)(row?.GradedSearches ?? 0);
-        var avgGrade = (double?)(row?.AverageGrade) ?? 0.0;
+        var avgGrade = (double?)row?.AverageGrade ?? 0.0;
 
         var days = Math.Max(1, (int)(DateTimeOffset.UtcNow - from).TotalDays);
 
         return new SearchQualityMetrics(
-            TotalSearches: total,
-            FollowThroughSearches: followThrough,
-            GradedSearches: graded,
-            AverageGrade: avgGrade,
-            FollowThroughRate: total > 0 ? (double)followThrough / total : 0.0,
-            Coverage: total > 0 ? (double)graded / total : 0.0,
-            SearchesPerDay: total / days);
+            total,
+            followThrough,
+            graded,
+            avgGrade,
+            total > 0 ? (double)followThrough / total : 0.0,
+            total > 0 ? (double)graded / total : 0.0,
+            total / days);
     }
 }

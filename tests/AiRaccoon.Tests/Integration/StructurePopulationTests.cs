@@ -4,10 +4,11 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -32,8 +33,8 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public ValueTask DisposeAsync()
@@ -88,7 +89,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
             $"[StructurePopulationTests] structure-populated fraction: {structuredEntries}/{totalEntries} ({(double)structuredEntries / totalEntries:P1})");
     }
 
-    private static Task<int> Scalar(Microsoft.Data.Sqlite.SqliteConnection connection, string sql) =>
+    private static Task<int> Scalar(SqliteConnection connection, string sql) =>
         connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, cancellationToken: TestContext.Current.CancellationToken));
 }

@@ -30,6 +30,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what the migrate
     // verb has to find on disk and rekey away from.
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+
     // Obviously fake sidecar fixture ids, unrelated to the interactive-default behaviour below —
     // not real Bitwarden vault entries.
     private const string FixtureProjectId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -75,7 +76,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
         var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
-        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, stdin ?? TextReader.Null,
+            ctx: TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -289,7 +291,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 801 && r.Level == LogLevel.Information
-                                                                             && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
+                                                                               && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
         await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {

@@ -23,7 +23,8 @@ public class ConfigCommandsAccessModelTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(settings: new SettingsCommands()).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands(settings: new SettingsCommands()).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null,
+            ctx: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -342,7 +343,7 @@ public class ConfigCommandsAccessModelTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands().RunAsync(["bogus", "verb"], parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands().RunAsync(["bogus", "verb"], parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null, ctx: TestContext.Current.CancellationToken);
 
         exit.ShouldBe(1);
         stderr.ToString().ShouldContain("unhandled command");

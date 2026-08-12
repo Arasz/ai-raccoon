@@ -1,5 +1,5 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Setup.Serve;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;

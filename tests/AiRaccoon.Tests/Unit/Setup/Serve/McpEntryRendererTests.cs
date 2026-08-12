@@ -1,5 +1,5 @@
 using System.Text.Json;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Setup.Cli.Render;
 using Shouldly;
 using Xunit;
 
@@ -21,8 +21,8 @@ public class McpEntryRendererTests
         var json = McpEntryRenderer.RenderHermes(7721);
 
         JsonDeepEqual(json, """
-            {"ai-raccoon":{"url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}
-            """).ShouldBeTrue();
+                            {"ai-raccoon":{"url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}
+                            """).ShouldBeTrue();
         json.ShouldNotContain('\n');
         json.TrimEnd().ShouldBe(json);
     }
@@ -33,8 +33,8 @@ public class McpEntryRendererTests
         var json = McpEntryRenderer.RenderClaude(7721);
 
         JsonDeepEqual(json, """
-            {"mcpServers":{"ai-raccoon":{"type":"http","url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}}
-            """).ShouldBeTrue();
+                            {"mcpServers":{"ai-raccoon":{"type":"http","url":"http://127.0.0.1:7721/mcp","headers":{"X-AiRaccoon-Token":"${AIRACCOON_MCP_TOKEN}"}}}}
+                            """).ShouldBeTrue();
         json.ShouldNotContain('\n');
         json.TrimEnd().ShouldBe(json);
     }

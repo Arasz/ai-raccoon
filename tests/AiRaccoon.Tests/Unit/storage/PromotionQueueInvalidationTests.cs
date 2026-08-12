@@ -24,13 +24,13 @@ namespace AiRaccoon.Tests.Unit.storage;
 public sealed class PromotionQueueInvalidationTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 9, 0, 0, 0, TimeSpan.Zero);
+    private readonly FakeTimeProvider _clock;
+    private readonly string _contentRoot = TestData.CreateTempRoot("ai-raccoon-queue-invalidation-content");
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-queue-invalidation");
-    private readonly string _contentRoot = TestData.CreateTempRoot("ai-raccoon-queue-invalidation-content");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _clock;
-    private readonly SqliteMemoryStore _store;
     private readonly SqlitePromotionQueueStore _queueStore;
+    private readonly SqliteMemoryStore _store;
 
     public PromotionQueueInvalidationTests()
     {
@@ -40,7 +40,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        _store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
@@ -55,8 +55,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         }
     }
 
-    private static QueueCandidate Candidate(string hash, string value, double score) =>
-        new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
+    private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
     [Fact]
     public async Task DeletingAnEntry_DropsItsQueuedCandidate()
@@ -234,6 +233,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
                 VALUES (100, 'custom-only-hash', 'p.md', 'v', 'custom', 'acme', 'ctx-a', 1, 1, 'embedded');
                 """);
         }
+
         await _queueStore.UpsertAsync("acme", [Candidate("custom-only-hash", "v", 1.0)],
             TestContext.Current.CancellationToken);
 
@@ -301,7 +301,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         var stdout = new StringWriter();
         var exit = await new ExtractCommands(_queueStore)
-            .PruneAsync(parsed.ParseResult, stdout, TestContext.Current.CancellationToken);
+            .PruneAsync(parsed.ParsedCliArgs, stdout, TestContext.Current.CancellationToken);
 
         exit.ShouldBe(0);
         stdout.ToString().ShouldContain("1 orphaned candidate(s)");
@@ -358,7 +358,6 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Sync;
 ///     sync add/remove write the rows, and the store is rebuilt on every call — never
 ///     constructed once at startup.
 /// </summary>
-public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory loggerFactory)
+public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory loggerFactory) : ISyncCloudStoreFactory
 {
     public async Task<SyncOptions> ReadOptionsAsync(CancellationToken cancellationToken = default)
     {

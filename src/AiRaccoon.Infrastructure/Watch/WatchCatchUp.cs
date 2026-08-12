@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -31,9 +30,11 @@ public sealed partial class WatchCatchUp(
     /// <summary>Cancels every in-flight scan (host shutdown).</summary>
     public void CancelAllScans() => scanGuard.CancelAll();
 
-    /// <summary>Deterministic core: files under path are due when there is no watermark, the mtime is
-    /// after the watermark, or the file was never fingerprinted. A watched FILE target enumerates itself;
-    /// a missing target enumerates nothing (reconciliation removes its stale chunks).</summary>
+    /// <summary>
+    ///     Deterministic core: files under path are due when there is no watermark, the mtime is
+    ///     after the watermark, or the file was never fingerprinted. A watched FILE target enumerates itself;
+    ///     a missing target enumerates nothing (reconciliation removes its stale chunks).
+    /// </summary>
     internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark,
         IReadOnlySet<string> fingerprinted)
     {
@@ -115,8 +116,10 @@ public sealed partial class WatchCatchUp(
         }
     }
 
-    /// <summary>Restart reconciliation: a fingerprinted file missing on disk is a delete that
-    /// happened while the server was down — enqueue Deleted so its chunks are removed.</summary>
+    /// <summary>
+    ///     Restart reconciliation: a fingerprinted file missing on disk is a delete that
+    ///     happened while the server was down — enqueue Deleted so its chunks are removed.
+    /// </summary>
     private async Task ReconcileMissingAsync(string projectId, string watchPath, CancellationToken cancellationToken)
     {
         foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))

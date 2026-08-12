@@ -22,12 +22,14 @@ internal static class PromotionQueueSql
 
     /// <summary>One agent rejection (docs/adr/0026): permanent per (project_id, hash), idempotent.</summary>
     public const string RememberDiscard = """
-                                           INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
-                                           VALUES (@ProjectId, @Hash, @DiscardedAt)
-                                           """;
+                                          INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
+                                          VALUES (@ProjectId, @Hash, @DiscardedAt)
+                                          """;
 
-    /// <summary>Residue sweep (docs/adr/0026): queued rows that are already shared (exact value
-    /// twin) or were rejected by a prior discard leave the queue.</summary>
+    /// <summary>
+    ///     Residue sweep (docs/adr/0026): queued rows that are already shared (exact value
+    ///     twin) or were rejected by a prior discard leave the queue.
+    /// </summary>
     public const string PruneRejected = """
                                         DELETE FROM promotion_queue
                                         WHERE project_id = @ProjectId

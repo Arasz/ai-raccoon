@@ -3,9 +3,10 @@ namespace AiRaccoon.Infrastructure.Encryption;
 /// <summary>Outcome of a bws process invocation.</summary>
 public sealed record BwsResult(int ExitCode, string Stdout, string Stderr)
 {
-    public string FirstErrorLine => Stderr.Split('\n')
-        .Select(l => l.Trim())
-        .FirstOrDefault(l => l.Length > 0) ?? "(no stderr)";
+    public string FirstErrorLine =>
+        Stderr.Split('\n')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Length > 0) ?? "(no stderr)";
 }
 
 /// <summary>

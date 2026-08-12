@@ -3,10 +3,12 @@ namespace AiRaccoon.Core.Memory;
 /// <summary>Refined score plus the plain-name reason tags the organic refinement layer fired.</summary>
 internal readonly record struct OrganicRefinementResult(double Score, IReadOnlyList<string> Reasons);
 
-/// <summary>Refines the channel prior for organic-note candidates: without it the model cannot tell a
-/// status/turn-mirror dump from a durable fact (docs/adr/0018-promotion-scoring-v2.md round-3 lane-A
-/// section, ported from scorer.py's organic_adjust() and the organic-note branch of score_candidate()).
-/// Only called for the organic-note channel; routing lives in ProvenanceArchetypeClassifier.</summary>
+/// <summary>
+///     Refines the channel prior for organic-note candidates: without it the model cannot tell a
+///     status/turn-mirror dump from a durable fact (docs/adr/0018-promotion-scoring-v2.md round-3 lane-A
+///     section, ported from scorer.py's organic_adjust() and the organic-note branch of score_candidate()).
+///     Only called for the organic-note channel; routing lives in ProvenanceArchetypeClassifier.
+/// </summary>
 internal static class OrganicRefinement
 {
     private const double DeltaLo = -1.6;

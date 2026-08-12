@@ -30,15 +30,15 @@ public sealed class SweepScopeSiblingTests : IDisposable
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero));
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-sweep-sibling");
     private readonly SqliteConnectionFactory _factory;
-    private readonly SweepService _sweeper;
     private readonly SqliteMemoryStore _store;
+    private readonly SweepService _sweeper;
 
     public SweepScopeSiblingTests()
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory,
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         _sweeper = new SweepService(_store, _clock);
     }
 
@@ -131,7 +131,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
             ORDER BY id
             """,
             new { hash });
-        return rows.ToList();
+        return [.. rows];
     }
 
     private sealed class SiblingRow
@@ -147,7 +147,6 @@ public sealed class SweepScopeSiblingTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

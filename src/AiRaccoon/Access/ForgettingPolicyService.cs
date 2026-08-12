@@ -10,23 +10,27 @@ namespace AiRaccoon.Access;
 ///     by the single-channel ruling — only per-entry TTLs remain, as data not config). This MCP path enforces
 ///     Destructive; the CLI (SettingsCommands) deliberately doesn't, since it's the console that sets access modes.
 /// </summary>
-public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access)
+public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGuard access) : IForgettingPolicyService
 {
-    public const string SweepThresholdSettingKey = SweepThreshold.SettingKey;
+    private const string SweepThresholdSettingKey = SweepThreshold.SettingKey;
 
     public const double DefaultSweepThreshold = SweepThreshold.Default;
 
-    /// <summary>Reads the sweep threshold — a single bank-global setting, not scoped by project;
-    /// unlike <see cref="SetSweepThresholdAsync" /> a read needs no caller to gate.</summary>
+    /// <summary>
+    ///     Reads the sweep threshold — a single bank-global setting, not scoped by project;
+    ///     unlike <see cref="SetSweepThresholdAsync" /> a read needs no caller to gate.
+    /// </summary>
     public async Task<double> GetSweepThresholdAsync(CancellationToken cancellationToken = default)
     {
         var raw = await store.GetSettingAsync(SweepThresholdSettingKey, cancellationToken).ConfigureAwait(false);
         return SweepThreshold.Parse(raw);
     }
 
-    /// <summary>Writes the sweep threshold — again a single bank-global setting: every project's
-    /// sweep reads the same value. <paramref name="projectId" /> is not a scope, only the caller's
-    /// proof of Destructive consent for changing a policy that affects every project's data.</summary>
+    /// <summary>
+    ///     Writes the sweep threshold — again a single bank-global setting: every project's
+    ///     sweep reads the same value. <paramref name="projectId" /> is not a scope, only the caller's
+    ///     proof of Destructive consent for changing a policy that affects every project's data.
+    /// </summary>
     public async Task SetSweepThresholdAsync(string projectId, double threshold,
         CancellationToken cancellationToken = default)
     {

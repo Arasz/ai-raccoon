@@ -20,21 +20,27 @@ public interface IOperationTelemetry
 /// </summary>
 public interface IOperationScope : IDisposable
 {
-    /// <summary>Adds a span attribute, applied if and when a span is recorded. Span only: the
-    /// metrics carry operation and result alone.</summary>
+    /// <summary>
+    ///     Adds a span attribute, applied if and when a span is recorded. Span only: the
+    ///     metrics carry operation and result alone.
+    /// </summary>
     void Tag(string key, string value);
 
-    /// <summary>Marks the pass as having done something worth a span. A clean, no-op success
-    /// without this call records its metrics but no span.</summary>
+    /// <summary>
+    ///     Marks the pass as having done something worth a span. A clean, no-op success
+    ///     without this call records its metrics but no span.
+    /// </summary>
     void NoteWork();
 
     void Succeeded();
 
     void Failed(Exception exception);
 
-    /// <summary>Records a pass that ran to completion but where some unit of work (e.g. one
-    /// project in a per-project loop) failed — distinct from <see cref="Succeeded" /> (nothing
-    /// failed) and <see cref="Failed" /> (the whole pass threw). Always worth a span, no-op
-    /// pass or not: a pass with a failure in it is never the quiet case span suppression exists for.</summary>
+    /// <summary>
+    ///     Records a pass that ran to completion but where some unit of work (e.g. one
+    ///     project in a per-project loop) failed — distinct from <see cref="Succeeded" /> (nothing
+    ///     failed) and <see cref="Failed" /> (the whole pass threw). Always worth a span, no-op
+    ///     pass or not: a pass with a failure in it is never the quiet case span suppression exists for.
+    /// </summary>
     void PartiallyFailed(int failureCount);
 }

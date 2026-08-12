@@ -16,6 +16,55 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemorySchemaVersionTests
 {
+    // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.
+    private const string V1Ddl = """
+                                 CREATE TABLE workspaces (
+                                     id TEXT PRIMARY KEY,
+                                     project_id TEXT NOT NULL,
+                                     status TEXT NOT NULL,
+                                     created_at INTEGER NOT NULL
+                                 );
+
+                                 CREATE TABLE entries (
+                                     id INTEGER PRIMARY KEY,
+                                     hash TEXT,
+                                     path TEXT,
+                                     value TEXT,
+                                     source_file TEXT,
+                                     section TEXT,
+                                     scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                                     project_id TEXT NULL,
+                                     context_label TEXT NULL,
+                                     workspace_id TEXT NULL,
+                                     agent_id TEXT NULL,
+                                     created_at INTEGER NOT NULL,
+                                     updated_at INTEGER NOT NULL,
+                                     access_count INTEGER NOT NULL DEFAULT 0,
+                                     last_accessed_at INTEGER NULL,
+                                     rating REAL NOT NULL DEFAULT 0.5,
+                                     ttl_days INTEGER NULL,
+                                     embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                                     embedding BLOB NULL,
+                                     heading_path TEXT NULL,
+                                     structure_embedding BLOB NULL
+                                 );
+
+                                 CREATE VIRTUAL TABLE entries_fts USING fts5(
+                                     value, source_file, section, content='entries', content_rowid='id'
+                                 );
+
+                                 CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                                     INSERT INTO entries_fts(rowid, value, source_file, section)
+                                     VALUES (new.id, new.value, new.source_file, new.section);
+                                 END;
+
+                                 CREATE UNIQUE INDEX uq_entries_shared_bucket
+                                     ON entries(path, hash) WHERE scope = 'shared';
+                                 CREATE UNIQUE INDEX uq_entries_committed_bucket
+                                     ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                                     WHERE scope IN ('project', 'custom');
+                                 """;
+
     [Fact]
     public async Task EnsureAsync_OnAFreshBank_StampsTheCurrentVersion()
     {
@@ -31,26 +80,26 @@ public sealed class MemorySchemaVersionTests
     {
         await using var connection = await OpenAsync();
         await connection.ExecuteAsync(new CommandDefinition("""
-            CREATE TABLE entries (
-                id INTEGER PRIMARY KEY,
-                hash TEXT,
-                path TEXT,
-                value TEXT,
-                scope TEXT NULL,
-                project_id TEXT NULL,
-                context_label TEXT NULL,
-                workspace_id TEXT NULL,
-                agent_id TEXT NULL,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL,
-                access_count INTEGER NOT NULL DEFAULT 0,
-                last_accessed_at INTEGER NULL,
-                rating REAL NOT NULL DEFAULT 0.5,
-                ttl_days INTEGER NULL,
-                embed_state TEXT NOT NULL DEFAULT 'pending',
-                embedding BLOB NULL
-            );
-            """, cancellationToken: TestContext.Current.CancellationToken));
+                                                            CREATE TABLE entries (
+                                                                id INTEGER PRIMARY KEY,
+                                                                hash TEXT,
+                                                                path TEXT,
+                                                                value TEXT,
+                                                                scope TEXT NULL,
+                                                                project_id TEXT NULL,
+                                                                context_label TEXT NULL,
+                                                                workspace_id TEXT NULL,
+                                                                agent_id TEXT NULL,
+                                                                created_at INTEGER NOT NULL,
+                                                                updated_at INTEGER NOT NULL,
+                                                                access_count INTEGER NOT NULL DEFAULT 0,
+                                                                last_accessed_at INTEGER NULL,
+                                                                rating REAL NOT NULL DEFAULT 0.5,
+                                                                ttl_days INTEGER NULL,
+                                                                embed_state TEXT NOT NULL DEFAULT 'pending',
+                                                                embedding BLOB NULL
+                                                            );
+                                                            """, cancellationToken: TestContext.Current.CancellationToken));
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
@@ -83,9 +132,9 @@ public sealed class MemorySchemaVersionTests
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO settings(key, value) VALUES ('watch.scope.acme', '[]');
-            PRAGMA user_version = 0;
-            """, cancellationToken: TestContext.Current.CancellationToken));
+                                                            INSERT INTO settings(key, value) VALUES ('watch.scope.acme', '[]');
+                                                            PRAGMA user_version = 0;
+                                                            """, cancellationToken: TestContext.Current.CancellationToken));
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
@@ -234,8 +283,7 @@ public sealed class MemorySchemaVersionTests
         await connection.ExecuteAsync(new CommandDefinition(
             $"PRAGMA user_version = {aheadVersion}", cancellationToken: TestContext.Current.CancellationToken));
 
-        var exception = await Should.ThrowAsync<UnsupportedSchemaVersionException>(
-            () => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
+        var exception = await Should.ThrowAsync<UnsupportedSchemaVersionException>(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
 
         exception.Message.ShouldContain(aheadVersion.ToString());
         exception.Message.ShouldContain(MemorySchema.CurrentVersion.ToString());
@@ -565,55 +613,6 @@ public sealed class MemorySchemaVersionTests
             "a bank whose trigger already carries the scope-aware guard must not take a schema write on reopen");
     }
 
-    // The pre-v2 shape: no chunk_index/total_chunks, no ctx partition key on vec_entries/vec_structure.
-    private const string V1Ddl = """
-                                 CREATE TABLE workspaces (
-                                     id TEXT PRIMARY KEY,
-                                     project_id TEXT NOT NULL,
-                                     status TEXT NOT NULL,
-                                     created_at INTEGER NOT NULL
-                                 );
-
-                                 CREATE TABLE entries (
-                                     id INTEGER PRIMARY KEY,
-                                     hash TEXT,
-                                     path TEXT,
-                                     value TEXT,
-                                     source_file TEXT,
-                                     section TEXT,
-                                     scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                                     project_id TEXT NULL,
-                                     context_label TEXT NULL,
-                                     workspace_id TEXT NULL,
-                                     agent_id TEXT NULL,
-                                     created_at INTEGER NOT NULL,
-                                     updated_at INTEGER NOT NULL,
-                                     access_count INTEGER NOT NULL DEFAULT 0,
-                                     last_accessed_at INTEGER NULL,
-                                     rating REAL NOT NULL DEFAULT 0.5,
-                                     ttl_days INTEGER NULL,
-                                     embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
-                                     embedding BLOB NULL,
-                                     heading_path TEXT NULL,
-                                     structure_embedding BLOB NULL
-                                 );
-
-                                 CREATE VIRTUAL TABLE entries_fts USING fts5(
-                                     value, source_file, section, content='entries', content_rowid='id'
-                                 );
-
-                                 CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
-                                     INSERT INTO entries_fts(rowid, value, source_file, section)
-                                     VALUES (new.id, new.value, new.source_file, new.section);
-                                 END;
-
-                                 CREATE UNIQUE INDEX uq_entries_shared_bucket
-                                     ON entries(path, hash) WHERE scope = 'shared';
-                                 CREATE UNIQUE INDEX uq_entries_committed_bucket
-                                     ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
-                                     WHERE scope IN ('project', 'custom');
-                                 """;
-
     /// <summary>Builds a v1-shaped bank (stamped user_version = 1) with vec_entries at the given dimension and the given rows.</summary>
     private static async Task SeedV1BankAsync(SqliteConnection connection,
         params (string Hash, string Path, string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId, string? SourceFile, bool Embedded)[] rows) =>
@@ -682,9 +681,11 @@ public sealed class MemorySchemaVersionTests
             "PRAGMA user_version", cancellationToken: TestContext.Current.CancellationToken));
 
     private static async Task<IReadOnlyCollection<string>> ColumnsAsync(SqliteConnection connection, string table) =>
-        (await connection.QueryAsync<string>(new CommandDefinition(
+    [
+        .. await connection.QueryAsync<string>(new CommandDefinition(
             $"SELECT name FROM pragma_table_info('{table}')",
-            cancellationToken: TestContext.Current.CancellationToken))).ToList();
+            cancellationToken: TestContext.Current.CancellationToken))
+    ];
 
     private static async Task<bool> IndexExistsAsync(SqliteConnection connection, string name) =>
         await connection.ExecuteScalarAsync<long?>(new CommandDefinition(

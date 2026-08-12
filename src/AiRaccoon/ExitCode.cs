@@ -17,5 +17,7 @@ public static class ExitCode
     /// <summary>`serve --restart` could not cycle the server on the port; it never attaches instead (ADR-0022).</summary>
     public const int RestartFailed = 8;
 
+    public const int FailedToParseCliArgs = 9;
+
     public const int Success = 0;
 }

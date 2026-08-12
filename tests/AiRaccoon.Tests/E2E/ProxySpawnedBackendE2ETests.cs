@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Observability;
-using AiRaccoon.Setup.Serve;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;

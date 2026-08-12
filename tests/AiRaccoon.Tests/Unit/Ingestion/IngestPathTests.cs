@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Watch;
 using Shouldly;
 using Xunit;
 

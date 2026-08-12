@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Workspace;
 ///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
 ///     discard (see docs/work/features-agent-memory/spec-issue-1.md §3.2).
 /// </summary>
-public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider)
+public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider) : IWorkspaceService
 {
     public async Task<WorkspaceRecord> BeginAsync(string projectId, string? agentId = null, string? name = null,
         CancellationToken cancellationToken = default)

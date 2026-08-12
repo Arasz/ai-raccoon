@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -26,7 +26,8 @@ public class ConfigCommandsWatchTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(watch: new WatchCommands(watchStore ?? new FakeWatchStore())).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await new ConfigCommands(watch: new WatchCommands(watchStore ?? new FakeWatchStore())).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null,
+            ctx: TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

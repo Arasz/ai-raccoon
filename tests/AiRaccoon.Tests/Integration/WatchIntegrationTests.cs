@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Diagnostics;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
@@ -642,12 +642,12 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = new SqliteMemoryStore(_factory, Time, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+            Memory = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), Time, new EmbeddingService());
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             Pipeline = new WatchPipeline(new WatchScheduler(),
-                new WatchDigestExecutor(Memory, WatchStore, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(), Memory, Time,
-                ScanGuard, NullLogger<WatchPipeline>.Instance);
+                new WatchDigestExecutor(Memory, WatchStore, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(),
+                ScanGuard, Memory, Time, NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);
             CatchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,

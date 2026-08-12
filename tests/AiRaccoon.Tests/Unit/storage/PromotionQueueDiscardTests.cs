@@ -5,8 +5,6 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Cli.Commands;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -25,13 +23,13 @@ namespace AiRaccoon.Tests.Unit.storage;
 public sealed class PromotionQueueDiscardTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 11, 0, 0, 0, TimeSpan.Zero);
+    private readonly FakeTimeProvider _clock;
+    private readonly string _contentRoot = TestData.CreateTempRoot("ai-raccoon-queue-discard-content");
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-queue-discard");
-    private readonly string _contentRoot = TestData.CreateTempRoot("ai-raccoon-queue-discard-content");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _clock;
-    private readonly SqliteMemoryStore _store;
     private readonly SqlitePromotionQueueStore _queueStore;
+    private readonly SqliteMemoryStore _store;
 
     public PromotionQueueDiscardTests()
     {
@@ -41,8 +39,8 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        _store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = new SqliteMemoryStore(_factory,
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
@@ -57,8 +55,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         }
     }
 
-    private static QueueCandidate Candidate(string hash, string value, double score) =>
-        new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
+    private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
     private async Task<long> SharedRowCountAsync(CancellationToken cancellationToken)
     {
@@ -159,8 +156,10 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         var service = CreateService();
 
         var outcome = await service.ProposeAsync("acme",
-            [Candidate("h-1", "fact one", 1.0), Candidate("h-2", "fact two", 1.0),
-             Candidate("h-3", "fact three", 1.0), Candidate("h-4", "fact four", 1.0)],
+            [
+                Candidate("h-1", "fact one", 1.0), Candidate("h-2", "fact two", 1.0),
+                Candidate("h-3", "fact three", 1.0), Candidate("h-4", "fact four", 1.0)
+            ],
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(1);
@@ -286,7 +285,6 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }
