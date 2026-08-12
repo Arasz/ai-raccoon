@@ -24,6 +24,16 @@
       "tools": [
         "*"
       ]
+    },
+      "semantica": {
+          "command": "python3",
+          "args": [
+              "-m",
+              "semantica.mcp_server"
+          ],
+          "tools": [
+              "*"
+          ]
     }
   }
 }

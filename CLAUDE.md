@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github
-> Scaffolded by ai-badger 0.116.2. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.116.3. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Non-negotiable invariants
 
@@ -138,7 +138,16 @@ isolate in-progress notes and consolidate on finish; `memory_share` promotes dur
 facts. Keep the docs directory searchable: check `memory_watch_status`, then `memory_watch_add`
 (project_id + absolute path) when no watch exists.
 
+<!-- semantica MCP tools -->
 
+## MCP Tools: semantica
+
+Semantica is the project knowledge graph. It complements AiRaccoon: AiRaccoon answers
+"what do we know?"; Semantica answers "how are things connected?" and "why was this decision made?".
+
+Start with `get_graph_summary` for orientation. Record architectural decisions with
+`record_decision`. Drill into specifics with `query_decisions`, `find_precedents`, or
+`get_causal_chain`. Each tool's own description covers the rest.
 
 ## Framework
 

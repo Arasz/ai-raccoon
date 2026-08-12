@@ -134,12 +134,14 @@
     "allow": [
       "mcp__code-review-graph__*",
       "mcp__hermes__*",
-      "mcp__ai-raccoon__*"
+        "mcp__ai-raccoon__*",
+        "mcp__semantica__*"
     ]
   },
   "enabledMcpjsonServers": [
     "code-review-graph",
     "hermes",
-    "ai-raccoon"
+      "ai-raccoon",
+      "semantica"
   ]
 }
