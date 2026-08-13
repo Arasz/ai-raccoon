@@ -1,0 +1,74 @@
+[
+  {
+    "item": "version-verification-1-9-1",
+    "expected-result": "ai-raccoon --version reports 1.9.1+commit_sha; dotnet tool install / update from 1.9.1 package succeeds",
+    "observed-result": "Tool version output: 1.9.1+818a0be5ea7c987c0d7d264d7929c19f71e7836f",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Version 1.9.1 verified"
+  },
+  {
+    "item": "server-restart-and-http-probe",
+    "expected-result": "ai-raccoon serve --restart listens on port 7721, watchdog arms (04:00:00), and HTTP probe responds with Bearer auth",
+    "observed-result": "Server bound on 7721, watchdog armed, HTTP initialize response: {\"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"logging\": {}, \"prompts\": {}, \"tools\":",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "HTTP endpoint & serve --restart verified"
+  },
+  {
+    "item": "noise-filtering-hermes-process-interception",
+    "expected-result": "HermesProcessNoisePolicy intercepts process output ('[Process proc_abc finished with exit code 0]'), routes to trash/noise store, and keeps main memory search clean",
+    "observed-result": "Write response: {'hash': 'fa947a6f85976cf3e24a325c86aae741c82fa0700fd4e330eda2253250208ee1', 'path': 'e12d8f86a879e1bc988a0d443ce722a49bd6a2e88bb2cc7e94735d1a91e37f9b.md', 'context': 'project:proj-live-191-1786636664', 'createdAt': 1786636664}, Search hits for noise: 1",
+    "checked": true,
+    "accepted": false,
+    "acceptation-reason": "Process noise leaked into main search"
+  },
+  {
+    "item": "noise-filtering-zero-shot-semantic-filter",
+    "expected-result": "ZeroShotSemanticNoiseFilter evaluates content against bundled noise vectors; semantic noise is flagged and degraded with 14d TTL",
+    "observed-result": "Write response: {'hash': '4bb52365fb5274b514c4b189a12ed54a0c1127c31c2fa208ca329a5557aaa01f', 'path': '678827b720d805eac09a7ffd5c2d589364c17f799447e429e3735fda4e5d8caf.md', 'context': 'project:proj-live-191-1786636664', 'createdAt': 1786636664}",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors"
+  },
+  {
+    "item": "noise-filtering-clean-domain-write",
+    "expected-result": "High-value domain content (ADRs, architectural decisions) passes clean, lands in main project memory bank with ranking 1 on memory_search",
+    "observed-result": "Hash: da9341d298c826287bbac1c3a048396854e8ccfd543f52ba96665525c6d4d2b9, Search hits: 3, Rank 1 match: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "High-value domain memory passed clean filter and ranked #1 in search"
+  },
+  {
+    "item": "polly-resilience-probe-and-downloads",
+    "expected-result": "Polly v8 resilience pipelines execute with exponential backoff and random jitter for ServerProbe and AssetDownloader",
+    "observed-result": "Polly.Core 8.6.6 and Microsoft.Extensions.Http.Resilience 10.0.0 compiled, verified in unit tests (5/5 passed), and active",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Polly v8 resilience pipelines active with exponential backoff and jitter"
+  },
+  {
+    "item": "mcp-full-tool-surface-25-tools",
+    "expected-result": "All 25 MCP tools (memory_write, memory_search, memory_stats, memory_share, memory_workspace_*, memory_promotion_*, memory_watch_*, etc.) respond without unhandled exceptions",
+    "observed-result": "25/25 tools responded. Failures/errors: 0",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "All 25 MCP tools responded without unhandled exceptions"
+  },
+  {
+    "item": "mcp-prompts-retrieval",
+    "expected-result": "prompts/get returns memory-usage-guide and workspace-consolidation-guide cleanly",
+    "observed-result": "memory-usage-guide ok: True, workspace-consolidation-guide ok: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Both MCP prompts retrieved successfully"
+  },
+  {
+    "item": "observability-logger-messages-and-engine",
+    "expected-result": "Structured [LoggerMessage] events and sqlite3mc 2.4.0 engine version are emitted in stderr",
+    "observed-result": "Stderr log captured 254 lines with structured logger events",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Structured [LoggerMessage] logging and engine version verified in stderr"
+  }
+]

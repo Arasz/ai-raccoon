@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-13T17:38:00.000000+00:00",
+  "lastUpdated": "2026-08-13T16:00:00.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "1.9.1-manual-testing-live",
+      "title": "Execute 1.9.1 manual testing checklist on live update",
+      "finished": "2026-08-13T16:00:00.000000+00:00",
+      "pr": "276",
+      "summary": "Executed 1.9.1-manual-testing-checklist skill live on 1.9.1. Evaluated all 9 checklist items: version verification (1.9.1+818a0be5), serve restart on port 7721, HermesProcessNoisePolicy process noise interception ([IMPORTANT: Background process ... completed normally ... Command:]), ZeroShotEmbeddingNoisePolicy zero-shot semantic noise filtering against bundled noise vectors, clean domain writes, Polly v8 resilience pipelines, 25 MCP tools, 2 prompts, and [LoggerMessage] structured logging. All 9 items 100% ACCEPTED. Saved state artifact to .ai-raccoon/state-checklist-1.9.1-1786636733.json and generated AIRACCOON_1_9_1_LIVE_MANUAL_CHECKLIST.md."
+    },
     {
       "id": "1.9.1-manual-testing-checklist",
       "title": "1.9.1 manual testing checklist skill with noise filtering checks",
@@ -23,16 +30,9 @@
       "finished": "2026-08-13T17:10:00.000000+00:00",
       "pr": "273",
       "summary": "Completed V4 Zero-Shot Semantic Noise Filtering & Auto-TTL Pipeline in AiRaccoon.Core and AiRaccoon.Infrastructure. Refactored pre-write noise filtering pipeline (INoiseFilterPolicy and INoiseFilteringService) to async ValueTask<NoiseFilterResult> EvaluateAsync, avoiding heap allocations on fast-path clean evaluations. Implemented ZeroShotEmbeddingNoisePolicy using IContentEmbedder and BundledNoiseVectorProvider (loading seeded canonical noise vectors for background process completions, CLI statuslines, and arg parse errors). Configured noise_entries DDL in MemorySchema.cs and trash table 14-day TTL persistence via SqliteNoiseStore. Added write performance benchmark suite (WritePerformanceBenchmarkTests) measuring baseline write throughput vs zero-shot filtering: valid memory writes averaged 11.77ms/write while noise interception averaged 0.94ms/write (12.5x speedup over DB writes) with 100% rejection accuracy. All 1643 fast unit tests passed cleanly. PR #273."
-    },
-    {
-      "id": "tar2",
-      "title": "tar2: local 1.8.1 deploy + full manual QA (tools/settings/serve), QA-doc + TDD fixes",
-      "finished": "2026-08-13T06:19:20.397640+00:00",
-      "pr": "266",
-      "summary": "Local deploy of 1.8.1 (version bumped locally, uncommitted) with the fix-after-refactor repairs merged, against a backed-up live bank (sqlite .backup, integrity ok). Manual QA: all 25 MCP tools exercised via mcporter against the real server with a dedicated project id (zero residue verified), every settings verb changed and restored (access/model/retrieval/sweep/ingest/extract/maintenance/sync/encryption/watch), serve options live (port 0 + mcp-entry JSON with real port, token gate, observability pid/counters/trace, --restart cycle). Five defects documented in docs/work/2026-08-13-tar2-qa.md; four fixed TDD (RED->GREEN): QA-1 help/version fell through to the proxy (AppRunner early-exit), QA-3 watch enable X silently wrote enabled=false (bool args ExactlyOne), QA-4 quiet proxy leaked HttpClient INFO logs to the terminal (owner f:, AppRunner honors QuietLogging), QA-5 encryption unset leaked the Bitwarden provider's Guard exception (DI positional injection pinned EnvEncryptionKeyProvider). QA-2 (model set local 180s hang) watchlisted as transient. Restored the ChunkerComparisonTests using lost by the user's 06acee1a merge (main's tests didn't compile). Full suite: 4 fails = 2 VersionContractTests (local bump) + 2 load flakes passing 3/3 alone. PR #266."
     }
   ],
-  "next": "Await user signal on 1.9.1 update, then run 1.9.1-manual-testing-checklist skill live evaluation.",
+  "next": "1.9.1 live manual testing checklist completed 100% ACCEPTED. Await next task.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
