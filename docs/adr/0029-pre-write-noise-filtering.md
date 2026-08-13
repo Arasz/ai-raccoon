@@ -20,4 +20,15 @@ We will implement a pre-write noise filtering pipeline (`INoiseFilteringService`
 - **Positive:** We stop expensive embedding API calls for pure noise.
 - **Positive:** The semantic vector index (`vec0`) and FTS tables remain clean, immediately boosting overall search retrieval quality.
 - **Positive:** We collect a high-quality dataset of true negative "noise" for future ML training.
-- **Negative:** We introduce synchronous string parsing into the hot path of `WriteAsync`, though structural matching is highly optimized.
+- **Positive:** **12.5x Write Performance Speedup** on intercepted noise (0.94 ms vs 11.77 ms) with 100% rejection recall.
+- **Negative:** We introduce synchronous string parsing / zero-shot cosine distance evaluation into the pre-write path of `WriteAsync`, though pre-write filtering is highly optimized (< 1 ms overhead).
+
+## Write Performance Benchmarks (baseline -> change -> effect)
+Measured in `WritePerformanceBenchmarkTests` (`tests/AiRaccoon.Tests/Integration/WritePerformanceBenchmarkTests.cs`) and documented in `docs/work/2026-08-13-v4-write-performance-benchmark-report.md`:
+
+| Metric | Valid Memory Write (Baseline) | Noise Interception (Zero-Shot) | Effect / Expected Return |
+|---|---|---|---|
+| Avg Latency per Write | 11.77 ms | 0.94 ms | **12.5x speedup** on noise handling |
+| Throughput | 84.97 ops/sec | 1,063.8 ops/sec | Bypasses database disk writes, FTS5 & vec0 indexing |
+| Rejection Recall | 0% false positives | 100% (50/50 noise logs) | Completely blocks background process noise logs |
+

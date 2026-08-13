@@ -32,6 +32,12 @@ flowchart LR
 ## What's new
 
 - **Semantic Noise Filtering & Real-time TTLs (1.9.0)** — [ADR-0029](docs/adr/0029-pre-write-noise-filtering.md) and [ADR-0030](docs/adr/0030-realtime-heuristic-ttl.md)
+  * **Write Performance Benchmarks** (`baseline -> change -> effect`): Measured in `WritePerformanceBenchmarkTests` (`tests/AiRaccoon.Tests/Integration/WritePerformanceBenchmarkTests.cs`) and documented in `docs/work/2026-08-13-v4-write-performance-benchmark-report.md`:
+    | Metric | Valid Memory Write (Baseline) | Noise Interception (Zero-Shot) | Effect / Expected Return |
+    |---|---|---|---|
+    | Avg Latency per Write | 11.77 ms | 0.94 ms | **12.5x speedup** on noise handling |
+    | Throughput | 84.97 ops/sec | 1,063.8 ops/sec | Bypasses database disk writes, FTS5 & vec0 indexing |
+    | Rejection Recall | 0% false positives | 100% (50/50 noise logs) | Completely blocks background process noise logs |
 - **FileType Handlers & Native JSON Support (1.8.0)** — [ADR-0027](docs/adr/0027-extensible-file-type-handlers-and-json-support.md)
 - **Search-Quality Metric System (1.7.0)** — [Plan](docs/plans/2026-08-11-search-quality-metric-plan.md)
 - **Persistent Propose Queue Discards (1.6.5)** — [ADR-0026](docs/adr/0026-persistent-discards-and-shared-exclusion.md)
