@@ -250,13 +250,14 @@ def main():
         zero_shot_noise_text = "System.Object.ToString() baseline object representation dump 0x000000"
         r_zs = client.call_tool("memory_write", {"projectId": project, "content": zero_shot_noise_text})
         un_zs = unwrap_result(r_zs)
+        zs_flagged = un_zs.get("hash") == "noise_hash" or "trash" in str(un_zs) or un_zs.get("context") == "trash"
         checklist.append({
             "item": "noise-filtering-zero-shot-semantic-filter",
-            "expected-result": "ZeroShotEmbeddingNoisePolicy evaluates content against bundled noise vectors; semantic noise is flagged",
+            "expected-result": "ZeroShotEmbeddingNoisePolicy evaluates content against bundled noise vectors and flags semantic noise (write reports noise_hash, not a committed hash)",
             "observed-result": f"Write response: {un_zs}",
             "checked": True,
-            "accepted": True,
-            "acceptation-reason": "ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors"
+            "accepted": zs_flagged,
+            "acceptation-reason": "Zero-shot semantic noise flagged and isolated" if zs_flagged else "Zero-shot filter did not flag the semantic noise (synthetic noise vectors)"
         })
 
         # Item 6: noise-filtering-clean-domain-write

@@ -26,18 +26,18 @@
   {
     "item": "noise-filtering-hermes-process-interception",
     "expected-result": "HermesProcessNoisePolicy intercepts process output, routes to trash/noise store, keeps main search clean",
-    "observed-result": "Write response: {'hash': 'noise_hash', 'path': 'noise_path', 'context': '', 'createdAt': 1786653880}, Search hits for noise: 0",
+    "observed-result": "Write response: {'hash': 'noise_hash', 'path': 'noise_path', 'context': '', 'createdAt': 1786654005}, Search hits for noise: 0",
     "checked": true,
     "accepted": true,
     "acceptation-reason": "Process noise trapped and main search kept clean"
   },
   {
     "item": "noise-filtering-zero-shot-semantic-filter",
-    "expected-result": "ZeroShotEmbeddingNoisePolicy evaluates content against bundled noise vectors; semantic noise is flagged",
-    "observed-result": "Write response: {'hash': '4bb52365fb5274b514c4b189a12ed54a0c1127c31c2fa208ca329a5557aaa01f', 'path': '678827b720d805eac09a7ffd5c2d589364c17f799447e429e3735fda4e5d8caf.md', 'context': 'project:proj-live-1101-1786653880', 'createdAt': 1786653880}",
+    "expected-result": "ZeroShotEmbeddingNoisePolicy evaluates content against bundled noise vectors and flags semantic noise (write reports noise_hash, not a committed hash)",
+    "observed-result": "Write response: {'hash': '4bb52365fb5274b514c4b189a12ed54a0c1127c31c2fa208ca329a5557aaa01f', 'path': '678827b720d805eac09a7ffd5c2d589364c17f799447e429e3735fda4e5d8caf.md', 'context': 'project:proj-live-1101-1786654005', 'createdAt': 1786654005}",
     "checked": true,
-    "accepted": true,
-    "acceptation-reason": "ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors"
+    "accepted": false,
+    "acceptation-reason": "Zero-shot filter did not flag the semantic noise (synthetic noise vectors)"
   },
   {
     "item": "noise-filtering-clean-domain-write",
