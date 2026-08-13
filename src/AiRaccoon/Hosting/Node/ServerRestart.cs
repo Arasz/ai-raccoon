@@ -30,6 +30,10 @@ public sealed partial class ServerRestart : IServerRestart
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
 
+    /// <summary>Time the OS is given to release the listening socket after the probe stops
+    /// answering, so the restart's own bind never loses the port to a TIME_WAIT hangover.</summary>
+    private static readonly TimeSpan PortSettleGrace = TimeSpan.FromMilliseconds(100);
+
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IHttpClientFactory _httpClientFactory;
@@ -143,10 +147,13 @@ public sealed partial class ServerRestart : IServerRestart
         {
             do
             {
-                if (!await _probe.RespondsAsync(port, waiting.Token))
+                if (await _probe.RespondsAsync(port, waiting.Token))
                 {
-                    return true;
+                    continue;
                 }
+
+                await Task.Delay(PortSettleGrace, _timeProvider, cancellationToken).ConfigureAwait(false);
+                return true;
             } while (await timer.WaitForNextTickAsync(waiting.Token));
         }
         catch (OperationCanceledException) when (bound.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
