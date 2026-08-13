@@ -193,6 +193,16 @@ internal static class MemorySchema
                                               value TEXT NOT NULL
                                           );
 
+                                          CREATE TABLE IF NOT EXISTS noise_entries (
+                                              id INTEGER PRIMARY KEY,
+                                              request_content TEXT NOT NULL,
+                                              project_id TEXT NOT NULL,
+                                              source_file TEXT NULL,
+                                              detected_by_policy TEXT NOT NULL,
+                                              expires_at INTEGER NOT NULL,
+                                              created_at INTEGER NOT NULL
+                                          );
+
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               hash TEXT NOT NULL,
                                               scope TEXT NOT NULL,

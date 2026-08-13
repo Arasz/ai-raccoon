@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
@@ -22,7 +25,7 @@ Output: test]";
         var request = new MemoryWriteRequest("proj-1", content);
 
         // Act
-        var result = await sut.EvaluatePreWriteAsync(request, CancellationToken.None);
+        var result = await sut.EvaluatePreWriteAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);

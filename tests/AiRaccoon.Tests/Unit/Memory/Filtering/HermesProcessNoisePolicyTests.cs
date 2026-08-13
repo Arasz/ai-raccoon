@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using Xunit;
@@ -10,7 +11,7 @@ public class HermesProcessNoisePolicyTests
     private readonly HermesProcessNoisePolicy _sut = new();
 
     [Fact]
-    public void Evaluate_WithExactHermesTerminalSignature_ReturnsNoise()
+    public async Task EvaluateAsync_WithExactHermesTerminalSignature_ReturnsNoise()
     {
         // Arrange
         var content = @"[IMPORTANT: Background process proc_74af2deb49a7 completed normally (exit code 0).
@@ -19,7 +20,7 @@ Output: ]";
         var request = new MemoryWriteRequest("proj-1", content);
 
         // Act
-        var result = _sut.Evaluate(request);
+        var result = await _sut.EvaluateAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result.IsNoise);
@@ -27,14 +28,14 @@ Output: ]";
     }
 
     [Fact]
-    public void Evaluate_WithStandardText_ReturnsClean()
+    public async Task EvaluateAsync_WithStandardText_ReturnsClean()
     {
         // Arrange
         var content = "This is just a normal memory note about a background process.";
         var request = new MemoryWriteRequest("proj-1", content);
 
         // Act
-        var result = _sut.Evaluate(request);
+        var result = await _sut.EvaluateAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(result.IsNoise);
