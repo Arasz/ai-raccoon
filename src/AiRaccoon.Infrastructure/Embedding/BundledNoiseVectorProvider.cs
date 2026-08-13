@@ -2,52 +2,43 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
-public sealed class BundledNoiseVectorProvider : INoiseVectorProvider
+/// <summary>
+///     Bundled zero-shot noise vectors: real embeddings of canonical noise text (process completion
+///     logs, terminal statuslines, CLI parse errors) — not synthetic placeholders. Embedded lazily
+///     on first use so a bank can open without the model, and so a configured model governs them.
+/// </summary>
+public sealed class BundledNoiseVectorProvider(IContentEmbedder embedder) : INoiseVectorProvider
 {
-    private static readonly Lazy<IReadOnlyList<NoiseVector>> CachedVectors = new(LoadVectors);
+    private static readonly (string Name, string Text)[] CanonicalNoise =
+    [
+        ("hermes_process_completion_log",
+            "[IMPORTANT: Background process proc_12345 completed normally. Command: python3 build.py]"),
+        ("terminal_statusline_capture",
+            "statusline 1 file changed 2 insertions 3 deletions"),
+        ("cli_arg_parse_error",
+            "error: unrecognized argument '--foobar'"),
+    ];
 
-    public Task<IReadOnlyList<NoiseVector>> GetNoiseVectorsAsync(CancellationToken cancellationToken = default)
+    private readonly Lazy<Task<IReadOnlyList<NoiseVector>>> _vectors = new(async () =>
     {
-        return Task.FromResult(CachedVectors.Value);
-    }
-
-    private static IReadOnlyList<NoiseVector> LoadVectors()
-    {
-        var vectors = new List<NoiseVector>
+        var vectors = new List<NoiseVector>();
+        foreach (var (name, text) in CanonicalNoise)
         {
-            new("hermes_process_completion_log", GenerateProcessLogVector()),
-            new("terminal_statusline_capture", GenerateStatuslineVector()),
-            new("cli_arg_parse_error", GenerateCliErrorVector())
-        };
+            var vector = await embedder.EmbedContentAsync(text, CancellationToken.None).ConfigureAwait(false);
+            if (vector is not null)
+            {
+                vectors.Add(new NoiseVector(name, vector));
+            }
+        }
 
-        return vectors;
-    }
+        return (IReadOnlyList<NoiseVector>)vectors;
+    });
 
-    private static float[] GenerateProcessLogVector()
-    {
-        var vec = new float[384];
-        vec[0] = 0.95f;
-        vec[1] = 0.05f;
-        return vec;
-    }
-
-    private static float[] GenerateStatuslineVector()
-    {
-        var vec = new float[384];
-        vec[0] = 0.90f;
-        vec[1] = 0.10f;
-        return vec;
-    }
-
-    private static float[] GenerateCliErrorVector()
-    {
-        var vec = new float[384];
-        vec[0] = 0.88f;
-        vec[1] = 0.12f;
-        return vec;
-    }
+    public Task<IReadOnlyList<NoiseVector>> GetNoiseVectorsAsync(CancellationToken cancellationToken = default) =>
+        _vectors.Value;
 }

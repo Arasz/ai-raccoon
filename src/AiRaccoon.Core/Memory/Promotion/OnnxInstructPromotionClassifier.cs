@@ -47,9 +47,11 @@ public sealed class OnnxInstructPromotionClassifier(
         }
 
         var similarity = 1.0f - (float)ZeroShotEmbeddingFilter.CosineDistance(vector, centroid);
-        // Preliminary threshold from a 3-point measurement (ADRs ~0.28 vs the core reference,
-        // noise ~0.04) — recalibrate against a labeled dataset before relying on this gate.
-        var isEligible = similarity >= 0.15f;
+        // Threshold from docs/work/2026-08-13-zero-shot-threshold-calibration.md: the zero-shot
+        // reference does NOT discriminate promotion-worthiness (signal median 0.19 vs noise 0.18),
+        // so 0.07 is the least-harmful measured value, not a quality gate. Promotion quality is the
+        // mechanical PromotionScorer's job.
+        var isEligible = similarity >= 0.07f;
 
         return new PromotionClassResult(isEligible, similarity, Name, $"ONNX Instruct Model score {similarity:F2}");
     }
