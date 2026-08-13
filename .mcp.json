@@ -10,7 +10,7 @@
       ]
     },
     "hermes": {
-      "command": "hermes",
+      "command": "${HOME}/.local/bin/hermes",
       "args": [
         "mcp",
         "serve"
@@ -20,13 +20,13 @@
       ]
     },
     "ai-raccoon": {
-      "command": "ai-raccoon",
+      "command": "${HOME}/.dotnet/tools/ai-raccoon",
       "tools": [
         "*"
       ]
     },
     "semantica": {
-      "command": "semantica",
+      "command": "${HOME}/.local/bin/semantica",
       "args": [
         "mcp",
         "start"

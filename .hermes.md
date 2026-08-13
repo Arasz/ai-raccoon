@@ -113,7 +113,7 @@ Framework skills live under `.ai-badger/skills/`. Load them in-session with `/sk
 preload with `hermes -s <name>`. Key skills:
 
 - `task` — task orchestration: TDD, PR flow, review loop, token tracking
-- `prompt-markers` — `h:`, `f:`, `e:` prefix markers (see below)
+- `prompt-markers` — `h:`, `f:`, `e:`, `q:`, `i!:` prefix markers (see below)
 
 ### Memory
 
@@ -144,6 +144,8 @@ This project understands prompt markers (see `.ai-badger/skills/prompt-markers`)
 - `h:` / `hint:` — a lead to validate before acting (research first).
 - `f:` / `feedback:` — a high-priority correction; adjust immediately.
 - `e:` / `extension:` — a request to expand the current task's scope.
+- `q:` / `queue:` — a queued instruction to analyze and run after active work completes.
+- `i!:` / `important!:` — immediate emergency interrupt: STOP, pause/cancel active tasks, and react instantly.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

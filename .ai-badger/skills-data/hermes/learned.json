@@ -238,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "ai-raccoon-retrieval-analysis",
-      "sourceHash": "07b0ad18bbe50a03ce68fa84808888ac80006503e9eb5e40c9d3c574b97444aa",
+        "sourceHash": "30cce32a873e58e34aae5e714077ce18bd2e01af4e0077878896092fafa4c51a",
       "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
       "status": "synced",
-      "syncedAt": "2026-08-11T14:15:57Z",
+        "syncedAt": "2026-08-13T09:15:33Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
     },
     {

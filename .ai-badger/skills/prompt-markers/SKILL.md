@@ -3,7 +3,8 @@ name: prompt-markers
 description: >-
   Use when a prompt starts with a marker prefix — `h:`/`hint:` (a lead to validate before
   acting), `f:`/`feedback:` (a correction to apply immediately), `e:`/`extension:` (a request to
-  widen scope) — or when the user asks to add, change, or inspect those markers. The
+  widen scope), `q:`/`queue:` (queued task for after current work), or `i!:`/`important!:` (immediate
+  emergency interrupt) — or when the user asks to add, change, or inspect those markers. The
   UserPromptSubmit hook detects them and injects the matching behaviour.
 version: 1.0.0
 author: ai-badger
@@ -30,6 +31,8 @@ context.
 | `h:` / `hint:` | A potential insight or lead, not a command | Validate first — do a quick research pass (search the project, check relevant files/docs) before acting on it, and report what you found |
 | `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history |
 | `e:` / `extension:` | A request to expand the current task's scope | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large |
+| `q:` / `queue:` | A queued instruction to run after active work finishes | Finish active work first. Once complete, analyze and execute this queued instruction, incorporating context from all prior work |
+| `i!:` / `important!:` | Immediate emergency interrupt | STOP IMMEDIATELY — pause or cancel running commands/subtasks, read the message, and react instantly before doing anything else |
 
 Marker definitions (prefixes + the exact instruction text injected for each) live in
 `markers-context.json`, next to this file — edit that file to add a marker or change its wording;
