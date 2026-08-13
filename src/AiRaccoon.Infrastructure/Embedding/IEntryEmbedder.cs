@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
-public interface IEntryEmbedder
+public interface IEntryEmbedder : IContentEmbedder
 {
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
     Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,

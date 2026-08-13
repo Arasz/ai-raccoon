@@ -1,8 +1,10 @@
 namespace AiRaccoon.Core.Memory.Filtering;
+
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using AiRaccoon.Core.Memory;
 
 public sealed class NoiseFilteringService(
     IEnumerable<INoiseFilterPolicy> policies,
@@ -13,7 +15,7 @@ public sealed class NoiseFilteringService(
     {
         foreach (var policy in policies)
         {
-            var result = policy.Evaluate(request);
+            var result = await policy.EvaluateAsync(request, cancellationToken).ConfigureAwait(false);
             if (result.IsNoise)
             {
                 if (noiseStore is not null)

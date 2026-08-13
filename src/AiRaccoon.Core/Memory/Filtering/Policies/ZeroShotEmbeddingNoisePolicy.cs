@@ -1,22 +1,38 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 
 namespace AiRaccoon.Core.Memory.Filtering.Policies;
 
-public sealed class ZeroShotEmbeddingNoisePolicy : INoiseFilterPolicy
+public sealed class ZeroShotEmbeddingNoisePolicy(
+    IContentEmbedder embedder,
+    INoiseVectorProvider noiseVectorProvider,
+    float distanceThreshold = 0.20f) : INoiseFilterPolicy
 {
     public string Name => "ZeroShotSemanticNoiseFilter";
 
-    // For now, this is a placeholder. In a fully wired implementation, 
-    // the SqliteMemoryStore would need to generate the embedding FIRST, 
-    // before the policies are run, or this policy needs access to the IEntryEmbedder.
-    // The subagent prototyped the math, but we need to adjust the pipeline to support async embeddings during filtering.
-    public NoiseFilterResult Evaluate(MemoryWriteRequest request)
+    public async ValueTask<NoiseFilterResult> EvaluateAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
-        // Prototype placeholder:
-        // In the real pipeline, we would fetch the embedding for request.Content
-        // and compare it against known noise signatures here.
-        return NoiseFilterResult.Clean; 
+        ArgumentNullException.ThrowIfNull(request);
+
+        var vector = await embedder.EmbedContentAsync(request.Content, cancellationToken).ConfigureAwait(false);
+        if (vector is null)
+        {
+            return NoiseFilterResult.Clean;
+        }
+
+        var noiseVectors = await noiseVectorProvider.GetNoiseVectorsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var noiseVec in noiseVectors)
+        {
+            if (ZeroShotEmbeddingFilter.IsNoise(vector, noiseVec.Vector, distanceThreshold))
+            {
+                return NoiseFilterResult.Noise(Name);
+            }
+        }
+
+        return NoiseFilterResult.Clean;
     }
 }
