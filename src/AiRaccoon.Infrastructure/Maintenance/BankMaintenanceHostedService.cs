@@ -12,7 +12,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010).
 /// </summary>
 public sealed partial class BankMaintenanceHostedService(
-    SqliteConnectionFactory factory,
+    ISqliteConnectionFactory factory,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<BankMaintenanceHostedService> logger)

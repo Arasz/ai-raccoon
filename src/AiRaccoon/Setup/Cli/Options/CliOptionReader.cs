@@ -12,7 +12,7 @@ public static class CliOptionReader
         {
             var collectedErrors = new List<string>();
             var options = reader(parseResult, collectedErrors);
-            return collectedErrors.Count > 0 ? OptionReadResult<TCliOptions>.Success(options) : OptionReadResult<TCliOptions>.Failure(collectedErrors);
+            return collectedErrors.Count == 0 ? OptionReadResult<TCliOptions>.Success(options) : OptionReadResult<TCliOptions>.Failure(collectedErrors);
         }
 
         /// <summary>

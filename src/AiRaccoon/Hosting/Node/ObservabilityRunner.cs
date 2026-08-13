@@ -95,7 +95,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
 
     private async Task<int> PrintAsync(StandardStreams streams, string line)
     {
-        await streams.WriteErrorLineAsync(line);
+        await streams.WriteOutputLineAsync(line);
         return ExitCode.Success;
     }
 

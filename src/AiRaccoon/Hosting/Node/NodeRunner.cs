@@ -72,13 +72,13 @@ internal partial class NodeRunner(
         }
 
         var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, ctx);
-        if (RestartRefusal(descriptor, restartResult) is not var (message, code))
+        if (RestartRefusal(descriptor, restartResult) is { } refusal)
         {
-            return ServerRestartResult.Success;
+            await streams.WriteErrorLineAsync(refusal.Message);
+            return ServerRestartResult.Failure(refusal.Code);
         }
 
-        await streams.WriteErrorLineAsync(message);
-        return ServerRestartResult.Failure(code);
+        return ServerRestartResult.Success;
     }
 
 
@@ -139,10 +139,8 @@ internal partial class NodeRunner(
 
     private async Task EmitBoundUrl(NodeLaunchDescriptor descriptor, StandardStreams streams, WebApplication serverHost)
     {
-        var boundUrl = serverHost.Urls.First().TrimEnd('/');
-        var boundPort = boundUrl.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(raw => int.TryParse(raw, out var p) ? p : 0)
-            .LastOrDefault(p => p != 0);
+        var boundUrl = $"{serverHost.Urls.First().TrimEnd('/')}/mcp";
+        var boundPort = new Uri(boundUrl).Port;
 
         Log.ServeListening(logger, boundUrl);
 

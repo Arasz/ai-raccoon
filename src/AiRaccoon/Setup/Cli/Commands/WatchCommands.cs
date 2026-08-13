@@ -5,13 +5,19 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 
+
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency (IWatchStore).</summary>
-public sealed class WatchCommands(IWatchStore watchStore)
+public sealed class WatchCommands
 {
-    // The ?? reads as redundant to the analyzer, but WatchCommandsTests proves the guard: the
-    // CLI composes this by hand, outside DI, where a null can genuinely arrive.
+    private readonly IWatchStore _watchStore;
+
+    public WatchCommands(IWatchStore watchStore)
+    {
+        ArgumentNullException.ThrowIfNull(watchStore);
+        _watchStore = watchStore;
+    }
 
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
@@ -134,7 +140,7 @@ public sealed class WatchCommands(IWatchStore watchStore)
         CancellationToken cancellationToken)
     {
         var filter = parseResult.GetValue<string?>("project-id");
-        var watches = await watchStore.ListWatchesAsync(cancellationToken);
+        var watches = await _watchStore.ListWatchesAsync(cancellationToken);
         var rows = watches
             .Where(w => filter is null || w.ProjectId == filter)
             .OrderBy(w => w.ProjectId, StringComparer.Ordinal)

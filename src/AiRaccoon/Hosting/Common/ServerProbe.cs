@@ -9,8 +9,17 @@ namespace AiRaccoon.Hosting.Common;
 ///     non-JSON body; recognized iff status ∈ {400,401,405,406} and the body mentions jsonrpc.
 ///     2 attempts, 1s timeout each (docs/plans/2026-08-06-http-serve-mode-plan.md R14).
 /// </summary>
-public sealed class ServerProbe(IHttpClientFactory httpClientFactory) : IServerProbe
+public sealed class ServerProbe : IServerProbe
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public ServerProbe(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
+
+    /// <summary>Probe over one pre-configured client (tests route it to an in-memory host).</summary>
+    public ServerProbe(HttpClient httpClient) : this(new SingleClientFactory(httpClient))
+    {
+    }
+
     private const int Attempts = 2;
 
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(1);
@@ -31,7 +40,7 @@ public sealed class ServerProbe(IHttpClientFactory httpClientFactory) : IServerP
                 using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
                 request.Headers.Accept.ParseAdd("application/json, text/event-stream");
-                using var response = await httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, ctx);
+                using var response = await _httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, ctx);
 
                 if (!FailureCodes.Contains(response.StatusCode))
                 {
@@ -58,4 +67,9 @@ public sealed class ServerProbe(IHttpClientFactory httpClientFactory) : IServerP
     }
 
     public static Uri EndpointFor(int port) => new($"http://127.0.0.1:{port}/mcp");
+
+    private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => client;
+    }
 }

@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     IMemorySourceStore over the memory_source table: resolves or creates source rows
 ///     by their natural key (source_type, source_locator, section).
 /// </summary>
-public sealed class SqliteMemorySourceStore(SqliteConnectionFactory factory) : IMemorySourceStore
+public sealed class SqliteMemorySourceStore(ISqliteConnectionFactory factory) : IMemorySourceStore
 {
     public async Task<MemorySource> ResolveOrCreateAsync(
         SourceType sourceType,

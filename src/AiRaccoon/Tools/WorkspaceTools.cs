@@ -11,7 +11,7 @@ namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tools over WorkspaceService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WorkspaceTools(
-    WorkspaceService workspaces,
+    IWorkspaceService workspaces,
     ToolGate gate)
 {
     private const string TnMemoryWorkspaceBegin = "memory_workspace_begin";

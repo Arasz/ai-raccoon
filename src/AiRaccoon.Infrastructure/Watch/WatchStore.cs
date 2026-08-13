@@ -29,7 +29,7 @@ public interface IWatchStore
 }
 
 /// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts).</summary>
-public sealed class WatchStore(SqliteConnectionFactory factory) : IWatchStore
+public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore
 {
     public async Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)

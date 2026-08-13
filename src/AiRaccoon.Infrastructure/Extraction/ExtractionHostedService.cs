@@ -12,7 +12,7 @@ namespace AiRaccoon.Infrastructure.Extraction;
 /// </summary>
 public sealed partial class ExtractionHostedService(
     IMemoryStore store,
-    SharedExtractionRunner extraction,
+    ISharedExtractionRunner extraction,
     IPromotionQueue queue,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,

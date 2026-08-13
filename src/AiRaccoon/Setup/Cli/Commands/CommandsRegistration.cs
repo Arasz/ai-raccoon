@@ -16,6 +16,7 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<ExtractCommands>();
             serviceCollection.AddSingleton<MaintenanceCommands>();
             serviceCollection.AddSingleton<ServeCommands>();
+            serviceCollection.AddSingleton<ConfigCommands>();
             serviceCollection.RegisterNodeServices();
         }
     }

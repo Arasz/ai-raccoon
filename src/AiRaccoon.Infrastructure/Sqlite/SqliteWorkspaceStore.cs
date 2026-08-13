@@ -6,7 +6,7 @@ using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>Workspace lifecycle rows in the memory.db workspaces table; never synced.</summary>
-public sealed class SqliteWorkspaceStore(SqliteConnectionFactory factory) : IWorkspaceStore
+public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWorkspaceStore
 {
     public async Task BeginAsync(WorkspaceRecord workspace, DateTimeOffset startedAt,
         CancellationToken cancellationToken = default)

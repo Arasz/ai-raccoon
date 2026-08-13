@@ -37,7 +37,7 @@ internal static class CliArgs
         }
 
         result = new CliInput(RootCliOptions.Null, commandPath, showHelp, showVersion, [.. errors.Union(optionReadResult.Errors)], parseResult);
-        return result is { ShowHelp: false, ShowVersion: false };
+        return false;
     }
 
     /// <summary>True when the args name one of the config verbs (skipping options and their values).</summary>
