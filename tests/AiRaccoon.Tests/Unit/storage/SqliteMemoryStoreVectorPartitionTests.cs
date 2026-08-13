@@ -146,7 +146,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
             new SearchQuery("acme", query, scope, Limit: limit, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IChunker
+    private sealed class StubChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => [text];
     }

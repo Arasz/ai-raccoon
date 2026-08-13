@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -29,7 +28,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         _conn = _factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         _sourceStore = new SqliteMemorySourceStore(_factory);
-        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new TokenizerChunker()), new JsonFileTypeHandler(new JsonFileTypeChunker())]);
+        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker()), new JsonFileTypeHandler(TestData.RealJsonChunker())]);
         _ingestor = new FileIngestor(matcher, new EntryEmbedder(new EmbeddingService()), _sourceStore, TimeProvider.System);
 
         // Configure global scope to include testDir

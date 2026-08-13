@@ -50,3 +50,18 @@ The `IFileTypeHandler` pattern establishes a clear blueprint for upcoming file f
 
 - `FileTypeMatcher` construction evaluates extension uniqueness at startup; duplicate registrations throw `InvalidOperationException`.
 - JSON parsing allocates temporary `JsonDocument` instances during chunking; fallback path guarantees no ingestion failures on malformed JSON files.
+
+## Amendment (2026-08-13) — chunker split and layer placement
+
+The dependencies-refactor review (`docs/reviews/2026-08-13-architecture-review-ingestion-and-deps-refactor.md`)
+reshaped the abstractions above:
+
+- `IFileTypeChunker` was never introduced. The existing `IChunker` (Core) is retained as the base contract, with two format-specific marker interfaces added: `IMarkdownChunker : IChunker` and
+  `IJsonChunker : IChunker` (both `AiRaccoon.Core.Chunking`). Handlers take the specific interface, so the DI graph cannot mis-wire them (`MarkdownFileTypeHandler(IMarkdownChunker)`,
+  `JsonFileTypeHandler(IJsonChunker)`).
+- `MarkdownChunker` (Core) is now an injectable `IMarkdownChunker` (constructor `TokenCount`); the former
+  `TokenizerChunker` was reduced to the o200k token counter `O200kTokenizer` (Infrastructure) and registered as the `TokenCount` delegate. Markdown chunking is fully in the pure layer; only the tokenizer and the JSON chunker remain in
+  Infrastructure.
+- `IFileTypeHandler` and `IFileTypeMatcher` live in `AiRaccoon.Core.Ingestion` (Decision 1's placement holds).
+- `IFileIngestor` is an Infrastructure seam whose signature names `SqliteConnection`: the caller opens the bank once and hands the open connection in so ingestion can join an existing write transaction (`SqliteMemoryStore.ReplaceFileAsync`
+  re-ingests with `embedInline: false`). It is intentionally not a Core abstraction.

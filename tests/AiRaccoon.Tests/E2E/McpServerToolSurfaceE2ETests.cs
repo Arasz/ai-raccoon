@@ -1,7 +1,6 @@
 using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -188,7 +187,8 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            new EmbeddingService());
         await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([tempDir]));
     }

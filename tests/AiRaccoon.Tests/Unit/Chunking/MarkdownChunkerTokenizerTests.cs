@@ -1,5 +1,4 @@
 using AiRaccoon.Infrastructure.Chunking;
-using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
 
@@ -7,7 +6,7 @@ namespace AiRaccoon.Tests.Unit.Chunking;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public class TokenizerChunkerTests
+public class MarkdownChunkerTokenizerTests
 {
     private static string BuildLongNote() =>
         string.Join(
@@ -18,7 +17,7 @@ public class TokenizerChunkerTests
     [Fact]
     public void Chunk_ShortNoteWithinBudget_ReturnsWholeNoteAsSingleChunk()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
 
         var chunks = chunker.Chunk("# Hello\n\nShort note.\n", 512);
 
@@ -28,8 +27,8 @@ public class TokenizerChunkerTests
     [Fact]
     public void Chunk_LongNote_ProducesChunksWithinMaxTokens()
     {
-        var chunker = new TokenizerChunker();
-        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var chunker = TestData.RealMarkdownChunker();
+        var tokenizer = new O200kTokenizer();
 
         var chunks = chunker.Chunk(BuildLongNote(), 96, 16);
 
@@ -40,8 +39,8 @@ public class TokenizerChunkerTests
     [Fact]
     public void Chunk_DefaultBounds256Overlay48_KeepChunksWithinTheModelWindow()
     {
-        var chunker = new TokenizerChunker();
-        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var chunker = TestData.RealMarkdownChunker();
+        var tokenizer = new O200kTokenizer();
 
         var chunks = chunker.Chunk(BuildLongNote(), 256, 48);
 
@@ -52,7 +51,7 @@ public class TokenizerChunkerTests
     [Fact]
     public void Chunk_IdenticalInput_ProducesIdenticalChunks()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
 
         var first = chunker.Chunk(BuildLongNote(), 96, 16);
         var second = chunker.Chunk(BuildLongNote(), 96, 16);
@@ -63,18 +62,18 @@ public class TokenizerChunkerTests
     [Fact]
     public void Chunk_EmptyText_ReturnsNoChunks()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
 
         chunker.Chunk("", 100).ShouldBeEmpty();
     }
 
     [Fact]
-    public void Chunk_NullText_Throws() => Should.Throw<ArgumentNullException>(() => new TokenizerChunker().Chunk(null!, 100));
+    public void Chunk_NullText_Throws() => Should.Throw<ArgumentNullException>(() => TestData.RealMarkdownChunker().Chunk(null!, 100));
 
     [Fact]
     public void O200kBase_CountsKnownStrings()
     {
-        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var tokenizer = new O200kTokenizer();
 
         tokenizer.CountTokens("").ShouldBe(0);
         tokenizer.CountTokens("Hello").ShouldBe(1);
@@ -85,7 +84,7 @@ public class TokenizerChunkerTests
     [Fact]
     public void O200kBase_CountingIsDeterministic()
     {
-        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var tokenizer = new O200kTokenizer();
         const string text = "The quick brown fox jumps over the lazy dog.";
 
         tokenizer.CountTokens(text).ShouldBe(tokenizer.CountTokens(text));

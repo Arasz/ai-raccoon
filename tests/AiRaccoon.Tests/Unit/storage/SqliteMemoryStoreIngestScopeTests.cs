@@ -239,7 +239,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         _store.SetSettingAsync(key, IngestScopeKeys.Serialize([directory]),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IChunker
+    private sealed class StubChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }

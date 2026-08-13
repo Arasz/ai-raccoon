@@ -1,11 +1,12 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
 ///     File type handler for Markdown and plain text files (.md, .markdown, .txt).
 /// </summary>
-public sealed class MarkdownFileTypeHandler(IChunker chunker) : IFileTypeHandler
+public sealed class MarkdownFileTypeHandler(IMarkdownChunker chunker) : IFileTypeHandler
 {
     public string Name => "Markdown";
 

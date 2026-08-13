@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Ingestion;
 using Xunit;
 
@@ -11,8 +10,8 @@ public class ChunkerComparisonTests(ITestOutputHelper output)
     [Fact]
     public void Compare_MarkdownAndJson_ChunkingResults()
     {
-        var mdHandler = new MarkdownFileTypeHandler(new TokenizerChunker());
-        var jsonHandler = new JsonFileTypeHandler(new JsonFileTypeChunker());
+        var mdHandler = new MarkdownFileTypeHandler(TestData.RealMarkdownChunker());
+        var jsonHandler = new JsonFileTypeHandler(TestData.RealJsonChunker());
 
         const string markdownContent = """
                                        # AiRaccoon Configuration

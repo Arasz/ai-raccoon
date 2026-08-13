@@ -7,7 +7,6 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Workspace;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
@@ -40,7 +39,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     // (used + unit.TokenCount > overlayTokens) actually admits at least one reused line.
     private const int ChunkOverlayTokens = 20;
 
-    private static readonly IChunker RealChunker = new TokenizerChunker();
+    private static readonly IChunker RealChunker = TestData.RealMarkdownChunker();
 
     // Real key material is contiguous base62/underscore after a known secret prefix — natural-language
     // fixture ids like "sk-hub-history-is-user-data" must not match.

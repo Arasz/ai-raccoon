@@ -602,10 +602,12 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
                             IdleWatchdog (ADR-0020)
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
-  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
-  Chunking/                 IChunker port, MarkdownChunker (pure splitter)
+  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming,
+                            SharedExtractionService, SharedExtractionRunner (extraction orchestration)
+  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
-  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFoundException
+  Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
+                            PathOutsideScopeException, PathNotFoundException
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
@@ -618,9 +620,10 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
-  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
+  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
+                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
-  Chunking/                 TokenizerChunker (o200k_base)
+  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)

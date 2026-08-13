@@ -353,7 +353,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 
-    private sealed class StubChunker : IChunker
+    private sealed class StubChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }

@@ -4,6 +4,7 @@ using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -21,19 +22,34 @@ public static class TestData
     /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by CliCommandRunnerTests and ConfigCommandsEncryptionTests).</summary>
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
 
-    /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
-    /// chunker — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
+    /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/>; the chunkers
+    /// default to real tokenizer-backed ones so tests stay decoupled from the ingest graph.</summary>
     public static SqliteMemoryStore CreateMemoryStore(
         ISqliteConnectionFactory factory,
         ILogger<SqliteMemoryStore> logger,
         IMemorySourceStore sourceStore,
-        IChunker chunker,
+        IMarkdownChunker markdownChunker,
         TimeProvider timeProvider,
-        IEmbeddingService embeddings)
+        IEmbeddingService embeddings,
+        IJsonChunker? jsonChunker = null)
     {
-        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler(chunker)]);
-        var fileIngestor = new FileIngestor(matcher, new EntryEmbedder(embeddings), sourceStore, timeProvider);
-        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embeddings, timeProvider, logger);
+        jsonChunker ??= new JsonFileTypeChunker(new O200kTokenizer().CountTokens, markdownChunker);
+        var embedder = new EntryEmbedder(embeddings);
+        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
+        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger);
+    }
+
+    public static IMarkdownChunker RealMarkdownChunker()
+    {
+        var tokenizer = new O200kTokenizer();
+        return new MarkdownChunker(tokenizer.CountTokens);
+    }
+
+    public static IJsonChunker RealJsonChunker()
+    {
+        var tokenizer = new O200kTokenizer();
+        return new JsonFileTypeChunker(tokenizer.CountTokens, new MarkdownChunker(tokenizer.CountTokens));
     }
 
     /// <summary>Builds a <see cref="ConfigCommands"/> with only the sub-command(s) a test needs; unused sub-commands
@@ -81,25 +97,6 @@ public static class TestData
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
         services.RegisterProxyServices();
         return services.BuildServiceProvider().GetRequiredService<IProxyRunner>();
-    }
-
-    private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
-    {
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    }
-
-    private sealed class LoopbackHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new() { Timeout = ServerProbe.RequestTimeout };
     }
 
     public static string CreateTempRoot(string prefix = "ai-raccoon-tests")
@@ -154,6 +151,25 @@ public static class TestData
         }
 
         throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
+    }
+
+    private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
+    {
+        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class LoopbackHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new() { Timeout = ServerProbe.RequestTimeout };
     }
 
     private sealed class NoopHttpClientFactory : IHttpClientFactory

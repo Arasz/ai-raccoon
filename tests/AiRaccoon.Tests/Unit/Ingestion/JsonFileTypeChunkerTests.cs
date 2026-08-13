@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Chunking;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Ingestion;
@@ -10,7 +9,7 @@ public class JsonFileTypeChunkerTests
     [Fact]
     public void Chunk_ValidJsonObject_ReturnsFormattedJsonChunks()
     {
-        var chunker = new JsonFileTypeChunker();
+        var chunker = TestData.RealJsonChunker();
         var json = """
                    {
                      "name": "ai-raccoon",
@@ -26,29 +25,9 @@ public class JsonFileTypeChunkerTests
     }
 
     [Fact]
-    public void ExtractSchemaSummary_ExtractsNodeSchema()
-    {
-        var json = """
-                   {
-                     "name": "ai-raccoon",
-                     "version": "1.7.0",
-                     "enabled": true,
-                     "tags": ["memory", "mcp"]
-                   }
-                   """;
-
-        var schema = JsonFileTypeChunker.ExtractSchemaSummary(json);
-
-        Assert.Contains("\"name\": string", schema);
-        Assert.Contains("\"version\": string", schema);
-        Assert.Contains("\"enabled\": boolean", schema);
-        Assert.Contains("\"tags\": [string]", schema);
-    }
-
-    [Fact]
     public void Chunk_LargeJsonObject_SplitsIntoMultipleTokenBoundedChunks()
     {
-        var chunker = new JsonFileTypeChunker();
+        var chunker = TestData.RealJsonChunker();
         var properties = new List<string>();
         for (var i = 0; i < 50; i++)
         {
@@ -65,7 +44,7 @@ public class JsonFileTypeChunkerTests
     [Fact]
     public void Chunk_MalformedJson_FallsBackToLineChunkingWithoutThrowing()
     {
-        var chunker = new JsonFileTypeChunker();
+        var chunker = TestData.RealJsonChunker();
         var invalidJson = "{\n  \"name\": \"ai-raccoon\",\n  \"unclosed_string\": \"oops\n";
 
         var chunks = chunker.Chunk(invalidJson, maxTokens: 256, overlayTokens: 0);
@@ -77,7 +56,7 @@ public class JsonFileTypeChunkerTests
     [Fact]
     public void Chunk_EmptyOrWhitespace_ReturnsEmptyOrSingleChunk()
     {
-        var chunker = new JsonFileTypeChunker();
+        var chunker = TestData.RealJsonChunker();
         var emptyChunks = chunker.Chunk("", maxTokens: 256);
         Assert.Empty(emptyChunks);
 
