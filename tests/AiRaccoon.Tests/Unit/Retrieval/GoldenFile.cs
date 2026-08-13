@@ -114,8 +114,8 @@ public sealed record GoldenFile(
         // The k-th (last) golden ranking is the cut point: a hash within tolerance of it that
         // only appears on one side is a boundary substitution, not a regression — absorb it.
         var boundaryRanking = expectedHits[^1].Ranking;
-        var expectedByHash = expectedHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);
-        var actualByHash = actualHits.ToDictionary(h => h.Hash, StringComparer.Ordinal);
+        var expectedByHash = expectedHits.ToDictionary(h => h.Hash, StringComparer.OrdinalIgnoreCase);
+        var actualByHash = actualHits.ToDictionary(h => h.Hash, StringComparer.OrdinalIgnoreCase);
 
         foreach (var (hash, e) in expectedByHash)
         {

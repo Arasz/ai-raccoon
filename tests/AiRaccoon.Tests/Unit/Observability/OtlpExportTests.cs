@@ -669,7 +669,7 @@ public sealed class OtlpExportTests : IDisposable
         return port;
     }
 
-    private ServerConfig Config(McpTransport transport, int port = 7721, TimeSpan idleTimeout = default) =>
+    private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
     private static async Task<IDisposable> AcquireCleanEnvAsync()

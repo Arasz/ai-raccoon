@@ -35,7 +35,7 @@ public sealed class ReferenceAssetManifestTests
     {
         var model = ReferenceAssets.PinnedAssets.Single(a => a.Name == ReferenceAssets.ModelFileName);
         model.Kind.ShouldBe("model");
-        model.Sha256.ShouldBe("908c82ac3849f9ca23158117cec614bd8ec404040d8794c35b4c81242bf315e3");
+        model.Sha256.ShouldBe("908C82AC3849F9CA23158117CEC614BD8EC404040D8794C35B4C81242BF315E3", StringCompareShould.IgnoreCase);
     }
 
     [Fact]

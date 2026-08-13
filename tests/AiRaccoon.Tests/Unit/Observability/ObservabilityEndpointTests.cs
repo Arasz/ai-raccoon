@@ -184,7 +184,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         return JsonDocument.Parse(body);
     }
 
-    private ServerConfig Config(McpTransport transport, int port = 7721, TimeSpan idleTimeout = default) =>
+    private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
     private static int FreePort()

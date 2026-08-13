@@ -37,17 +37,14 @@ public sealed class ServerProbe : IServerProbe
         {
             try
             {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ctx);
+                attemptCts.CancelAfter(RequestTimeout);
                 using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
                 request.Headers.Accept.ParseAdd("application/json, text/event-stream");
-                using var response = await _httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, ctx);
+                using var response = await _httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, attemptCts.Token);
 
-                if (!FailureCodes.Contains(response.StatusCode))
-                {
-                    continue;
-                }
-
-                var body = await response.Content.ReadAsStringAsync(ctx);
+                var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
                 if (body.Contains("jsonrpc", StringComparison.Ordinal))
                 {
                     return true;
