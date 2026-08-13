@@ -11,7 +11,7 @@ public static class ProxyRegistrations
         public void RegisterProxyServices()
         {
             serviceCollection.AddSingleton(TimeProvider.System);
-            serviceCollection.AddHttpClient(nameof(ServerProbe)).ConfigureHttpClient(client => client.Timeout = ServerProbe.RequestTimeout);
+            serviceCollection.AddHttpClient(nameof(ServerProbe)).RemoveAllLoggers().ConfigureHttpClient(client => client.Timeout = ServerProbe.RequestTimeout);
             serviceCollection.AddSingleton<ServerProbe>(sp => new ServerProbe(sp.GetRequiredService<IHttpClientFactory>()));
             serviceCollection.AddSingleton<IServerProbe>(sp => sp.GetRequiredService<ServerProbe>());
             serviceCollection.AddHttpClient(BackendLauncher.BackendSessionClient).ConfigurePrimaryHttpMessageHandler(_ => new JsonRpcErrorHandler

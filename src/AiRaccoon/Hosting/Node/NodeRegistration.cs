@@ -11,12 +11,13 @@ public static class NodeRegistration
     {
         public void RegisterNodeServices()
         {
-            serviceCollection.AddHttpClient(nameof(ServerProbe)).ConfigureHttpClient(client => client.Timeout = ServerProbe.RequestTimeout);
+            serviceCollection.AddHttpClient(nameof(ServerProbe)).RemoveAllLoggers().ConfigureHttpClient(client => client.Timeout = ServerProbe.RequestTimeout);
             serviceCollection.AddSingleton<ServerProbe>(sp => new ServerProbe(sp.GetRequiredService<IHttpClientFactory>()));
             serviceCollection.AddSingleton<IServerProbe>(sp => sp.GetRequiredService<ServerProbe>());
-            serviceCollection.AddHttpClient(nameof(ObservabilityRunner)).ConfigureHttpClient(client => client.Timeout = ObservabilityRunner.RequestTimeout);
+            serviceCollection.AddHttpClient(nameof(ObservabilityRunner)).RemoveAllLoggers().ConfigureHttpClient(client => client.Timeout = ObservabilityRunner.RequestTimeout);
             serviceCollection.AddRequiredSingleton<IObservabilityRunner, ObservabilityRunner>();
             serviceCollection.AddHttpClient(nameof(ServerRestart))
+                .RemoveAllLoggers()
                 .ConfigurePrimaryHttpMessageHandler(_ => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .ConfigureHttpClient(c => c.Timeout = ServerRestart.RequestTimeout);
             serviceCollection.AddRequiredSingleton<IServerRestart, ServerRestart>(sp => new ServerRestart(

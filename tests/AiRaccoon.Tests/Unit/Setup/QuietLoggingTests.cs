@@ -195,6 +195,8 @@ public sealed class QuietLoggingTests : IDisposable
         var port = FreePort();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
+        // Mint the loopback token so the relay dials the backend: the probe no longer logs (log-leak fix).
+        await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
 
         var (_, stderr) = await CaptureConsoleAsync(async () =>
         {
