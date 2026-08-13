@@ -62,7 +62,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = new SqliteMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
 
         // Ingest is contained by the declared scope, so the E2E server is configured with one

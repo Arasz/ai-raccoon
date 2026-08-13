@@ -45,7 +45,7 @@ public class ServerConfigTests
     {
         CliArgs.TryParse([], out var parsed).ShouldBeTrue();
 
-        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
+        parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
     }
 
     /// <summary>The escape hatch of ADR-0020: --transport stdio keeps the complete in-process server.</summary>
@@ -54,7 +54,7 @@ public class ServerConfigTests
     {
         CliArgs.TryParse(["--transport", "stdio"], out var parsed).ShouldBeTrue();
 
-        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
+        parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
     }
 
     [Fact]

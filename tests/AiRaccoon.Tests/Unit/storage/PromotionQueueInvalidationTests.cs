@@ -40,7 +40,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
@@ -297,11 +297,11 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         string[] argv = apply ? ["extract", "prune", "--apply"] : ["extract", "prune"];
         CliArgs.TryParse(argv, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
 
         var stdout = new StringWriter();
         var exit = await new ExtractCommands(_queueStore)
-            .PruneAsync(parsed.ParsedCliArgs, stdout, TestContext.Current.CancellationToken);
+            .PruneAsync(parsed!.ParsedCliArgs, new StandardStreams(TextReader.Null, stdout, TextWriter.Null), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(0);
         stdout.ToString().ShouldContain("1 orphaned candidate(s)");

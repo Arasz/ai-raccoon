@@ -18,13 +18,13 @@ public class ConfigCommandsAccessModelTests
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(settings: new SettingsCommands()).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null,
-            ctx: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, settings: new SettingsCommands())
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -339,11 +339,12 @@ public class ConfigCommandsAccessModelTests
     public async Task UnhandledCommandPath_FallsThroughToError()
     {
         var store = new FakeConfigStore();
-        CliArgs.TryParse(["access", "default", "show"], out var parsed);
+        CliArgs.TryParse(["access"], out var parsed);
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands().RunAsync(["bogus", "verb"], parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null, ctx: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store)
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(1);
         stderr.ToString().ShouldContain("unhandled command");

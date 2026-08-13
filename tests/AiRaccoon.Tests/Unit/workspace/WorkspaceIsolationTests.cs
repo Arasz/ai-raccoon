@@ -34,7 +34,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
     private SqliteMemoryStore CreateStore() =>
-        new(_factory,
+        TestData.CreateMemoryStore(_factory,
             NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), new EmbeddingService());
 
     [Fact]

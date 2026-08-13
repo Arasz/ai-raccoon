@@ -36,7 +36,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
             new EmbeddingService());
     }
 

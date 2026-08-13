@@ -127,11 +127,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     private ServeRun StartRestartInProcess(int port)
     {
         CliArgs.TryParse(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"], out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
-        return new ServeRun(NodeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), stdout, stderr, cts.Token),
+        return new ServeRun(TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
             stdout, stderr, cts);
     }
 

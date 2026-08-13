@@ -1,4 +1,5 @@
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Render;
 using Shouldly;
 using Xunit;
 
@@ -22,7 +23,7 @@ public class CliOutputRoutingTests
         CliArgs.TryParse(["--help"], out var parsed);
         var stderr = new StringWriter();
 
-        parsed.RenderTo(stderr);
+        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, stderr));
 
         stderr.ToString().ShouldContain("Usage");
     }
@@ -33,9 +34,8 @@ public class CliOutputRoutingTests
         CliArgs.TryParse(["--bogus"], out var parsed);
         var stderr = new StringWriter();
 
-        var exit = parsed.RenderTo(stderr);
+        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, stderr));
 
-        exit.ShouldBe(1);
         stderr.ToString().ShouldContain("Unrecognized command or argument '--bogus'.");
     }
 
@@ -47,7 +47,7 @@ public class CliOutputRoutingTests
         CliArgs.TryParse(["--version"], out var parsed);
         var stderr = new StringWriter();
 
-        parsed.RenderTo(stderr);
+        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, stderr));
 
         stderr.ToString().ShouldNotBeEmpty();
     }
@@ -57,7 +57,9 @@ public class CliOutputRoutingTests
     {
         CliArgs.TryParse(["--help"], out var parsed);
 
-        parsed.RenderTo(new StringWriter()).ShouldBe(0);
+        var writer = new StringWriter();
+        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, writer));
+        writer.ToString().ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -65,7 +67,9 @@ public class CliOutputRoutingTests
     {
         CliArgs.TryParse(["--version"], out var parsed);
 
-        parsed.RenderTo(new StringWriter()).ShouldBe(0);
+        var writer = new StringWriter();
+        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, writer));
+        writer.ToString().ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -78,7 +82,7 @@ public class CliOutputRoutingTests
             Console.SetOut(redirected);
             CliArgs.TryParse(["--help"], out var parsed);
 
-            parsed.RenderTo(new StringWriter());
+            parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, new StringWriter()));
 
             redirected.ToString().ShouldBeEmpty();
         }
@@ -98,7 +102,7 @@ public class CliOutputRoutingTests
             Console.SetOut(redirected);
             CliArgs.TryParse(["--bogus"], out var parsed);
 
-            parsed.RenderTo(new StringWriter());
+            parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, new StringWriter()));
 
             redirected.ToString().ShouldBeEmpty();
         }

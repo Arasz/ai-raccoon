@@ -38,6 +38,7 @@ public static partial class AppRegistrations
             services.AddSingleton(TimeProvider.System);
             services.RegisterEncryptionServices(options);
             services.RegisterEmbeddingServices();
+            services.RegisterFileIngestionServices();
             services.RegisterStores();
         }
 
@@ -45,12 +46,12 @@ public static partial class AppRegistrations
         {
             services.RegisterPromotionQueue();
             services.RegisterWatchServices();
-            services.RegisterFileIngestionServices();
             services.RegisterSyncServices();
             services.RegisterCoreMemoryServices(options);
+            services.RegisterWorkspaceService();
             services.RegisterAccessGuardServices();
             services.RegisterObservabilityServices();
-            services.RegisterWatchServices();
+            services.RegisterExtractionServices();
             services.RegisterLongLivedBackgroundServices(mcpTransport);
             services.RegisterBankMaintenanceBackgrounbdService();
         }
@@ -59,8 +60,8 @@ public static partial class AppRegistrations
 
         private void RegisterExtractionServices()
         {
-            services.AddSingleton<ISharedExtractionService, SharedExtractionService>();
-            services.AddSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
+            services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
+            services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
         }
 
         private void RegisterSyncServices()
@@ -121,21 +122,23 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISearchQualityService, SqliteSearchQualityService>();
             services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
-            services.AddSingleton<IToolCallMetrics, ToolCallMetrics>();
+            services.AddRequiredSingleton<IToolCallMetrics, ToolCallMetrics>();
         }
 
         private void RegisterBankMaintenanceBackgrounbdService()
         {
-            services.AddSingleton<ISweepService, SweepService>();
+            services.AddRequiredSingleton<ISweepService, SweepService>();
             services.AddHostedService<BankMaintenanceHostedService>();
         }
 
         private void RegisterFileIngestionServices()
         {
             services.AddRequiredSingleton<IChunker, TokenizerChunker>();
-            services.AddRequiredSingleton<IChunker, JsonFileTypeChunker>();
+            services.AddSingleton<JsonFileTypeChunker>(sp => new JsonFileTypeChunker(sp.GetRequiredService<TokenizerChunker>()));
+            services.AddSingleton<IChunker>(sp => sp.GetRequiredService<JsonFileTypeChunker>());
             services.AddRequiredSingleton<IFileTypeHandler, MarkdownFileTypeHandler>();
             services.AddRequiredSingleton<IFileTypeHandler, JsonFileTypeHandler>();
+            services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
             services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
         }
@@ -149,9 +152,10 @@ public static partial class AppRegistrations
 
         private void RegisterStores()
         {
-            services.AddSingleton<ISqliteConnectionFactory>(sp => new SqliteConnectionFactory(
+            services.AddSingleton(sp => new SqliteConnectionFactory(
                 sp.GetRequiredService<InfrastructureOptions>(),
                 sp.GetRequiredService<IEncryptionKeyResolver>()));
+            services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();

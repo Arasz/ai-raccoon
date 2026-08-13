@@ -15,6 +15,7 @@ public static class WatchdogRegistrations
             }
 
             serviceCollection.AddSingleton<IIdleTimeoutProvider>(serverConfig);
+            serviceCollection.AddSingleton(typeof(TimeSpan), serverConfig.IdleTimeout);
             serviceCollection.AddRequiredSingleton<IActivitySignaler, IdleWatchdog>();
             serviceCollection.AddHostedService(sp => sp.GetRequiredService<IdleWatchdog>());
         }

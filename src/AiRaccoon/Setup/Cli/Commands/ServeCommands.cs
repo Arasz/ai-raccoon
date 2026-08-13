@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Setup.Cli.Options;
 
@@ -24,17 +25,33 @@ public static class ServeCommandOptionsReader
             {
                 Node = new NodeCliOptions
                 {
-                    Port = parseResult.ReadOption(CliCommandTree.ServePortOption, DefaultOptions.Port, collectedErrors),
+                    Port = ResolvePort(parseResult, collectedErrors),
                     Format = parseResult.ReadOption(CliCommandTree.ServeFormatOption, "", collectedErrors),
                     IdleTimeout = parseResult.ReadOption(CliCommandTree.ServeIdleTimeoutOption, "", collectedErrors),
-                    McpEntry = parseResult.ReadOption(CliCommandTree.ServeMcpEntryOption, false, collectedErrors),
-                    Restart = parseResult.ReadOption(CliCommandTree.ServeRestartOption, false, collectedErrors)
+                    McpEntry = parseResult.ReadOption(CliCommandTree.ServeMcpEntryOption, false, collectedErrors, false),
+                    Restart = parseResult.ReadOption(CliCommandTree.ServeRestartOption, false, collectedErrors, false)
                 },
                 Observability = new ObservabilityCliOptions
                 {
                     Port = parseResult.ReadOption(CliCommandTree.ObservabilityPortOption, DefaultOptions.Port, collectedErrors)
                 }
             });
+    }
+
+    /// <summary>Serve's own --port wins; else the root --port; else 7721 (docs/plans/2026-08-06-http-serve-mode-plan.md R7/R12).</summary>
+    private static int ResolvePort(ParseResult parseResult, List<string> collectedErrors)
+    {
+        if (parseResult.GetResult(CliCommandTree.ServePortOption) is OptionResult { Tokens.Count: > 0 })
+        {
+            return parseResult.ReadOption(CliCommandTree.ServePortOption, DefaultOptions.Port, collectedErrors);
+        }
+
+        if (parseResult.GetResult(CliCommandTree.LaunchPortOption) is OptionResult { Tokens.Count: > 0 })
+        {
+            return parseResult.ReadOption(CliCommandTree.LaunchPortOption, DefaultOptions.Port, collectedErrors);
+        }
+
+        return DefaultOptions.Port;
     }
 }
 

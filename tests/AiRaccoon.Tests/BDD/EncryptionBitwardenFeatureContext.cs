@@ -85,7 +85,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         Resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
-        ConfigStore = new SqliteMemoryStore(Bank, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank), new StubChunker(), TimeProvider, new EmbeddingService());
+        ConfigStore = TestData.CreateMemoryStore(Bank, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank), new StubChunker(), TimeProvider, new EmbeddingService());
     }
 
     /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>
@@ -181,19 +181,19 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     public async Task<CliRun> RunCliAsync(string stdin, params string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        if (parsed.Errors.Count > 0 || parsed.CommandPath.Length == 0)
+        if (parsed!.Errors.Count > 0 || parsed!.CommandPath.Length == 0)
         {
             throw new InvalidOperationException(
-                $"CLI command did not parse: {string.Join("; ", parsed.Errors)}");
+                $"CLI command did not parse: {string.Join("; ", parsed!.Errors)}");
         }
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var envProvider = new StubEnvProvider(EnvPassphrase);
         var encryptionState = new EncryptionSourceSidecar(BankPath);
-        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger());
-        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, ConfigStore, stdout, stderr, new StringReader(stdin),
-            ctx: CancellationToken.None);
+        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
+        var exit = await TestData.CreateConfigCommands(ConfigStore, encryptionCommands: encryptionCommands)
+            .RunAsync(parsed!, new StandardStreams(new StringReader(stdin), stdout, stderr), CancellationToken.None);
         return new CliRun(exit, stdout.ToString(), stderr.ToString());
     }
 

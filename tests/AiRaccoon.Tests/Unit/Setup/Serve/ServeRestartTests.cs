@@ -191,17 +191,17 @@ public sealed class ServeRestartTests : IDisposable
         (await StopAsync(old)).ShouldBe(ExitCode.Success);
     }
 
-    private static Task<bool> ProbeAsync(int port) => ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+    private static Task<bool> ProbeAsync(int port) => TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
 
     private static ServeRun Start(string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["serve"]);
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldBe(["serve"]);
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-        return new ServeRun(NodeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), stdout, stderr, cts.Token),
+        return new ServeRun(TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
             stdout, stderr, cts);
     }
 

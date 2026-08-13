@@ -9,7 +9,7 @@ public sealed record PromotionQueueOrphanReport(int TotalOrphans, IReadOnlyDicti
 
 /// <summary>Propose-tier persistence in the memory.db promotion_queue table; never synced (waiting rows are per-machine by design).</summary>
 public sealed class SqlitePromotionQueueStore(
-    SqliteConnectionFactory factory,
+    ISqliteConnectionFactory factory,
     TimeProvider timeProvider) : IPromotionQueueStore
 {
     public async Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,

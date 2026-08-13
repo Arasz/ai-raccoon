@@ -24,7 +24,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"], out var parsed);
 
-        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed!, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch enable '*' true");
@@ -35,7 +35,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "scope", "add", "CLAUDE.md", "README.md", "docs", "/tmp/x"], out var parsed);
 
-        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed!, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch scope add '*' /tmp/x");
@@ -46,7 +46,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "true"], out var parsed);
 
-        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed!, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch enable '*' true");
@@ -57,7 +57,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "concurrency", "CLAUDE.md", "README.md", "/tmp/x"], out var parsed);
 
-        var hint = CliRendering.GlobExpansionHint(parsed, CwdEntries);
+        var hint = CliRendering.GlobExpansionHint(parsed!, CwdEntries);
 
         hint.ShouldNotBeNull();
         hint.ShouldContain("ai-raccoon watch concurrency '*' /tmp/x");
@@ -68,7 +68,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "enable", "foo", "bar", "baz"], out var parsed);
 
-        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed!, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "bogus"], out var parsed);
 
-        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed!, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["watch", "enable", "myproject", "true"], out var parsed);
 
-        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed!, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class CliGlobExpansionHintTests
     {
         CliArgs.TryParse(["--bogus"], out var parsed);
 
-        CliRendering.GlobExpansionHint(parsed, CwdEntries).ShouldBeNull();
+        CliRendering.GlobExpansionHint(parsed!, CwdEntries).ShouldBeNull();
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class CliGlobExpansionHintTests
         names.Length.ShouldBeGreaterThanOrEqualTo(3);
         CliArgs.TryParse(["watch", "enable", .. names, "true"], out var parsed);
 
-        var hint = CliRendering.GlobExpansionHint(parsed);
+        var hint = CliRendering.GlobExpansionHint(parsed!);
 
         hint.ShouldNotBeNull();
     }
@@ -118,9 +118,8 @@ public class CliGlobExpansionHintTests
         CliArgs.TryParse(["watch", "enable", "CLAUDE.md", "README.md", "docs", "true"], out var parsed);
         var stderr = new StringWriter();
 
-        var exit = CliRendering.Render(parsed, stderr, CwdEntries);
+        CliRendering.Render(parsed!, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), CwdEntries);
 
-        exit.ShouldBe(1);
         var output = stderr.ToString();
         output.ShouldContain("Unrecognized command or argument 'docs'.");
         output.ShouldContain("ai-raccoon watch enable '*' true");

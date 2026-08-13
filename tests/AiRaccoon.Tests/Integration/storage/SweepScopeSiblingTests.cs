@@ -37,7 +37,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(_factory,
+        _store = TestData.CreateMemoryStore(_factory,
             NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         _sweeper = new SweepService(_store, _clock);
     }

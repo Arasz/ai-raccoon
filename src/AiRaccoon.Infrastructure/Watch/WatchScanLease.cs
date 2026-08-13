@@ -22,7 +22,7 @@ public interface IWatchScanLease
 ///     owner never releases, so expiry alone frees the lease; see D-2/D-3 in
 ///     docs/plans/2026-08-07-watch-scan-runaway-fix.md.
 /// </summary>
-public sealed class SqliteWatchScanLease(SqliteConnectionFactory factory, TimeProvider timeProvider) : IWatchScanLease
+public sealed class SqliteWatchScanLease(ISqliteConnectionFactory factory, TimeProvider timeProvider) : IWatchScanLease
 {
     public static TimeSpan LeaseTtl { get; } = TimeSpan.FromSeconds(60);
 

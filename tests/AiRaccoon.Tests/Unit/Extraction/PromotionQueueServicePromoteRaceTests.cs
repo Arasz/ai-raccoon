@@ -169,6 +169,10 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public Task<int> PruneRejectedAsync(string projectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 
     private sealed class RecordingShareStore : IMemoryStore

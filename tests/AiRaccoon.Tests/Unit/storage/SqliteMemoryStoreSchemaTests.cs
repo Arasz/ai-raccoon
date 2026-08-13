@@ -103,7 +103,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     {
         await CreateLegacyBankAsync();
 
-        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
             new EmbeddingService());
         await store.WriteAsync(new MemoryWriteRequest("acme", "fresh wave two content",
             SourceFile: "docs/adr/0001-legacy-migrated.md"), TestContext.Current.CancellationToken);
@@ -137,7 +137,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     {
         // A crash between the migration's DROP/CREATE and its repopulate leaves a
         // new-shape FTS table with no rows and no triggers — it must heal on reopen.
-        var store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
             new EmbeddingService());
         await store.WriteAsync(new MemoryWriteRequest("acme", "shell crash recovery content"),
             TestContext.Current.CancellationToken);

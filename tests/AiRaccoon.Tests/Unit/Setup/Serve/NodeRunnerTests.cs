@@ -338,9 +338,9 @@ public sealed class NodeRunnerTests : IDisposable
     private static async Task<ServeRun> StartServeAsync(string[] args, Task? gate = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["serve"]);
-        var config = parsed.Options.ToServerConfig();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldBe(["serve"]);
+        var config = parsed!.Options.ToServerConfig();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
@@ -350,7 +350,7 @@ public sealed class NodeRunnerTests : IDisposable
             await gate;
         }
 
-        var exit = NodeRunner.RunAsync(parsed, config, stdout, stderr, cts.Token);
+        var exit = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

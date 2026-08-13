@@ -14,7 +14,7 @@ namespace AiRaccoon.Infrastructure.Degradation;
 /// </summary>
 public sealed partial class SweepHostedService(
     IMemoryStore store,
-    SweepService sweeper,
+    ISweepService sweeper,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<SweepHostedService> logger)

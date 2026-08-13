@@ -176,5 +176,9 @@ public sealed class ExtractionMetricsTests
             var removed = _rows.RemoveAll(r => r.ProjectId == projectId && _discarded.Contains((r.ProjectId, r.Hash)));
             return Task.FromResult(removed);
         }
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 }

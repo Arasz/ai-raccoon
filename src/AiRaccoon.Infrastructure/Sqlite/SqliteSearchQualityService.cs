@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     Records search-quality signals (search, follow-through, grade) into the search_quality table.
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md.
 /// </summary>
-public sealed class SqliteSearchQualityService(SqliteConnectionFactory factory) : ISearchQualityService
+public sealed class SqliteSearchQualityService(ISqliteConnectionFactory factory) : ISearchQualityService
 {
     public async Task RecordSearchAsync(
         string correlationId,

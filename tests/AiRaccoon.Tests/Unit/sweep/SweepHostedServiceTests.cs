@@ -39,7 +39,7 @@ public sealed class SweepHostedServiceTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
-        _store = new SqliteMemoryStore(factory,
+        _store = TestData.CreateMemoryStore(factory,
             new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new StubChunker(), _time, new EmbeddingService());
         _service = new SweepHostedService(_store, new SweepService(_store, _time), _time,
             TestTelemetry.None, new FakeLogger<SweepHostedService>());

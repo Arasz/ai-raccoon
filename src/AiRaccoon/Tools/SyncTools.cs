@@ -10,7 +10,7 @@ namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tool over SyncService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class SyncTools(
-    SyncService sync,
+    ISyncService sync,
     SyncCloudStoreFactory syncFactory,
     ToolGate gate)
 {

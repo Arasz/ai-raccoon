@@ -32,7 +32,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
             new EmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }

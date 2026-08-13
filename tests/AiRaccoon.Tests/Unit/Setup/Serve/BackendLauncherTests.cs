@@ -99,7 +99,7 @@ public sealed class BackendLauncherTests : IDisposable
 
         result.Url.ShouldBe(UrlFor(port));
         result.ServeExitCode.ShouldBeNull();
-        var live = await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+        var live = await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
         live.ShouldBeTrue();
     }
 
@@ -138,8 +138,8 @@ public sealed class BackendLauncherTests : IDisposable
     {
         var port = FreePort();
         var clock = new FakeTimeProvider();
-        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
-            BackendLauncher.DefaultBudget, clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            clock, NullLogger<BackendLauncher>.Instance);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
@@ -185,8 +185,8 @@ public sealed class BackendLauncherTests : IDisposable
     {
         var port = FreePort();
         var clock = new FakeTimeProvider();
-        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
-            BackendLauncher.DefaultBudget, clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            clock, NullLogger<BackendLauncher>.Instance);
         using var caller = new CancellationTokenSource();
 
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
@@ -197,7 +197,8 @@ public sealed class BackendLauncherTests : IDisposable
             TestContext.Current.CancellationToken));
     }
 
-    private static BackendLauncher Launcher() => new(ServerProbe.ForLoopback(), NullLogger.Instance);
+    private static BackendLauncher Launcher() => new(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+        TimeProvider.System, NullLogger<BackendLauncher>.Instance);
 
     private static string UrlFor(int port) => $"http://127.0.0.1:{port}/mcp";
 
