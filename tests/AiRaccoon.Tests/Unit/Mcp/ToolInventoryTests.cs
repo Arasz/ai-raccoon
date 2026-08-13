@@ -118,14 +118,14 @@ public class ToolInventoryTests
         missing.ShouldBeEmpty();
     }
 
-    /// <summary>The packaged README is the nuget.org listing (PackageReadmeFile) — its tool count must track the registry, not go stale.</summary>
+    /// <summary>The server reference doc lists all MCP tools — its tool count heading must track the registry, not go stale.</summary>
     [Fact]
     public void PackagedReadme_ToolsHeading_MatchesActualToolCount()
     {
-        var readme = File.ReadAllText(RepoFile("src/AiRaccoon/README.md"));
-        var match = Regex.Match(readme, @"^## Tools \((\d+)\) and prompts \(\d+\)$", RegexOptions.Multiline);
+        var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
+        var match = Regex.Match(readme, @"^## Tools \((\d+)\)", RegexOptions.Multiline);
 
-        match.Success.ShouldBeTrue("Could not find the '## Tools (N) and prompts (N)' heading in src/AiRaccoon/README.md.");
+        match.Success.ShouldBeTrue("Could not find the '## Tools (N)' heading in docs/reference/agent-memory-server.md.");
         int.Parse(match.Groups[1].Value).ShouldBe(ToolMethods().Count());
     }
 
