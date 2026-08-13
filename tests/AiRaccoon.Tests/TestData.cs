@@ -13,6 +13,8 @@ using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Filtering.Policies;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests;
@@ -38,7 +40,8 @@ public static class TestData
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
-        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger);
+        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>(), null, timeProvider);
+        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, Array.Empty<IAutoTtlPolicy>());
     }
 
     /// <summary>Real o200k-backed markdown chunker for tests that exercise token bounds, not just structure.</summary>

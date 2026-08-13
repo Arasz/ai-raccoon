@@ -2,6 +2,8 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
@@ -163,6 +165,14 @@ public static partial class AppRegistrations
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
+            services.AddRequiredSingleton<INoiseStore, SqliteNoiseStore>();
+            services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
+            
+            // Register default noise filter policies
+            services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
+            
+            // Register default TTL policies
+            services.AddSingleton<IAutoTtlPolicy, PromotionScorerTtlPolicy>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
