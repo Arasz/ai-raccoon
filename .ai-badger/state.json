@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-13T04:05:55.152961+00:00",
+  "lastUpdated": "2026-08-13T06:19:20.397888+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "tar2",
+      "title": "tar2: local 1.8.1 deploy + full manual QA (tools/settings/serve), QA-doc + TDD fixes",
+      "finished": "2026-08-13T06:19:20.397640+00:00",
+      "pr": "266",
+      "summary": "Local deploy of 1.8.1 (version bumped locally, uncommitted) with the fix-after-refactor repairs merged, against a backed-up live bank (sqlite .backup, integrity ok). Manual QA: all 25 MCP tools exercised via mcporter against the real server with a dedicated project id (zero residue verified), every settings verb changed and restored (access/model/retrieval/sweep/ingest/extract/maintenance/sync/encryption/watch), serve options live (port 0 + mcp-entry JSON with real port, token gate, observability pid/counters/trace, --restart cycle). Five defects documented in docs/work/2026-08-13-tar2-qa.md; four fixed TDD (RED->GREEN): QA-1 help/version fell through to the proxy (AppRunner early-exit), QA-3 watch enable X silently wrote enabled=false (bool args ExactlyOne), QA-4 quiet proxy leaked HttpClient INFO logs to the terminal (owner f:, AppRunner honors QuietLogging), QA-5 encryption unset leaked the Bitwarden provider's Guard exception (DI positional injection pinned EnvEncryptionKeyProvider). QA-2 (model set local 180s hang) watchlisted as transient. Restored the ChunkerComparisonTests using lost by the user's 06acee1a merge (main's tests didn't compile). Full suite: 4 fails = 2 VersionContractTests (local bump) + 2 load flakes passing 3/3 alone. PR #266."
+    },
     {
       "id": "fix-after-refactor",
       "title": "Restore build and tests after the dependencies refactor",

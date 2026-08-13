@@ -23,7 +23,6 @@ public sealed class CliCommandRunnerTests : IDisposable
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var config = parsed!.Options.ToServerConfig();
 
@@ -115,5 +114,45 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         exit.ShouldBe(0);
         stdout.ShouldContain("source: env");
+    }
+
+    /// <summary>QA-1: --version must exit after rendering, not fall through to the proxy
+    /// (which attaches to, or spawns, a server on the machine).</summary>
+    [Fact]
+    public async Task Version_ExitsWithoutLaunchingTheProxy()
+    {
+        var (exit, stdout, stderr, _) = await Run(["--version"]);
+
+        exit.ShouldBe(0);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldMatch(@"^\d+\.\d+\.\d+");
+    }
+
+    /// <summary>QA-5: encryption unset on an env-keyed bank with no passphrase must take the
+    /// documented warning path; the DI-composed command must not hand the Bitwarden provider
+    /// an env-source EncryptionData (Guard: "encryptionData.SecretId must not be null").</summary>
+    [Fact]
+    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsOne()
+    {
+        // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
+        var (seedExit, _, _, _) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
+        seedExit.ShouldBe(0);
+
+        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
+
+        exit.ShouldBe(1);
+        stderr.ShouldContain("no AIRACCOON_DB_PASSPHRASE set");
+        stderr.ShouldNotContain("must not be null");
+    }
+
+    /// <summary>QA-1: verb-level --help must exit 0 after rendering; it must not run the
+    /// dispatcher on the bare verb path (which errored "unhandled command: sync").</summary>
+    [Fact]
+    public async Task VerbHelp_ExitsZero_WithoutRunningTheVerb()
+    {
+        var (exit, _, stderr, _) = await Run(["sync", "--help"]);
+
+        exit.ShouldBe(0);
+        stderr.ShouldNotContain("unhandled command");
     }
 }

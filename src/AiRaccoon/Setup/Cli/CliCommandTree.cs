@@ -237,8 +237,8 @@ internal static class CliCommandTree
             "Watch configuration (CLI-only channel): enable/disable, scope allowlist and concurrency per target. This family CONFIGURES watching — it does not register watches; registrations are created by agents via the memory_watch_add MCP tool.")
         {
             new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
-                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
-            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false" } },
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
+            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
             // Kept as a deprecated alias: the scope moved to `ingest scope` when it stopped being
             // watch-only, and breaking every existing setup script at the same time is gratuitous.
             ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"),

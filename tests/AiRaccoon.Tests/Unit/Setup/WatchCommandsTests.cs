@@ -98,4 +98,28 @@ public class WatchCommandsTests
     {
         Should.Throw<ArgumentNullException>(() => new WatchCommands(null!));
     }
+
+    /// <summary>QA-3: omitting the bool on watch enable/disable must be a parse error — the
+    /// System.CommandLine bool argument otherwise defaults to false, so `watch enable X`
+    /// silently DISABLES watching for X.</summary>
+    [Fact]
+    public void Enable_WithoutTheBoolArgument_IsAParseError()
+    {
+        CliArgs.TryParse(["watch", "enable", "acme"], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+    }
+
+    /// <summary>QA-3 control: the explicit form still parses and drives the verb.</summary>
+    [Fact]
+    public async Task Enable_WithExplicitBool_SetsIt()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, _) = await Run(["watch", "enable", "acme", "true"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("enabled");
+        store.Settings["watch.enabled.acme"].ShouldBe("true");
+    }
 }
