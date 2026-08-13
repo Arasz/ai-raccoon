@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -290,7 +289,7 @@ public sealed class WatchIntegrationTests
         first.Write("a.md", "zephyrtwo v2");
         first.Write("b.md", "zephyrbee new");
 
-        using var second = new Stack("restart", first.Time.GetUtcNow(), true);
+        using var second = new Stack("restart", first.Time.GetUtcNow());
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {
@@ -390,7 +389,7 @@ public sealed class WatchIntegrationTests
         first.Time.Advance(TimeSpan.FromMinutes(5));
         File.Delete(first.File("a.md"));
 
-        using var second = new Stack("restart-delete", first.Time.GetUtcNow(), true);
+        using var second = new Stack("restart-delete", first.Time.GetUtcNow());
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {
@@ -431,7 +430,7 @@ public sealed class WatchIntegrationTests
         first.Time.Advance(TimeSpan.FromMinutes(5));
         first.Write("readme.md", "zephyrsingle v2");
 
-        using var second = new Stack("restart-single", first.Time.GetUtcNow(), true);
+        using var second = new Stack("restart-single", first.Time.GetUtcNow());
         await second.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
         if (second.CatchUp.LastScan is { } scan)
         {

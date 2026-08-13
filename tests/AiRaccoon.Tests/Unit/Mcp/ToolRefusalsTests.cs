@@ -10,7 +10,6 @@ using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -152,7 +151,7 @@ public sealed class ToolRefusalsTests : IDisposable
 
             var port = FreePort();
             var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
             await host.StartAsync(TestContext.Current.CancellationToken);
             try
             {
@@ -217,7 +216,7 @@ public sealed class ToolRefusalsTests : IDisposable
     {
         var port = FreePort();
         var host = McpServerSetup.CreateServerHost(
-            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
         var fakeLogs = new FakeLoggerProvider();
         host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
 
@@ -263,7 +262,8 @@ public sealed class ToolRefusalsTests : IDisposable
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            new EmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
     }
 
@@ -312,7 +312,7 @@ public sealed class ToolRefusalsTests : IDisposable
         {
             var port = FreePort();
             var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot), default));
+                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
             var fakeLogs = new FakeLoggerProvider();
             host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
 

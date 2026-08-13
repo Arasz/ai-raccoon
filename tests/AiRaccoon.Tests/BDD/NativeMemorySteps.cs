@@ -7,7 +7,6 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Workspace;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
@@ -1475,7 +1474,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var text = (string)scenarioContext["FencedNote"];
         // A budget smaller than the fence's own token count: a fence-unaware chunker would be
         // forced to split it.
-        scenarioContext["Chunks"] = RealChunker.Chunk(text, 8, 0);
+        scenarioContext["Chunks"] = RealChunker.Chunk(text, 8);
     }
 
     [Given(@"workspace ""(.*)"" contains entries ""(.*)"" and ""(.*)""")]
@@ -1560,7 +1559,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         _lastSearch = await _store.SearchAsync(
-            new SearchQuery(projectId, query, SearchScope.All, ContextLabel: context),
+            new SearchQuery(projectId, query, ContextLabel: context),
             CancellationToken.None);
     }
 
@@ -1723,7 +1722,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["ColdHash"] = cold.Hash;
         for (var i = 0; i < 2; i++)
         {
-            await _store.SearchAsync(new SearchQuery(projectId, "blorptastic", SearchScope.All),
+            await _store.SearchAsync(new SearchQuery(projectId, "blorptastic"),
                 CancellationToken.None);
         }
     }

@@ -184,7 +184,7 @@ public sealed class SharedExtractionRunnerTests
             new PromotionQueueRow("acme", "q2", "q2.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version),
             new PromotionQueueRow("acme", "q3", "q3.md", "v", "doc.md", 0.1, [], 0, 0, PromotionScorer.Version)
         ];
-        store.Candidates["acme"] = [Row("new1", "organic fact about beta", sourceFile: "doc.md")];
+        store.Candidates["acme"] = [Row("new1", sourceFile: "doc.md")];
 
         await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);

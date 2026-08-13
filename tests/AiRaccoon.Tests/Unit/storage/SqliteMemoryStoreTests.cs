@@ -690,7 +690,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var shared = await _store.ShareAsync("acme", offTopic.Hash, TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", query, SearchScope.All, Limit: 25, MinScore: 0.0),
+            new SearchQuery("acme", query, Limit: 25, MinScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results[0].Path.ShouldBe(bestMatch.Entry.Path,

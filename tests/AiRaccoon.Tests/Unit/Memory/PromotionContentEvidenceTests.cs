@@ -14,10 +14,6 @@ public sealed class PromotionContentEvidenceTests
 {
     private static readonly string[] AllProjects = ["proj-alpha", "proj-beta", "proj-gamma"];
 
-    private static ContentEvidence Evaluate(string value, ProvenanceArchetype archetype = ProvenanceArchetype.WorkNote,
-        string projectId = "proj-alpha") =>
-        PromotionContentEvidence.Evaluate(value, archetype, projectId, AllProjects);
-
     private static readonly CandidateFeatures NeutralFeatures = new(
         RuleDensity: 0, MeasureWords: 0, NumUnit: 0, Ephemera: 0, Superseded: false,
         FindingRows: 0, TableFrac: 0, LinkDensity: 0, DocnameDensity: 0, VersionRows: 0,
@@ -26,6 +22,10 @@ public sealed class PromotionContentEvidenceTests
         ForeignSubject: false, HeadingStart: false, StatusOpener: false, StatusVocab: 0,
         SecondPerson: false, CommitHashes: 0, RealMeasures: 0, DurableLoose: 0, DatedFact: false,
         FirstPerson: 0, MetaHeader: 0, Imperatives: 0, Urls: 0, ContentsIndex: false, DirReadme: false);
+
+    private static ContentEvidence Evaluate(string value, ProvenanceArchetype archetype = ProvenanceArchetype.WorkNote,
+        string projectId = "proj-alpha") =>
+        PromotionContentEvidence.Evaluate(value, archetype, projectId, AllProjects);
 
     [Fact]
     public void GeneralizableRuleLanguage_FiresPositiveAdjustment_WithReason()
@@ -83,12 +83,12 @@ public sealed class PromotionContentEvidenceTests
     public void ForeignProjectMention_IsProximityGated_NotBareSubstring()
     {
         var subject = Evaluate("proj-beta's pre-push gate rejects any commit missing a changelog entry " +
-                                "for the release train, which keeps the history reviewable across every " +
-                                "downstream consumer that depends on a clean, bisectable commit log.");
+                               "for the release train, which keeps the history reviewable across every " +
+                               "downstream consumer that depends on a clean, bisectable commit log.");
         var padding = string.Concat(Enumerable.Repeat("The release train keeps a changelog entry for every " +
-                                                        "commit so history stays reviewable. ", 6));
+                                                      "commit so history stays reviewable. ", 6));
         var mentionedLate = Evaluate(padding + "A practice later adopted by proj-beta as well, long after " +
-                                                "this paragraph opened its case and said nothing about it.");
+                                     "this paragraph opened its case and said nothing about it.");
 
         subject.Reasons.ShouldContain("foreign-subject");
         mentionedLate.Reasons.ShouldNotContain("foreign-subject");
@@ -157,7 +157,7 @@ public sealed class PromotionContentEvidenceTests
             "| doc | path |\n| --- | --- |\n| [a](docs/a.md) | [b](docs/b.md) |\n| [c](docs/c.md) | [d](docs/d.md) |\n" +
             "| [e](docs/e.md) | [f](docs/f.md) |\n| [g](docs/g.md) | [h](docs/h.md) |");
         var prose = Evaluate("The cache invalidation queue clears entries once their TTL expires, keeping " +
-                              "memory pressure predictable across long-running sessions without operator input.");
+                             "memory pressure predictable across long-running sessions without operator input.");
 
         pointerHeavy.Reasons.ShouldContain("pointer-density");
         pointerHeavy.Adjustment.ShouldBeLessThan(prose.Adjustment);
@@ -241,9 +241,9 @@ public sealed class PromotionContentEvidenceTests
     public void PlanArchetype_CapsRuleLanguageBonus()
     {
         var ruleLanguageText = "This is by design: never bypass the invalidation queue, it is a hard invariant " +
-                                "recorded here so nobody has to relearn it, and the rule is required reading.";
+                               "recorded here so nobody has to relearn it, and the rule is required reading.";
 
-        var asWorkNote = Evaluate(ruleLanguageText, ProvenanceArchetype.WorkNote);
+        var asWorkNote = Evaluate(ruleLanguageText);
         var asPlan = Evaluate(ruleLanguageText, ProvenanceArchetype.Plan);
 
         asPlan.Adjustment.ShouldBeLessThan(asWorkNote.Adjustment);

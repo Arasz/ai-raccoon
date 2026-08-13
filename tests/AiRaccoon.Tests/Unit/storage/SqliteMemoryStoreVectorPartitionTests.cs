@@ -83,7 +83,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "narwhals", SearchScope.All, WorkspaceId: "ws-1", Limit: 10,
+            new SearchQuery("acme", "narwhals", WorkspaceId: "ws-1", Limit: 10,
                 MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 

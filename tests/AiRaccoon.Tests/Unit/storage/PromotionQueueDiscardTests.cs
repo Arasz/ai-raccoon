@@ -72,7 +72,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     public async Task DiscardedHash_IsNotReQueuedByUpsert()
     {
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "discarded fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "discarded fact"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "discarded fact", 1.0)],
             TestContext.Current.CancellationToken);
@@ -94,7 +94,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     public async Task PruneRejectedAsync_RemovesSharedTwinAndDiscardedResidue()
     {
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "durable shared fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "durable shared fact"),
             TestContext.Current.CancellationToken);
         // Pre-fix residue order: the twin is queued FIRST, then the content gets shared.
         await _queueStore.UpsertAsync("acme", [Candidate("fresh-hash-1", "durable shared fact", 2.0)],
@@ -134,7 +134,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     public async Task Promote_DoesNotRememberClaimsAsDiscards()
     {
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "promotable fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "promotable fact"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "promotable fact", 2.0)],
             TestContext.Current.CancellationToken);
@@ -174,7 +174,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     {
         var service = CreateService();
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "rejected fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "rejected fact"),
             TestContext.Current.CancellationToken);
         await service.ProposeAsync("acme", [Candidate(entry.Hash, "rejected fact", 1.0)],
             TestContext.Current.CancellationToken);

@@ -20,8 +20,7 @@ public class SearchLatencyBenchmark
     /// <summary>The fixed 10-query set: BenchmarkDotNet runs every benchmark once per query, so results are per-query stable rather than averaged over a round-robin.</summary>
     public static IEnumerable<string> Queries => SearchFixtureBank.Queries;
 
-    [ParamsSource(nameof(Queries))]
-    public string Query { get; set; } = "";
+    [ParamsSource(nameof(Queries))] public string Query { get; set; } = "";
 
     [GlobalSetup]
     public async Task Setup() => _bank = await SearchFixtureBank.BuildAsync();
@@ -32,18 +31,18 @@ public class SearchLatencyBenchmark
     /// <summary>Headline case: hybrid FTS+vector search, scope=all, limit=10.</summary>
     [Benchmark(Baseline = true)]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_Limit10() =>
-        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query, SearchScope.All,
+        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
             Limit: 10, MinScore: 0.0));
 
     /// <summary>Vector-only (FtsWeight=0): isolates vec0 KNN + fusion + deferred-snippet cost.</summary>
     [Benchmark]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_VectorOnly_Limit10() =>
-        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query, SearchScope.All,
+        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
             Limit: 10, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1));
 
     /// <summary>FTS-only (VectorWeight=0): isolates the FTS5 bm25 + snippet() cost.</summary>
     [Benchmark]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_FtsOnly_Limit10() =>
-        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query, SearchScope.All,
+        _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
             Limit: 10, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0));
 }

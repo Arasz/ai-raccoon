@@ -71,7 +71,7 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task HttpHost_WithPortZero_BindsAnEphemeralPort()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, 0));
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http));
 
         await host.StartAsync(TestContext.Current.CancellationToken);
 

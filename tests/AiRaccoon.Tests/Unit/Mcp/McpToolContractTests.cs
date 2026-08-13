@@ -82,7 +82,7 @@ public sealed class McpToolContractTests : IDisposable
     private List<McpServerTool> Tools()
     {
         var host = McpServerSetup.CreateServerHost(
-            new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(_dataRoot), default));
+            new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(_dataRoot)));
         var options = host.Services.GetRequiredService<IOptions<McpServerOptions>>().Value;
         return
         [

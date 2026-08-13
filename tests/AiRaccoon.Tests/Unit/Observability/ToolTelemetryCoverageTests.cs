@@ -89,7 +89,7 @@ public sealed class ToolTelemetryCoverageTests
         try
         {
             var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(dataRoot), default));
+                new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(dataRoot)));
 
             host.Services.GetServices<McpServerTool>().ShouldNotBeEmpty();
             host.Services.GetService<ToolCallMetrics>().ShouldNotBeNull();

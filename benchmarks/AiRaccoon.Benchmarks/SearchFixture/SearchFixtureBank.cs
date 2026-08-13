@@ -1,13 +1,12 @@
 using System.Text;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -93,8 +92,10 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var embeddingService = new EmbeddingService();
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
-        var fileTypeMatcher = new FileTypeMatcher([new MarkdownFileTypeHandler(markdownChunker),
-            new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))]);
+        var fileTypeMatcher = new FileTypeMatcher([
+            new MarkdownFileTypeHandler(markdownChunker),
+            new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
+        ]);
         var embedder = new EntryEmbedder(embeddingService);
         var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System);
         var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>(), null, TimeProvider.System);
@@ -159,7 +160,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             $"({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
-                new SearchQuery(ProjectId, Queries[0], SearchScope.All, Limit: 10, MinScore: 0.0),
+                new SearchQuery(ProjectId, Queries[0], Limit: 10, MinScore: 0.0),
                 cancellationToken)
             .ConfigureAwait(false);
         if (probe.Count == 0)

@@ -60,7 +60,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _proxyServer = McpServer.Create(
             new StreamServerTransport(toProxy.Reader.AsStream(), fromProxy.Writer.AsStream(), "proxy",
                 NullLoggerFactory.Instance),
-            options, NullLoggerFactory.Instance, null);
+            options, NullLoggerFactory.Instance);
         _proxyServerRun = _proxyServer.RunAsync(CancellationToken.None);
 
         _wire = new ReadRecorder(fromProxy.Reader.AsStream());
@@ -96,17 +96,6 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         var factory = new McpServerFactory();
         _reacquired.Add(factory);
         return await factory.CreateClientAsync();
-    }
-
-    /// <summary>Backs the forwarder's re-acquire path with this test's counted re-acquire.</summary>
-    private sealed class ReacquireSessions(ProxyForwardTests owner) : IBackendSessions
-    {
-        public string Url => string.Empty;
-
-        public Task<McpClient> OpenAsync(string? revision, CancellationToken ctx) =>
-            owner.ReacquireAsync(revision, ctx);
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     [Fact]
@@ -243,6 +232,16 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         {
             await Task.Delay(25, cancellationToken);
         }
+    }
+
+    /// <summary>Backs the forwarder's re-acquire path with this test's counted re-acquire.</summary>
+    private sealed class ReacquireSessions(ProxyForwardTests owner) : IBackendSessions
+    {
+        public string Url => string.Empty;
+
+        public Task<McpClient> OpenAsync(string? revision, CancellationToken ctx) => owner.ReacquireAsync(revision, ctx);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     /// <summary>Records what the forwarder hands the backend, then delegates to the live session.</summary>

@@ -61,7 +61,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     public async Task DeletingAnEntry_DropsItsQueuedCandidate()
     {
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "doomed fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "doomed fact"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "doomed fact", 1.0)],
             TestContext.Current.CancellationToken);
@@ -197,12 +197,12 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     public async Task DeletingAnUnrelatedEntry_DoesNotAffectAQueueRowBackedByALiveProjectScopeEntry()
     {
         var kept = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "kept fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "kept fact"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(kept.Hash, "kept fact", 1.0)],
             TestContext.Current.CancellationToken);
         var unrelated = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "unrelated fact", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "unrelated fact"),
             TestContext.Current.CancellationToken);
 
         await _store.DeleteAsync("acme", unrelated.Hash, TestContext.Current.CancellationToken);
@@ -220,7 +220,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     public async Task Prune_TreatsACustomScopeSiblingAsAnOrphan_ButNotALiveProjectScopeEntry()
     {
         var live = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "still project-scoped", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "still project-scoped"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(live.Hash, "still project-scoped", 2.0)],
             TestContext.Current.CancellationToken);
@@ -261,7 +261,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         await _queueStore.UpsertAsync("other", [Candidate("orphan-2", "also gone", 1.0)],
             TestContext.Current.CancellationToken);
         var live = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "still here", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "still here"),
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync("acme", [Candidate(live.Hash, "still here", 2.0)],
             TestContext.Current.CancellationToken);

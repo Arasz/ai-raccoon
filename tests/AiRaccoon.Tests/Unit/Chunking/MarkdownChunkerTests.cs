@@ -13,7 +13,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_NoteLongerThanMaxTokens_SplitsAtLineBoundariesWithinBudget()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("aaaa\nbbbb\ncccc\ndddd\n", 10, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("aaaa\nbbbb\ncccc\ndddd\n", 10);
 
         chunks.ShouldBe(["aaaa\nbbbb\n", "cccc\ndddd\n"]);
     }
@@ -29,7 +29,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_NoteWithinBudget_ReturnsWholeNoteAsSingleChunk()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("aaaa\nbbbb\n", 10, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("aaaa\nbbbb\n", 10);
 
         chunks.ShouldBe(["aaaa\nbbbb\n"]);
     }
@@ -39,7 +39,7 @@ public class MarkdownChunkerTests
     {
         var text = "# Title\n\n```csharp\nvar x = 1;\nvar y = 2;\n```\n\nTail.\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 12, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 12);
 
         chunks.ShouldBe(["# Title\n\n", "```csharp\nvar x = 1;\nvar y = 2;\n```\n", "\nTail.\n"]);
     }
@@ -49,7 +49,7 @@ public class MarkdownChunkerTests
     {
         var fence = "```\nvar x = 1;\nvar y = 2;\n```\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(fence, 5, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk(fence, 5);
 
         chunks.ShouldBe([fence]);
     }
@@ -57,7 +57,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_TildeFence_IsNeverSplit()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("~~~\ncode\n~~~\n", 5, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("~~~\ncode\n~~~\n", 5);
 
         chunks.ShouldBe(["~~~\ncode\n~~~\n"]);
     }
@@ -65,7 +65,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_UnclosedFence_KeepsRestOfNoteInOneChunk()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 5, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 5);
 
         chunks.ShouldBe(["```\ncode\nmore\n"]);
     }
@@ -75,7 +75,7 @@ public class MarkdownChunkerTests
     {
         var text = "a\n\n```\nx\n```\n\nb\n\n```\ny\n```\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 3, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 3);
 
         chunks.ShouldBe(["a\n\n", "```\nx\n```\n", "\nb\n", "\n", "```\ny\n```\n"]);
     }
@@ -94,7 +94,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_CrLfInput_NormalizesLineEndings()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("aa\r\nbb\r\ncc", 5, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("aa\r\nbb\r\ncc", 5);
 
         chunks.ShouldBe(["aa\n", "bb\ncc"]);
         chunks.ShouldAllBe(chunk => !chunk.Contains('\r'));
@@ -103,7 +103,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_EmptyText_ReturnsNoChunks()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("", 10, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("", 10);
 
         chunks.ShouldBeEmpty();
     }
@@ -111,7 +111,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_LineWithoutTrailingNewline_IsKeptWhole()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("aa\nbb\ncc", 4, 0);
+        var chunks = new MarkdownChunker(CharCount).Chunk("aa\nbb\ncc", 4);
 
         chunks.ShouldBe(["aa\n", "bb\n", "cc"]);
     }
@@ -119,7 +119,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_WithMaxTokensZero_Throws() =>
         Should.Throw<ArgumentOutOfRangeException>(() =>
-            new MarkdownChunker(CharCount).Chunk("aa", 0, 0));
+            new MarkdownChunker(CharCount).Chunk("aa", 0));
 
     [Fact]
     public void Split_WithNegativeOverlay_Throws() =>
@@ -134,7 +134,7 @@ public class MarkdownChunkerTests
     [Fact]
     public void Split_WithNullText_Throws() =>
         Should.Throw<ArgumentNullException>(() =>
-            new MarkdownChunker(CharCount).Chunk(null!, 10, 0));
+            new MarkdownChunker(CharCount).Chunk(null!, 10));
 
     [Fact]
     public void Split_WithNullTokenCounter_Throws() =>

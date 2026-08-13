@@ -179,11 +179,11 @@ public sealed class PromotionQueueServiceTests : IDisposable
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         // Queue candidates are committed entries by construction (propose extracts from the
         // project context), so the hashes must exist there for ShareAsync.
-        var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact", null, null, null, null, null),
+        var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact"),
             TestContext.Current.CancellationToken);
-        var high = await store.WriteAsync(new MemoryWriteRequest("acme", "high fact", null, null, null, null, null),
+        var high = await store.WriteAsync(new MemoryWriteRequest("acme", "high fact"),
             TestContext.Current.CancellationToken);
-        var mid = await store.WriteAsync(new MemoryWriteRequest("acme", "mid fact", null, null, null, null, null),
+        var mid = await store.WriteAsync(new MemoryWriteRequest("acme", "mid fact"),
             TestContext.Current.CancellationToken);
         await _service.ProposeAsync("acme",
             [
@@ -208,9 +208,9 @@ public sealed class PromotionQueueServiceTests : IDisposable
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
-        var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact", null, null, null, null, null),
+        var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact"),
             TestContext.Current.CancellationToken);
-        var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact", null, null, null, null, null),
+        var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact"),
             TestContext.Current.CancellationToken);
 
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -423,11 +423,11 @@ public sealed class PromotionQueueServiceTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var doomed = await store.WriteAsync(
-            new MemoryWriteRequest("acme", "doomed entry", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "doomed entry"),
             TestContext.Current.CancellationToken);
         await store.SetEntryTtlAsync("acme", doomed.Hash, 1, TestContext.Current.CancellationToken);
         var healthy = await store.WriteAsync(
-            new MemoryWriteRequest("acme", "healthy entry", null, null, null, null, null),
+            new MemoryWriteRequest("acme", "healthy entry"),
             TestContext.Current.CancellationToken);
         _clock.Advance(TimeSpan.FromDays(2)); // older than the TTL, rating below any threshold
         await _service.ProposeAsync("acme",

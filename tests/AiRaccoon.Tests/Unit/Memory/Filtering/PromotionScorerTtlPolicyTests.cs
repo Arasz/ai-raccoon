@@ -13,7 +13,7 @@ public class PromotionScorerTtlPolicyTests
     public void EvaluateTtl_WithEmptyContent_AssignsTransientTtl()
     {
         // Arrange
-        var request = new MemoryWriteRequest("proj-1", "   ", null, null, null, null, null);
+        var request = new MemoryWriteRequest("proj-1", "   ");
 
         // Act
         var ttl = _sut.EvaluateTtl(request);
@@ -27,7 +27,7 @@ public class PromotionScorerTtlPolicyTests
     {
         // Arrange
         var content = "This is a highly detailed architectural decision record explaining how the SQLite memory store works and why we chose FTS5 for the search engine.";
-        var request = new MemoryWriteRequest("proj-1", content, null, null, null, "docs/adr-001.md", null);
+        var request = new MemoryWriteRequest("proj-1", content, null, null, null, "docs/adr-001.md");
 
         // Act
         var ttl = _sut.EvaluateTtl(request);
@@ -41,7 +41,7 @@ public class PromotionScorerTtlPolicyTests
     {
         // Arrange
         var content = "test run failed";
-        var request = new MemoryWriteRequest("proj-1", content, null, null, null, null, null);
+        var request = new MemoryWriteRequest("proj-1", content);
 
         // Act
         var ttl = _sut.EvaluateTtl(request);
