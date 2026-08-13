@@ -1,81 +1,81 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/learned-skills.schema.json",
-    "title": "ai-badger learned skills manifest",
-    "description": "Provenance and idempotence record for Hermes learned skills synced into a project. Lives at .ai-badger/skills-data/hermes/learned.json. Separate from manifest.json: the framework does not own these files.",
-    "type": "object",
-    "required": [
-        "version",
-        "skills"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "version": {
-            "type": "integer",
-            "minimum": 1
-        },
-        "skills": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": [
-                    "name",
-                    "category",
-                    "target",
-                    "sourcePath",
-                    "sourceHash",
-                    "syncedAt",
-                    "status"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "minLength": 1,
-                        "pattern": "^[^/\\\\]+$"
-                    },
-                    "category": {
-                        "type": "string",
-                        "minLength": 1,
-                        "pattern": "^[^/\\\\]+$",
-                        "description": "Hermes category segment; 'uncategorized' when the skill has none."
-                    },
-                    "target": {
-                        "type": "string",
-                        "pattern": "^\\.ai-badger/skills/learned/[^/\\\\]+/[^/\\\\]+$",
-                        "description": "Project-relative destination. Writes are confined to learned/."
-                    },
-                    "sourcePath": {
-                        "type": "string",
-                        "minLength": 1,
-                        "pattern": "^[^/\\\\][^\\\\]*$",
-                        "not": {
-                            "pattern": "(^|/)\\.\\.(/|$)"
-                        },
-                        "description": "Relative to the Hermes skills root — never absolute, never a home path."
-                    },
-                    "sourceHash": {
-                        "type": "string",
-                        "pattern": "^[0-9a-f]{64}$",
-                        "description": "badger_lib.dir_content_hash content hash of the source directory."
-                    },
-                    "syncedAt": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "ISO-8601 UTC timestamp of the last sync decision."
-                    },
-                    "status": {
-                        "enum": [
-                            "synced",
-                            "orphaned",
-                            "conflict"
-                        ]
-                    }
-                }
-            }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/learned-skills.schema.json",
+  "title": "ai-badger learned skills manifest",
+  "description": "Provenance and idempotence record for Hermes learned skills synced into a project. Lives at .ai-badger/skills-data/hermes/learned.json. Separate from manifest.json: the framework does not own these files.",
+  "type": "object",
+  "required": [
+    "version",
+    "skills"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "category",
+          "target",
+          "sourcePath",
+          "sourceHash",
+          "syncedAt",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\]+$"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\]+$",
+            "description": "Hermes category segment; 'uncategorized' when the skill has none."
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^\\.ai-badger/skills/learned/[^/\\\\]+/[^/\\\\]+$",
+            "description": "Project-relative destination. Writes are confined to learned/."
+          },
+          "sourcePath": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\][^\\\\]*$",
+            "not": {
+              "pattern": "(^|/)\\.\\.(/|$)"
+            },
+            "description": "Relative to the Hermes skills root — never absolute, never a home path."
+          },
+          "sourceHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "badger_lib.dir_content_hash content hash of the source directory."
+          },
+          "syncedAt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ISO-8601 UTC timestamp of the last sync decision."
+          },
+          "status": {
+            "enum": [
+              "synced",
+              "orphaned",
+              "conflict"
+            ]
+          }
         }
+      }
     }
+  }
 }

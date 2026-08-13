@@ -32,7 +32,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-
 def _bootstrap_lib() -> Path:
     """Put the framework's engine/ and tooling/ on sys.path and return its root.
 
@@ -147,6 +146,11 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from _shared import (  # noqa: E402 — re-exported for backward compatibility
+    _test_ignore, PROJECT_LOCAL_FILE, MANAGED_HEADER, _MANAGED_PREFIX,
+    cfg_get, requirement_met, _condition_met, _within,
+)
+
 # Read from each skill's own `scope:` frontmatter (ADR-0018), against the catalog
 # scaffold_skills actually reads, so a default-scope skill shipped from another stack is
 # not offered here and then reported as missing.
@@ -215,14 +219,14 @@ def demote_headings(text: str, levels: int = 2) -> str:
 # The shared context, the manifest's generated-config ledger, and the seven collaborators
 from scaffold_context import ScaffoldContext  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
-from hook_wiring import HookWiring  # noqa: E402
+from hook_wiring import HookWiring, merge_hooks  # noqa: E402
 from template_rendering import TemplateRendering, invariant_summary  # noqa: E402
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
-from skill_delivery import SkillDelivery  # noqa: E402
+from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 

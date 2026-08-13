@@ -1,564 +1,591 @@
 {
-  "$schema": "../../../schemas/learned-skills.schema.json",
-  "skills": [
-    {
-      "category": "ai-raccoon",
-      "name": "ai-raccoon-new-service",
-      "sourceHash": "096bdc74929b7b0e3791c19ec5f19716a46626797ae7c6fe4d4ba216e6b9c0dd",
-      "sourcePath": "ai-raccoon/ai-raccoon-new-service",
-      "status": "synced",
-      "syncedAt": "2026-08-11T14:54:17Z",
-      "target": ".ai-badger/skills/learned/ai-raccoon/ai-raccoon-new-service"
-    },
-    {
-      "category": "ai-raccoon",
-      "name": "design-gate-audit",
-      "sourceHash": "4714ed230dff232be17adcd6c1f490b917000b7d9634a80a106f696960e0870c",
-      "sourcePath": "ai-raccoon/design-gate-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:12:42Z",
-      "target": ".ai-badger/skills/learned/ai-raccoon/design-gate-audit"
-    },
-    {
-      "category": "ai-raccoon",
-      "name": "sqlite-schema-review",
-      "sourceHash": "4eb6078a262300943506102ae92b991535520c6bab649fd8f2de0259990cf894",
-      "sourcePath": "ai-raccoon/sqlite-schema-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:18:20Z",
-      "target": ".ai-badger/skills/learned/ai-raccoon/sqlite-schema-review"
-    },
-    {
-      "category": "ai-raccoon-ops",
-      "name": "ai-raccoon-deployment-ops",
-      "sourceHash": "45bb22bc8d6e99437a1d7364c4d138420d219747ebdd2dc7434d20d743d50a39",
-      "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
-      "status": "synced",
-      "syncedAt": "2026-08-07T06:17:00Z",
-      "target": ".ai-badger/skills/learned/ai-raccoon-ops/ai-raccoon-deployment-ops"
-    },
-    {
-      "category": "data-analysis",
-      "name": "memory-bank-audit",
-      "sourceHash": "1ff33ae80f24c74dce34f4cc4e2a7dc082ca48085d1dbaca31be3709e89732f1",
-      "sourcePath": "data-analysis/memory-bank-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-06T13:12:46Z",
-      "target": ".ai-badger/skills/learned/data-analysis/memory-bank-audit"
-    },
-    {
-      "category": "data-analysis",
-      "name": "sqlite-bank-space-diagnosis",
-      "sourceHash": "98b906fb4082e012a401d032db5303f3d28233c9d3a7d9bb766d33b827384d03",
-      "sourcePath": "data-analysis/sqlite-bank-space-diagnosis",
-      "status": "synced",
-      "syncedAt": "2026-08-06T23:27:26Z",
-      "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
-    },
-    {
-      "category": "devops",
-      "name": "azure-swa-custom-domains",
-      "sourceHash": "9dbfd86cd2178323c4bfaa3fa691044a40d3c9fac7aca51bbdc109563c8728e7",
-      "sourcePath": "devops/azure-swa-custom-domains",
-      "status": "synced",
-      "syncedAt": "2026-08-11T17:45:34Z",
-      "target": ".ai-badger/skills/learned/devops/azure-swa-custom-domains"
-    },
-    {
-      "category": "hermes",
-      "name": "hermes-memory-provider-development",
-      "sourceHash": "da1e52e8323a74ff265095be3a67433a93932233264b42da0fb9979e1d352412",
-      "sourcePath": "hermes/hermes-memory-provider-development",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:19:16Z",
-      "target": ".ai-badger/skills/learned/hermes/hermes-memory-provider-development"
-    },
-    {
-      "category": "mcp",
-      "name": "mcp-tool-indexing",
-      "sourceHash": "4b9c2a6e38f8a2dfb1abfe2d1c42084ac8b90bb069b2249d3a53246f11fbca4f",
-      "sourcePath": "mcp/mcp-tool-indexing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T12:47:31Z",
-      "target": ".ai-badger/skills/learned/mcp/mcp-tool-indexing"
-    },
-    {
-      "category": "mcp",
-      "name": "mcp-tool-surface-testing",
-      "sourceHash": "308dac2737285c1454f5c7bc585c535d2a5b52eca6138a3ab28302a93d2e1e78",
-      "sourcePath": "mcp/mcp-tool-surface-testing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T09:22:50Z",
-      "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
-    },
-    {
-      "category": "software-development",
-      "name": "dotnet-hosted-service-review",
-      "sourceHash": "fd32d7a17e99fead5e13028a6854b43b3b814cc764e3fa369a0d04461dcd4b59",
-      "sourcePath": "software-development/dotnet-hosted-service-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T12:50:01Z",
-      "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-review"
-    },
-    {
-      "category": "software-development",
-      "name": "dotnet-hosted-service-testing",
-      "sourceHash": "8836391dfb47e4a597a730217eea39babc2614368468d5e444cc72c51e251f3a",
-      "sourcePath": "software-development/dotnet-hosted-service-testing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T12:55:58Z",
-      "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-testing"
-    },
-    {
-      "category": "software-development",
-      "name": "dotnet-logger-message-design",
-      "sourceHash": "018fecbaba6e4f8e68db4b06bbd2ea41d7e68c114dba07082c79129bb3e73a3b",
-      "sourcePath": "software-development/dotnet-logger-message-design",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:03:10Z",
-      "target": ".ai-badger/skills/learned/software-development/dotnet-logger-message-design"
-    },
-    {
-      "category": "software-development",
-      "name": "dotnext-library",
-      "sourceHash": "a49fa02f2d48995153fed77303d09baec392a5399f275fc0e22dca311ccf29ad",
-      "sourcePath": "software-development/dotnext-library",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:57:31Z",
-      "target": ".ai-badger/skills/learned/software-development/dotnext-library"
-    },
-    {
-      "category": "software-development",
-      "name": "observability-contract-review",
-      "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
-      "sourcePath": "software-development/observability-contract-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:55:27Z",
-      "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
-    },
-    {
-      "category": "software-development",
-      "name": "red-proof",
-      "sourceHash": "c61738f8e3d00a699a890c7b1384a9c062ecba683a1916caf7ed07287d556bb1",
-      "sourcePath": "software-development/red-proof",
-      "status": "synced",
-      "syncedAt": "2026-08-09T20:42:42Z",
-      "target": ".ai-badger/skills/learned/software-development/red-proof"
-    },
-    {
-      "category": "software-development",
-      "name": "scripts-tooling-refactor",
-      "sourceHash": "52def0f92cf4b7552c7414823739e7b5c8399de9751f7a11344fa92b3647c7c8",
-      "sourcePath": "software-development/scripts-tooling-refactor",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:07:01Z",
-      "target": ".ai-badger/skills/learned/software-development/scripts-tooling-refactor"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-badger-contribution",
-      "sourceHash": "1c0f728f8e55c9cd44da3cebda1af666889cbfd389516d9d9d9bf5fb800397b8",
-      "sourcePath": "software-development/ai-badger-contribution",
-      "status": "synced",
-      "syncedAt": "2026-08-06T20:54:59Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-contribution"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-badger-project-ops",
-      "sourceHash": "31bc79d439c8aba3cb8a2be3088a5e280eda3f9b0dc1490cd728666096ed03d2",
-      "sourcePath": "ai-badger-project-ops",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:38:31Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-badger-task-orchestration",
-      "sourceHash": "536c565f39cd7d539d539969363e3498b1dddc3bac819e86c99d5aa7a8527ec8",
-      "sourcePath": "autonomous-ai-agents/ai-badger-task-orchestration",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:24:43Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-task-orchestration"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-badger-worktree-pitfalls",
-      "sourceHash": "150ac0f3cb42db7a3f0ef68a45005deb2c0ee616af3f09a31bb46a706fa467b4",
-      "sourcePath": "ai-badger-worktree-pitfalls",
-      "status": "synced",
-      "syncedAt": "2026-08-11T17:21:55Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-worktree-pitfalls"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-raccoon-deployment-ops",
-      "sourceHash": "d7ea13e37e85e251cb2771481c413aa666fb277acd277cf7ca5cc5c489e12da9",
-      "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
-      "status": "synced",
-      "syncedAt": "2026-08-13T06:23:45Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-deployment-ops"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-raccoon-mcp-client",
-      "sourceHash": "857dc25ac9b70d6b4596b6d62051dc003927115f14530a62333c06c4ffaba8b3",
-      "sourcePath": "ai-raccoon-mcp-client",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:06:57Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-mcp-client"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-raccoon-new-service",
-      "sourceHash": "9445412dc2c11923aaa7af44802816bc9d250740b65cc0d2d50fa705e3ed9f3c",
-      "sourcePath": "ai-raccoon/ai-raccoon-new-service",
-      "status": "synced",
-      "syncedAt": "2026-08-11T15:50:45Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-new-service"
-    },
-    {
-      "category": "uncategorized",
-      "name": "ai-raccoon-retrieval-analysis",
-      "sourceHash": "07b0ad18bbe50a03ce68fa84808888ac80006503e9eb5e40c9d3c574b97444aa",
-      "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
-      "status": "synced",
-      "syncedAt": "2026-08-11T14:15:57Z",
-      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
-    },
-    {
-      "category": "uncategorized",
-      "name": "artifact-verification",
-      "sourceHash": "c7278df53e31be91dd487c2a5378aae34b3fa1ddb9397b06d4a234fd83bd109d",
-      "sourcePath": "artifact-verification",
-      "status": "synced",
-      "syncedAt": "2026-08-06T13:32:01Z",
-      "target": ".ai-badger/skills/learned/uncategorized/artifact-verification"
-    },
-    {
-      "category": "uncategorized",
-      "name": "code-review-evidence",
-      "sourceHash": "c66fe5e223834c5c17c3537a80a2f9cfc692514273c4eebe7ad3a516d1b5ade4",
-      "sourcePath": "software-development/code-review-evidence",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:13:57Z",
-      "target": ".ai-badger/skills/learned/uncategorized/code-review-evidence"
-    },
-    {
-      "category": "uncategorized",
-      "name": "cron-watchdog-authoring",
-      "sourceHash": "a3ab59306902b119941b948280bfce1c143f5f945b62c30204bf272b7c0ac00f",
-      "sourcePath": "cron-watchdog-authoring",
-      "status": "synced",
-      "syncedAt": "2026-08-07T05:47:00Z",
-      "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
-    },
-    {
-      "category": "uncategorized",
-      "name": "design-gate-audit",
-      "sourceHash": "33ccc233b4b7a963a699f2f66f90c2f8230241446967a6cfb1621e5a39abcd87",
-      "sourcePath": "ai-raccoon/design-gate-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:12:53Z",
-      "target": ".ai-badger/skills/learned/uncategorized/design-gate-audit"
-    },
-    {
-      "category": "uncategorized",
-      "name": "documentation-drift-audit",
-      "sourceHash": "e5a66f2e9f6979b7e4d2764a751f54273616cef15215f9cb23c1a62384cbdd0d",
-      "sourcePath": "documentation/documentation-drift-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-06T10:50:32Z",
-      "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-bdd-testing",
-      "sourceHash": "6310a1e0f100fc5eac1894f9beda4906f29f895473b2dc5cc55b05c3b8c1a786",
-      "sourcePath": "software-development/dotnet-bdd-testing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:49:45Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-bdd-testing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-cli-parsing",
-      "sourceHash": "17c8ec3363cd169b510d897f538ef2d9eb625d453502acc6009994c93e4d0087",
-      "sourcePath": "dotnet-cli-parsing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:49:43Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-cli-parsing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-domain-modeling",
-      "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
-      "sourcePath": "software-development/dotnet-domain-modeling",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:17:27Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-domain-modeling"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-flaky-test-diagnosis",
-      "sourceHash": "1e2580460aac73bc2043741c07c55a994b1049eefc02097eb02b93efe00c87ae",
-      "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
-      "status": "synced",
-      "syncedAt": "2026-08-07T05:47:50Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-hosted-service-review",
-      "sourceHash": "badb800b3ccb80e841bab29781b458ededb2ba91c7b5daa22e7bda6bb1b40736",
-      "sourcePath": "software-development/dotnet-hosted-service-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:33:36Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-review"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-hosted-service-testing",
-      "sourceHash": "2c862aacdc09f61e49d11537b46b8c9d184be99a5f3135ec99e074a0d0551c6d",
-      "sourcePath": "software-development/dotnet-hosted-service-testing",
-      "status": "synced",
-      "syncedAt": "2026-08-07T07:52:40Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-logger-message-design",
-      "sourceHash": "a2657156106c79ddab4580579eaa26d88ac2f951b1fb7984afb830d6ffb1ab40",
-      "sourcePath": "software-development/dotnet-logger-message-design",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:17:09Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-logger-message-design"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-mcp-server",
-      "sourceHash": "761368b6540911ef165d7c414a04f4db6a08f929cc91853609c027e6295789da",
-      "sourcePath": "software-development/dotnet-mcp-server",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:37:48Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-mcp-server"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-nuget-publish",
-      "sourceHash": "2e772cb076e6f1f3d461194bc485f48629e391160ada9002527a5ae6904499f1",
-      "sourcePath": "software-development/dotnet-nuget-publish",
-      "status": "synced",
-      "syncedAt": "2026-08-06T12:25:47Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-sqlcipher-encryption",
-      "sourceHash": "361e27d01d7551d4d1ac7628095583d68f189dd9a3462fa3fef2361a2741bc40",
-      "sourcePath": "software-development/dotnet-sqlcipher-encryption",
-      "status": "synced",
-      "syncedAt": "2026-08-06T22:23:34Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-sqlcipher-encryption"
-    },
-    {
-      "category": "uncategorized",
-      "name": "dotnet-tool-publishing",
-      "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
-      "sourcePath": "software-development/dotnet-tool-publishing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:12:36Z",
-      "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "framework-development",
-      "sourceHash": "1f52ffe450ee01f6fdece39f128d068af1d06c366aeb4c4f1a94412c34cbd118",
-      "sourcePath": "ai-badger/framework-development",
-      "status": "synced",
-      "syncedAt": "2026-08-06T21:09:12Z",
-      "target": ".ai-badger/skills/learned/uncategorized/framework-development"
-    },
-    {
-      "category": "uncategorized",
-      "name": "git-worktree-isolation",
-      "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
-      "sourcePath": "git-worktree-isolation",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:51:43Z",
-      "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
-    },
-    {
-      "category": "uncategorized",
-      "name": "hermes-memory-provider-development",
-      "sourceHash": "fea089aadcba0122b98fa62030378d3f79ba8fe405236e685ad7d2118056275f",
-      "sourcePath": "hermes/hermes-memory-provider-development",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:19:27Z",
-      "target": ".ai-badger/skills/learned/uncategorized/hermes-memory-provider-development"
-    },
-    {
-      "category": "uncategorized",
-      "name": "hermes-plugin-authoring",
-      "sourceHash": "28966b1a6e09b8ddf7086b32e6ea8afca6103890afa9727d355c0ce0ac804d66",
-      "sourcePath": "hermes/hermes-plugin-authoring",
-      "status": "synced",
-      "syncedAt": "2026-08-06T14:56:10Z",
-      "target": ".ai-badger/skills/learned/uncategorized/hermes-plugin-authoring"
-    },
-    {
-      "category": "uncategorized",
-      "name": "hermes-plugin-development",
-      "sourceHash": "8efe2894b5ee323d73937ab5e8babf4ee64ffd66ba88c5079e0ea09a002eafba",
-      "sourcePath": "autonomous-ai-agents/hermes-plugin-development",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:08:24Z",
-      "target": ".ai-badger/skills/learned/uncategorized/hermes-plugin-development"
-    },
-    {
-      "category": "uncategorized",
-      "name": "mcp-tool-indexing",
-      "sourceHash": "6c6ecd31d88392d0a3fd50a326d8f0368f684a89f81c98459269d8af0c2f0af3",
-      "sourcePath": "mcp/mcp-tool-indexing",
-      "status": "synced",
-      "syncedAt": "2026-08-12T11:08:22Z",
-      "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-indexing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "mcp-tool-surface-testing",
-      "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
-      "sourcePath": "mcp/mcp-tool-surface-testing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:20:46Z",
-      "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "memory-bank-audit",
-      "sourceHash": "03b648b31190db9ab1c6a03c4f97d5d9ca657b851a96855fd7de6c993005476c",
-      "sourcePath": "data-analysis/memory-bank-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-09T20:26:10Z",
-      "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
-    },
-    {
-      "category": "uncategorized",
-      "name": "memory-quality-logging",
-      "sourceHash": "aa0cc90f34d610f3f2b930a3257775b371a856c630c23fafc079fdd744b5bb63",
-      "sourcePath": "ai-raccoon-integration/memory-quality-logging",
-      "status": "synced",
-      "syncedAt": "2026-08-11T15:30:24Z",
-      "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
-    },
-    {
-      "category": "uncategorized",
-      "name": "multi-lane-report-assembly",
-      "sourceHash": "d5f30f4c8e6b9fdf94fe93319929b4e0c098dd3d147b63c952accff73ff336fd",
-      "sourcePath": "software-development/multi-lane-report-assembly",
-      "status": "synced",
-      "syncedAt": "2026-08-06T13:31:19Z",
-      "target": ".ai-badger/skills/learned/uncategorized/multi-lane-report-assembly"
-    },
-    {
-      "category": "uncategorized",
-      "name": "nuget-publishing",
-      "sourceHash": "df0463a900024bb1f1527e902891fd24e792da45ff53d0a9cc1622cf6f96466d",
-      "sourcePath": "devops/nuget-publishing",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:51:21Z",
-      "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
-    },
-    {
-      "category": "uncategorized",
-      "name": "observability-contract-review",
-      "sourceHash": "fe7f03c188c0909feb0f5ba1178f17e8a2da80c69d1f6e6ee613c559523e156a",
-      "sourcePath": "software-development/observability-contract-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:50:07Z",
-      "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
-    },
-    {
-      "category": "uncategorized",
-      "name": "parallel-expert-review",
-      "sourceHash": "5048d202d559000ce9f7088668a22a810be52a3ced90ebf16a83450966d267ec",
-      "sourcePath": "parallel-expert-review",
-      "status": "synced",
-      "syncedAt": "2026-08-06T13:05:01Z",
-      "target": ".ai-badger/skills/learned/uncategorized/parallel-expert-review"
-    },
-    {
-      "category": "uncategorized",
-      "name": "pre-push-gate-debugging",
-      "sourceHash": "6b53711a6ce4180e488dd5a65a2d46f4aaa1fa5b1d3c3928b3d2e09e096dd404",
-      "sourcePath": "devops/pre-push-gate-debugging",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:42:51Z",
-      "target": ".ai-badger/skills/learned/uncategorized/pre-push-gate-debugging"
-    },
-    {
-      "category": "uncategorized",
-      "name": "red-proof",
-      "sourceHash": "20a795ca73fbfd36cfb071b5beb5eaef8668ed80e9b8062f846de6321ff040ee",
-      "sourcePath": "software-development/red-proof",
-      "status": "synced",
-      "syncedAt": "2026-08-09T20:43:04Z",
-      "target": ".ai-badger/skills/learned/uncategorized/red-proof"
-    },
-    {
-      "category": "uncategorized",
-      "name": "research-record-audit",
-      "sourceHash": "d3b64168934a3273b5b898d4af4e5c1d6e74f934f73476a040efe6d92a372900",
-      "sourcePath": "software-development/research-record-audit",
-      "status": "synced",
-      "syncedAt": "2026-08-06T14:51:31Z",
-      "target": ".ai-badger/skills/learned/uncategorized/research-record-audit"
-    },
-    {
-      "category": "uncategorized",
-      "name": "review-gate-diff-verification",
-      "sourceHash": "baa1ec42b826ec2342dba1105fc3f203893ef1b29e1746d577cc0070acc0fb21",
-      "sourcePath": "uncategorized/review-gate-diff-verification",
-      "status": "synced",
-      "syncedAt": "2026-08-06T15:43:06Z",
-      "target": ".ai-badger/skills/learned/uncategorized/review-gate-diff-verification"
-    },
-    {
-      "category": "uncategorized",
-      "name": "scripts-tooling-refactor",
-      "sourceHash": "be0dfd1ef1ca076e266c15fb2810505747a7860d79d65830b0949e87464ae9a0",
-      "sourcePath": "software-development/scripts-tooling-refactor",
-      "status": "synced",
-      "syncedAt": "2026-08-06T16:48:53Z",
-      "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
-    },
-    {
-      "category": "uncategorized",
-      "name": "spec-driven-refactoring",
-      "sourceHash": "e556d062554ceca48de4e0e622f631cfa0cd33e6120ef4e8771338c51bf87f9f",
-      "sourcePath": "software-development/spec-driven-refactoring",
-      "status": "synced",
-      "syncedAt": "2026-08-06T11:52:07Z",
-      "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
-    },
-    {
-      "category": "uncategorized",
-      "name": "sqlite-schema-review",
-      "sourceHash": "73476bcf6ae0cb012ac03cccfb431100fcd16990d1638ade5d6712d658ad0c6d",
-      "sourcePath": "ai-raccoon/sqlite-schema-review",
-      "status": "synced",
-      "syncedAt": "2026-08-11T19:24:11Z",
-      "target": ".ai-badger/skills/learned/uncategorized/sqlite-schema-review"
-    },
-    {
-      "category": "uncategorized",
-      "name": "worktree-agent-isolation",
-      "sourceHash": "b1d1ec19104da3443097ce7d611b792608e646004d34b581a332282d7a6dc207",
-      "sourcePath": "software-development/worktree-agent-isolation",
-      "status": "synced",
-      "syncedAt": "2026-08-06T13:31:09Z",
-      "target": ".ai-badger/skills/learned/uncategorized/worktree-agent-isolation"
-    }
-  ],
-  "version": 1
+    "$schema": "../../../schemas/learned-skills.schema.json",
+    "skills": [
+        {
+            "category": "ai-raccoon",
+            "name": "ai-raccoon-new-service",
+            "sourceHash": "096bdc74929b7b0e3791c19ec5f19716a46626797ae7c6fe4d4ba216e6b9c0dd",
+            "sourcePath": "ai-raccoon/ai-raccoon-new-service",
+            "status": "synced",
+            "syncedAt": "2026-08-11T14:54:17Z",
+            "target": ".ai-badger/skills/learned/ai-raccoon/ai-raccoon-new-service"
+        },
+        {
+            "category": "ai-raccoon",
+            "name": "design-gate-audit",
+            "sourceHash": "4714ed230dff232be17adcd6c1f490b917000b7d9634a80a106f696960e0870c",
+            "sourcePath": "ai-raccoon/design-gate-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:12:42Z",
+            "target": ".ai-badger/skills/learned/ai-raccoon/design-gate-audit"
+        },
+        {
+            "category": "ai-raccoon",
+            "name": "sqlite-schema-review",
+            "sourceHash": "4eb6078a262300943506102ae92b991535520c6bab649fd8f2de0259990cf894",
+            "sourcePath": "ai-raccoon/sqlite-schema-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:18:20Z",
+            "target": ".ai-badger/skills/learned/ai-raccoon/sqlite-schema-review"
+        },
+        {
+            "category": "ai-raccoon-ops",
+            "name": "ai-raccoon-deployment-ops",
+            "sourceHash": "45bb22bc8d6e99437a1d7364c4d138420d219747ebdd2dc7434d20d743d50a39",
+            "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
+            "status": "synced",
+            "syncedAt": "2026-08-07T06:17:00Z",
+            "target": ".ai-badger/skills/learned/ai-raccoon-ops/ai-raccoon-deployment-ops"
+        },
+        {
+            "category": "data-analysis",
+            "name": "memory-bank-audit",
+            "sourceHash": "1ff33ae80f24c74dce34f4cc4e2a7dc082ca48085d1dbaca31be3709e89732f1",
+            "sourcePath": "data-analysis/memory-bank-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-06T13:12:46Z",
+            "target": ".ai-badger/skills/learned/data-analysis/memory-bank-audit"
+        },
+        {
+            "category": "data-analysis",
+            "name": "sqlite-bank-space-diagnosis",
+            "sourceHash": "98b906fb4082e012a401d032db5303f3d28233c9d3a7d9bb766d33b827384d03",
+            "sourcePath": "data-analysis/sqlite-bank-space-diagnosis",
+            "status": "synced",
+            "syncedAt": "2026-08-06T23:27:26Z",
+            "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
+        },
+        {
+            "category": "devops",
+            "name": "azure-swa-custom-domains",
+            "sourceHash": "9dbfd86cd2178323c4bfaa3fa691044a40d3c9fac7aca51bbdc109563c8728e7",
+            "sourcePath": "devops/azure-swa-custom-domains",
+            "status": "synced",
+            "syncedAt": "2026-08-11T17:45:34Z",
+            "target": ".ai-badger/skills/learned/devops/azure-swa-custom-domains"
+        },
+        {
+            "category": "devops",
+            "name": "python-global-tool-management",
+            "sourceHash": "06caebb3bc9efbf334777e7a841295f87da90c4e125b76c194a7ee313ac74fef",
+            "sourcePath": "devops/python-global-tool-management",
+            "status": "synced",
+            "syncedAt": "2026-08-13T08:11:48Z",
+            "target": ".ai-badger/skills/learned/devops/python-global-tool-management"
+        },
+        {
+            "category": "hermes",
+            "name": "hermes-memory-provider-development",
+            "sourceHash": "da1e52e8323a74ff265095be3a67433a93932233264b42da0fb9979e1d352412",
+            "sourcePath": "hermes/hermes-memory-provider-development",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:19:16Z",
+            "target": ".ai-badger/skills/learned/hermes/hermes-memory-provider-development"
+        },
+        {
+            "category": "mcp",
+            "name": "mcp-tool-indexing",
+            "sourceHash": "4b9c2a6e38f8a2dfb1abfe2d1c42084ac8b90bb069b2249d3a53246f11fbca4f",
+            "sourcePath": "mcp/mcp-tool-indexing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T12:47:31Z",
+            "target": ".ai-badger/skills/learned/mcp/mcp-tool-indexing"
+        },
+        {
+            "category": "mcp",
+            "name": "mcp-tool-surface-testing",
+            "sourceHash": "308dac2737285c1454f5c7bc585c535d2a5b52eca6138a3ab28302a93d2e1e78",
+            "sourcePath": "mcp/mcp-tool-surface-testing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T09:22:50Z",
+            "target": ".ai-badger/skills/learned/mcp/mcp-tool-surface-testing"
+        },
+        {
+            "category": "software-development",
+            "name": "dotnet-hosted-service-review",
+            "sourceHash": "fd32d7a17e99fead5e13028a6854b43b3b814cc764e3fa369a0d04461dcd4b59",
+            "sourcePath": "software-development/dotnet-hosted-service-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T12:50:01Z",
+            "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-review"
+        },
+        {
+            "category": "software-development",
+            "name": "dotnet-hosted-service-testing",
+            "sourceHash": "8836391dfb47e4a597a730217eea39babc2614368468d5e444cc72c51e251f3a",
+            "sourcePath": "software-development/dotnet-hosted-service-testing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T12:55:58Z",
+            "target": ".ai-badger/skills/learned/software-development/dotnet-hosted-service-testing"
+        },
+        {
+            "category": "software-development",
+            "name": "dotnet-logger-message-design",
+            "sourceHash": "018fecbaba6e4f8e68db4b06bbd2ea41d7e68c114dba07082c79129bb3e73a3b",
+            "sourcePath": "software-development/dotnet-logger-message-design",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:03:10Z",
+            "target": ".ai-badger/skills/learned/software-development/dotnet-logger-message-design"
+        },
+        {
+            "category": "software-development",
+            "name": "dotnext-library",
+            "sourceHash": "a49fa02f2d48995153fed77303d09baec392a5399f275fc0e22dca311ccf29ad",
+            "sourcePath": "software-development/dotnext-library",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:57:31Z",
+            "target": ".ai-badger/skills/learned/software-development/dotnext-library"
+        },
+        {
+            "category": "software-development",
+            "name": "observability-contract-review",
+            "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
+            "sourcePath": "software-development/observability-contract-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:55:27Z",
+            "target": ".ai-badger/skills/learned/software-development/observability-contract-review"
+        },
+        {
+            "category": "software-development",
+            "name": "red-proof",
+            "sourceHash": "c61738f8e3d00a699a890c7b1384a9c062ecba683a1916caf7ed07287d556bb1",
+            "sourcePath": "software-development/red-proof",
+            "status": "synced",
+            "syncedAt": "2026-08-09T20:42:42Z",
+            "target": ".ai-badger/skills/learned/software-development/red-proof"
+        },
+        {
+            "category": "software-development",
+            "name": "scripts-tooling-refactor",
+            "sourceHash": "52def0f92cf4b7552c7414823739e7b5c8399de9751f7a11344fa92b3647c7c8",
+            "sourcePath": "software-development/scripts-tooling-refactor",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:07:01Z",
+            "target": ".ai-badger/skills/learned/software-development/scripts-tooling-refactor"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-badger-contribution",
+            "sourceHash": "1c0f728f8e55c9cd44da3cebda1af666889cbfd389516d9d9d9bf5fb800397b8",
+            "sourcePath": "software-development/ai-badger-contribution",
+            "status": "synced",
+            "syncedAt": "2026-08-06T20:54:59Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-badger-contribution"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-badger-project-ops",
+            "sourceHash": "31bc79d439c8aba3cb8a2be3088a5e280eda3f9b0dc1490cd728666096ed03d2",
+            "sourcePath": "ai-badger-project-ops",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:38:31Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-badger-project-ops"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-badger-task-orchestration",
+            "sourceHash": "536c565f39cd7d539d539969363e3498b1dddc3bac819e86c99d5aa7a8527ec8",
+            "sourcePath": "autonomous-ai-agents/ai-badger-task-orchestration",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:24:43Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-badger-task-orchestration"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-badger-worktree-pitfalls",
+            "sourceHash": "150ac0f3cb42db7a3f0ef68a45005deb2c0ee616af3f09a31bb46a706fa467b4",
+            "sourcePath": "ai-badger-worktree-pitfalls",
+            "status": "synced",
+            "syncedAt": "2026-08-11T17:21:55Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-badger-worktree-pitfalls"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-raccoon-deployment-ops",
+            "sourceHash": "d7ea13e37e85e251cb2771481c413aa666fb277acd277cf7ca5cc5c489e12da9",
+            "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
+            "status": "synced",
+            "syncedAt": "2026-08-13T06:23:45Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-deployment-ops"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-raccoon-mcp-client",
+            "sourceHash": "857dc25ac9b70d6b4596b6d62051dc003927115f14530a62333c06c4ffaba8b3",
+            "sourcePath": "ai-raccoon-mcp-client",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:06:57Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-mcp-client"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-raccoon-new-service",
+            "sourceHash": "9445412dc2c11923aaa7af44802816bc9d250740b65cc0d2d50fa705e3ed9f3c",
+            "sourcePath": "ai-raccoon/ai-raccoon-new-service",
+            "status": "synced",
+            "syncedAt": "2026-08-11T15:50:45Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-new-service"
+        },
+        {
+            "category": "uncategorized",
+            "name": "ai-raccoon-retrieval-analysis",
+            "sourceHash": "07b0ad18bbe50a03ce68fa84808888ac80006503e9eb5e40c9d3c574b97444aa",
+            "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
+            "status": "synced",
+            "syncedAt": "2026-08-11T14:15:57Z",
+            "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
+        },
+        {
+            "category": "uncategorized",
+            "name": "artifact-verification",
+            "sourceHash": "c7278df53e31be91dd487c2a5378aae34b3fa1ddb9397b06d4a234fd83bd109d",
+            "sourcePath": "artifact-verification",
+            "status": "synced",
+            "syncedAt": "2026-08-06T13:32:01Z",
+            "target": ".ai-badger/skills/learned/uncategorized/artifact-verification"
+        },
+        {
+            "category": "uncategorized",
+            "name": "code-review-evidence",
+            "sourceHash": "c66fe5e223834c5c17c3537a80a2f9cfc692514273c4eebe7ad3a516d1b5ade4",
+            "sourcePath": "software-development/code-review-evidence",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:13:57Z",
+            "target": ".ai-badger/skills/learned/uncategorized/code-review-evidence"
+        },
+        {
+            "category": "uncategorized",
+            "name": "cron-watchdog-authoring",
+            "sourceHash": "a3ab59306902b119941b948280bfce1c143f5f945b62c30204bf272b7c0ac00f",
+            "sourcePath": "cron-watchdog-authoring",
+            "status": "synced",
+            "syncedAt": "2026-08-07T05:47:00Z",
+            "target": ".ai-badger/skills/learned/uncategorized/cron-watchdog-authoring"
+        },
+        {
+            "category": "uncategorized",
+            "name": "design-gate-audit",
+            "sourceHash": "33ccc233b4b7a963a699f2f66f90c2f8230241446967a6cfb1621e5a39abcd87",
+            "sourcePath": "ai-raccoon/design-gate-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:12:53Z",
+            "target": ".ai-badger/skills/learned/uncategorized/design-gate-audit"
+        },
+        {
+            "category": "uncategorized",
+            "name": "documentation-drift-audit",
+            "sourceHash": "e5a66f2e9f6979b7e4d2764a751f54273616cef15215f9cb23c1a62384cbdd0d",
+            "sourcePath": "documentation/documentation-drift-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-06T10:50:32Z",
+            "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-bdd-testing",
+            "sourceHash": "6310a1e0f100fc5eac1894f9beda4906f29f895473b2dc5cc55b05c3b8c1a786",
+            "sourcePath": "software-development/dotnet-bdd-testing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:49:45Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-bdd-testing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-cli-parsing",
+            "sourceHash": "17c8ec3363cd169b510d897f538ef2d9eb625d453502acc6009994c93e4d0087",
+            "sourcePath": "dotnet-cli-parsing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:49:43Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-cli-parsing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-domain-modeling",
+            "sourceHash": "5e9deac9b03192a6a88437fc61cbc3ed0a66e48e2ef0e2c406c1b6af7b21cb1c",
+            "sourcePath": "software-development/dotnet-domain-modeling",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:17:27Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-domain-modeling"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-flaky-test-diagnosis",
+            "sourceHash": "1e2580460aac73bc2043741c07c55a994b1049eefc02097eb02b93efe00c87ae",
+            "sourcePath": "software-development/dotnet-flaky-test-diagnosis",
+            "status": "synced",
+            "syncedAt": "2026-08-07T05:47:50Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-flaky-test-diagnosis"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-hosted-service-review",
+            "sourceHash": "badb800b3ccb80e841bab29781b458ededb2ba91c7b5daa22e7bda6bb1b40736",
+            "sourcePath": "software-development/dotnet-hosted-service-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:33:36Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-review"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-hosted-service-testing",
+            "sourceHash": "2c862aacdc09f61e49d11537b46b8c9d184be99a5f3135ec99e074a0d0551c6d",
+            "sourcePath": "software-development/dotnet-hosted-service-testing",
+            "status": "synced",
+            "syncedAt": "2026-08-07T07:52:40Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-hosted-service-testing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-logger-message-design",
+            "sourceHash": "a2657156106c79ddab4580579eaa26d88ac2f951b1fb7984afb830d6ffb1ab40",
+            "sourcePath": "software-development/dotnet-logger-message-design",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:17:09Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-logger-message-design"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-mcp-server",
+            "sourceHash": "761368b6540911ef165d7c414a04f4db6a08f929cc91853609c027e6295789da",
+            "sourcePath": "software-development/dotnet-mcp-server",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:37:48Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-mcp-server"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-nuget-publish",
+            "sourceHash": "2e772cb076e6f1f3d461194bc485f48629e391160ada9002527a5ae6904499f1",
+            "sourcePath": "software-development/dotnet-nuget-publish",
+            "status": "synced",
+            "syncedAt": "2026-08-06T12:25:47Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-nuget-publish"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-sqlcipher-encryption",
+            "sourceHash": "361e27d01d7551d4d1ac7628095583d68f189dd9a3462fa3fef2361a2741bc40",
+            "sourcePath": "software-development/dotnet-sqlcipher-encryption",
+            "status": "synced",
+            "syncedAt": "2026-08-06T22:23:34Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-sqlcipher-encryption"
+        },
+        {
+            "category": "uncategorized",
+            "name": "dotnet-tool-publishing",
+            "sourceHash": "a35faa3bb887ce9f954b22c1eaa77a6ba35025f2d127101da07e508035cd9c14",
+            "sourcePath": "software-development/dotnet-tool-publishing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:12:36Z",
+            "target": ".ai-badger/skills/learned/uncategorized/dotnet-tool-publishing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "framework-development",
+            "sourceHash": "1f52ffe450ee01f6fdece39f128d068af1d06c366aeb4c4f1a94412c34cbd118",
+            "sourcePath": "ai-badger/framework-development",
+            "status": "synced",
+            "syncedAt": "2026-08-06T21:09:12Z",
+            "target": ".ai-badger/skills/learned/uncategorized/framework-development"
+        },
+        {
+            "category": "uncategorized",
+            "name": "git-worktree-isolation",
+            "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
+            "sourcePath": "git-worktree-isolation",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:51:43Z",
+            "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
+        },
+        {
+            "category": "uncategorized",
+            "name": "hermes-mcp-setup",
+            "sourceHash": "5d9208117774dccc041284cfb2eae94c2298e6b02e01856c07448012e6a4b9bc",
+            "sourcePath": "autonomous-ai-agents/hermes-mcp-setup",
+            "status": "synced",
+            "syncedAt": "2026-08-13T08:04:45Z",
+            "target": ".ai-badger/skills/learned/uncategorized/hermes-mcp-setup"
+        },
+        {
+            "category": "uncategorized",
+            "name": "hermes-memory-provider-development",
+            "sourceHash": "fea089aadcba0122b98fa62030378d3f79ba8fe405236e685ad7d2118056275f",
+            "sourcePath": "hermes/hermes-memory-provider-development",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:19:27Z",
+            "target": ".ai-badger/skills/learned/uncategorized/hermes-memory-provider-development"
+        },
+        {
+            "category": "uncategorized",
+            "name": "hermes-plugin-authoring",
+            "sourceHash": "28966b1a6e09b8ddf7086b32e6ea8afca6103890afa9727d355c0ce0ac804d66",
+            "sourcePath": "hermes/hermes-plugin-authoring",
+            "status": "synced",
+            "syncedAt": "2026-08-06T14:56:10Z",
+            "target": ".ai-badger/skills/learned/uncategorized/hermes-plugin-authoring"
+        },
+        {
+            "category": "uncategorized",
+            "name": "hermes-plugin-development",
+            "sourceHash": "8efe2894b5ee323d73937ab5e8babf4ee64ffd66ba88c5079e0ea09a002eafba",
+            "sourcePath": "autonomous-ai-agents/hermes-plugin-development",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:08:24Z",
+            "target": ".ai-badger/skills/learned/uncategorized/hermes-plugin-development"
+        },
+        {
+            "category": "uncategorized",
+            "name": "mcp-tool-indexing",
+            "sourceHash": "6c6ecd31d88392d0a3fd50a326d8f0368f684a89f81c98459269d8af0c2f0af3",
+            "sourcePath": "mcp/mcp-tool-indexing",
+            "status": "synced",
+            "syncedAt": "2026-08-12T11:08:22Z",
+            "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-indexing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "mcp-tool-surface-testing",
+            "sourceHash": "1815cc785801a1fb8c5205483ad83f65a53d2933279772a7b2b6a9b993b2c8ec",
+            "sourcePath": "mcp/mcp-tool-surface-testing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:20:46Z",
+            "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-surface-testing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "memory-bank-audit",
+            "sourceHash": "03b648b31190db9ab1c6a03c4f97d5d9ca657b851a96855fd7de6c993005476c",
+            "sourcePath": "data-analysis/memory-bank-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-09T20:26:10Z",
+            "target": ".ai-badger/skills/learned/uncategorized/memory-bank-audit"
+        },
+        {
+            "category": "uncategorized",
+            "name": "memory-quality-logging",
+            "sourceHash": "aa0cc90f34d610f3f2b930a3257775b371a856c630c23fafc079fdd744b5bb63",
+            "sourcePath": "ai-raccoon-integration/memory-quality-logging",
+            "status": "synced",
+            "syncedAt": "2026-08-11T15:30:24Z",
+            "target": ".ai-badger/skills/learned/uncategorized/memory-quality-logging"
+        },
+        {
+            "category": "uncategorized",
+            "name": "multi-lane-report-assembly",
+            "sourceHash": "d5f30f4c8e6b9fdf94fe93319929b4e0c098dd3d147b63c952accff73ff336fd",
+            "sourcePath": "software-development/multi-lane-report-assembly",
+            "status": "synced",
+            "syncedAt": "2026-08-06T13:31:19Z",
+            "target": ".ai-badger/skills/learned/uncategorized/multi-lane-report-assembly"
+        },
+        {
+            "category": "uncategorized",
+            "name": "nuget-publishing",
+            "sourceHash": "df0463a900024bb1f1527e902891fd24e792da45ff53d0a9cc1622cf6f96466d",
+            "sourcePath": "devops/nuget-publishing",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:51:21Z",
+            "target": ".ai-badger/skills/learned/uncategorized/nuget-publishing"
+        },
+        {
+            "category": "uncategorized",
+            "name": "observability-contract-review",
+            "sourceHash": "fe7f03c188c0909feb0f5ba1178f17e8a2da80c69d1f6e6ee613c559523e156a",
+            "sourcePath": "software-development/observability-contract-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:50:07Z",
+            "target": ".ai-badger/skills/learned/uncategorized/observability-contract-review"
+        },
+        {
+            "category": "uncategorized",
+            "name": "parallel-expert-review",
+            "sourceHash": "5048d202d559000ce9f7088668a22a810be52a3ced90ebf16a83450966d267ec",
+            "sourcePath": "parallel-expert-review",
+            "status": "synced",
+            "syncedAt": "2026-08-06T13:05:01Z",
+            "target": ".ai-badger/skills/learned/uncategorized/parallel-expert-review"
+        },
+        {
+            "category": "uncategorized",
+            "name": "pre-push-gate-debugging",
+            "sourceHash": "6b53711a6ce4180e488dd5a65a2d46f4aaa1fa5b1d3c3928b3d2e09e096dd404",
+            "sourcePath": "devops/pre-push-gate-debugging",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:42:51Z",
+            "target": ".ai-badger/skills/learned/uncategorized/pre-push-gate-debugging"
+        },
+        {
+            "category": "uncategorized",
+            "name": "python-global-tool-management",
+            "sourceHash": "c8a8388ebc8d3314e307d5bba2a9f4f6014d8a53c05d1028aaacf0c64dcc30ae",
+            "sourcePath": "devops/python-global-tool-management",
+            "status": "synced",
+            "syncedAt": "2026-08-13T08:12:58Z",
+            "target": ".ai-badger/skills/learned/uncategorized/python-global-tool-management"
+        },
+        {
+            "category": "uncategorized",
+            "name": "red-proof",
+            "sourceHash": "20a795ca73fbfd36cfb071b5beb5eaef8668ed80e9b8062f846de6321ff040ee",
+            "sourcePath": "software-development/red-proof",
+            "status": "synced",
+            "syncedAt": "2026-08-09T20:43:04Z",
+            "target": ".ai-badger/skills/learned/uncategorized/red-proof"
+        },
+        {
+            "category": "uncategorized",
+            "name": "research-record-audit",
+            "sourceHash": "d3b64168934a3273b5b898d4af4e5c1d6e74f934f73476a040efe6d92a372900",
+            "sourcePath": "software-development/research-record-audit",
+            "status": "synced",
+            "syncedAt": "2026-08-06T14:51:31Z",
+            "target": ".ai-badger/skills/learned/uncategorized/research-record-audit"
+        },
+        {
+            "category": "uncategorized",
+            "name": "review-gate-diff-verification",
+            "sourceHash": "baa1ec42b826ec2342dba1105fc3f203893ef1b29e1746d577cc0070acc0fb21",
+            "sourcePath": "uncategorized/review-gate-diff-verification",
+            "status": "synced",
+            "syncedAt": "2026-08-06T15:43:06Z",
+            "target": ".ai-badger/skills/learned/uncategorized/review-gate-diff-verification"
+        },
+        {
+            "category": "uncategorized",
+            "name": "scripts-tooling-refactor",
+            "sourceHash": "be0dfd1ef1ca076e266c15fb2810505747a7860d79d65830b0949e87464ae9a0",
+            "sourcePath": "software-development/scripts-tooling-refactor",
+            "status": "synced",
+            "syncedAt": "2026-08-06T16:48:53Z",
+            "target": ".ai-badger/skills/learned/uncategorized/scripts-tooling-refactor"
+        },
+        {
+            "category": "uncategorized",
+            "name": "spec-driven-refactoring",
+            "sourceHash": "e556d062554ceca48de4e0e622f631cfa0cd33e6120ef4e8771338c51bf87f9f",
+            "sourcePath": "software-development/spec-driven-refactoring",
+            "status": "synced",
+            "syncedAt": "2026-08-06T11:52:07Z",
+            "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
+        },
+        {
+            "category": "uncategorized",
+            "name": "sqlite-schema-review",
+            "sourceHash": "73476bcf6ae0cb012ac03cccfb431100fcd16990d1638ade5d6712d658ad0c6d",
+            "sourcePath": "ai-raccoon/sqlite-schema-review",
+            "status": "synced",
+            "syncedAt": "2026-08-11T19:24:11Z",
+            "target": ".ai-badger/skills/learned/uncategorized/sqlite-schema-review"
+        },
+        {
+            "category": "uncategorized",
+            "name": "worktree-agent-isolation",
+            "sourceHash": "b1d1ec19104da3443097ce7d611b792608e646004d34b581a332282d7a6dc207",
+            "sourcePath": "software-development/worktree-agent-isolation",
+            "status": "synced",
+            "syncedAt": "2026-08-06T13:31:09Z",
+            "target": ".ai-badger/skills/learned/uncategorized/worktree-agent-isolation"
+        }
+    ],
+    "version": 1
 }

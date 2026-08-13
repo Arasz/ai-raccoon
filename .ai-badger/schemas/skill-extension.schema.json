@@ -1,50 +1,50 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/skill-extension.schema.json",
-    "title": "ai-badger skill extension descriptor",
-    "description": "The activation contract for an extension shipped inside a skill, at features/<stack>/skills/<skill>/extensions/<ext>/extension.json. scaffold.py copies the extension with the skill, then prunes it unless every `requires` condition holds against the project's config (welcome-ai-badger/scripts/extensions.py::prune_inline_extensions).",
-    "type": "object",
-    "required": [
-        "skill",
-        "extension",
-        "requires"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "skill": {
-            "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "description": "The base skill this extension attaches to. Must equal the <skill> directory name."
-        },
-        "extension": {
-            "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "description": "Must equal the <ext> directory name."
-        },
-        "requires": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "$ref": "#/$defs/condition"
-            },
-            "description": "Every condition must hold or the extension is pruned from the scaffold."
-        },
-        "optional": {
-            "type": "array",
-            "items": {
-                "$ref": "#/$defs/condition"
-            },
-            "description": "Config keys the extension uses when present. Never gates activation; documented so a reader can see what enriches the extension."
-        }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/skill-extension.schema.json",
+  "title": "ai-badger skill extension descriptor",
+  "description": "The activation contract for an extension shipped inside a skill, at features/<stack>/skills/<skill>/extensions/<ext>/extension.json. scaffold.py copies the extension with the skill, then prunes it unless every `requires` condition holds against the project's config (welcome-ai-badger/scripts/extensions.py::prune_inline_extensions).",
+  "type": "object",
+  "required": [
+    "skill",
+    "extension",
+    "requires"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
     },
-    "$defs": {
-        "condition": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_.]*((=|==)[^|]+)?(\\|\\|[A-Za-z][A-Za-z0-9_.]*((=|==)[^|]+)?)*$",
-            "description": "_shared.requirement_met syntax: 'stacks=dotnet' (equality, list membership), 'sourceControl.platform==github' (value equality), 'sourceControl.repoUrl' (presence), or sub-conditions joined by '||'."
-        }
+    "skill": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The base skill this extension attaches to. Must equal the <skill> directory name."
+    },
+    "extension": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Must equal the <ext> directory name."
+    },
+    "requires": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/condition"
+      },
+      "description": "Every condition must hold or the extension is pruned from the scaffold."
+    },
+    "optional": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/condition"
+      },
+      "description": "Config keys the extension uses when present. Never gates activation; documented so a reader can see what enriches the extension."
     }
+  },
+  "$defs": {
+    "condition": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.]*((=|==)[^|]+)?(\\|\\|[A-Za-z][A-Za-z0-9_.]*((=|==)[^|]+)?)*$",
+      "description": "_shared.requirement_met syntax: 'stacks=dotnet' (equality, list membership), 'sourceControl.platform==github' (value equality), 'sourceControl.repoUrl' (presence), or sub-conditions joined by '||'."
+    }
+  }
 }

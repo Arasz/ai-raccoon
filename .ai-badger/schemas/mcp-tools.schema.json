@@ -1,115 +1,115 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/mcp-tools.schema.json",
-    "title": "MCP Tool Index",
-    "description": "Maps every MCP server tool to tags (for categorical filtering) and intent (for semantic matching). Lives at .ai-badger/mcp-tools.json in scaffolded projects (a legacy .ai-badger/mcp-tools.yaml is migrated automatically the first time a write command runs).",
-    "type": "object",
-    "required": [
-        "version",
-        "generated_at",
-        "sources"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "version": {
-            "type": "string",
-            "pattern": "^\\d+\\.\\d+\\.\\d+$",
-            "description": "Index format version (not ai-badger framework version)."
-        },
-        "generated_at": {
-            "type": "string",
-            "description": "ISO-8601 timestamp of last index generation."
-        },
-        "sources": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "$ref": "#/$defs/mcpSource"
-            }
-        }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/mcp-tools.schema.json",
+  "title": "MCP Tool Index",
+  "description": "Maps every MCP server tool to tags (for categorical filtering) and intent (for semantic matching). Lives at .ai-badger/mcp-tools.json in scaffolded projects (a legacy .ai-badger/mcp-tools.yaml is migrated automatically the first time a write command runs).",
+  "type": "object",
+  "required": [
+    "version",
+    "generated_at",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
     },
-    "$defs": {
-        "mcpSource": {
-            "type": "object",
-            "required": [
-                "name",
-                "tools"
-            ],
-            "additionalProperties": false,
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "MCP server name as the host CLI that listed it prints it (`hermes mcp list`, `claude mcp list`)."
-                },
-                "url": {
-                    "type": "string",
-                    "description": "MCP server endpoint URL (for HTTP/SSE servers)."
-                },
-                "status": {
-                    "enum": [
-                        "ok",
-                        "disabled",
-                        "empty",
-                        "unknown",
-                        "absent",
-                        "unreachable",
-                        "unauthenticated",
-                        "pending_approval"
-                    ],
-                    "description": "What the host's last listing said about this server: 'ok' (tools reported), 'disabled' (the host says it is switched off), 'empty' (enabled, asked, exposed nothing), 'unknown' (the listing carried no tool detail — the `hermes mcp list` text table, or a `claude mcp list` server that is merely Connected), 'absent' (the host no longer lists it; its tools are marked removed), 'unreachable' / 'unauthenticated' / 'pending_approval' (`claude mcp list` reports these distinctly: Failed to connect, Needs authentication, Pending approval). Each has a different remedy, which is why a zero-tool server is recorded rather than dropped (ADR-0014 decision 7). The enum is additive: a status is added only once some host CLI is observed reporting it."
-                },
-                "tools": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/$defs/toolEntry"
-                    }
-                }
-            }
-        },
-        "toolEntry": {
-            "type": "object",
-            "required": [
-                "tags",
-                "intent"
-            ],
-            "additionalProperties": false,
-            "properties": {
-                "tags": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Category tags from the closed taxonomy in features/common/mcp-tags.json."
-                },
-                "intent": {
-                    "type": "string",
-                    "minLength": 10,
-                    "maxLength": 200,
-                    "description": "Human-readable one-sentence description of what the tool accomplishes. Used for semantic matching."
-                },
-                "status": {
-                    "enum": [
-                        "active",
-                        "removed"
-                    ],
-                    "default": "active",
-                    "description": "Set to 'removed' when the MCP server no longer exposes this tool (preserves manual tags for later re-addition)."
-                },
-                "origin": {
-                    "enum": [
-                        "catalog",
-                        "heuristic",
-                        "manual"
-                    ],
-                    "description": "Where this entry's tags and intent came from: 'catalog' (features/<stack>/mcp/<server>/tools.json), 'heuristic' (_auto_tags guessing from the tool name), 'manual' (mcp-index tag/intent). Per tool, not per server: a catalog-described server also exposes tools the catalog does not describe. Only 'manual' survives a later `mcp-index update`."
-                }
-            }
-        }
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Index format version (not ai-badger framework version)."
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO-8601 timestamp of last index generation."
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/mcpSource"
+      }
     }
+  },
+  "$defs": {
+    "mcpSource": {
+      "type": "object",
+      "required": [
+        "name",
+        "tools"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "MCP server name as the host CLI that listed it prints it (`hermes mcp list`, `claude mcp list`)."
+        },
+        "url": {
+          "type": "string",
+          "description": "MCP server endpoint URL (for HTTP/SSE servers)."
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "disabled",
+            "empty",
+            "unknown",
+            "absent",
+            "unreachable",
+            "unauthenticated",
+            "pending_approval"
+          ],
+          "description": "What the host's last listing said about this server: 'ok' (tools reported), 'disabled' (the host says it is switched off), 'empty' (enabled, asked, exposed nothing), 'unknown' (the listing carried no tool detail — the `hermes mcp list` text table, or a `claude mcp list` server that is merely Connected), 'absent' (the host no longer lists it; its tools are marked removed), 'unreachable' / 'unauthenticated' / 'pending_approval' (`claude mcp list` reports these distinctly: Failed to connect, Needs authentication, Pending approval). Each has a different remedy, which is why a zero-tool server is recorded rather than dropped (ADR-0014 decision 7). The enum is additive: a status is added only once some host CLI is observed reporting it."
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/toolEntry"
+          }
+        }
+      }
+    },
+    "toolEntry": {
+      "type": "object",
+      "required": [
+        "tags",
+        "intent"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Category tags from the closed taxonomy in features/common/mcp-tags.json."
+        },
+        "intent": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 200,
+          "description": "Human-readable one-sentence description of what the tool accomplishes. Used for semantic matching."
+        },
+        "status": {
+          "enum": [
+            "active",
+            "removed"
+          ],
+          "default": "active",
+          "description": "Set to 'removed' when the MCP server no longer exposes this tool (preserves manual tags for later re-addition)."
+        },
+        "origin": {
+          "enum": [
+            "catalog",
+            "heuristic",
+            "manual"
+          ],
+          "description": "Where this entry's tags and intent came from: 'catalog' (features/<stack>/mcp/<server>/tools.json), 'heuristic' (_auto_tags guessing from the tool name), 'manual' (mcp-index tag/intent). Per tool, not per server: a catalog-described server also exposes tools the catalog does not describe. Only 'manual' survives a later `mcp-index update`."
+        }
+      }
+    }
+  }
 }

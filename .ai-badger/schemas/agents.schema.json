@@ -1,31 +1,31 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/agents.schema.json",
-    "title": "ai-badger supported agents",
-    "description": "Canonical list of supported agents. Keep in sync with config.schema.json, manifest.schema.json, and badger_lib.py AGENT_NAMES.",
-    "type": "object",
-    "required": [
-        "agents"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "agents": {
-            "type": "array",
-            "items": {
-                "enum": [
-                    "claude",
-                    "copilot",
-                    "hermes"
-                ]
-            },
-            "default": [
-                "claude",
-                "copilot",
-                "hermes"
-            ]
-        }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/agents.schema.json",
+  "title": "ai-badger supported agents",
+  "description": "Canonical list of supported agents. Keep in sync with config.schema.json, manifest.schema.json, and badger_lib.py AGENT_NAMES.",
+  "type": "object",
+  "required": [
+    "agents"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "claude",
+          "copilot",
+          "hermes"
+        ]
+      },
+      "default": [
+        "claude",
+        "copilot",
+        "hermes"
+      ]
     }
+  }
 }

@@ -1,122 +1,81 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/stack-mcp.schema.json",
-    "title": "Stack MCP server declarations",
-    "description": "Which MCP servers a stack wants, and how to launch the ones ai-badger may launch. Read at scaffold time and NOT indexed, the same contract as skills.json; the servers themselves are catalog items under features/<stack>/mcp/<name>/. Naming a server here is a 'this is relevant' claim that holds for every arrival route; 'declare' is the louder claim that ai-badger should write its launch config, and only two routes accept one (ADR-0014).",
-    "type": "object",
-    "required": [
-        "servers"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "servers": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": [
-                    "name"
-                ],
-                "additionalProperties": false,
-                "if": {
-                    "properties": {
-                        "declare": {
-                            "const": true
-                        }
-                    },
-                    "required": [
-                        "declare"
-                    ]
-                },
-                "then": {
-                    "required": [
-                        "command"
-                    ]
-                },
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "The server's merge key. Must name a features/<stack>/mcp/<name>/ catalog entry."
-                    },
-                    "command": {
-                        "type": "string",
-                        "description": "Launch command, e.g. 'python3 -m code_review_graph serve'. Split on whitespace into command + args. Required when 'declare' is true and pointless without it: a server ai-badger cannot launch is described, not declared."
-                    },
-                    "declare": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Write this server's launch config into the project files ai-badger owns (.mcp.json and .github/mcp.json). Defaults to false: describing a server is the common case, declaring one is the exception."
-                    },
-                    "scope": {
-                        "enum": [
-                            "project",
-                            "user"
-                        ],
-                        "default": "project",
-                        "description": "project = repo-level config ai-badger owns. user = a user-global file, which ai-badger proposes and never writes (ADR-0014 decision 6)."
-                    },
-                    "env": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "string"
-                        },
-                        "description": "Environment variables the launch config carries. Values are literals or ${VAR} references — never a secret."
-                    },
-                    "availability": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": [
-                            "command"
-                        ],
-                        "properties": {
-                            "command": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Executable that must resolve on PATH before this optional declaration is emitted."
-                            }
-                        },
-                        "description": "Optional host capability gate. When present, the declaration is emitted only if the command resolves on PATH."
-                    },
-                    "agentOverrides": {
-                        "type": "object",
-                        "description": "Per-agent launch overrides, applied by the one agent that reads each generated file.",
-                        "additionalProperties": false,
-                        "properties": {
-                            "claude": {
-                                "$ref": "#/$defs/agentOverride"
-                            },
-                            "hermes": {
-                                "$ref": "#/$defs/agentOverride"
-                            },
-                            "copilot": {
-                                "$ref": "#/$defs/agentOverride"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    },
-    "$defs": {
-        "agentOverride": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/stack-mcp.schema.json",
+  "title": "Stack MCP server declarations",
+  "description": "Which MCP servers a stack wants, and how to launch the ones ai-badger may launch. Read at scaffold time and NOT indexed, the same contract as skills.json; the servers themselves are catalog items under features/<stack>/mcp/<name>/. Naming a server here is a 'this is relevant' claim that holds for every arrival route; 'declare' is the louder claim that ai-badger should write its launch config, and only two routes accept one (ADR-0014).",
+  "type": "object",
+  "required": ["servers"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "if": { "properties": { "declare": { "const": true } }, "required": ["declare"] },
+        "then": { "required": ["command"] },
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The server's merge key. Must name a features/<stack>/mcp/<name>/ catalog entry."
+          },
+          "command": {
+            "type": "string",
+            "description": "Launch command, e.g. 'python3 -m code_review_graph serve'. Split on whitespace into command + args. Required when 'declare' is true and pointless without it: a server ai-badger cannot launch is described, not declared."
+          },
+          "declare": {
+            "type": "boolean",
+            "default": false,
+            "description": "Write this server's launch config into the project files ai-badger owns (.mcp.json and .github/mcp.json). Defaults to false: describing a server is the common case, declaring one is the exception."
+          },
+          "scope": {
+            "enum": ["project", "user"],
+            "default": "project",
+            "description": "project = repo-level config ai-badger owns. user = a user-global file, which ai-badger proposes and never writes (ADR-0014 decision 6)."
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Environment variables the launch config carries. Values are literals or ${VAR} references — never a secret."
+          },
+          "availability": {
             "type": "object",
             "additionalProperties": false,
+            "required": ["command"],
             "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Agent-specific launch command override."
-                },
-                "args": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "Agent-specific args override."
-                }
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Executable that must resolve on PATH before this optional declaration is emitted."
+              }
+            },
+            "description": "Optional host capability gate. When present, the declaration is emitted only if the command resolves on PATH."
+          },
+          "agentOverrides": {
+            "type": "object",
+            "description": "Per-agent launch overrides, applied by the one agent that reads each generated file.",
+            "additionalProperties": false,
+            "properties": {
+              "claude": { "$ref": "#/$defs/agentOverride" },
+              "hermes": { "$ref": "#/$defs/agentOverride" },
+              "copilot": { "$ref": "#/$defs/agentOverride" }
             }
+          }
         }
+      }
     }
+  },
+  "$defs": {
+    "agentOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string", "description": "Agent-specific launch command override." },
+        "args": { "type": "array", "items": { "type": "string" }, "description": "Agent-specific args override." }
+      }
+    }
+  }
 }

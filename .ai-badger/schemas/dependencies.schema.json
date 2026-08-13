@@ -1,96 +1,80 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/dependencies.schema.json",
-    "title": "Feature Dependencies",
-    "description": "Declares external package dependencies for framework features. Used by the dependency-check script to detect and install missing packages during scaffold and refresh.",
-    "type": "object",
-    "required": [
-        "dependencies"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "dependencies": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/dependencies.schema.json",
+  "title": "Feature Dependencies",
+  "description": "Declares external package dependencies for framework features. Used by the dependency-check script to detect and install missing packages during scaffold and refresh.",
+  "type": "object",
+  "required": ["dependencies"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["feature", "path", "dependencies"],
+        "additionalProperties": false,
+        "properties": {
+          "feature": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Feature identifier that triggers this dependency check."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to the feature in the catalog (for reference)."
+          },
+          "dependencies": {
             "type": "array",
             "items": {
-                "type": "object",
-                "required": [
-                    "feature",
-                    "path",
-                    "dependencies"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "feature": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Feature identifier that triggers this dependency check."
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": "Path to the feature in the catalog (for reference)."
-                    },
-                    "dependencies": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": [
-                                "name",
-                                "ecosystem",
-                                "package"
-                            ],
-                            "additionalProperties": false,
-                            "properties": {
-                                "name": {
-                                    "type": "string",
-                                    "description": "Human-readable dependency name."
-                                },
-                                "ecosystem": {
-                                    "type": "string",
-                                    "enum": [
-                                        "python",
-                                        "node",
-                                        "system"
-                                    ],
-                                    "description": "Package ecosystem."
-                                },
-                                "package": {
-                                    "type": "string",
-                                    "description": "Package name for the package manager (pip/npm/brew)."
-                                },
-                                "venv": {
-                                    "type": "boolean",
-                                    "default": false,
-                                    "description": "If true, install into a project-local .venv."
-                                },
-                                "extras": {
-                                    "type": "string",
-                                    "description": "Extra specifiers (e.g. [embeddings] for pip)."
-                                },
-                                "command": {
-                                    "type": "string",
-                                    "description": "Custom install command (overrides ecosystem default)."
-                                },
-                                "optional": {
-                                    "type": "boolean",
-                                    "default": false,
-                                    "description": "If true, never auto-installed. Instead detected in the host interpreter and surfaced as an actionable hint when missing."
-                                },
-                                "importName": {
-                                    "type": "string",
-                                    "description": "Python import name used to detect presence, when it differs from the pip package name (e.g. 'sentence_transformers' for extras that don't share the base package's import name)."
-                                },
-                                "note": {
-                                    "type": "string",
-                                    "description": "Extra caveat appended to the install hint for optional dependencies (cost, compatibility risk, silent-degradation consequence, etc.)."
-                                }
-                            }
-                        }
-                    }
+              "type": "object",
+              "required": ["name", "ecosystem", "package"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Human-readable dependency name."
+                },
+                "ecosystem": {
+                  "type": "string",
+                  "enum": ["python", "node", "system"],
+                  "description": "Package ecosystem."
+                },
+                "package": {
+                  "type": "string",
+                  "description": "Package name for the package manager (pip/npm/brew)."
+                },
+                "venv": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "If true, install into a project-local .venv."
+                },
+                "extras": {
+                  "type": "string",
+                  "description": "Extra specifiers (e.g. [embeddings] for pip)."
+                },
+                "command": {
+                  "type": "string",
+                  "description": "Custom install command (overrides ecosystem default)."
+                },
+                "optional": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "If true, never auto-installed. Instead detected in the host interpreter and surfaced as an actionable hint when missing."
+                },
+                "importName": {
+                  "type": "string",
+                  "description": "Python import name used to detect presence, when it differs from the pip package name (e.g. 'sentence_transformers' for extras that don't share the base package's import name)."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "Extra caveat appended to the install hint for optional dependencies (cost, compatibility risk, silent-degradation consequence, etc.)."
                 }
+              }
             }
+          }
         }
+      }
     }
+  }
 }

@@ -28,29 +28,24 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). Every M
 ## Workflows
 
 ### 1. Decision recording
-
 1. `record_decision(category="...", scenario="...", reasoning="...", outcome="...", confidence=0.85)`
 2. `add_entity` for key concepts
 3. `add_relationship(source="...", target="...", relationship_type="...")`
 4. Cite decision id in commits or PRs for traceability
 
 ### 2. Entity extraction
-
 - **Option 2 (Agent-Guided — Primary)**: Use LLM reasoning to extract domain concepts and call `add_entity` + `add_relationship`. Zero extra dependencies, instantaneous, zero cold-start.
 - **For Code Structures**: Use `code-review-graph` MCP tools (`semantic_search_nodes_tool`, `find_callers`, `find_dependents`) for code symbol graphs.
 - **Option 1 (Native Local ML)**: Optional `extract_entities` / `extract_relations` via PyTorch/HuggingFace (`pip install torch transformers`). Degrades if ML deps missing.
 - Verify with `get_graph_summary()`.
 
 ### 3. Decision archaeology
-
 1. `query_decisions(query="keyword")` → find decisions
 2. `get_causal_chain(decision_id="...")` → trace ancestry
 3. `find_precedents(scenario="...")` → check prior patterns
 
 ### 4. Graph export & AiRaccoon persistence pattern
-
 To prevent data loss from Semantica's ephemeral in-memory process:
-
 1. **Export as a hook / procedure**: Call `export_graph(format="json")` and save to `.ai-raccoon/semantica-graph.json`.
 2. **Watch via AiRaccoon**: Register `memory_watch_add(project_id="...", path="<path>/semantica-graph.json")`.
 3. **Structural JSON Integration**: AiRaccoon automatically ingests the JSON file, parses node/edge hierarchies and decision outcomes, and embeds them into AiRaccoon's persistent SQLite memory bank (`memory.db`).

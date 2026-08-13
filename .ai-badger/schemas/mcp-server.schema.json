@@ -1,56 +1,50 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/mcp-server.schema.json",
-    "title": "MCP server catalog entry",
-    "description": "features/<stack>/mcp/<server>/meta.json — the server's identity, and the marker index_build.py keys the mcp discovery rule on. Its prose lives beside it in server.md and its curated tool intents in tools.json. Which stacks want the server is NOT recorded here: that is what features/<stack>/stack-mcp.json says, by being the file that names it (ADR-0014).",
-    "type": "object",
-    "required": [
-        "name"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/mcp-server.schema.json",
+  "title": "MCP server catalog entry",
+  "description": "features/<stack>/mcp/<server>/meta.json — the server's identity, and the marker index_build.py keys the mcp discovery rule on. Its prose lives beside it in server.md and its curated tool intents in tools.json. Which stacks want the server is NOT recorded here: that is what features/<stack>/stack-mcp.json says, by being the file that names it (ADR-0014).",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The server name, matching the directory name and the name stack-mcp.json declares."
+    },
+    "package": {
+      "type": "string",
+      "description": "Distribution name for install reference (PyPI, npm). A property of the server, which is why it lives here rather than in one stack's declaration."
+    },
+    "description": {
+      "type": "string",
+      "description": "What the server is, for a human reading the catalog. Never injected into an agent file — server.md is what reaches a session."
+    },
+    "homepage": {
+      "type": "string",
+      "description": "Where the server is documented."
+    },
+    "prerequisite": {
+      "type": "object",
+      "description": "What must already be on the machine for this server to launch. A property of the server, so it lives here rather than in one stack's declaration — the same reasoning as 'package'. ai-badger never installs it: a server declared with 'declare: true' gets launch config written, and without its prerequisite that config fails at runtime with the agent's own error, which names neither ai-badger nor the missing tool.",
+      "required": ["summary"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What has to be installed, in a phrase a reader can act on: 'the Aspire CLI', not 'dependencies'."
         },
-        "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The server name, matching the directory name and the name stack-mcp.json declares."
+        "check": {
+          "type": "string",
+          "description": "A command that exits 0 when the prerequisite is present, e.g. 'aspire --version'. The summary says what is missing; this says whether it is."
         },
-        "package": {
-            "type": "string",
-            "description": "Distribution name for install reference (PyPI, npm). A property of the server, which is why it lives here rather than in one stack's declaration."
-        },
-        "description": {
-            "type": "string",
-            "description": "What the server is, for a human reading the catalog. Never injected into an agent file — server.md is what reaches a session."
-        },
-        "homepage": {
-            "type": "string",
-            "description": "Where the server is documented."
-        },
-        "prerequisite": {
-            "type": "object",
-            "description": "What must already be on the machine for this server to launch. A property of the server, so it lives here rather than in one stack's declaration — the same reasoning as 'package'. ai-badger never installs it: a server declared with 'declare: true' gets launch config written, and without its prerequisite that config fails at runtime with the agent's own error, which names neither ai-badger nor the missing tool.",
-            "required": [
-                "summary"
-            ],
-            "additionalProperties": false,
-            "properties": {
-                "summary": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "What has to be installed, in a phrase a reader can act on: 'the Aspire CLI', not 'dependencies'."
-                },
-                "check": {
-                    "type": "string",
-                    "description": "A command that exits 0 when the prerequisite is present, e.g. 'aspire --version'. The summary says what is missing; this says whether it is."
-                },
-                "install": {
-                    "type": "string",
-                    "description": "Where to get it — an install URL or the exact command."
-                }
-            }
+        "install": {
+          "type": "string",
+          "description": "Where to get it — an install URL or the exact command."
         }
+      }
     }
+  }
 }

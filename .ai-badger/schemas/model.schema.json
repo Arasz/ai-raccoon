@@ -1,333 +1,176 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/agent-instructions.schema.json",
-    "title": "Agent instruction maintenance model",
-    "type": "object",
-    "required": [
-        "version",
-        "files",
-        "directories",
-        "instructionSets",
-        "sharedPolicy",
-        "agents",
-        "validation"
-    ],
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "version": {
-            "type": "integer",
-            "minimum": 1
-        },
-        "files": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/$defs/fileSpec"
-            }
-        },
-        "directories": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/$defs/directorySpec"
-            }
-        },
-        "instructionSets": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/$defs/instructionSet"
-            }
-        },
-        "sharedPolicy": {
-            "type": "object",
-            "required": [
-                "authoritativeDocs",
-                "nonNegotiableInvariants"
-            ],
-            "properties": {
-                "authoritativeDocs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "nonNegotiableInvariants": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/$defs/invariant"
-                    }
-                },
-                "reviewCategories": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/$defs/reviewCategory"
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "agents": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/$defs/agentSpec"
-            }
-        },
-        "validation": {
-            "type": "object",
-            "properties": {
-                "requiredHeadings": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "oneOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "$ref": "#/$defs/headingSpec"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "requiredPatterns": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "forbiddenPatterns": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                }
-            },
-            "additionalProperties": false
-        }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/agent-instructions.schema.json",
+  "title": "Agent instruction maintenance model",
+  "type": "object",
+  "required": ["version", "files", "directories", "instructionSets", "sharedPolicy", "agents", "validation"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "files": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/fileSpec" }
     },
-    "additionalProperties": false,
-    "$defs": {
-        "fileSpec": {
-            "type": "object",
-            "required": [
-                "path",
-                "required",
-                "role"
-            ],
-            "properties": {
-                "path": {
-                    "type": "string"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "maxRecommendedLines": {
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "warnAboveLines": {
-                    "type": "integer",
-                    "minimum": 1
-                }
-            },
-            "additionalProperties": false
+    "directories": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/directorySpec" }
+    },
+    "instructionSets": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/instructionSet" }
+    },
+    "sharedPolicy": {
+      "type": "object",
+      "required": ["authoritativeDocs", "nonNegotiableInvariants"],
+      "properties": {
+        "authoritativeDocs": { "type": "array", "items": { "type": "string" } },
+        "nonNegotiableInvariants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/invariant" }
         },
-        "directorySpec": {
-            "type": "object",
-            "required": [
-                "path",
-                "required"
-            ],
-            "properties": {
-                "path": {
-                    "type": "string"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "allowedFiles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "instructionSet": {
-            "type": "object",
-            "required": [
-                "path",
-                "requiredTopics"
-            ],
-            "properties": {
-                "path": {
-                    "type": "string"
-                },
-                "frontmatter": {
-                    "type": "object",
-                    "properties": {
-                        "descriptionRequired": {
-                            "type": "boolean"
-                        },
-                        "applyToRequired": {
-                            "type": "boolean"
-                        }
-                    },
-                    "additionalProperties": false
-                },
-                "requiredTopics": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": [
-                            "id",
-                            "patterns"
-                        ],
-                        "properties": {
-                            "id": {
-                                "type": "string"
-                            },
-                            "patterns": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "additionalProperties": false
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "invariant": {
-            "type": "object",
-            "required": [
-                "id",
-                "summary",
-                "patterns",
-                "mustAppearIn"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "summary": {
-                    "type": "string"
-                },
-                "patterns": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mustAppearIn": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "headingSpec": {
-            "type": "object",
-            "required": [
-                "text"
-            ],
-            "properties": {
-                "text": {
-                    "type": "string"
-                },
-                "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": [
-                            "string",
-                            "number",
-                            "boolean"
-                        ]
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "reviewCategory": {
-            "type": "object",
-            "required": [
-                "id",
-                "patterns",
-                "mustAppearIn"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "patterns": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mustAppearIn": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "agentSpec": {
-            "type": "object",
-            "required": [
-                "entrypoint",
-                "mode"
-            ],
-            "properties": {
-                "entrypoint": {
-                    "type": "string"
-                },
-                "mode": {
-                    "type": "string"
-                },
-                "onDemandFiles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scopedInstructionsDirectory": {
-                    "type": "string"
-                },
-                "tokenBudget": {
-                    "type": "object",
-                    "properties": {
-                        "maxRecommendedLines": {
-                            "type": "integer",
-                            "minimum": 1
-                        },
-                        "warnAboveLines": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    },
-                    "additionalProperties": false
-                }
-            },
-            "additionalProperties": false
+        "reviewCategories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reviewCategory" }
         }
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/agentSpec" }
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "requiredHeadings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                { "$ref": "#/$defs/headingSpec" }
+              ]
+            }
+          }
+        },
+        "requiredPatterns": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "forbiddenPatterns": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "additionalProperties": false
     }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "fileSpec": {
+      "type": "object",
+      "required": ["path", "required", "role"],
+      "properties": {
+        "path": { "type": "string" },
+        "required": { "type": "boolean" },
+        "role": { "type": "string" },
+        "maxRecommendedLines": { "type": "integer", "minimum": 1 },
+        "warnAboveLines": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "directorySpec": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": { "type": "string" },
+        "required": { "type": "boolean" },
+        "allowedFiles": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "instructionSet": {
+      "type": "object",
+      "required": ["path", "requiredTopics"],
+      "properties": {
+        "path": { "type": "string" },
+        "frontmatter": {
+          "type": "object",
+          "properties": {
+            "descriptionRequired": { "type": "boolean" },
+            "applyToRequired": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "requiredTopics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "patterns"],
+            "properties": {
+              "id": { "type": "string" },
+              "patterns": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "invariant": {
+      "type": "object",
+      "required": ["id", "summary", "patterns", "mustAppearIn"],
+      "properties": {
+        "id": { "type": "string" },
+        "summary": { "type": "string" },
+        "patterns": { "type": "array", "items": { "type": "string" } },
+        "mustAppearIn": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "headingSpec": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "reviewCategory": {
+      "type": "object",
+      "required": ["id", "patterns", "mustAppearIn"],
+      "properties": {
+        "id": { "type": "string" },
+        "patterns": { "type": "array", "items": { "type": "string" } },
+        "mustAppearIn": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "agentSpec": {
+      "type": "object",
+      "required": ["entrypoint", "mode"],
+      "properties": {
+        "entrypoint": { "type": "string" },
+        "mode": { "type": "string" },
+        "onDemandFiles": { "type": "array", "items": { "type": "string" } },
+        "scopedInstructionsDirectory": { "type": "string" },
+        "tokenBudget": {
+          "type": "object",
+          "properties": {
+            "maxRecommendedLines": { "type": "integer", "minimum": 1 },
+            "warnAboveLines": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

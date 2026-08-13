@@ -1,49 +1,49 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/skills.schema.json",
-    "title": "ai-badger external skills list",
-    "description": "External skills to install from sources declared in sibling skills-source.json. Lives at features/<stack>/skills.json. Use {\"skills\":[]} for extension-only stacks.",
-    "type": "object",
-    "required": [
-        "skills"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/skills.schema.json",
+  "title": "ai-badger external skills list",
+  "description": "External skills to install from sources declared in sibling skills-source.json. Lives at features/<stack>/skills.json. Use {\"skills\":[]} for extension-only stacks.",
+  "type": "object",
+  "required": [
+    "skills"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name of a source in the sibling skills-source.json."
+          },
+          "scope": {
+            "enum": [
+              "default",
+              "local",
+              "user"
+            ],
+            "default": "default"
+          },
+          "description": {
             "type": "string"
-        },
-        "skills": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": [
-                    "name",
-                    "source"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "source": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Name of a source in the sibling skills-source.json."
-                    },
-                    "scope": {
-                        "enum": [
-                            "default",
-                            "local",
-                            "user"
-                        ],
-                        "default": "default"
-                    },
-                    "description": {
-                        "type": "string"
-                    }
-                }
-            }
+          }
         }
+      }
     }
+  }
 }

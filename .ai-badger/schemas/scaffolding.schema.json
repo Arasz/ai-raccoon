@@ -1,76 +1,76 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/scaffolding.schema.json",
-    "title": "ai-badger agent scaffolding descriptor",
-    "description": "Declarative specification of what files an agent needs scaffolded into a target project. Lives at features/<agent>/scaffolding.json. Read by scaffold.py during welcome-ai-badger and den-refresh.",
-    "type": "object",
-    "required": [
-        "agent",
-        "files"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "agent": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/scaffolding.schema.json",
+  "title": "ai-badger agent scaffolding descriptor",
+  "description": "Declarative specification of what files an agent needs scaffolded into a target project. Lives at features/<agent>/scaffolding.json. Read by scaffold.py during welcome-ai-badger and den-refresh.",
+  "type": "object",
+  "required": [
+    "agent",
+    "files"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent name matching the features/<agent>/ directory and config.agents entries."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this scaffolding provides."
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "managed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
             "type": "string",
-            "description": "Agent name matching the features/<agent>/ directory and config.agents entries."
-        },
-        "description": {
+            "description": "Path relative to the feature directory (features/<agent>/). For template entries, the .tmpl file to render."
+          },
+          "target": {
             "type": "string",
-            "description": "Human-readable description of what this scaffolding provides."
-        },
-        "files": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "object",
-                "required": [
-                    "source",
-                    "target",
-                    "managed"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "Path relative to the feature directory (features/<agent>/). For template entries, the .tmpl file to render."
-                    },
-                    "target": {
-                        "type": "string",
-                        "description": "Path in the scaffolded project (relative to project root)."
-                    },
-                    "managed": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "True = framework overwrites on re-scaffold. False = seed-once, project-owned after first scaffold."
-                    },
-                    "seedOnce": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "True = written only on first scaffold, preserved on re-scaffold. Overrides managed when true. When combined with alsoTarget, both copies are skipped together."
-                    },
-                    "template": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "True = render source as a template with standard slots (PROJECT_NAME, INVARIANTS, COMMANDS, etc.). False = copy source verbatim."
-                    },
-                    "alsoTarget": {
-                        "type": "string",
-                        "description": "Optional second target path to write the same content to (e.g. .hermes.md alias for HERMES.md)."
-                    },
-                    "aibCopy": {
-                        "type": "string",
-                        "description": "Optional path under .ai-badger/ to write the source-of-truth copy (before the managed-header copy to target)."
-                    },
-                    "instructionsScoped": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "If true, write one copy per instruction file from the project's instruction set (copilot's .github/instructions/ pattern)."
-                    }
-                }
-            }
+            "description": "Path in the scaffolded project (relative to project root)."
+          },
+          "managed": {
+            "type": "boolean",
+            "default": true,
+            "description": "True = framework overwrites on re-scaffold. False = seed-once, project-owned after first scaffold."
+          },
+          "seedOnce": {
+            "type": "boolean",
+            "default": false,
+            "description": "True = written only on first scaffold, preserved on re-scaffold. Overrides managed when true. When combined with alsoTarget, both copies are skipped together."
+          },
+          "template": {
+            "type": "boolean",
+            "default": false,
+            "description": "True = render source as a template with standard slots (PROJECT_NAME, INVARIANTS, COMMANDS, etc.). False = copy source verbatim."
+          },
+          "alsoTarget": {
+            "type": "string",
+            "description": "Optional second target path to write the same content to (e.g. .hermes.md alias for HERMES.md)."
+          },
+          "aibCopy": {
+            "type": "string",
+            "description": "Optional path under .ai-badger/ to write the source-of-truth copy (before the managed-header copy to target)."
+          },
+          "instructionsScoped": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, write one copy per instruction file from the project's instruction set (copilot's .github/instructions/ pattern)."
+          }
         }
+      }
     }
+  }
 }

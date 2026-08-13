@@ -1,52 +1,52 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/plugins-instructions.schema.json",
-    "title": "Agent skill installation instructions",
-    "description": "Describes how an agent installs external skills. Lives at features/<agent>/plugins-instructions.json.",
-    "type": "object",
-    "required": [
-        "agent",
-        "instructions"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/plugins-instructions.schema.json",
+  "title": "Agent skill installation instructions",
+  "description": "Describes how an agent installs external skills. Lives at features/<agent>/plugins-instructions.json.",
+  "type": "object",
+  "required": [
+    "agent",
+    "instructions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "agent": {
+      "type": "string"
+    },
+    "instructions": {
+      "type": "object",
+      "description": "Map of source type to installation commands. Keys must match skills-source.schema.json type enum.",
+      "propertyNames": {
+        "enum": [
+          "marketplace",
+          "hub",
+          "tap",
+          "url",
+          "well-known"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "commands"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
             "type": "string"
-        },
-        "agent": {
-            "type": "string"
-        },
-        "instructions": {
-            "type": "object",
-            "description": "Map of source type to installation commands. Keys must match skills-source.schema.json type enum.",
-            "propertyNames": {
-                "enum": [
-                    "marketplace",
-                    "hub",
-                    "tap",
-                    "url",
-                    "well-known"
-                ]
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
             },
-            "additionalProperties": {
-                "type": "object",
-                "required": [
-                    "commands"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "description": {
-                        "type": "string"
-                    },
-                    "commands": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "Shell commands with {source}, {sourceName}, {name}, {scope} placeholders. The first entry adds the source; a later entry containing {name} installs one skill. Without a {name} template no skill can be installed by name, and install_plugins.py warns."
-                    }
-                }
-            }
+            "description": "Shell commands with {source}, {sourceName}, {name}, {scope} placeholders. The first entry adds the source; a later entry containing {name} installs one skill. Without a {name} template no skill can be installed by name, and install_plugins.py warns."
+          }
         }
+      }
     }
+  }
 }

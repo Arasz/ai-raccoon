@@ -1,285 +1,285 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/Arasz/ai-badger/schemas/config.schema.json",
-    "title": "ai-badger project config",
-    "description": "Project profile authored by the agent during welcome-ai-badger and validated by scripts. The single machine-readable input the scaffolded skills read.",
-    "type": "object",
-    "required": [
-        "frameworkVersion",
-        "project",
-        "stacks",
-        "agents"
-    ],
-    "additionalProperties": false,
-    "properties": {
-        "$schema": {
-            "type": "string"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/config.schema.json",
+  "title": "ai-badger project config",
+  "description": "Project profile authored by the agent during welcome-ai-badger and validated by scripts. The single machine-readable input the scaffolded skills read.",
+  "type": "object",
+  "required": [
+    "frameworkVersion",
+    "project",
+    "stacks",
+    "agents"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "frameworkVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "ai-badger framework version this config was generated against."
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
         },
-        "frameworkVersion": {
-            "type": "string",
-            "pattern": "^\\d+\\.\\d+\\.\\d+$",
-            "description": "ai-badger framework version this config was generated against."
+        "summary": {
+          "type": "string"
         },
-        "project": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "additionalProperties": false,
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "minLength": 1
-                },
-                "summary": {
-                    "type": "string"
-                },
-                "domain": {
-                    "type": "string",
-                    "description": "One-line business/domain description; NOT a stack."
-                }
-            }
-        },
-        "commonStacks": {
-            "description": "Catalog stack(s) always resolved in addition to `stacks` \u2014 the source of the always-included stack's name for scaffold.py and install_plugins.py. Defaults to \"common\" when absent.",
-            "default": "common",
-            "oneOf": [
-                {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9-]*$"
-                },
-                {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9][a-z0-9-]*$"
-                    }
-                }
-            ]
-        },
-        "stacks": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9-]*$"
-            },
-            "description": "Selected technology stacks. Must exist under index.json.stacks (excluding 'common')."
-        },
-        "agents": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "enum": [
-                    "claude",
-                    "copilot",
-                    "hermes"
-                ]
-            },
-            "description": "Coding agents detected as present in the repo/user scope; only these are initialized. Keep in sync with AGENT_NAMES in badger_lib.py."
-        },
-        "sourceControl": {
-            "type": "object",
-            "required": [
-                "platform"
-            ],
-            "additionalProperties": false,
-            "properties": {
-                "platform": {
-                    "enum": [
-                        "github",
-                        "gitlab",
-                        "azure-devops",
-                        "none"
-                    ]
-                },
-                "repoUrl": {
-                    "type": [
-                        "string",
-                        "null"
-                    ]
-                },
-                "projectUrl": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "description": "Board/project URL; gates project-board task features."
-                }
-            }
-        },
-        "commands": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "build": {
-                    "type": "string"
-                },
-                "test": {
-                    "type": "string"
-                },
-                "lint": {
-                    "type": "string"
-                },
-                "run": {
-                    "type": "string"
-                }
-            }
-        },
-        "personaRouting": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": [
-                    "work",
-                    "agent"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                    "work": {
-                        "type": "string"
-                    },
-                    "agent": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "skillScope": {
-            "enum": [
-                "default",
-                "local"
-            ],
-            "default": "default",
-            "description": "default = honor each skill entry's declared scope; local = force all installs to project scope. Renamed from pluginScope in v0.7.0."
-        },
-        "docs": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "string"
-            }
-        },
-        "include": {
-            "type": "object",
-            "description": "Catalog items this project asks for by index name \u2014 the counterpart of exclude. Skills declaring scope: optIn in their own SKILL.md frontmatter can be named \u2014 they stay in the catalog until a project wants them (ADR-0018) \u2014 as can a group name from badger_lib.SKILL_GROUPS, which delivers every member. Both welcome-ai-badger and den-refresh deliver what is named here, and a name matching no optIn skill \u2014 or naming one that already ships by default \u2014 is reported, never fatal. exclude wins if a name appears in both.",
-            "additionalProperties": false,
-            "properties": {
-                "skills": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "optIn skill names to scaffold into .ai-badger/skills/. A name in badger_lib.SKILL_GROUPS installs its whole group \u2014 those skills read each other's references/ in place and cannot work alone \u2014 and a group's own name (e.g. \"documentation\") works too."
-                }
-            }
-        },
-        "exclude": {
-            "type": "object",
-            "description": "Catalog items this project declines, by index name. Neither welcome-ai-badger nor den-refresh delivers them again, and the discovery links ai-badger placed for them are removed; the copy already under .ai-badger/ is left on disk. Only the four name-addressable feature types can be declined \u2014 templates, hooks and adjustments materialise outputs named otherwise. A name matching nothing in the catalog is reported, never fatal.",
-            "additionalProperties": false,
-            "properties": {
-                "skills": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Skill names not to scaffold into .ai-badger/skills/."
-                },
-                "personas": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Persona names not to scaffold into .ai-badger/agents/."
-                },
-                "invariants": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Invariant names not to scaffold into .ai-badger/invariants/ or render into the agent instruction files."
-                },
-                "instructions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Instruction names not to scaffold into .ai-badger/instructions/."
-                }
-            }
-        },
-        "mcp": {
-            "type": "object",
-            "description": "What this project wants done about the MCP servers the catalog declares (ADR-0014). Not the same concern as mcpToolIndex, which curates whatever servers arrive; this decides which of them the agent may call. Each host honours it as far as its own surface allows: Claude denies project-wide in .claude/settings.json, Copilot leaves the server out of .github/mcp.json, and Hermes gets a proposed tools exclude because it has no project route at all.",
-            "additionalProperties": false,
-            "properties": {
-                "approve": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Pre-approve the servers ai-badger declares into this project's .mcp.json, so their tools do not prompt: Claude Code's enabledMcpjsonServers plus a permissions.allow rule per server. Set false to keep the prompt for a project that declares a server but wants each call confirmed."
-                },
-                "decline": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "description": "Server names whose tools this project refuses, by name, whatever route the server arrived by \u2014 catalog declaration, plugin, user-global config or CLI. A declined server is not declared at all, and comes back out of .mcp.json and .github/mcp.json if an earlier run wrote it; on Claude it also lands as disabledMcpjsonServers plus a permissions.deny rule, and deny beats allow. This is the decline route config.externalTools' silence used to carry (issue #186)."
-                }
-            }
-        },
-        "mcpToolIndex": {
-            "type": "object",
-            "description": "MCP tool index configuration. When enabled, the mcp-index skill and ai_badger_hooks plugin use index-based tool recommendations.",
-            "additionalProperties": false,
-            "properties": {
-                "enabled": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Generate and maintain .ai-badger/mcp-tools.json during scaffold/refresh."
-                },
-                "path": {
-                    "type": "string",
-                    "default": ".ai-badger/mcp-tools.json",
-                    "description": "Relative path to the index file within the project."
-                }
-            }
-        },
-        "agentDocs": {
-            "type": "object",
-            "description": "Size budget for the generated agent discovery files (CLAUDE.md, AGENTS.md, HERMES.md, .hermes.md, copilot-instructions.md), enforced by the task skill's stop hook. Omit for the defaults. Raise it when the breach comes from framework-rendered content the project cannot shorten without declining policy: these files are regenerated in full, so editing them does not reduce their size past the next re-scaffold. A non-positive or non-integer value is ignored and the default applies, so a typo cannot silently disable the gate.",
-            "additionalProperties": false,
-            "properties": {
-                "maxChars": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "default": 12000,
-                    "description": "Character budget per agent discovery file."
-                },
-                "maxLines": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "default": 110,
-                    "description": "Line budget per agent discovery file."
-                }
-            }
-        },
-        "statusLineCapture": {
-            "type": "object",
-            "description": "Capture Claude Code's statusLine payload so the task skill can read its rate-limit metadata instead of spending a probe. When enabled, scaffolding points .claude/settings.json statusLine at ai-badger's capture wrapper and records the renderer it replaced as the wrapper's delegate, so the existing status line keeps rendering.",
-            "additionalProperties": false,
-            "properties": {
-                "enabled": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Wire the capture wrapper into .claude/settings.json. Off by default: statusLine is a personal setting and a project-level entry overrides the user's own."
-                }
-            }
+        "domain": {
+          "type": "string",
+          "description": "One-line business/domain description; NOT a stack."
         }
+      }
+    },
+    "commonStacks": {
+      "description": "Catalog stack(s) always resolved in addition to `stacks` \u2014 the source of the always-included stack's name for scaffold.py and install_plugins.py. Defaults to \"common\" when absent.",
+      "default": "common",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      ]
+    },
+    "stacks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "description": "Selected technology stacks. Must exist under index.json.stacks (excluding 'common')."
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "claude",
+          "copilot",
+          "hermes"
+        ]
+      },
+      "description": "Coding agents detected as present in the repo/user scope; only these are initialized. Keep in sync with AGENT_NAMES in badger_lib.py."
+    },
+    "sourceControl": {
+      "type": "object",
+      "required": [
+        "platform"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "enum": [
+            "github",
+            "gitlab",
+            "azure-devops",
+            "none"
+          ]
+        },
+        "repoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projectUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Board/project URL; gates project-board task features."
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        },
+        "lint": {
+          "type": "string"
+        },
+        "run": {
+          "type": "string"
+        }
+      }
+    },
+    "personaRouting": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "work",
+          "agent"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "work": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "skillScope": {
+      "enum": [
+        "default",
+        "local"
+      ],
+      "default": "default",
+      "description": "default = honor each skill entry's declared scope; local = force all installs to project scope. Renamed from pluginScope in v0.7.0."
+    },
+    "docs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "include": {
+      "type": "object",
+      "description": "Catalog items this project asks for by index name \u2014 the counterpart of exclude. Skills declaring scope: optIn in their own SKILL.md frontmatter can be named \u2014 they stay in the catalog until a project wants them (ADR-0018) \u2014 as can a group name from badger_lib.SKILL_GROUPS, which delivers every member. Both welcome-ai-badger and den-refresh deliver what is named here, and a name matching no optIn skill \u2014 or naming one that already ships by default \u2014 is reported, never fatal. exclude wins if a name appears in both.",
+      "additionalProperties": false,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "optIn skill names to scaffold into .ai-badger/skills/. A name in badger_lib.SKILL_GROUPS installs its whole group \u2014 those skills read each other's references/ in place and cannot work alone \u2014 and a group's own name (e.g. \"documentation\") works too."
+        }
+      }
+    },
+    "exclude": {
+      "type": "object",
+      "description": "Catalog items this project declines, by index name. Neither welcome-ai-badger nor den-refresh delivers them again, and the discovery links ai-badger placed for them are removed; the copy already under .ai-badger/ is left on disk. Only the four name-addressable feature types can be declined \u2014 templates, hooks and adjustments materialise outputs named otherwise. A name matching nothing in the catalog is reported, never fatal.",
+      "additionalProperties": false,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Skill names not to scaffold into .ai-badger/skills/."
+        },
+        "personas": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Persona names not to scaffold into .ai-badger/agents/."
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Invariant names not to scaffold into .ai-badger/invariants/ or render into the agent instruction files."
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Instruction names not to scaffold into .ai-badger/instructions/."
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "description": "What this project wants done about the MCP servers the catalog declares (ADR-0014). Not the same concern as mcpToolIndex, which curates whatever servers arrive; this decides which of them the agent may call. Each host honours it as far as its own surface allows: Claude denies project-wide in .claude/settings.json, Copilot leaves the server out of .github/mcp.json, and Hermes gets a proposed tools exclude because it has no project route at all.",
+      "additionalProperties": false,
+      "properties": {
+        "approve": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pre-approve the servers ai-badger declares into this project's .mcp.json, so their tools do not prompt: Claude Code's enabledMcpjsonServers plus a permissions.allow rule per server. Set false to keep the prompt for a project that declares a server but wants each call confirmed."
+        },
+        "decline": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Server names whose tools this project refuses, by name, whatever route the server arrived by \u2014 catalog declaration, plugin, user-global config or CLI. A declined server is not declared at all, and comes back out of .mcp.json and .github/mcp.json if an earlier run wrote it; on Claude it also lands as disabledMcpjsonServers plus a permissions.deny rule, and deny beats allow. This is the decline route config.externalTools' silence used to carry (issue #186)."
+        }
+      }
+    },
+    "mcpToolIndex": {
+      "type": "object",
+      "description": "MCP tool index configuration. When enabled, the mcp-index skill and ai_badger_hooks plugin use index-based tool recommendations.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Generate and maintain .ai-badger/mcp-tools.json during scaffold/refresh."
+        },
+        "path": {
+          "type": "string",
+          "default": ".ai-badger/mcp-tools.json",
+          "description": "Relative path to the index file within the project."
+        }
+      }
+    },
+    "agentDocs": {
+      "type": "object",
+      "description": "Size budget for the generated agent discovery files (CLAUDE.md, AGENTS.md, HERMES.md, .hermes.md, copilot-instructions.md), enforced by the task skill's stop hook. Omit for the defaults. Raise it when the breach comes from framework-rendered content the project cannot shorten without declining policy: these files are regenerated in full, so editing them does not reduce their size past the next re-scaffold. A non-positive or non-integer value is ignored and the default applies, so a typo cannot silently disable the gate.",
+      "additionalProperties": false,
+      "properties": {
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 12000,
+          "description": "Character budget per agent discovery file."
+        },
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 110,
+          "description": "Line budget per agent discovery file."
+        }
+      }
+    },
+    "statusLineCapture": {
+      "type": "object",
+      "description": "Capture Claude Code's statusLine payload so the task skill can read its rate-limit metadata instead of spending a probe. When enabled, scaffolding points .claude/settings.json statusLine at ai-badger's capture wrapper and records the renderer it replaced as the wrapper's delegate, so the existing status line keeps rendering.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Wire the capture wrapper into .claude/settings.json. Off by default: statusLine is a personal setting and a project-level entry overrides the user's own."
+        }
+      }
     }
+  }
 }
