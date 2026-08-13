@@ -238,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "ai-raccoon-retrieval-analysis",
-        "sourceHash": "30cce32a873e58e34aae5e714077ce18bd2e01af4e0077878896092fafa4c51a",
+      "sourceHash": "30cce32a873e58e34aae5e714077ce18bd2e01af4e0077878896092fafa4c51a",
       "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
       "status": "synced",
-        "syncedAt": "2026-08-13T09:15:33Z",
+      "syncedAt": "2026-08-13T09:15:33Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
     },
     {
@@ -306,6 +306,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T10:50:32Z",
       "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
+    },
+    {
+      "category": "uncategorized",
+      "name": "dotnet-ai-evaluation",
+      "sourceHash": "60b03aed1476979cf30f3fa3fe131d4e55ba86d2559d719e7701635454dd8132",
+      "sourcePath": "software-development/dotnet-ai-evaluation",
+      "status": "synced",
+      "syncedAt": "2026-08-13T15:39:24Z",
+      "target": ".ai-badger/skills/learned/uncategorized/dotnet-ai-evaluation"
     },
     {
       "category": "uncategorized",

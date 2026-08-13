@@ -1,8 +1,22 @@
 {
-  "lastUpdated": "2026-08-13T17:10:00.000000+00:00",
+  "lastUpdated": "2026-08-13T17:38:00.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "1.9.1-manual-testing-checklist",
+      "title": "1.9.1 manual testing checklist skill with noise filtering checks",
+      "finished": "2026-08-13T17:38:00.000000+00:00",
+      "pr": "275",
+      "summary": "Prepared 1.9.1-manual-testing-checklist skill in .ai-badger/skills/learned/ai-raccoon/1.9.1-manual-testing-checklist and .ai-badger/skills/learned/uncategorized/1.9.1-manual-testing-checklist with SKILL.md and templates/checklist-template.json. Includes 9 structured checklist items covering version 1.9.1 verification, server restart on port 7721, HermesProcessNoisePolicy process noise interception, ZeroShotEmbeddingNoisePolicy zero-shot semantic noise filtering, clean domain writes, Polly v8 resilience pipelines, 25 MCP tools, 2 prompts, and [LoggerMessage] structured log emissions. Ready for user's signal upon updating to 1.9.1."
+    },
+    {
+      "id": "use-polly-resilience",
+      "title": "Add Polly resilience policies with exponential backoff & jitter",
+      "finished": "2026-08-13T17:35:00.000000+00:00",
+      "pr": "274",
+      "summary": "Added Polly v8 resilience pipelines with exponential backoff and decorrelated random jitter to AiRaccoon. Added Polly.Core (8.6.6) and Microsoft.Extensions.Http.Resilience (10.0.0) packages across Directory.Packages.props and project files. Implemented ResiliencePipelineFactory in AiRaccoon.Core with CreateProbePipeline and CreateAssetDownloaderPipeline. Refactored ServerProbe and AssetDownloader to execute network attempts via Polly pipelines with exponential backoff and jitter. Added unit test suites ServerProbeResilienceTests and ResiliencePipelineFactoryTests; 1,600 unit tests passed cleanly. Created ADR 0031 in docs/adr/0031-polly-resilience-pipelines.md. Bumped package version to 1.9.1 and pushed commit 818a0be5 to origin/main."
+    },
     {
       "id": "v4-zero-shot-noise-filter",
       "title": "V4 Zero-Shot Semantic Noise Filtering & Auto-TTL Pipeline Implementation",
@@ -16,65 +30,9 @@
       "finished": "2026-08-13T06:19:20.397640+00:00",
       "pr": "266",
       "summary": "Local deploy of 1.8.1 (version bumped locally, uncommitted) with the fix-after-refactor repairs merged, against a backed-up live bank (sqlite .backup, integrity ok). Manual QA: all 25 MCP tools exercised via mcporter against the real server with a dedicated project id (zero residue verified), every settings verb changed and restored (access/model/retrieval/sweep/ingest/extract/maintenance/sync/encryption/watch), serve options live (port 0 + mcp-entry JSON with real port, token gate, observability pid/counters/trace, --restart cycle). Five defects documented in docs/work/2026-08-13-tar2-qa.md; four fixed TDD (RED->GREEN): QA-1 help/version fell through to the proxy (AppRunner early-exit), QA-3 watch enable X silently wrote enabled=false (bool args ExactlyOne), QA-4 quiet proxy leaked HttpClient INFO logs to the terminal (owner f:, AppRunner honors QuietLogging), QA-5 encryption unset leaked the Bitwarden provider's Guard exception (DI positional injection pinned EnvEncryptionKeyProvider). QA-2 (model set local 180s hang) watchlisted as transient. Restored the ChunkerComparisonTests using lost by the user's 06acee1a merge (main's tests didn't compile). Full suite: 4 fails = 2 VersionContractTests (local bump) + 2 load flakes passing 3/3 alone. PR #266."
-    },
-    {
-      "id": "fix-after-refactor",
-      "title": "Restore build and tests after the dependencies refactor",
-      "finished": "2026-08-13T04:05:55.152841+00:00",
-      "pr": "265",
-      "summary": "Repaired everything the dependencies-management refactor (d6a9bb65/12fb1569/af38d804) broke, without reverting any of the refactor. Production: CliOptionReader.ReadOptions had an inverted ternary (clean parse = failure); CliArgs failure path returned true; serve lost the root --port fallback and read bool flags (--restart/--mcp-entry) with requireTokens=true though S.CL bool options carry no tokens; NodeRunner.RestartRefusal 'is not var' pattern never matched; EmitBoundUrl dropped /mcp and mis-parsed the port; observability commands printed to stderr; proxy named client was registered as nameof(BackendSessions) while BackendSessions asks for BackendLauncher.BackendSessionClient, silently unwiring JsonRpcErrorHandler (-32603 collapse). DI: ConfigCommands never registered in RegisterCommands; RegisterExtractionServices/RegisterWorkspaceService were dead code; file ingestion missing from the core graph though SqliteMemoryStore needs IFileIngestor; IReadOnlyCollection<IFileTypeHandler> unregistered; JsonFileTypeChunker ctors ambiguous for DI; SqliteConnectionFactory/ToolCallMetrics concretes lost; IdleWatchdog + BackendLauncher TimeSpan budgets unregistered; 7 classes + SweepService + SharedExtractionRunner + WorkspaceService + SyncService still took concretes instead of interfaces; WatchCommands/EncryptionCommands lost their ArgumentNullException guards. Tests: ~75 files migrated to the new ctor orders/command APIs; AppRunner-based CliCommandRunnerTests with a Console-capture race fixed (redirect moved inside EnvVarGate). Gates: build 0/0; full suite 2244/0/6 (pre-refactor baseline 2187/2/6); live CLI test: access/encryption verbs exit 0 and write the bank, serve --port 0 bound 61657, printed http://127.0.0.1:61657/mcp, token-gated 401 on /mcp, /observability serves ServerInfo JSON."
-    },
-    {
-      "id": "re-evaluate-round-3",
-      "title": "Re-evaluate round-3 winner A with owner gate",
-      "finished": "2026-08-11T16:25:01.152116+00:00",
-      "pr": "260 (draft)",
-      "summary": "Owner gate for round-3 promotion scoring. 5/5 decisions: C1 APPROVE (lane A = shipped scorer v2 in 1.6.4), D1 APPROVE (keep recentred evidence + refitted priors), D2 APPROVE (keep portability restricted to six doc channels), D3 DEFER (n=2 insufficient for measurement retuning), D4 APPROVE (judge scorer quality post-hygiene). Evidence report: 10 findings (F1-F10). Diagnostic stale \"never shipped\" claim corrected. Reconciled with architect (PARTIALLY_SUFFICIENT_MUST_FIX) and code-reviewer (REQUEST_CHANGES_FOR_GATE_INTEGRITY, PASS_WITH_TEST_DEBT) reviews. Gate debt documented: reusable change gate needs non-vacuous fixture check, Portability vs organic tech-breadth ambiguity, real-data fixture absent. No production code change. Build 0/0; promotion tests 58/0/1; full suite 2187/2/6 (pre-existing environmental failures)."
-    },
-    {
-      "id": "mem-cleanup",
-      "title": "Memory cleanup: migrate 59 legacy shared rows, remove file logging (ai-raccoon provider + ai-badger), sweep stale workspaces + tombstones",
-      "finished": "2026-08-11T15:30:46Z",
-      "pr": "259 (ai-raccoon) + ai-badger 373",
-      "summary": "Recs 5-7 of the 08-11 diagnostic closed. WP1: 59 legacy shared//<path> rows migrated to value format on the live bank (scripts/migrate-shared-legacy-rows.py, TDD 7 tests; 103/103 value-addressed, integrity ok; backup /tmp/mem-cleanup/pre-migration.db). WP2: MemoryOperationLog + AIRACCOON_MEMORY_LOG removed from integrations/hermes/ai-raccoon (RED->GREEN test; live plugin synced; ops jsonl deleted). WP3 (ai-badger repo, PR 373): memory-grade feature removed (memory_grade.py, hooks wiring, manifest/hooks.json entries); gate marker moved to memory_first_gate_post_hook.py; REMOVED_MODULES in adjust_hooks; 3759 tests green; live plugin + 4 project hooks dirs cleaned. WP4: 8 stale Active workspaces discarded+deleted, 32 sync_tombstones deleted (verified via tool + SQL + integrity). WP5: outcome doc, diagnostic resolution section, ADR-0007 note, plan KPI updates. No C# change -> no version bump."
-    },
-    {
-      "id": "mem-imp-1",
-      "title": "Queue hygiene: exclude already-shared from propose, persist discards (+ de-noise e:)",
-      "finished": "2026-08-11T17:30:00Z",
-      "pr": "258 (awaiting owner merge: repo requires a review; no reviewer attachable)",
-      "summary": "Diagnostic rec-2: propose-side shared dedup now normalizes BOTH sides (was half-normalized — 38/1000 queue rows duplicated shared values, 38 in the top-50 live); persistent discards (promotion_discards table, additive DDL, tool-path only — promote claims/evictions never write it); upsert refuses discarded hashes + exact shared twins (honest new-count); PruneRejectedAsync sweeps residue at propose+promote pass start; watch-replace restore excludes discards. e: per-element logs removed (701/705/706/507/509); counts metered (ai_raccoon.queue.pruned, promote_failures); one summary log per batch; sweep's per-row delete log kept as audit trail (owner ruling pending). TDD RED witnessed (2+3); full suite 2201/0/6; live gate on a faithful bank copy: top50 already-shared 38->0, discards persist across restart, discarded hash never re-queued, server 1.6.5.0. ADR-0026; plan rev 2 (APPROVE-WITH-CHANGES folded); outcome docs/work/2026-08-11-mem-imp-1-queue-hygiene.md."
-    },
-    {
-      "id": "manual-test-1-6-3",
-      "title": "Manual test session on live 1.6.3: watch source_file fix (1.6.2) + promotion accounting (1.6.3)",
-      "finished": "2026-08-10T10:55:00Z",
-      "pr": "-",
-      "summary": "Manual live test of the two newest fixes on the running deployment (serve PID 2004 = installed 1.6.3+11dadc04; wire serverInfo 1.6.3.0; 23 tools; real bank ~/.ai-raccoon). Fix 1 (1.6.2 #254): watch replace-by-path no longer deletes manual rows citing the watched file — verified live on manualtest163: manual row + its promotion_queue row survive two digest cycles, mirror row replaced with current file content, 0 orphan queue rows; deterministic scratch control (watch-replace-by-path-manual-test.py) PASS. Fix 2 (1.6.3 #255): honest promotion accounting + per-chunk sharing — 3 chunks of one file -> 3 promoted + 0 absorbed + 3 distinct value-addressed shared rows (paths byte-exact shared/<sha256(value)>.md); whitespace twins -> 1 promoted + 1 skipped (never absorbed); double memory_share idempotent (1 row); empty-queue promote all-zero; invariant claimed = promoted+absorbed+skipped+failures held on every call; EventId 702 log line field order verified live on a scratch serve ('2 shared, 0 absorbed (already shared), 0 duplicate-skipped'). Observations (no defects): propose re-queues already-shared chunks (skipped on promote); per-doc flooding cap means a 5-chunk file queues at most 3; memory_share reports {shared:true} unconditionally. Zero residue: entries/shared/queue/watches/watch_files/settings all 0 for manualtest163. Report: docs/work/2026-08-10-ai-raccoon-1-6-3-manual-test.md."
-    },
-    {
-      "id": "promotion-accounting-fix",
-      "title": "Honest promotion accounting + per-chunk sharing (MemoryEntryResult, absorbed counter)",
-      "finished": "2026-08-09T21:29:00Z",
-      "pr": "255",
-      "summary": "Two promotion defects fixed (found in mem-test + owner correction): (1) every non-skipped claim was reported as promoted — now promotedHashes contains only actually-created rows (MemoryEntryResult.Created = affected == 1 from the insert outcome), with an absorbed counter and the invariant claimed = promoted + absorbed + skipped + failures; (2) file-path-addressed shared rows coalesced all chunks of a file into one row — owner f: corrected to per-chunk sharing: shared rows are value-addressed (shared/<sha256(value)>.md) so every promoted chunk lands and identical chunk content from different paths dedupes by construction (UNIQUE path+hash). ContentHash.OfValue added. Plan rev 2 (reviewed APPROVE-WITH-CHANGES) + rev 3 (owner correction) in docs/plans. TDD RED->GREEN incl. inverted TwoChunksOfOneFile_BothChunksShared; 186/186 targeted; full suite only the pre-existing OTLP flake. 1.6.3 bump (folded into the 1.6.2 line per owner: local build + live test of 1.6.2 with the change verified 3 chunks -> 3 shared rows on the real bank)."
-    },
-    {
-      "id": "fix-watch-source-file-delete",
-      "title": "Watch replace-by-path deletes manual rows citing watched source_file",
-      "finished": "2026-08-09T20:53:00Z",
-      "pr": "254",
-      "summary": "Data-loss bug found in the mem-test (2/2 manual writes citing a watched file died when the file changed). Root cause: DeleteBySourcePath (MemorySql.cs:264) matched source_file, not path. Fix: match path (mirror/ingest rows carry the real path; manual rows carry hash filenames), preserving the directory-cascade + watch_files fingerprint cascade and workspace_id guard. TDD RED->GREEN, full suite (only the base-verified OTLP env flake), scratch-bank manual live test (manual row survives digest, mirror chunk replaced). 1.6.2 bump incl. the VersionContractTests ExpectedVersion pin the 1.6.1 bump had missed. Plan+review+impl+QA run by delegated lane (deleg_e7267619)."
-    },
-    {
-      "id": "mem-test",
-      "title": "Memory server live test: all tools, metrics, db, watches, promotion queue",
-      "finished": "2026-08-09T20:06:00Z",
-      "pr": "-",
-      "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "Proxy follow-ups, unchanged in priority now the Hermes regression is closed: (1) superseded backend sessions are never disposed while the process runs - BackendSessions.OpenAsync appends and nothing removes; (2) the revision guard records the requested rather than the negotiated revision (PLAUSIBLE, unconfirmed); (3) ProxyForwarder and BackendLauncher never meet in a test; (4) guard clauses on the new entry points plus a launch-race test. Then the pre-existing C2/C1/D4/C3 queue, and the upstream issue against ModelContextProtocol.",
+  "next": "Await user signal on 1.9.1 update, then run 1.9.1-manual-testing-checklist skill live evaluation.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
