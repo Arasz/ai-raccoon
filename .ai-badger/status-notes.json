@@ -98,5 +98,22 @@
       "The refactor commits on main are unreleased; no version bump was taken for this repair (they share the pending 1.8.0+release).",
       "BackendSessions.OpenAsync appends sessions and nothing removes them (pre-existing follow-up, still open)."
     ]
+  },
+  "tar2": {
+    "recorded": "2026-08-13T06:19:20.398979+00:00",
+    "pr": "https://github.com/Arasz/ai-raccoon/pull/266",
+    "decisions": [
+      "Version bump 1.8.1 is LOCAL-ONLY and uncommitted (user instruction); the two VersionContractTests failures in the worktree are the expected pin fallout and the bump is excluded from the PR.",
+      "EncryptionCommands keeps the IEncryptionKeyProvider ctor seam (38 test sites stub it); CommandsRegistration pins the EnvEncryptionKeyProvider via an explicit factory instead of relying on positional last-wins.",
+      "watch enable/disable bool arguments are ExactlyOne: the omission trap (S.CL bool args default false) becomes a parse error.",
+      "QA doc records the envelope asymmetry: errors come back as MCP isError content envelopes, successes as bare {data,meta}.",
+      "The user's merge 06acee1a reverted exactly one PR line (ChunkerComparisonTests using) \u2014 main's test build was broken until tar2's commit."
+    ],
+    "open": [
+      "QA-2 (model set local 180s hang, transient) watchlisted \u2014 revisit if it recurs.",
+      "memory_list requires projectId at runtime though the schema does not mark it required (documented, not fixed).",
+      "Two known parallel-load flakes: BackendLauncherTests.Acquire_WhenAServerIsAlreadyListening_DoesNotSpawn, McpTokenFileTests.TwoProcessesHealingConcurrently (both pass in isolation).",
+      "Existing long-lived stdio bridges still run the pre-fix 1.8.1 build; they go quiet on restart."
+    ]
   }
 }
