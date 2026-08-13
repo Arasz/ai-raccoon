@@ -8,6 +8,7 @@ using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
+[Trait("Speed", "Fast")]
 public class ZeroShotNoiseFixtureTests
 {
     private class SearchQualityRow

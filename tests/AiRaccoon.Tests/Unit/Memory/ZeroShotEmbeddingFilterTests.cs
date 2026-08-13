@@ -5,6 +5,7 @@ using Shouldly;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
+[Trait("Speed", "Fast")]
 public class ZeroShotEmbeddingFilterTests
 {
     [Fact]
