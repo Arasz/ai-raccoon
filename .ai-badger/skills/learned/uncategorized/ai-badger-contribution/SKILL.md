@@ -788,6 +788,11 @@ skill must degrade gracefully when the installed tool lacks tools the docs promi
 user `dotnet tool update -g <pkg>`).
 
 **MCP catalog pitfalls (verified 2026-08-06, ai-raccoon serve-mode PR):**
+- **`tooling/` script registration requirement**: Adding a new script to `tooling/` MUST be accompanied by (1) registering it in `TOOLING_SCRIPTS` in `tests/test_engine_tooling_layout.py` AND (2) adding it to the script table in `docs/scripts.md`. Missing either causes `pytest` failures (`test_every_tooling_script_lives_in_the_tooling_directory`, `test_every_script_is_named[tooling]`).
+- **`tooling/` CLI interface requirement (`argparse`)**: `test_engine_tooling_layout.py` runs `python3 tooling/<script> --help` on every registered script. Maintainer tooling scripts MUST use `argparse` to handle `--help` and `--check`/`--dry-run` modes so test execution does not trigger unintended side effects or file mutations on disk.
+- **JSON formatting (`ensure_ascii=False`)**: Scripts that rewrite catalog JSON files (`meta.json`, `index.json`, etc.) MUST pass `ensure_ascii=False` to `json.dumps()` to prevent escaping UTF-8 characters like em-dashes (`—`) into `\u2014`.
+- **Defensive JSON null-handling in Python**: When accessing nested dict keys from JSON data where a key may explicitly hold `null`, `data.get("key", {}).get("subkey")` evaluates to `None.get("subkey")` and raises `AttributeError`. Use `(data.get("key") or {}).get("subkey")` for null-safe navigation.
+- **Updating `features/common/stack-mcp.json` breaks scaffold assertions in CI when `hermes` is absent**: When adding a new common MCP server (e.g. `semantica`), scaffold tests asserting on `delegation.md` section `"MCP servers reachable here"` when nothing is configured (e.g. `test_the_delegation_map_still_renders_when_nothing_is_configured`) will render the newly added common server when `hermes` is not installed on `PATH` (like in CI runners). On local machines where `hermes` binary is present, ``"`hermes`" in servers`` passed, hiding the failure. Update scaffold assertions to include newly added common servers (e.g., `"`semantica`" in servers`), and test locally with `PATH=/usr/bin:/bin` to verify behaviour when `hermes` is missing.
 - **`server.md` has a hard 15-line budget** (`test_every_shipped_server_md_stays_within_the_line_budget`
   in `tests/test_mcp_catalog_instructions.py`): the file is embedded verbatim in every agent
   instruction file, so it is budget-constrained by policy. The focused
@@ -878,6 +883,45 @@ stored as a server argument. Always pass hermes-level flags BEFORE `--args`, or 
 a warm-up (e.g. `uvx` downloading a package), the first attempt may fail with "Connection
 closed". Use `echo "y" | hermes mcp add ... --connect-timeout 60` to save the config anyway,
 then `hermes mcp test <name>` to verify once the package is cached.
+
+## Feeding learned skills back (feed-badger harvest mechanics, verified 2026-08-07)
+
+When a consumer project's learned skills are fed back to the catalog, placement and gate
+rules differ from authoring fresh operational skills:
+
+- **Placement** — stack-specific skills go to `features/<stack>/skills/<name>/` as
+  STACK-LOCAL: no `SKILL_SCOPES` entry needed; they ship when that stack is configured
+  (like `auto-wm` for claude). Universal skills go to `features/common/skills/` and
+  REQUIRE a `SKILL_SCOPES` entry (`optIn` unless they must ship everywhere) or the
+  catalog-routing test fails. A first harvest filled `features/dotnet/skills/` (12),
+  `features/mcp/skills/` (1), `features/hermes/skills/` (3) and added 14 optIn common
+  skills.
+- **Stack-local skills alter scaffold tests.** Adding dotnet stack-local skills broke
+  `test_scaffold_empty_skills` tests pinned to `stacks=["dotnet"]` (assertions like
+  "reused 2 skill(s)" and "no `.ai-badger/skills` dir" became wrong). Switch those
+  fixtures to a stack WITHOUT stack-local skills (e.g. `node`) and comment why.
+- **Freshness guard reads the INDEX, not the worktree.** `scaffold_freshness_guard.py`
+  enumerates via `git ls-files -co`, so a skill deleted/renamed only in the working tree
+  is reported as "the re-scaffold no longer writes it". Stage the deletions
+  (`git add -A <deleted paths>`) BEFORE running the guard, then re-run.
+- **Run the suite with the MAIN checkout's venv python** — the scaffold-fixture tests
+  spawn `sys.executable`, and macOS system `python3` lacks `jsonschema`, producing a
+  wall of `ModuleNotFoundError` errors that looks like your change broke everything.
+  `AIB_PYTHON=...` does NOT fix it; the venv python must BE the interpreter:
+  `<main>/.venv/bin/python3 -m pytest`.
+- **tdd_guard** — editing `engine/badger_lib.py` (e.g. SKILL_SCOPES) requires a test
+  file change in the same commit; add a focused test asserting the new skills' scopes.
+- **Main moved mid-PR recovery**: if `git fetch` shows your PR branch force-updated on
+  origin (someone rebased it onto new main), recover local WIP with
+  `git stash push -m <wip>` → `git checkout -B <branch> origin/<branch>` → `git stash pop`,
+  then verify no conflicts and re-run gates. Check `git log origin/main` for what moved
+  (e.g. a plan PR merged) and align the contribution with any new conventions it set.
+- **Cross-skill references to dropped skills must be swept**: after removing a
+  project-specific skill (e.g. `memory-bank-audit`), grep ALL placed skills for
+  backticked references to its name (SKILL.md + references/) and reword or re-point.
+
+See also `skills-corpus-optimization` for the audit/MoE-plan/implementation phase that
+optimizes the harvested skills before the PR is final.
 
 ## Changelog and version bump rules
 
