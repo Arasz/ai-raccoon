@@ -227,8 +227,8 @@ overlay.
 > (scope check), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:64-144`
 > (chunk insertion), `src/AiRaccoon.Infrastructure/Embedding/EntryEmbedder.cs:53-69`
 > (per-chunk embed), `src/AiRaccoon.Core/Memory/ContentHash.cs:12-23`
-> (hashing), `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:11-46`
-> (splitting), `src/AiRaccoon.Infrastructure/Chunking/TokenizerChunker.cs:7-14`
+> (hashing), `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:19-55`
+> (splitting), `src/AiRaccoon.Infrastructure/Chunking/O200kTokenizer.cs:6-11`
 > (tokenizer)
 
 ## Query flow
@@ -586,8 +586,8 @@ engine's maximum input tokens:
 5. **Overlay** the tail of the previous chunk (up to `overlayTokens`) onto the
    start of the next, so context carries across chunk boundaries.
 
-> **Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:11-46` (split),
-> `src/AiRaccoon.Infrastructure/Chunking/TokenizerChunker.cs:7-14` (tokenizer)
+> **Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:19-55` (split),
+> `src/AiRaccoon.Infrastructure/Chunking/O200kTokenizer.cs:6-11` (tokenizer)
 
 ## Layering
 
@@ -603,9 +603,10 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
-  Chunking/                 IChunker port, MarkdownChunker (pure splitter)
+  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
-  Ingestion/                IngestPath, IngestScopeKeys/List, PathOutsideScopeException, PathNotFoundException
+  Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
+                            PathOutsideScopeException, PathNotFoundException
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
@@ -618,9 +619,10 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
-  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8)
+  Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
+                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
-  Chunking/                 TokenizerChunker (o200k_base)
+  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)

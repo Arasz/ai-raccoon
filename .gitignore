@@ -37,3 +37,6 @@ tests/AiRaccoon.Tests/Unit/Retrieval/Managed/
 # Backup files
 *.bak-*
 *.bak
+
+# Generated logs (semantica, serve.log, quiet.log, etc.)
+*.log

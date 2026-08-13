@@ -1,45 +1,26 @@
 # AiRaccoon
 
+[![build](https://github.com/Arasz/ai-raccoon/actions/workflows/build.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/build.yml)
+[![nightly](https://github.com/Arasz/ai-raccoon/actions/workflows/nightly.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/nightly.yml)
 [![publish](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml)
+[![NuGet](https://img.shields.io/nuget/v/ai-raccoon.svg)](https://www.nuget.org/packages/ai-raccoon)
 
 An MCP server that gives AI agents persistent, project-scoped memory. It runs local-first: one SQLite bank per install scope, with hybrid FTS5+vec0 search, workspace sandboxes, a curated shared tier, memory degradation, and optional cloud
 sync to S3 or Azure Blob. Built on the
 [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) C# SDK 2.1.0 (net10.0).
 
-## What's new (from 1.2.0 to 1.8.0)
+## What's new
 
-- **Extensible FileType Handlers & Native JSON Support (1.8.0).** File ingestion now uses extensible file type handlers (`IFileTypeHandler`, `IFileTypeMatcher`). Added native `.json` file support via `JsonFileTypeChunker`, which parses JSON object and array key structures into token-bounded chunks and extracts JSON schema summaries, falling back safely to line chunking on malformed files. Sets the foundation for upcoming `.xml`, `.yaml`, and `.html` handlers. [ADR-0027](docs/adr/0027-extensible-file-type-handlers-and-json-support.md)
-
-- **Search-quality metric system (1.7.0).** Every `memory_search` call creates a row in the `search_quality` table with a v7 correlation-id, query, results, and project context. `memory_record_followthrough` and `memory_record_grade` MCP tools record follow-through (did the agent use the result?) and human usefulness grades. An agent-side hook auto-detects follow-through when `read_file` matches a search result's source file within 60s. Prometheus 7B auto-grading runs every 6h via cron. See `docs/plans/2026-08-11-search-quality-metric-plan.md`.
-
-- **The propose queue stays honest (1.6.5).** `memory_promotion_discard` is now a permanent
-  "no": the rejected hash can never be re-queued by extraction, and propose refuses rows whose
-  value is already in the shared tier — no more déjà-vu candidates at the top of the queue.
-  [ADR-0026](docs/adr/0026-persistent-discards-and-shared-exclusion.md)
-
-- **Connecting a client is all it takes.** `ai-raccoon` is now a thin proxy that probes port 7721 and starts the backend itself, so every client on the machine shares one embedding model and one bank instead of paying for its own.
-  [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
-- **Upgrading no longer means hunting for a process.** `ai-raccoon serve --restart`
-  cycles the server already on the port over an authenticated loopback shutdown — no PID, no lockout when `dotnet tool update` needs the file. It cannot cycle a server older than 1.6.0, which has no endpoint to ask: this upgrade is the last
-  one that needs a manual stop.
-  [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
-- **Talking to the server directly works again.** The loopback token that ADR-0020 put in front of `/mcp` left every non-proxy caller unable to authenticate. `/mcp`
-  now also accepts `Authorization: Bearer <token>`, `serve --mcp-entry` prints the
-  `headers` map a client needs, and 401 says whether the credential was missing or wrong. [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
-- **Search got faster — about 10× on the vector path, 4× on FTS.** Persisted chunk columns and partition-key KNN took a vector batch from 32.20 ms to 3.05 ms, and an FTS batch from 41.23 ms to 9.60 ms. One bank, 4,423 entries, a 2,065-row
-  project context, k=300, warm, median of 20 reps. The FTS half is the smaller win and most of what remains is `snippet()`.
-  [measurements](docs/plans/2026-08-08-search-knn-perf.md)
-- **The shared tier proposes better memories.** Promotion scoring v3 routes each candidate through its own channel — an ADR section and a scratch note are no longer judged by the same yardstick. (The ADR is filed under v2; v3 is a later
-  section in it.) [ADR-0018 § v3](docs/adr/0018-promotion-scoring-v2.md#v3-channel-routed-prior-bounded-evidence-2026-08-08)
-- **Errors tell your agent what to fix.** A wrong or blank argument now comes back as
-  `invalid-argument:` naming the parameter, instead of the opaque
-  `An error occurred invoking '<tool>'`.
-  [tool reference](docs/reference/agent-memory-server.md)
-- **Headings count, not just words.** A second structure vector ranks a match by where it sits in a document. [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
-- **Encrypted banks can be rekeyed in place.** HKDF derivation replaced the legacy scheme, with a migration that moves an existing bank across without a re-import.
-  [how to rekey](docs/how-to/rekey-an-encrypted-bank.md)
-- **An old build can't corrupt a newer bank.** The schema is stamped and writes are refused when the binary is behind it — which matters now that one bank is shared by every project on the machine.
-  [ADR-0019](docs/adr/0019-forward-version-write-guard.md)
+- **Extensible FileType Handlers & Native JSON Support (1.8.0).** [ADR-0027](docs/adr/0027-extensible-file-type-handlers-and-json-support.md)
+- **Search-quality metric system (1.7.0).** [plan](docs/plans/2026-08-11-search-quality-metric-plan.md)
+- **The propose queue stays honest (1.6.5).** [ADR-0026](docs/adr/0026-persistent-discards-and-shared-exclusion.md)
+- **Connecting a client is all it takes.** [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
+- **Upgrading no longer means hunting for a process.** [ADR-0022](docs/adr/0022-authenticated-loopback-restart.md)
+- **Talking to the server directly works again.** [direct-HTTP walkthrough](docs/reference/agent-memory-server.md#direct-http-access-advanced)
+- **Search got faster — about 10× on the vector path, 4× on FTS.** [measurements](docs/plans/2026-08-08-search-knn-perf.md)
+- **The shared tier proposes better memories.** [ADR-0018 § v3](docs/adr/0018-promotion-scoring-v2.md#v3-channel-routed-prior-bounded-evidence-2026-08-08)
+- **Errors tell your agent what to fix.** [tool reference](docs/reference/agent-memory-server.md)
+- **Headings count, not just words.** [ADR-0004](docs/adr/0004-dual-vector-structure-signal.md)
 
 ## Quick start
 
