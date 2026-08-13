@@ -4,6 +4,7 @@ using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -22,18 +23,36 @@ public static class TestData
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
 
     /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
-    /// chunker — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
+    /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
     public static SqliteMemoryStore CreateMemoryStore(
         ISqliteConnectionFactory factory,
         ILogger<SqliteMemoryStore> logger,
         IMemorySourceStore sourceStore,
-        IChunker chunker,
+        IMarkdownChunker markdownChunker,
         TimeProvider timeProvider,
-        IEmbeddingService embeddings)
+        IEmbeddingService embeddings,
+        IJsonChunker? jsonChunker = null)
     {
-        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler(chunker)]);
-        var fileIngestor = new FileIngestor(matcher, new EntryEmbedder(embeddings), sourceStore, timeProvider);
-        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embeddings, timeProvider, logger);
+        jsonChunker ??= RealJsonChunker(markdownChunker);
+        var embedder = new EntryEmbedder(embeddings);
+        var matcher = new FileTypeMatcher(
+            [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
+        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger);
+    }
+
+    /// <summary>Real o200k-backed markdown chunker for tests that exercise token bounds, not just structure.</summary>
+    public static IMarkdownChunker RealMarkdownChunker()
+    {
+        var tokenizer = new O200kTokenizer();
+        return new MarkdownChunker(tokenizer.CountTokens);
+    }
+
+    /// <summary>Real JSON chunker sharing one tokenizer with its markdown fallback.</summary>
+    public static IJsonChunker RealJsonChunker(IMarkdownChunker? fallback = null)
+    {
+        var tokenizer = new O200kTokenizer();
+        return new JsonFileTypeChunker(tokenizer.CountTokens, fallback ?? new MarkdownChunker(tokenizer.CountTokens));
     }
 
     /// <summary>Builds a <see cref="ConfigCommands"/> with only the sub-command(s) a test needs; unused sub-commands

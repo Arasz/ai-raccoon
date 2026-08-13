@@ -356,7 +356,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         _store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.Serialize([_contentRoot]),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IChunker
+    private sealed class StubChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }

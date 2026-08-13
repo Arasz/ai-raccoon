@@ -89,7 +89,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
         var embeddingService = new EmbeddingService();
-        var countTokens = new O200kTokenizer().CountTokens;
+        var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([new MarkdownFileTypeHandler(markdownChunker),
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker))]);

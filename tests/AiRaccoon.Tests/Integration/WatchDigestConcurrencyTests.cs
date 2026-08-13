@@ -204,10 +204,10 @@ public sealed class WatchDigestConcurrencyTests
     ///     Chunker that parks (or fails) the digest between its delete and its inserts once armed —
     ///     the seam that makes the interleaving deterministic instead of timing-dependent.
     /// </summary>
-    private sealed class GateChunker : IChunker
+    private sealed class GateChunker : IMarkdownChunker
     {
         private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly IChunker _inner = new TokenizerChunker();
+        private readonly IChunker _inner = TestData.RealMarkdownChunker();
 
         private readonly ManualResetEventSlim _release = new(false);
 

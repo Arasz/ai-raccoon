@@ -16,7 +16,7 @@ public class FileTypeMatcherTests
         public IChunker Chunker { get; } = new FakeChunker();
     }
 
-    private sealed class FakeChunker : IChunker
+    private sealed class FakeChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => [text];
     }
