@@ -1,7 +1,7 @@
 {
   "$schema": "../schemas/manifest.schema.json",
   "frameworkVersion": "0.117.0",
-  "frameworkCommit": "e3de122fb823e2b7285560178b1860622e416e8f",
+  "frameworkCommit": "a09eb78de10e7c4d85bb82b933c801d8cbd772c9",
   "frameworkDirty": false,
   "frameworkRoot": "/Users/arasz/RiderProjects/ai-badger",
   "generatedAt": null,
@@ -545,12 +545,12 @@
       "source": "features/common/skills/prompt-markers",
       "target": ".ai-badger/skills/prompt-markers",
       "frameworkVersion": "0.117.0",
-      "hash": "e9738149fa5bdaceca310731178706a6c4412cf9da24be34820948fd961c6d95",
+      "hash": "67307c70bec224009719dbc4ea12620888bb12a8a013bbff54e55ff90bc7c1a0",
       "dirMeta": {
         "file_count": 3,
         "dir_count": 1
       },
-      "sourceHash": "d043b4ac5c6a9a87056f6d6533e305a2915aa381b2a37e55d25e2bd36118afef",
+      "sourceHash": "923ea40b346a27c22620e234293c6a713334ae56b21904a57b3ff9c78ebeeb43",
       "sourceMeta": {
         "file_count": 4,
         "dir_count": 1
@@ -789,12 +789,12 @@
       "source": "features/common/skills/scaffold-documentation",
       "target": ".ai-badger/skills/scaffold-documentation",
       "frameworkVersion": "0.117.0",
-      "hash": "02685b7bb9f9238fe93430fd1d4746de94f8cb9e7c631bfdabddf285d0c07d81",
+      "hash": "e74218fa38e1b40aa578cc5aa2238decb034c77ef7d8e75b7841eb7ad9813b43",
       "dirMeta": {
         "file_count": 2,
         "dir_count": 1
       },
-      "sourceHash": "02685b7bb9f9238fe93430fd1d4746de94f8cb9e7c631bfdabddf285d0c07d81",
+      "sourceHash": "e74218fa38e1b40aa578cc5aa2238decb034c77ef7d8e75b7841eb7ad9813b43",
       "sourceMeta": {
         "file_count": 2,
         "dir_count": 1
@@ -810,12 +810,12 @@
       "source": "features/common/skills/update-documentation",
       "target": ".ai-badger/skills/update-documentation",
       "frameworkVersion": "0.117.0",
-      "hash": "e855aa95ab7f71e9f67f380e7e5959aece2525adf0b38ed5b344fc1c67cda27a",
+      "hash": "d3bc4b0d08ca83a45b8b8b62a831c663440a319ddf02987c0b79b3a2ff84eb08",
       "dirMeta": {
         "file_count": 4,
         "dir_count": 1
       },
-      "sourceHash": "e855aa95ab7f71e9f67f380e7e5959aece2525adf0b38ed5b344fc1c67cda27a",
+      "sourceHash": "d3bc4b0d08ca83a45b8b8b62a831c663440a319ddf02987c0b79b3a2ff84eb08",
       "sourceMeta": {
         "file_count": 4,
         "dir_count": 1
@@ -1287,6 +1287,27 @@
       ]
     },
     {
+      "feature": "skills",
+      "stack": "common",
+      "name": "humanizer",
+      "source": "features/common/skills/humanizer",
+      "target": ".ai-badger/skills/humanizer",
+      "frameworkVersion": "0.117.0",
+      "hash": "d81ce12e44ba9e8d5e1adfcabe50273c64531d40e1d3a9779eec265d8f03d4b7",
+      "dirMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "sourceHash": "d81ce12e44ba9e8d5e1adfcabe50273c64531d40e1d3a9779eec265d8f03d4b7",
+      "sourceMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
       "feature": "templates",
       "stack": "common",
       "name": "agent-instructions/schema.json",
@@ -1353,7 +1374,7 @@
       "source": "features/hermes/templates/HERMES.md.tmpl",
       "target": "HERMES.md",
       "frameworkVersion": "0.117.0",
-      "hash": "8df5436cac88bcf0cd525a1b5e9e37d48eb84546941198820bf1126141f2cf2e",
+      "hash": "3211d33c4d302cd065837a5a7965c612f0470db0482f438496e1af83a76d5700",
       "seedOnce": false
     },
     {
@@ -1677,6 +1698,15 @@
       "name": "adjustments/.claude/skills/semantica-knowledge-graph",
       "source": "features/claude/adjustments/adjust_skills.py",
       "target": ".claude/skills/semantica-knowledge-graph",
+      "frameworkVersion": "0.117.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/humanizer",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/humanizer",
       "frameworkVersion": "0.117.0",
       "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
     },
@@ -2010,6 +2040,15 @@
       "name": "adjustments/.github/skills/semantica-knowledge-graph",
       "source": "features/copilot/adjustments/adjust_skills.py",
       "target": ".github/skills/semantica-knowledge-graph",
+      "frameworkVersion": "0.117.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/humanizer",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/humanizer",
       "frameworkVersion": "0.117.0",
       "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
     },

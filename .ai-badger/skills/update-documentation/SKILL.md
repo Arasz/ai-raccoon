@@ -59,10 +59,12 @@ directory, which cannot ship.
    file with `blocked="…"`. **Postcondition:** a search for `trust:untrusted` in `<path>` returns no marker
    inside a block you edited. A span left `untrusted` in edited text is a false claim with a fresh
    timestamp.
-5. **Write the change.** Each factual statement about the running system gets a `trustchecked`
-   marker with `evidence=<path>:<line>` you actually opened. **Postcondition:** every claim you
-   would defend in review has a marker; anything you would not defend is either deleted or written
-   as unverified.
+5. **Write the change with visual focus & humanizer discipline.**
+   - **Visual-first preference:** Represent complex flows, architectures, state transitions, or component relationships with visual diagrams (Mermaid flowcharts, sequence diagrams, mindmaps) instead of dense paragraphs.
+   - **Low-noise root READMEs:** Keep root and index READMEs concise (high-level architecture diagram + feature matrix + quick start) and link out to dedicated Diátaxis pages for deep dives.
+   - **Humanizer pass:** Apply `humanizer` rules to strip AI writing tells (`serves as`, em-dashes `—`, filler connectors `Additionally`, `Furthermore`, `At its core`). Keep sentence lengths bursty and active.
+   - Each factual statement about the running system gets a `trustchecked` marker with `evidence=<path>:<line>` you actually opened.
+   **Postcondition:** every claim you would defend in review has a marker; anything you would not defend is either deleted or written as unverified.
 6. **Evidence gate. Do not proceed until every `evidence=` path and line resolves to a line you
    opened.** Re-open each one and confirm it still says what you cited it for. This is the gate an
    agent will self-certify — **"I checked it" is not a check, and a plausible line number is not a

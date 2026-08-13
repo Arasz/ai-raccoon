@@ -12,32 +12,6 @@
     "rider": {
       "url": "http://127.0.0.1:64482/stream",
       "type": "http"
-    },
-    "semantica": {
-      "command": "semantica",
-      "args": [
-        "mcp",
-        "start"
-      ],
-      "tools": [
-        "*"
-      ]
-    },
-    "hermes": {
-      "command": "hermes",
-      "args": [
-        "mcp",
-        "serve"
-      ],
-      "tools": [
-        "*"
-      ]
-    },
-    "ai-raccoon": {
-      "command": "ai-raccoon",
-      "tools": [
-        "*"
-      ]
     }
   }
 }

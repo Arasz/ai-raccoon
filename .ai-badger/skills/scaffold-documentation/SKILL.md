@@ -47,10 +47,11 @@ Seeded READMEs are meant to be edited. They carry no generated-file header and n
 3. **Structure gate. Re-run the inventory from step 1 and do not proceed until it comes back
    empty** — no content is written before it does. Content written into a wrong tree has to be
    moved, and moving it costs the file's history on every file.
-4. **Write the root README and each directory README as complete maps.** This is judgement — naming
-   a directory's purpose is not scriptable. **Postcondition:** every **file** in each governed
-   directory appears in its parent README, and every relative link in what you wrote resolves to a
-   path that exists. Check both by hand; a missing entry is a document nobody will find.
+4. **Write the root README and each directory README as complete, visual-first maps.**
+   - **Root README:** Keep it concise and low-noise: high-level architecture/flow Mermaid diagram, quick start snippet, capabilities matrix, and clear links to dedicated Diátaxis pages.
+   - **Directory READMEs:** One row per file, describing purpose directly without fluffy prose.
+   - **Humanization:** Apply `humanizer` rules — active verbs, no em-dash filler, no empty copulas (`serves as`).
+   **Postcondition:** every **file** in each governed directory appears in its parent README, and every relative link in what you wrote resolves to a path that exists. Check both by hand; a missing entry is a document nobody will find.
 5. **Record the seeded files** in the project's documentation ledger, if it has one.
    **Postcondition:** every seeded file has an entry, and the ledger's own consistency check is
    green. An unrecorded seed makes the very next person's check fail.
