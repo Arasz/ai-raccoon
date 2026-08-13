@@ -67,7 +67,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
             result.IsError.ShouldNotBe(true);
             // The in-process server opened its own bank, and nothing was ever spawned on the port.
             File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeTrue();
-            (await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken))
+            (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
                 .ShouldBeFalse();
         }
         finally

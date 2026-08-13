@@ -260,24 +260,24 @@ public sealed class ObservabilityRunnerTests : IDisposable
     private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port)
     {
         CliArgs.TryParse(["serve", "observability", kind, "--port", port.ToString()], out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = await ObservabilityRunner.RunAsync(parsed, stdout, stderr, TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateObservabilityRunner().RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new ObservabilityRun(exit, stdout.ToString(), stderr.ToString());
     }
 
     private static ServeRun StartServe(string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        var config = parsed.Options.ToServerConfig();
+        parsed!.Errors.ShouldBeEmpty();
+        var config = parsed!.Options.ToServerConfig();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
-        var exit = NodeRunner.RunAsync(parsed, config, stdout, stderr, cts.Token);
+        var exit = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

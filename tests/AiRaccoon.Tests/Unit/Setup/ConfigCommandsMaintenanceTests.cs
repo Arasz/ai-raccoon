@@ -32,13 +32,13 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     private async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(maintenance: new MaintenanceCommands(_factory)).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, TextReader.Null,
-            ctx: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory))
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

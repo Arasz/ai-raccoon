@@ -1,6 +1,8 @@
 using System.Text;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -84,7 +86,12 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var dataRoot = Directory.CreateTempSubdirectory("ai-raccoon-search-bench").FullName;
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
-        var store = new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory),, TimeProvider.System, new EmbeddingService(),
+        var sourceStore = new SqliteMemorySourceStore(factory);
+        var embeddingService = new EmbeddingService();
+        var fileTypeMatcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new TokenizerChunker()),
+            new JsonFileTypeHandler(new JsonFileTypeChunker())]);
+        var fileIngestor = new FileIngestor(fileTypeMatcher, new EntryEmbedder(embeddingService), sourceStore, TimeProvider.System);
+        var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embeddingService, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance);
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one

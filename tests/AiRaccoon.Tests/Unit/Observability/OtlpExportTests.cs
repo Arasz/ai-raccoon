@@ -319,23 +319,31 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task CliCommandRunner_NeverWiresTheExporter()
     {
-        // CliCommandRunner hand-composes without a DI container, so this asserts a delta: running
-        // a one-shot verb must not add a NEW listener, robust to listeners other concurrent tests
-        // already attached (Enabled/HasListeners() reflect process-wide state, not per-test).
+        // The one-shot verb path (AppRunner.RunCliCommand) registers only core memory + command
+        // services, never the OTLP exporter, so this asserts a delta: running a one-shot verb must
+        // not add a NEW listener, robust to listeners other concurrent tests already attached
+        // (Enabled/HasListeners() reflect process-wide state, not per-test).
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         using var toolMetrics = new ToolCallMetrics();
         var enabledBefore = toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires").Enabled;
         var hasListenersBefore = toolMetrics.ActivitySource.HasListeners();
-        CliArgs.TryParse(["--data-root", _dataRoot, "access", "default", "show"], out var parsed);
-        var config = parsed.Options.ToServerConfig();
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
 
-        var exit = await CliCommandRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
-            TestContext.Current.CancellationToken);
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        Console.SetOut(new StringWriter());
+        Console.SetError(new StringWriter());
+        try
+        {
+            var exit = await new AppRunner().Run(["--data-root", _dataRoot, "access", "default", "show"]);
+            exit.ShouldBe(0);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
 
-        exit.ShouldBe(0);
         toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires_after").Enabled.ShouldBe(enabledBefore);
         toolMetrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
     }

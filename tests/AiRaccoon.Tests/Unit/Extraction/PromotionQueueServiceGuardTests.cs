@@ -123,6 +123,10 @@ public sealed class PromotionQueueServiceGuardTests
         public Task<int> PruneRejectedAsync(string projectId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>Simulates a store that found nothing to discard — every other member is unreachable
@@ -160,6 +164,10 @@ public sealed class PromotionQueueServiceGuardTests
             throw new NotSupportedException();
 
         public Task<int> PruneRejectedAsync(string projectId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

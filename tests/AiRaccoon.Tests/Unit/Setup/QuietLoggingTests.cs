@@ -62,7 +62,7 @@ public sealed class QuietLoggingTests : IDisposable
 
         var (stdout, stderr) = CaptureConsole(() =>
         {
-            using var host = McpServerSetup.CreateServerHost(config, [McpTransport.Stdio, McpTransport.Http]);
+            using var host = McpServerSetup.CreateServerHost(config, [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
             var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
             logger.LogInformation("quiet-combined-info-marker");
             logger.LogWarning("quiet-combined-warn-marker");

@@ -47,7 +47,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // via TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    private FakeLogger? _lastLogger;
+    private FakeLogger<EncryptionCommands>? _lastLogger;
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
@@ -63,21 +63,21 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private async Task<RunResult> Run(string[] args, FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(envPassphrase), new BitwardenEncryptionKeyProvider(runner)]));
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var logger = new FakeLogger();
+        var logger = new FakeLogger<EncryptionCommands>();
         _lastLogger = logger;
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
         var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
-        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParsedCliArgs, store, stdout, stderr, stdin ?? TextReader.Null,
-            ctx: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, encryptionCommands: encryptionCommands)
+            .RunAsync(parsed!, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -576,7 +576,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bank");
     }
 
@@ -589,7 +589,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 null!,
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bws");
     }
 
@@ -602,7 +602,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("env");
     }
 
@@ -615,7 +615,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("sidecar");
     }
 

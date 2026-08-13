@@ -41,7 +41,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = new SqliteMemoryStore(_factory,
+        var store = TestData.CreateMemoryStore(_factory,
             NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
@@ -159,7 +159,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         var logger = new ListLogger();
         var service = new PromotionQueueService(
             new SqlitePromotionQueueStore(_factory, _clock),
-            new SqliteMemoryStore(_factory,
+            TestData.CreateMemoryStore(_factory,
                 NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService()),
             new UniformCountEvictionPolicy(), new SpyMetrics(), logger, _clock);
         await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
@@ -224,6 +224,10 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public Task<int> PruneRejectedAsync(string projectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 
     /// <summary>

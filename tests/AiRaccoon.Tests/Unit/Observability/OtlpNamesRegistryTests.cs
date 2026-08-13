@@ -74,6 +74,11 @@ public sealed class OtlpNamesRegistryTests : IDisposable
 
         foreach (var property in instance.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
+            if (property.GetIndexParameters().Length > 0)
+            {
+                continue; // an indexer is not a scope member
+            }
+
             AddScopeName(property.PropertyType, property.GetValue(instance), meterNames, sourceNames);
         }
 

@@ -2,6 +2,7 @@ using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Tests.E2E;
 using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,7 +12,6 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
-using ProxyForwarder = AiRaccoon.Hosting.Proxy.ProxyForwarder;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -53,7 +53,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
             ServerInfo = new Implementation { Name = LocalServerName, Version = "0.0.0" }
         };
         options.Filters.Message.IncomingFilters.Add(
-            ProxyForwarder.Create(_recorder, ReacquireAsync, NullLogger.Instance));
+            new ProxyForwarder(NullLogger<ProxyForwarder>.Instance).Create(_recorder, new ReacquireSessions(this)));
 
         var toProxy = new Pipe();
         var fromProxy = new Pipe();
@@ -85,7 +85,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     }
 
     /// <summary>Stands in for the runner's backend acquisition: a brand new server, counted.</summary>
-    private async Task<McpSession> ReacquireAsync(string? revision, CancellationToken cancellationToken)
+    private async Task<McpClient> ReacquireAsync(string? revision, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _reacquireCount);
         if (_failReacquire)
@@ -96,6 +96,17 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         var factory = new McpServerFactory();
         _reacquired.Add(factory);
         return await factory.CreateClientAsync();
+    }
+
+    /// <summary>Backs the forwarder's re-acquire path with this test's counted re-acquire.</summary>
+    private sealed class ReacquireSessions(ProxyForwardTests owner) : IBackendSessions
+    {
+        public string Url => string.Empty;
+
+        public Task<McpClient> OpenAsync(string? revision, CancellationToken ctx) =>
+            owner.ReacquireAsync(revision, ctx);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     [Fact]

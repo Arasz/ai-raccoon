@@ -38,7 +38,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
     {
         // The probe proves "an ai-raccoon server is here", never "I may use it": it carries no
         // token, and ServeRunner's attach path plus the proxy's acquire both depend on it.
-        var responds = await ServerProbe.ForLoopback().RespondsAsync(Port, TestContext.Current.CancellationToken);
+        var responds = await TestData.CreateServerProbe().RespondsAsync(Port, TestContext.Current.CancellationToken);
 
         responds.ShouldBeTrue();
     }
@@ -142,8 +142,8 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
             Port = FreePort();
             CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
-            parsed.Errors.ShouldBeEmpty();
-            _serve = NodeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), _stdout, _stderr, _cts.Token);
+            parsed!.Errors.ShouldBeEmpty();
+            _serve = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
             await WaitForListeningAsync();
         }
 
