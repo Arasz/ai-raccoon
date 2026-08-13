@@ -17,7 +17,7 @@ public sealed class SpeedGateCoverageTests
     public void EveryTestClass_CarriesASpeedTrait()
     {
         var ungated = TestClasses()
-            .Where(t => !Traits(t).Any(trait => trait.Name == TestCategories.Speed))
+            .Where(t => Traits(t).All(trait => trait.Name != TestCategories.Speed))
             .Select(t => t.FullName ?? t.Name)
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
@@ -33,7 +33,7 @@ public sealed class SpeedGateCoverageTests
         TestClasses().Count.ShouldBeGreaterThan(100);
     }
 
-    /// <summary>Hand-written xUnit classes: any type with a [Fact] or [Theory], minus Reqnroll's generated features (gated by Category=bdd).</summary>
+    /// <summary>Handwritten xUnit classes: any type with a [Fact] or [Theory], minus Reqnroll's generated features (gated by Category=bdd).</summary>
     private static List<Type> TestClasses() =>
     [
         .. typeof(SpeedGateCoverageTests).Assembly.GetTypes()
@@ -42,8 +42,7 @@ public sealed class SpeedGateCoverageTests
             .Where(t => !Methods(t).Any(m => Traits(m).Any(trait => trait.Name == "FeatureTitle")))
     ];
 
-    private static MethodInfo[] Methods(Type type) =>
-        type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+    private static MethodInfo[] Methods(Type type) => type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
 
     private static bool HasFactOrTheory(MethodInfo method) =>
         method.GetCustomAttributesData().Any(a =>

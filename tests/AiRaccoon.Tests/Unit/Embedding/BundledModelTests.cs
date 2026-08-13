@@ -4,6 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class BundledModelTests
 {
     [Fact]
@@ -13,7 +15,7 @@ public sealed class BundledModelTests
         Directory.CreateDirectory(tempDir);
         try
         {
-            var fileName = BundledModel.ModelFileName;
+            const string fileName = BundledModel.ModelFileName;
             var flatPath = Path.Combine(tempDir, fileName);
             File.WriteAllText(flatPath, "dummy");
 
