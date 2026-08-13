@@ -50,14 +50,14 @@ public sealed class McpTokenFileTests : IDisposable
     {
         // The create is raced directly: an EnsureAsync fan-out lets the first minter finish before
         // the others look, so its read-first shortcut hides the collision this test exists for.
-        const int Minters = 16;
-        var minted = new string?[Minters];
+        const int minters = 16;
+        var minted = new string?[minters];
 
-        RaceOnThreads(Minters, index =>
+        RaceOnThreads(minters, index =>
             minted[index] = new McpTokenFile(_dataRoot).TryMintAsync(CancellationToken.None).GetAwaiter().GetResult());
 
         var winner = minted.Where(token => token is not null).ShouldHaveSingleItem();
-        var tokens = await Task.WhenAll(Enumerable.Range(0, Minters)
+        var tokens = await Task.WhenAll(Enumerable.Range(0, minters)
             .Select(_ => new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)));
         tokens.Distinct(StringComparer.Ordinal).ShouldHaveSingleItem().ShouldBe(winner);
         (await File.ReadAllTextAsync(new McpTokenFile(_dataRoot).Path, TestContext.Current.CancellationToken)).ShouldBe(winner);
@@ -223,12 +223,12 @@ public sealed class McpTokenFileTests : IDisposable
     {
         // Healing routes back through the exclusive create rather than writing directly, so racing
         // healers converge exactly as racing minters do.
-        const int Healers = 16;
+        const int healers = 16;
         var healAfter = TimeSpan.FromMilliseconds(200);
         await File.WriteAllTextAsync(new McpTokenFile(_dataRoot).Path, string.Empty, TestContext.Current.CancellationToken);
-        var healed = new string?[Healers];
+        var healed = new string?[healers];
 
-        RaceOnThreads(Healers, index =>
+        RaceOnThreads(healers, index =>
             healed[index] = new McpTokenFile(_dataRoot, healAfter: healAfter)
                 .EnsureAsync(CancellationToken.None).GetAwaiter().GetResult());
 
@@ -262,16 +262,16 @@ public sealed class McpTokenFileTests : IDisposable
     {
         using var barrier = new Barrier(count);
         var threads = Enumerable.Range(0, count)
-            .Select(index => new Thread(() =>
+            .Select(index => new Thread(b =>
             {
-                barrier.SignalAndWait();
+                (b as Barrier)?.SignalAndWait();
                 action(index);
             }))
             .ToArray();
 
         foreach (var thread in threads)
         {
-            thread.Start();
+            thread.Start(barrier);
         }
 
         foreach (var thread in threads)
