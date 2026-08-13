@@ -3,7 +3,7 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Memory;
+using AiRaccoon.Core.Memory;
 
 public sealed class OnnxInstructPromotionClassifier(
     IContentEmbedder embedder,
@@ -12,6 +12,13 @@ public sealed class OnnxInstructPromotionClassifier(
     public string Name => "OnnxInstructPromotionClassifier";
 
     public bool IsModelEnabled => isModelEnabled;
+
+    /// <summary>Canonical promotable-reference text — the centroid is its real embedding, not a synthetic vector.</summary>
+    private const string PromotableReference =
+        "A cross-project reusable fact worth sharing: a durable architectural decision or invariant that every project benefits from knowing.";
+
+    private readonly Lazy<Task<float[]?>> _coreCentroid = new(
+        () => embedder.EmbedContentAsync(PromotableReference, CancellationToken.None));
 
     public async ValueTask<PromotionClassResult> ClassifyCandidateAsync(
         MemoryWriteRequest request,
@@ -26,28 +33,21 @@ public sealed class OnnxInstructPromotionClassifier(
             return await fallback.ClassifyCandidateAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
-        // ONNX Instruct Classifier evaluation logic (Qwen2.5-0.5B-Instruct / ONNX Runtime)
         var vector = await embedder.EmbedContentAsync(request.Content, cancellationToken).ConfigureAwait(false);
         if (vector is null)
         {
             return new PromotionClassResult(false, 0.0f, Name, "No embedding available for ONNX evaluation");
         }
 
-        // Fast ONNX Instruct scoring simulation
-        var distance = (float)ZeroShotEmbeddingFilter.CosineDistance(vector, OnnxCoreCentroid);
-        var score = 1.0f - distance;
-        var isEligible = score >= 0.70f;
+        var centroid = await _coreCentroid.Value.ConfigureAwait(false);
+        if (centroid is null)
+        {
+            return new PromotionClassResult(false, 0.0f, Name, "No promotable centroid available");
+        }
 
-        return new PromotionClassResult(isEligible, score, Name, $"ONNX Instruct Model score {score:F2}");
-    }
+        var similarity = 1.0f - (float)ZeroShotEmbeddingFilter.CosineDistance(vector, centroid);
+        var isEligible = similarity >= 0.70f;
 
-    private static readonly float[] OnnxCoreCentroid = GenerateOnnxCoreCentroid();
-
-    private static float[] GenerateOnnxCoreCentroid()
-    {
-        var vec = new float[384];
-        vec[0] = 0.88f;
-        vec[1] = 0.12f;
-        return vec;
+        return new PromotionClassResult(isEligible, similarity, Name, $"ONNX Instruct Model score {similarity:F2}");
     }
 }

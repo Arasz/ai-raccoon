@@ -3,7 +3,7 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Memory;
+using AiRaccoon.Core.Memory;
 
 public sealed class ZeroShotVectorPromotionClassifier(
     IContentEmbedder embedder,
@@ -13,8 +13,12 @@ public sealed class ZeroShotVectorPromotionClassifier(
 
     public bool IsModelEnabled => false;
 
-    // Representative core domain knowledge centroids (ADRs, architectural decisions, core invariants)
-    private static readonly float[] CoreDomainCentroid = GenerateCoreDomainCentroid();
+    /// <summary>Canonical core-domain reference — the centroid is its real embedding, not a synthetic vector.</summary>
+    private const string CoreDomainReference =
+        "Architecture decision record documenting a durable technical decision: the chosen approach, the rejected alternatives, the trade-offs and the rationale.";
+
+    private readonly Lazy<Task<float[]?>> _coreCentroid = new(
+        () => embedder.EmbedContentAsync(CoreDomainReference, CancellationToken.None));
 
     public async ValueTask<PromotionClassResult> ClassifyCandidateAsync(
         MemoryWriteRequest request,
@@ -28,8 +32,13 @@ public sealed class ZeroShotVectorPromotionClassifier(
             return new PromotionClassResult(false, 0.0f, Name, "No embedding available");
         }
 
-        var distance = (float)ZeroShotEmbeddingFilter.CosineDistance(vector, CoreDomainCentroid);
-        var similarity = 1.0f - distance;
+        var centroid = await _coreCentroid.Value.ConfigureAwait(false);
+        if (centroid is null)
+        {
+            return new PromotionClassResult(false, 0.0f, Name, "No core-domain centroid available");
+        }
+
+        var similarity = 1.0f - (float)ZeroShotEmbeddingFilter.CosineDistance(vector, centroid);
 
         var isEligible = similarity >= eligibilityThreshold;
         var reason = isEligible
@@ -37,13 +46,5 @@ public sealed class ZeroShotVectorPromotionClassifier(
             : $"Core domain similarity {similarity:F2} < threshold {eligibilityThreshold:F2}";
 
         return new PromotionClassResult(isEligible, similarity, Name, reason);
-    }
-
-    private static float[] GenerateCoreDomainCentroid()
-    {
-        var vec = new float[384];
-        vec[0] = 0.85f;
-        vec[1] = 0.15f;
-        return vec;
     }
 }
