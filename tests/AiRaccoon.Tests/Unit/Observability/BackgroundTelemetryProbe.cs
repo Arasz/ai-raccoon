@@ -24,7 +24,11 @@ internal sealed class BackgroundTelemetryProbe : IDisposable
         _passes = new MetricCollector<long>(Telemetry.Meter, OtlpNames.BackgroundPasses);
         _listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == OtlpNames.BackgroundScope,
+            // Reference-equality on the probe's own ActivitySource, not the source NAME: every
+            // BackgroundTelemetry publishes on the same "AiRaccoon.Background" name, so a
+            // name filter would also capture a parallel test collection's spans (two spans where
+            // a maintenance pass asserts one).
+            ShouldListenTo = source => ReferenceEquals(source, Telemetry.ActivitySource),
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {

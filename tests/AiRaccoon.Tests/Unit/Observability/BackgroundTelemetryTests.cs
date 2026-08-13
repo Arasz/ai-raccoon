@@ -206,4 +206,23 @@ public sealed class BackgroundTelemetryTests
         probe.Durations.Count.ShouldBe(1);
         probe.Passes.Count.ShouldBe(1);
     }
+
+    [Fact]
+    public void Probe_IgnoresSpansFromAnotherTelemetryInstance_SharingTheSourceName()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        // A different BackgroundTelemetry instance publishes on the SAME source name — the
+        // shape of a parallel test collection's spans. The probe must not capture them, or a
+        // single-item assertion (e.g. a maintenance pass) races every other background test.
+        using var other = new BackgroundTelemetry();
+        using (var scope = other.Begin(Operation))
+        {
+            scope.NoteWork();
+            scope.Succeeded();
+        }
+
+        probe.Spans.ShouldBeEmpty();
+        probe.Durations.ShouldBeEmpty();
+    }
 }
