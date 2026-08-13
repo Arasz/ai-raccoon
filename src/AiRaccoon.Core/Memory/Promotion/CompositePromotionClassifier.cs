@@ -3,15 +3,16 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Memory;
+using AiRaccoon.Core.Memory;
 
 public sealed class CompositePromotionClassifier(
     IContentEmbedder embedder,
-    bool isModelEnabled = false) : IPromotionClassifier
+    Func<bool>? isModelEnabled = null) : IPromotionClassifier
 {
     public string Name => "CompositePromotionClassifier";
 
-    public bool IsModelEnabled => isModelEnabled;
+    /// <summary>Read through the injected accessor so the settings-table lookup happens at use, not at DI construction.</summary>
+    public bool IsModelEnabled => isModelEnabled?.Invoke() ?? false;
 
     private readonly ZeroShotVectorPromotionClassifier _vectorClassifier = new(embedder);
     private readonly OnnxInstructPromotionClassifier _onnxClassifier = new(embedder, isModelEnabled);
@@ -29,7 +30,7 @@ public sealed class CompositePromotionClassifier(
             return vectorResult; // Rejected at pre-screen
         }
 
-        if (!isModelEnabled)
+        if (!IsModelEnabled)
         {
             return vectorResult;
         }

@@ -44,8 +44,8 @@ public class PromotionClassifierComparativeBenchmarkTests
             var embedder = provider.GetRequiredService<IContentEmbedder>();
 
             var approachA = new ZeroShotVectorPromotionClassifier(embedder);
-            var approachB = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: true);
-            var approachC = new CompositePromotionClassifier(embedder, isModelEnabled: true);
+            var approachB = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: () => true);
+            var approachC = new CompositePromotionClassifier(embedder, isModelEnabled: () => true);
 
             var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
             var fixturePath = Path.Combine(repoRoot, "tests", "AiRaccoon.Tests", "search_quality_eval.json");

@@ -75,11 +75,13 @@ public static partial class AppRegistrations
             {
                 var embedder = sp.GetRequiredService<IContentEmbedder>();
                 var store = sp.GetRequiredService<IMemoryStore>();
-                // One-time read of the opt-in toggle; absent key resolves to false (the safe default).
-                var enabled = PromotionModelSettings.ParseEnabled(
-                    store.GetSettingAsync(PromotionModelSettings.EnabledKey, CancellationToken.None)
-                        .GetAwaiter().GetResult());
-                return new CompositePromotionClassifier(embedder, enabled);
+                // Lazy accessor: the settings-table read happens at first use (propose time), not at
+                // DI construction — a bank that cannot open yet (e.g. a forward schema version) must
+                // not break host startup. Absent key resolves to false (the safe default).
+                return new CompositePromotionClassifier(embedder,
+                    () => PromotionModelSettings.ParseEnabled(
+                        store.GetSettingAsync(PromotionModelSettings.EnabledKey, CancellationToken.None)
+                            .GetAwaiter().GetResult()));
             });
         }
 

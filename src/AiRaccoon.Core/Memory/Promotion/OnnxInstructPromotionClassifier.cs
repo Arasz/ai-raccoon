@@ -7,11 +7,12 @@ using AiRaccoon.Core.Memory;
 
 public sealed class OnnxInstructPromotionClassifier(
     IContentEmbedder embedder,
-    bool isModelEnabled = false) : IPromotionClassifier
+    Func<bool>? isModelEnabled = null) : IPromotionClassifier
 {
     public string Name => "OnnxInstructPromotionClassifier";
 
-    public bool IsModelEnabled => isModelEnabled;
+    /// <summary>Read through the injected accessor so the settings-table lookup happens at use, not at DI construction.</summary>
+    public bool IsModelEnabled => isModelEnabled?.Invoke() ?? false;
 
     /// <summary>Canonical promotable-reference text — the centroid is its real embedding, not a synthetic vector.</summary>
     private const string PromotableReference =
@@ -26,7 +27,7 @@ public sealed class OnnxInstructPromotionClassifier(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!isModelEnabled)
+        if (!IsModelEnabled)
         {
             // Opt-in option disabled by default: fallback to fast vector distance evaluation
             var fallback = new ZeroShotVectorPromotionClassifier(embedder);

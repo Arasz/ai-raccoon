@@ -41,7 +41,7 @@ public class PromotionClassifierTests
     public async Task OnnxInstructClassifier_WhenDisabled_FallsBackToZeroShotVectorClassifier()
     {
         var embedder = new FakeContentEmbedder(SampleVector());
-        var classifier = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: false);
+        var classifier = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: () => false);
 
         var result = await classifier.ClassifyCandidateAsync(
             new MemoryWriteRequest("proj-1", "# ADR-0029: Pre-Write Noise Filtering Pipeline"),
@@ -55,7 +55,7 @@ public class PromotionClassifierTests
     public async Task OnnxInstructClassifier_WhenEnabled_RoutesThroughItsOwnCentroid()
     {
         var embedder = new FakeContentEmbedder(SampleVector());
-        var classifier = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: true);
+        var classifier = new OnnxInstructPromotionClassifier(embedder, isModelEnabled: () => true);
 
         var result = await classifier.ClassifyCandidateAsync(
             new MemoryWriteRequest("proj-1", "# ADR-0029: Pre-Write Noise Filtering Pipeline"),
@@ -69,7 +69,7 @@ public class PromotionClassifierTests
     public async Task CompositeClassifier_WhenModelDisabled_PassesPreScreenAndReturnsVectorResult()
     {
         var embedder = new FakeContentEmbedder(SampleVector());
-        var classifier = new CompositePromotionClassifier(embedder, isModelEnabled: false);
+        var classifier = new CompositePromotionClassifier(embedder, isModelEnabled: () => false);
 
         var result = await classifier.ClassifyCandidateAsync(
             new MemoryWriteRequest("proj-1", "# ADR-0029: Pre-Write Noise Filtering Pipeline"),
@@ -83,7 +83,7 @@ public class PromotionClassifierTests
     public async Task CompositeClassifier_WhenModelEnabled_RoutesThroughTheOnnxClassifier()
     {
         var embedder = new FakeContentEmbedder(SampleVector());
-        var classifier = new CompositePromotionClassifier(embedder, isModelEnabled: true);
+        var classifier = new CompositePromotionClassifier(embedder, isModelEnabled: () => true);
 
         var result = await classifier.ClassifyCandidateAsync(
             new MemoryWriteRequest("proj-1", "# ADR-0029: Pre-Write Noise Filtering Pipeline"),
