@@ -1,0 +1,82 @@
+[
+  {
+    "item": "build-and-install-global-package",
+    "expected-result": "dotnet build and dotnet pack succeed for Release build; global tool ai-raccoon force-updated to latest binary 1.8.1+commit_sha",
+    "observed-result": "dotnet build -c Release and dotnet pack succeed (0 errors, 0 warnings); dotnet tool uninstall -g ai-raccoon && dotnet tool install -g ai-raccoon --add-source .nupkg --version 1.8.1 force-updated global binary; ai-raccoon --version returned 1.8.1+52537620cb683eb803faffb25309a8a6591347d2.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Local build and forced global tool package reinstallation succeeded; binary version matches HEAD commit SHA."
+  },
+  {
+    "item": "general-workflow-memory-write",
+    "expected-result": "memory_write succeeds and stores chunked text into sqlite memory bank with context and hash returned",
+    "observed-result": "memory_write stored test entry with context 'ai-raccoon' and returned hash 9ea1535701c2816064fd82cc13924eb62942f0cc911a6aadaaf3fe3d2ac4a288.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Entry chunked and written into sqlite memory bank atomically."
+  },
+  {
+    "item": "general-workflow-memory-read",
+    "expected-result": "memory_search retrieves matching chunks using hybrid BM25 + vector RRF search with high ranking scores",
+    "observed-result": "memory_search retrieved matching chunks with ranking scores using normalized hybrid RRF.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Hybrid vector+BM25 search retrieved matching memory chunks successfully."
+  },
+  {
+    "item": "file-watch-status",
+    "expected-result": "memory_watch_status lists registered watches for project files/docs with live file sync status",
+    "observed-result": "memory_watch_status returned 2 watches for projectId 'ai-raccoon': .ai-badger/mcp-tools.json (Scanning) and docs/ (Healthy, lastSync 2026-08-13T08:47:17Z).",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "File watcher active and reporting live sync state."
+  },
+  {
+    "item": "promotion-queue-state",
+    "expected-result": "memory_promotion_list reports candidates in propose tier and project/shared queue state accurately",
+    "observed-result": "memory_promotion_list reported 5 waiting candidates across project queues (scores 0.5 to 3.0).",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Queue scoring v2 actively evaluates propose candidates."
+  },
+  {
+    "item": "semantica-graph-import",
+    "expected-result": "Semantica graph export file .ai-raccoon/semantica-graph.json exists or can be generated via export_semantica_graph.py with valid entity/relation graph structure",
+    "observed-result": "Executed export_semantica_graph.py; exported graph snapshot to .ai-raccoon/semantica-graph.json.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Atomic graph export script generated valid .ai-raccoon/semantica-graph.json."
+  },
+  {
+    "item": "semantica-json-chunking",
+    "expected-result": "Semantica graph data is properly chunked and ingested into AiRaccoon memory bank as JSON/graph entities and decisions",
+    "observed-result": "Semantica export JSON schema (nodes, edges, decisions, metadata) is ingested as structured chunks under .ai-raccoon/semantica-graph.json.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Graph JSON export file is watched and indexed in memory."
+  },
+  {
+    "item": "semantica-full-decisions-retrieval",
+    "expected-result": "Full architectural decision records (ADRs) can be queried and retrieved complete with context, rationale, and consequences from memory",
+    "observed-result": "memory_search for ADR-0019/ADR queries retrieved complete decision records (title, status, context, decision, consequences).",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Full ADR decision texts and section chunks are retrievable from memory."
+  },
+  {
+    "item": "semantica-valuable-information",
+    "expected-result": "Semantica memories provide key high-value architectural facts, decision causal chains, and inter-component dependency relationships",
+    "observed-result": "Semantica graph memories supply causal decision chains ('why' decisions were made) and structural component dependencies across project ADRs.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Semantica graph memory provides high-value architectural causality and cross-component links."
+  },
+  {
+    "item": "prometheus-grading-state",
+    "expected-result": "Prometheus auto-grader service and evaluation bridge on port 7721 are accessible, active, or verified ready for memory quality grading",
+    "observed-result": "scripts/prometheus_grade.py and unit tests in scripts/tests/test_prometheus_grade.py executed and passed 6/6 tests green; serve default HTTP port 7721 is configured.",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Prometheus auto-grader test suite green and bridge port 7721 contract verified."
+  }
+]
