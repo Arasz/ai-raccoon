@@ -17,7 +17,7 @@ internal static class CliCommandTree
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "promotion", "maintenance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -73,6 +73,7 @@ internal static class CliCommandTree
         root.Add(WatchCommand());
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
+        root.Add(PromotionCommand());
         root.Add(MaintenanceCommand());
         root.Add(ServeCommand());
         return root;
@@ -317,6 +318,20 @@ internal static class CliCommandTree
             }
         });
         return option;
+    }
+
+    private static Command PromotionCommand()
+    {
+        var promotion = new Command("promotion", "Promotion classifier configuration");
+        var model = new Command("model",
+            "Opt-in ONNX instruct promotion classifier (promotion.model.enabled, default disabled; the zero-shot vector classifier runs either way)")
+        {
+            new Command("enable", "Enables the ONNX instruct promotion classifier (promotion.model.enabled = true)"),
+            new Command("disable", "Disables the ONNX instruct promotion classifier (promotion.model.enabled = false; the default)"),
+            new Command("show", "Shows whether the ONNX instruct promotion classifier is enabled (row value, else disabled)")
+        };
+        promotion.Add(model);
+        return promotion;
     }
 
     private static Command MaintenanceCommand()

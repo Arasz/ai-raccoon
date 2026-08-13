@@ -143,7 +143,7 @@ dotnet tool update -g ai-raccoon
 To enable the local ONNX instruct classifier for promotion evaluation in your project:
 
 ```bash
-ai-raccoon settings set promotion.model.enabled true
+ai-raccoon promotion model enable
 ```
 
 The full source code, benchmark harnesses, and research records are available on [GitHub](https://github.com/Arasz/ai-raccoon).

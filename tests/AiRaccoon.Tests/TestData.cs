@@ -68,9 +68,10 @@ public static class TestData
         WatchCommands? watch = null,
         EncryptionCommands? encryptionCommands = null,
         ExtractCommands? extract = null,
+        PromotionCommands? promotion = null,
         MaintenanceCommands? maintenance = null,
         ServeCommands? serve = null) =>
-        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, serve!);
+        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, promotion!, maintenance!, serve!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());

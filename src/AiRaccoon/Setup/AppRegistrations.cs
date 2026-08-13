@@ -4,6 +4,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
+using AiRaccoon.Core.Memory.Promotion;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
@@ -55,6 +56,7 @@ public static partial class AppRegistrations
             services.RegisterAccessGuardServices();
             services.RegisterObservabilityServices();
             services.RegisterExtractionServices();
+            services.RegisterPromotionClassifier();
             services.RegisterLongLivedBackgroundServices(mcpTransport);
             services.RegisterBankMaintenanceBackgrounbdService();
         }
@@ -65,6 +67,20 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
+        }
+
+        private void RegisterPromotionClassifier()
+        {
+            services.AddSingleton<IPromotionClassifier>(sp =>
+            {
+                var embedder = sp.GetRequiredService<IContentEmbedder>();
+                var store = sp.GetRequiredService<IMemoryStore>();
+                // One-time read of the opt-in toggle; absent key resolves to false (the safe default).
+                var enabled = PromotionModelSettings.ParseEnabled(
+                    store.GetSettingAsync(PromotionModelSettings.EnabledKey, CancellationToken.None)
+                        .GetAwaiter().GetResult());
+                return new CompositePromotionClassifier(embedder, enabled);
+            });
         }
 
         private void RegisterSyncServices()

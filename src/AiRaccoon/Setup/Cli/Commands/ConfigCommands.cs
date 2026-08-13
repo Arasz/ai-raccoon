@@ -14,6 +14,7 @@ internal sealed class ConfigCommands(
     WatchCommands watch,
     EncryptionCommands encryptionCommands,
     ExtractCommands extract,
+    PromotionCommands promotion,
     MaintenanceCommands maintenance,
     ServeCommands serve)
 {
@@ -81,6 +82,9 @@ internal sealed class ConfigCommands(
                     ctx),
                 ["extract", "exclude", "list"] => await extract.ExcludeListAsync(store, streams, ctx),
                 ["extract", "prune"] => await extract.PruneAsync(parsedCliArgs, streams, ctx),
+                ["promotion", "model", "enable"] => await promotion.SetEnabledAsync(true, store, streams, ctx),
+                ["promotion", "model", "disable"] => await promotion.SetEnabledAsync(false, store, streams, ctx),
+                ["promotion", "model", "show"] => await promotion.ShowAsync(store, streams, ctx),
                 ["encryption", "show"] => await encryptionCommands.ShowAsync(store, streams,
                     ctx),
                 ["encryption", "unset"] => await encryptionCommands.UnsetAsync(store, streams,
