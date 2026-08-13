@@ -31,7 +31,7 @@ public sealed class ExtractionHostedServiceTests
         var time = new FakeTimeProvider(FixedNow);
         var queue = new FakePromotionQueue();
         var service = new ExtractionHostedService(store,
-            new SharedExtractionRunner(store, new SharedExtractionService(), queue, time), queue, time,
+            new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, new NoopPromotionClassifier()), queue, time,
             telemetry ?? TestTelemetry.None, logger);
         return (store, time, service, queue);
     }

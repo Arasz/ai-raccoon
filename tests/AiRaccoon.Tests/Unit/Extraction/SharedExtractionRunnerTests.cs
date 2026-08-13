@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Promotion;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -18,7 +19,7 @@ public sealed class SharedExtractionRunnerTests
         var store = new FakeExtractionStore();
         var queue = new FakePromotionQueue();
         var time = new FakeTimeProvider(FixedNow);
-        return (store, queue, time, new SharedExtractionRunner(store, new SharedExtractionService(), queue, time));
+        return (store, queue, time, new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, new NoopPromotionClassifier()));
     }
 
     private static ExtractionCandidateRow Row(string hash, string value = "organic fact about beta",
@@ -347,5 +348,67 @@ public sealed class SharedExtractionRunnerTests
         await Should.ThrowAsync<ArgumentException>(() =>
             runner.ProposeAsync("  ", EmptyIndex, includeTtlRows: false, limit: 20,
                 TestContext.Current.CancellationToken));
+    }
+
+    // ------------------------------------------------------------------ semantic promotion gating
+
+    /// <summary>The opt-in ONNX promotion model is a real gate: when enabled, a candidate the
+    /// classifier rejects never reaches the queue, while a passing one still does.</summary>
+    [Fact]
+    public async Task ProposeAsync_WhenModelEnabled_DropsCandidatesTheClassifierRejects()
+    {
+        var store = new FakeExtractionStore();
+        var queue = new FakePromotionQueue();
+        var time = new FakeTimeProvider(FixedNow);
+        var classifier = new FakePromotionClassifier(modelEnabled: true, rejectSubstring: "beta");
+        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, classifier);
+        store.Candidates["acme"] = [Row("h1", "organic fact about beta"), Row("h2", "organic fact about alpha")];
+
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        candidates.Select(c => c.Hash).ShouldBe(["h2"]);
+        queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["h2"]);
+        classifier.Calls.ShouldBe(2);
+    }
+
+    /// <summary>Model off (the default) is a pass-through: the mechanical scorer runs and the
+    /// semantic classifier is never consulted, so existing behaviour is unchanged.</summary>
+    [Fact]
+    public async Task ProposeAsync_WhenModelDisabled_DoesNotConsultTheClassifier()
+    {
+        var store = new FakeExtractionStore();
+        var queue = new FakePromotionQueue();
+        var time = new FakeTimeProvider(FixedNow);
+        var classifier = new FakePromotionClassifier(modelEnabled: false, rejectSubstring: "beta");
+        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, classifier);
+        store.Candidates["acme"] = [Row("h1", "organic fact about beta")];
+
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+
+        candidates.Select(c => c.Hash).ShouldBe(["h1"]);
+        queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["h1"]);
+        classifier.Calls.ShouldBe(0);
+    }
+
+    /// <summary>Rejects content carrying the reject substring; counts its calls so a test can assert
+    /// whether the runner consulted it at all.</summary>
+    private sealed class FakePromotionClassifier(bool modelEnabled, string rejectSubstring) : IPromotionClassifier
+    {
+        public string Name => "FakePromotionClassifier";
+
+        public bool IsModelEnabled => modelEnabled;
+
+        public int Calls { get; private set; }
+
+        public ValueTask<PromotionClassResult> ClassifyCandidateAsync(MemoryWriteRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            var eligible = !request.Content.Contains(rejectSubstring, StringComparison.Ordinal);
+            return new ValueTask<PromotionClassResult>(
+                new PromotionClassResult(eligible, eligible ? 0.9f : 0.1f, Name, eligible ? "eligible" : "rejected"));
+        }
     }
 }

@@ -12,6 +12,10 @@ public record PromotionClassResult(
 public interface IPromotionClassifier
 {
     string Name { get; }
+
+    /// <summary>True when the opt-in ONNX instruct model is active; a disabled classifier still evaluates but on the zero-shot vector path only.</summary>
+    bool IsModelEnabled { get; }
+
     ValueTask<PromotionClassResult> ClassifyCandidateAsync(
         MemoryWriteRequest request,
         CancellationToken cancellationToken = default);

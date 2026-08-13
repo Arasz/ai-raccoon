@@ -15,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
+using AiRaccoon.Core.Memory.Promotion;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests;
@@ -444,4 +445,16 @@ public sealed class FakeExtractionStore : IMemoryStore
     public Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
+}
+
+/// <summary>An <see cref="IPromotionClassifier"/> with the model off — the no-op default for tests that don't exercise semantic promotion gating.</summary>
+public sealed class NoopPromotionClassifier : IPromotionClassifier
+{
+    public string Name => "NoopPromotionClassifier";
+
+    public bool IsModelEnabled => false;
+
+    public ValueTask<PromotionClassResult> ClassifyCandidateAsync(MemoryWriteRequest request,
+        CancellationToken cancellationToken = default) =>
+        new(new PromotionClassResult(false, 0.0f, Name, "noop"));
 }

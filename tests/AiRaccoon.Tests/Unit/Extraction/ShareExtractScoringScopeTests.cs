@@ -28,7 +28,7 @@ public sealed class ShareExtractScoringScopeTests
         var store = new FakeExtractionStore();
         var queue = new FakePromotionQueue();
         var time = new FakeTimeProvider(FixedNow);
-        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time);
+        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, new NoopPromotionClassifier());
         store.Candidates["acme"] = [Row("h1", "organic fact about beta")];
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
 
@@ -56,7 +56,7 @@ public sealed class ShareExtractScoringScopeTests
         var store = new FakeExtractionStore();
         var queue = new FakePromotionQueue();
         var time = new FakeTimeProvider(FixedNow);
-        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time);
+        var runner = new SharedExtractionRunner(store, new SharedExtractionService(), queue, time, new NoopPromotionClassifier());
         store.Candidates["acme"] = [Row("h1", "organic fact about beta")];
         store.Candidates["beta"] = [Row("h2", "organic fact about acme")];
 

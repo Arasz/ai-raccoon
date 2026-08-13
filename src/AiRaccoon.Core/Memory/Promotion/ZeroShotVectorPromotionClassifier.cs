@@ -3,13 +3,15 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AiRaccoon.Core.Memory;
+using Memory;
 
 public sealed class ZeroShotVectorPromotionClassifier(
     IContentEmbedder embedder,
     float eligibilityThreshold = 0.65f) : IPromotionClassifier
 {
     public string Name => "ZeroShotVectorPromotionClassifier";
+
+    public bool IsModelEnabled => false;
 
     // Representative core domain knowledge centroids (ADRs, architectural decisions, core invariants)
     private static readonly float[] CoreDomainCentroid = GenerateCoreDomainCentroid();
@@ -30,7 +32,7 @@ public sealed class ZeroShotVectorPromotionClassifier(
         var similarity = 1.0f - distance;
 
         var isEligible = similarity >= eligibilityThreshold;
-        var reason = isEligible 
+        var reason = isEligible
             ? $"Core domain similarity {similarity:F2} >= threshold {eligibilityThreshold:F2}"
             : $"Core domain similarity {similarity:F2} < threshold {eligibilityThreshold:F2}";
 

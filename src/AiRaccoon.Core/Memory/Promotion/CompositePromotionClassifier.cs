@@ -3,13 +3,15 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AiRaccoon.Core.Memory;
+using Memory;
 
 public sealed class CompositePromotionClassifier(
     IContentEmbedder embedder,
     bool isModelEnabled = false) : IPromotionClassifier
 {
     public string Name => "CompositePromotionClassifier";
+
+    public bool IsModelEnabled => isModelEnabled;
 
     private readonly ZeroShotVectorPromotionClassifier _vectorClassifier = new(embedder);
     private readonly OnnxInstructPromotionClassifier _onnxClassifier = new(embedder, isModelEnabled);

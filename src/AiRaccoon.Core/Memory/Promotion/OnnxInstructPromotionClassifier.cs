@@ -3,13 +3,15 @@ namespace AiRaccoon.Core.Memory.Promotion;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AiRaccoon.Core.Memory;
+using Memory;
 
 public sealed class OnnxInstructPromotionClassifier(
     IContentEmbedder embedder,
     bool isModelEnabled = false) : IPromotionClassifier
 {
     public string Name => "OnnxInstructPromotionClassifier";
+
+    public bool IsModelEnabled => isModelEnabled;
 
     public async ValueTask<PromotionClassResult> ClassifyCandidateAsync(
         MemoryWriteRequest request,

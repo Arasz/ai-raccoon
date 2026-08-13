@@ -43,7 +43,7 @@ public class MemoryToolsTests
         _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
-                new FakeTimeProvider(FixedNow)), _queue);
+                new FakeTimeProvider(FixedNow), new NoopPromotionClassifier()), _queue);
         _workspace = new WorkspaceTools(workspaces, gate);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate);
         _syncTools = new SyncTools(_sync,

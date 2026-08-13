@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Memory.Promotion;
+
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
@@ -9,12 +11,13 @@ public sealed class SharedExtractionRunner(
     IMemoryStore store,
     ISharedExtractionService extraction,
     IPromotionQueue queue,
-    TimeProvider timeProvider) : ISharedExtractionRunner
+    TimeProvider timeProvider,
+    IPromotionClassifier classifier) : ISharedExtractionRunner
 {
     /// <summary>
-    ///     Ranks and queues one project's share-worthy entries; the shared index is a per-pass
-    ///     input, read once by the caller and reused across projects. Cross-project scoring always
-    ///     covers every known project id, fetched here rather than caller-supplied.
+    ///     The propose round-trip for one project: read candidate rows, rank via
+    ///     <see cref="SharedExtractionService" />, and persist into the propose tier — shared by the MCP
+    ///     tool and the background loop (docs/work/features-agent-memory/spec-issue-1.md §6.1).
     /// </summary>
     public async Task<IReadOnlyList<ShareCandidate>> ProposeAsync(
         string projectId,
@@ -32,8 +35,8 @@ public sealed class SharedExtractionRunner(
         // ranking below re-admits anything still eligible on merit in this same pass.
         await queue.ClearStaleAsync(projectId, PromotionScorer.Version, cancellationToken).ConfigureAwait(false);
 
-        var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken)
-            .ConfigureAwait(false);
+        var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken).ConfigureAwait(false);
+        rows = await FilterByClassifierAsync(projectId, rows, cancellationToken).ConfigureAwait(false);
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
         var ranked = extraction.RankAll(projectId, allProjectIds, rows,
             sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
@@ -63,6 +66,34 @@ public sealed class SharedExtractionRunner(
         }
 
         return [.. ranked.Take(limit)];
+    }
+
+    /// <summary>
+    ///     With the opt-in ONNX promotion model enabled, drops candidates the semantic classifier
+    ///     rejects before the mechanical scorer ranks them. Disabled (the default) is a pass-through —
+    ///     the zero-shot vector path alone is not a promotion gate.
+    /// </summary>
+    private async Task<IReadOnlyList<ExtractionCandidateRow>> FilterByClassifierAsync(
+        string projectId, IReadOnlyList<ExtractionCandidateRow> rows, CancellationToken cancellationToken)
+    {
+        if (!classifier.IsModelEnabled)
+        {
+            return rows;
+        }
+
+        var kept = new List<ExtractionCandidateRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            var result = await classifier.ClassifyCandidateAsync(
+                    new MemoryWriteRequest(projectId, row.Value, SourceFile: row.SourceFile), cancellationToken)
+                .ConfigureAwait(false);
+            if (result.IsEligibleForPromotion)
+            {
+                kept.Add(row);
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>
