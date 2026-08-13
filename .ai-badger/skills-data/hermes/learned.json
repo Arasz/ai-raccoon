@@ -238,10 +238,10 @@
     {
       "category": "uncategorized",
       "name": "ai-raccoon-retrieval-analysis",
-      "sourceHash": "30cce32a873e58e34aae5e714077ce18bd2e01af4e0077878896092fafa4c51a",
+      "sourceHash": "de5ef074530f275914ea6759d0681d4217692731583b4547ff86548d8ba5b1d1",
       "sourcePath": "ai-raccoon/ai-raccoon-retrieval-analysis",
       "status": "synced",
-      "syncedAt": "2026-08-13T09:15:33Z",
+      "syncedAt": "2026-08-13T21:35:51Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-retrieval-analysis"
     },
     {
@@ -263,15 +263,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/ai-text-humanization"
     },
     {
-        "category": "uncategorized",
-        "name": "angular-static-content",
-        "sourceHash": "3d1c6c28c8c9f8d1e663a04d241362eb1669df861fcd56d81f18b157554e9f8f",
-        "sourcePath": "software-development/angular-static-content",
-        "status": "synced",
-        "syncedAt": "2026-08-13T16:44:31Z",
-        "target": ".ai-badger/skills/learned/uncategorized/angular-static-content"
+      "category": "uncategorized",
+      "name": "angular-static-content",
+      "sourceHash": "3d1c6c28c8c9f8d1e663a04d241362eb1669df861fcd56d81f18b157554e9f8f",
+      "sourcePath": "software-development/angular-static-content",
+      "status": "synced",
+      "syncedAt": "2026-08-13T16:44:31Z",
+      "target": ".ai-badger/skills/learned/uncategorized/angular-static-content"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "artifact-verification",
       "sourceHash": "c7278df53e31be91dd487c2a5378aae34b3fa1ddb9397b06d4a234fd83bd109d",

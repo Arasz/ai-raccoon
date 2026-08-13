@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-13T17:45:00.000000+00:00",
+  "lastUpdated": "2026-08-13T20:28:27.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "fix-warning-log",
+      "title": "Stop serve from warning 'ignoring --transport Proxy' on the default transport",
+      "finished": "2026-08-13T20:28:27.000000+00:00",
+      "pr": "275",
+      "summary": "Fixed the spurious 'serve ignoring --transport Proxy' warning on a plain `ai-raccoon serve`. Root cause: since ADR-0020 the default transport is Proxy, and serve warns on any non-http transport, so a plain serve warned though --transport was never passed. TDD fix: added RootCliOptions.IsTransportExplicit (mirrors IsPortExplicit), set from the --transport option tokens in CliArgs.ReadRootOptions; NodeRunner.WarnOnNonHttpTransport now skips the warning unless the flag was explicitly given. Tests: NodeRunnerTests.DefaultTransport_DoesNotWarnThatServeIgnoresIt (RED->GREEN) + CliArgsTests flag pins; explicit --transport stdio still warns (NonHttpTransport_WarnsOnStderr_AndStillServesHttp). Manual live check: warning gone on default serve, still present on explicit stdio. 119 targeted + 5 VersionContract tests green; CI (build-bdd/fast/slow) green. Bump 1.10.2. PR #275."
+    },
     {
       "id": "v4-dynamic-noise-and-semantic-promotion",
       "title": "V4 Dynamic Noise Vector Learning and Semantic Promotion Classifier",

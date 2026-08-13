@@ -112,13 +112,12 @@ calibration, RAGAS context precision, implicit feedback) that answers the diagno
 ## Methodology: Semantica Causal Graph Persistence Bridge
 
 When integrating session-scoped knowledge graph reasoning (Semantica MCP):
-
 1. **In-Memory Reset**: Semantica's graph lives in process memory and resets on session exit.
 2. **Persistence Bridge**: `.ai-badger/skills/semantica-knowledge-graph/scripts/export_semantica_graph.py` exports graph schema (`nodes`, `edges`, `decisions`) to `.ai-raccoon/semantica-graph.json`.
 3. **AiRaccoon Watch & Ingestion**: AiRaccoon registers `memory_watch_add` on `.ai-raccoon/semantica-graph.json`, chunking entities, relations, and decision rationale into `memory.db`.
 4. **Auditable Decision Chains**: `memory_search` in AiRaccoon returns both textual rationale and structural graph relations, enabling cross-session retrieval of auditable decision chains ("why" choices were made).
-5. **Pre-Flight Evaluation Checklist**: Execute `ai-raccoon-state-checklist` after server restarts to verify global tool binaries, memory write/read, watch sync, promotion queue, Semantica graph JSON chunking, and Prometheus auto-grader
-   unit tests green.
+5. **Pre-Flight Evaluation Checklist**: Execute `ai-raccoon-state-checklist` after server restarts to verify global tool binaries, memory write/read, watch sync, promotion queue, Semantica graph JSON chunking, and Prometheus auto-grader unit tests green.
+
 
 ## Methodology: A/B Comparison (candidate vs baseline)
 
