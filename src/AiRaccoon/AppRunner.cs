@@ -1,4 +1,5 @@
 using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup;
@@ -6,6 +7,7 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Setup.Cli.Render;
 using AiRaccoon.Setup.Extensions;
+using AiRaccoon.Setup.Logging;
 using AiRaccoon.Setup.Models;
 using Microsoft.Data.Sqlite;
 using SQLitePCL;
@@ -24,6 +26,11 @@ public sealed partial class AppRunner
         if (GetCliInput(args) is not { } cliInput)
         {
             return ExitCode.FailedToParseCliArgs;
+        }
+
+        if (cliInput.ShowHelp || cliInput.ShowVersion)
+        {
+            return ExitCode.Success;
         }
 
         if (cliInput.IsCommandInput)
@@ -121,7 +128,7 @@ public sealed partial class AppRunner
     private async Task<int> RunCliCommand(CliInput cliInput)
     {
         var services = new ServiceCollection();
-        services.AddLogging(builder => builder.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace));
+        ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
         services.RegisterCommands();
         await using var providder = services.BuildServiceProvider();
@@ -132,12 +139,29 @@ public sealed partial class AppRunner
     private async Task<int> RunProxy(CliInput cliInput)
     {
         var services = new ServiceCollection();
-        services.AddLogging(builder => builder.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace));
+        ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
         services.RegisterProxyServices();
         await using var providder = services.BuildServiceProvider();
         var proxyRunner = providder.GetRequiredService<IProxyRunner>();
         return await proxyRunner.RunAsync(cliInput.ServerConfig, _streams, Token);
+    }
+
+    /// <summary>One-shot graphs get no host logging pipeline; quiet mode must still reach them
+    /// or a quiet stdio bridge prints per-request HttpClient lines to the terminal (QA-4).</summary>
+    private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options)
+    {
+        services.AddLogging(builder =>
+        {
+            if (options.Quiet)
+            {
+                QuietLogging.Configure(builder, options);
+            }
+            else
+            {
+                builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+            }
+        });
     }
 
     private static partial class Log
