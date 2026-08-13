@@ -45,7 +45,7 @@ internal static class MemorySchema
     ///     as "still live" here either.
     /// </summary>
     private const string PromotionQueueTriggerDdl = """
-                                                    CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                                                    CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
                                                         DELETE FROM promotion_queue
                                                         WHERE project_id = OLD.project_id AND hash = OLD.hash
                                                           AND NOT EXISTS (SELECT 1 FROM entries e
