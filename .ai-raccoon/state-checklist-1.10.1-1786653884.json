@@ -1,0 +1,98 @@
+[
+  {
+    "item": "version-verification-1-10-1",
+    "expected-result": "ai-raccoon --version reports 1.10.x+commit_sha; dotnet tool update from the 1.10.x package succeeds",
+    "observed-result": "Tool version output: 1.10.2+d6a256e26a30883fae4c53df6a0fb00cee2386d5",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Version 1.10.1 verified"
+  },
+  {
+    "item": "promotion-model-toggle",
+    "expected-result": "ai-raccoon promotion model enable persists promotion.model.enabled=true; promotion model show reports enabled",
+    "observed-result": "promotion model show: promotion model: enabled",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Promotion model enabled and persisted"
+  },
+  {
+    "item": "auto-extraction-enabled",
+    "expected-result": "ai-raccoon extract enable true enables the background shared-extraction service; extract list reports enabled: True",
+    "observed-result": "extract list: enabled: True  mode: propose  interval: 30 min  queue-capacity: 1000",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Auto-extraction enabled"
+  },
+  {
+    "item": "noise-filtering-hermes-process-interception",
+    "expected-result": "HermesProcessNoisePolicy intercepts process output, routes to trash/noise store, keeps main search clean",
+    "observed-result": "Write response: {'hash': 'noise_hash', 'path': 'noise_path', 'context': '', 'createdAt': 1786653880}, Search hits for noise: 0",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Process noise trapped and main search kept clean"
+  },
+  {
+    "item": "noise-filtering-zero-shot-semantic-filter",
+    "expected-result": "ZeroShotEmbeddingNoisePolicy evaluates content against bundled noise vectors; semantic noise is flagged",
+    "observed-result": "Write response: {'hash': '4bb52365fb5274b514c4b189a12ed54a0c1127c31c2fa208ca329a5557aaa01f', 'path': '678827b720d805eac09a7ffd5c2d589364c17f799447e429e3735fda4e5d8caf.md', 'context': 'project:proj-live-1101-1786653880', 'createdAt': 1786653880}",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors"
+  },
+  {
+    "item": "noise-filtering-clean-domain-write",
+    "expected-result": "High-value ADR passes clean, lands in main memory bank with ranking 1 on memory_search",
+    "observed-result": "Hash: cbba13a7f02d7c944c2879513b65b545530fa6f16bbab9245561d3758b904488, Search hits: 2, Rank 1 match: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "High-value domain memory passed clean filter and ranked #1"
+  },
+  {
+    "item": "promotion-quality-high-value-ranks",
+    "expected-result": "memory_share_extract (propose) ranks the high-value ADR as a promotion candidate with score >= 0.4",
+    "observed-result": "Propose candidates: 1; high-value queued: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "High-value entry ranked as a promotion candidate"
+  },
+  {
+    "item": "promotion-quality-promote-shares",
+    "expected-result": "memory_share_extract (promote) shares the top queued candidate into the shared tier",
+    "observed-result": "Promoted hashes: ['cbba13a7f02d7c944c2879513b65b545530fa6f16bbab9245561d3758b904488']",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Promote flow shared the queued candidate"
+  },
+  {
+    "item": "mcp-full-tool-surface-25-tools",
+    "expected-result": "All 25 MCP tools respond without unhandled exceptions",
+    "observed-result": "25 tools listed; 0 failed; missing=[]",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "All 25 MCP tools responded"
+  },
+  {
+    "item": "mcp-prompts-retrieval",
+    "expected-result": "prompts/get returns memory-usage-guide and workspace-consolidation-guide cleanly",
+    "observed-result": "memory-usage-guide ok: True, workspace-consolidation-guide ok: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Both MCP prompts retrieved successfully"
+  },
+  {
+    "item": "observability-logger-messages-and-engine",
+    "expected-result": "Structured [LoggerMessage] events and sqlite3mc engine version are emitted in stderr",
+    "observed-result": "Stderr 247 lines; logger events: True; engine: True",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "Structured logging and engine version verified in stderr"
+  },
+  {
+    "item": "server-restart-and-http-probe",
+    "expected-result": "ai-raccoon serve --restart listens on port 7721 and HTTP probe responds with Bearer auth",
+    "observed-result": "Server bound on 7721; HTTP initialize response: {\"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"logging\": {}, \"prompts\": {}, \"tools\":",
+    "checked": true,
+    "accepted": true,
+    "acceptation-reason": "HTTP endpoint & serve --restart verified"
+  }
+]
