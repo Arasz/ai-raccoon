@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Chunking;
 
-namespace AiRaccoon.Infrastructure.Ingestion;
+namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
 ///     Handler for a specific file format family and its associated chunker.

@@ -1,32 +1,25 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using AiRaccoon.Core.Chunking;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Chunking;
 
 /// <summary>
-///     Token-bounded chunker for JSON files. Preserves key structure and schema context for objects/arrays,
+///     Token-bounded chunker for JSON files. Preserves key structure for objects/arrays,
 ///     with automatic fallback to line-based chunking for malformed JSON.
 /// </summary>
-public sealed class JsonFileTypeChunker : IChunker
+public sealed class JsonFileTypeChunker : IJsonChunker
 {
-    private readonly Func<string, int> _countTokens;
-    private readonly IChunker _fallbackChunker;
+    private readonly TokenCount _countTokens;
+    private readonly IMarkdownChunker _fallbackChunker;
 
-    public JsonFileTypeChunker(Func<string, int>? countTokens = null, IChunker? fallbackChunker = null)
+    public JsonFileTypeChunker(TokenCount countTokens, IMarkdownChunker fallbackChunker)
     {
-        var defaultTokenizer = new TokenizerChunker();
-        _countTokens = countTokens ?? defaultTokenizer.CountTokens;
-        _fallbackChunker = fallbackChunker ?? defaultTokenizer;
-    }
-
-    public JsonFileTypeChunker(TokenizerChunker tokenizer)
-    {
-        Guard.IsNotNull(tokenizer);
-        _countTokens = tokenizer.CountTokens;
-        _fallbackChunker = tokenizer;
+        Guard.IsNotNull(countTokens);
+        Guard.IsNotNull(fallbackChunker);
+        _countTokens = countTokens;
+        _fallbackChunker = fallbackChunker;
     }
 
     public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
@@ -54,63 +47,10 @@ public sealed class JsonFileTypeChunker : IChunker
         }
     }
 
-    /// <summary>
-    ///     Extract a compact structural schema summary from a JSON text representation.
-    /// </summary>
-    public static string ExtractSchemaSummary(string jsonText)
-    {
-        if (string.IsNullOrWhiteSpace(jsonText))
-        {
-            return "{}";
-        }
-
-        try
-        {
-            var node = JsonNode.Parse(jsonText);
-            return BuildNodeSchema(node);
-        }
-        catch (JsonException)
-        {
-            return "{}";
-        }
-    }
-
-    private static string BuildNodeSchema(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return "null";
-        }
-
-        if (node is JsonObject obj)
-        {
-            var props = obj.Select(p => $"\"{p.Key}\": {BuildNodeSchema(p.Value)}");
-            return "{\n  " + string.Join(",\n  ", props) + "\n}";
-        }
-
-        if (node is JsonArray arr)
-        {
-            if (arr.Count == 0)
-            {
-                return "[]";
-            }
-
-            return "[" + BuildNodeSchema(arr[0]) + "]";
-        }
-
-        var kind = node.GetValueKind();
-        return kind switch
-        {
-            JsonValueKind.String => "string",
-            JsonValueKind.Number => "number",
-            JsonValueKind.True or JsonValueKind.False => "boolean",
-            JsonValueKind.Null => "null",
-            _ => kind.ToString().ToLowerInvariant()
-        };
-    }
-
     private IReadOnlyList<string> ChunkObject(JsonElement root, int maxTokens, int overlayTokens, string rawText)
     {
+        // Structural chunks are key/item-bounded and deliberately non-overlapping: markdown-style
+        // overlap would duplicate whole properties, so overlayTokens is intentionally unused here.
         var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {
@@ -156,6 +96,7 @@ public sealed class JsonFileTypeChunker : IChunker
 
     private IReadOnlyList<string> ChunkArray(JsonElement root, int maxTokens, int overlayTokens, string rawText)
     {
+        // Same non-overlapping contract as ChunkObject (see above).
         var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {

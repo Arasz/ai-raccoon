@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
+using AiRaccoon.Core.Ingestion;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
@@ -30,8 +31,6 @@ public sealed class FileTypeMatcher : IFileTypeMatcher
 
         _handlersByExtension = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
-
-    public IReadOnlySet<string> SupportedExtensions => _handlersByExtension.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public bool TryGetHandler(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {

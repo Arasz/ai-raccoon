@@ -56,15 +56,15 @@
       "target": ".ai-badger/skills/learned/data-analysis/sqlite-bank-space-diagnosis"
     },
     {
-        "category": "devops",
-        "name": "azure-swa-custom-domains",
-        "sourceHash": "9dbfd86cd2178323c4bfaa3fa691044a40d3c9fac7aca51bbdc109563c8728e7",
-        "sourcePath": "devops/azure-swa-custom-domains",
-        "status": "synced",
-        "syncedAt": "2026-08-11T17:45:34Z",
-        "target": ".ai-badger/skills/learned/devops/azure-swa-custom-domains"
+      "category": "devops",
+      "name": "azure-swa-custom-domains",
+      "sourceHash": "9dbfd86cd2178323c4bfaa3fa691044a40d3c9fac7aca51bbdc109563c8728e7",
+      "sourcePath": "devops/azure-swa-custom-domains",
+      "status": "synced",
+      "syncedAt": "2026-08-11T17:45:34Z",
+      "target": ".ai-badger/skills/learned/devops/azure-swa-custom-domains"
     },
-      {
+    {
       "category": "hermes",
       "name": "hermes-memory-provider-development",
       "sourceHash": "da1e52e8323a74ff265095be3a67433a93932233264b42da0fb9979e1d352412",
@@ -182,15 +182,24 @@
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-task-orchestration"
     },
     {
-        "category": "uncategorized",
-        "name": "ai-badger-worktree-pitfalls",
-        "sourceHash": "150ac0f3cb42db7a3f0ef68a45005deb2c0ee616af3f09a31bb46a706fa467b4",
-        "sourcePath": "ai-badger-worktree-pitfalls",
-        "status": "synced",
-        "syncedAt": "2026-08-11T17:21:55Z",
-        "target": ".ai-badger/skills/learned/uncategorized/ai-badger-worktree-pitfalls"
+      "category": "uncategorized",
+      "name": "ai-badger-worktree-pitfalls",
+      "sourceHash": "150ac0f3cb42db7a3f0ef68a45005deb2c0ee616af3f09a31bb46a706fa467b4",
+      "sourcePath": "ai-badger-worktree-pitfalls",
+      "status": "synced",
+      "syncedAt": "2026-08-11T17:21:55Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-badger-worktree-pitfalls"
     },
-      {
+    {
+      "category": "uncategorized",
+      "name": "ai-raccoon-deployment-ops",
+      "sourceHash": "d7ea13e37e85e251cb2771481c413aa666fb277acd277cf7ca5cc5c489e12da9",
+      "sourcePath": "ai-raccoon-ops/ai-raccoon-deployment-ops",
+      "status": "synced",
+      "syncedAt": "2026-08-13T06:23:45Z",
+      "target": ".ai-badger/skills/learned/uncategorized/ai-raccoon-deployment-ops"
+    },
+    {
       "category": "uncategorized",
       "name": "ai-raccoon-mcp-client",
       "sourceHash": "857dc25ac9b70d6b4596b6d62051dc003927115f14530a62333c06c4ffaba8b3",
@@ -409,10 +418,10 @@
     {
       "category": "uncategorized",
       "name": "mcp-tool-indexing",
-        "sourceHash": "6c6ecd31d88392d0a3fd50a326d8f0368f684a89f81c98459269d8af0c2f0af3",
+      "sourceHash": "6c6ecd31d88392d0a3fd50a326d8f0368f684a89f81c98459269d8af0c2f0af3",
       "sourcePath": "mcp/mcp-tool-indexing",
       "status": "synced",
-        "syncedAt": "2026-08-12T11:08:22Z",
+      "syncedAt": "2026-08-12T11:08:22Z",
       "target": ".ai-badger/skills/learned/uncategorized/mcp-tool-indexing"
     },
     {
@@ -533,15 +542,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/spec-driven-refactoring"
     },
     {
-        "category": "uncategorized",
-        "name": "sqlite-schema-review",
-        "sourceHash": "73476bcf6ae0cb012ac03cccfb431100fcd16990d1638ade5d6712d658ad0c6d",
-        "sourcePath": "ai-raccoon/sqlite-schema-review",
-        "status": "synced",
-        "syncedAt": "2026-08-11T19:24:11Z",
-        "target": ".ai-badger/skills/learned/uncategorized/sqlite-schema-review"
+      "category": "uncategorized",
+      "name": "sqlite-schema-review",
+      "sourceHash": "73476bcf6ae0cb012ac03cccfb431100fcd16990d1638ade5d6712d658ad0c6d",
+      "sourcePath": "ai-raccoon/sqlite-schema-review",
+      "status": "synced",
+      "syncedAt": "2026-08-11T19:24:11Z",
+      "target": ".ai-badger/skills/learned/uncategorized/sqlite-schema-review"
     },
-      {
+    {
       "category": "uncategorized",
       "name": "worktree-agent-isolation",
       "sourceHash": "b1d1ec19104da3443097ce7d611b792608e646004d34b581a332282d7a6dc207",

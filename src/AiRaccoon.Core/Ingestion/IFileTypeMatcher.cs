@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace AiRaccoon.Infrastructure.Ingestion;
+namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
 ///     Matches file paths or extensions to registered file type handlers.
