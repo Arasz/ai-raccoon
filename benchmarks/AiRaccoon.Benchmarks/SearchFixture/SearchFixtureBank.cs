@@ -6,6 +6,8 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -95,8 +97,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))]);
         var embedder = new EntryEmbedder(embeddingService);
         var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System);
+        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>(), null, TimeProvider.System);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
-            NullLogger<SqliteMemoryStore>.Instance);
+            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Array.Empty<IAutoTtlPolicy>());
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.

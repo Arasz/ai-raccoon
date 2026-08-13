@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
@@ -23,7 +24,9 @@ public sealed partial class SqliteMemoryStore(
     IFileIngestor fileIngestor,
     IEntryEmbedder embedder,
     TimeProvider timeProvider,
-    ILogger<SqliteMemoryStore> logger)
+    ILogger<SqliteMemoryStore> logger,
+    INoiseFilteringService noiseFilteringService,
+    System.Collections.Generic.IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -32,6 +35,23 @@ public sealed partial class SqliteMemoryStore(
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        var isNoise = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken).ConfigureAwait(false);
+        if (isNoise)
+        {
+            // Dummy entry. In C# 10+, MemoryEntry record has 5 properties: Hash, Path, Context, Value, CreatedAt
+            return new MemoryEntry("noise_hash", "noise_path", request.Context ?? string.Empty, request.Content, timeProvider.GetUtcNow().ToUnixTimeSeconds());
+        }
+
+        int? resolvedTtlDays = null;
+        foreach (var policy in autoTtlPolicies)
+        {
+            var ttl = policy.EvaluateTtl(request);
+            if (ttl.HasValue)
+            {
+                resolvedTtlDays = resolvedTtlDays.HasValue ? System.Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
+            }
+        }
 
         var context = ContextResolver.Resolve(request);
         var bucket = EntryBucket.For(context, request.ProjectId);
@@ -81,7 +101,8 @@ public sealed partial class SqliteMemoryStore(
                         agentId = request.AgentId,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id
+                        sourceId = source.Id,
+                        ttl_days = resolvedTtlDays
                     },
                     cancellationToken))
             .ConfigureAwait(false);
