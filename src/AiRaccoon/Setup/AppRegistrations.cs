@@ -1,5 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
@@ -133,11 +134,15 @@ public static partial class AppRegistrations
 
         private void RegisterFileIngestionServices()
         {
-            services.AddRequiredSingleton<IChunker, TokenizerChunker>();
-            services.AddSingleton<JsonFileTypeChunker>(sp => new JsonFileTypeChunker(sp.GetRequiredService<TokenizerChunker>()));
-            services.AddSingleton<IChunker>(sp => sp.GetRequiredService<JsonFileTypeChunker>());
-            services.AddRequiredSingleton<IFileTypeHandler, MarkdownFileTypeHandler>();
-            services.AddRequiredSingleton<IFileTypeHandler, JsonFileTypeHandler>();
+            services.AddSingleton<O200kTokenizer>();
+            services.AddSingleton<TokenCount>(sp => new TokenCount(sp.GetRequiredService<O200kTokenizer>().CountTokens));
+            services.AddRequiredSingleton<IMarkdownChunker, MarkdownChunker>();
+            services.AddSingleton<IJsonChunker>(sp => new JsonFileTypeChunker(
+                sp.GetRequiredService<TokenCount>(),
+                sp.GetRequiredService<IMarkdownChunker>(),
+                ChunkingDefaults.OverlayTokens));
+            services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
+            services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
             services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();

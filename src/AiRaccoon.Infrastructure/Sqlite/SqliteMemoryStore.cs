@@ -21,13 +21,13 @@ public sealed partial class SqliteMemoryStore(
     ISqliteConnectionFactory factory,
     IMemorySourceStore sourceStore,
     IFileIngestor fileIngestor,
-    IEmbeddingService embeddings,
+    IEntryEmbedder embedder,
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
-    private readonly EntryEmbedder _embedder = new(embeddings);
+    private readonly IEntryEmbedder _embedder = embedder;
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {

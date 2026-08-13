@@ -18,7 +18,7 @@ public class ChunkingFeatureTests
     [Fact]
     public void IngestingMarkdownNoteLongerThanMaxTokens_ProducesTokenBoundedChunksWithOverlay()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
         var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
 
         var chunks = chunker.Chunk(BuildLongNote(), 128, 24);
@@ -34,7 +34,7 @@ public class ChunkingFeatureTests
     [Fact]
     public void ChunkingIdenticalNoteTwice_ProducesIdenticalChunks()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
 
         var first = chunker.Chunk(BuildLongNote(), 128, 24);
         var second = chunker.Chunk(BuildLongNote(), 128, 24);
@@ -45,7 +45,7 @@ public class ChunkingFeatureTests
     [Fact]
     public void IngestingNoteWithFencedCodeBlock_NeverSplitsTheFence()
     {
-        var chunker = new TokenizerChunker();
+        var chunker = TestData.RealMarkdownChunker();
         var fence = $"```csharp\n{string.Join("\n", Enumerable.Range(1, 40).Select(i => $"var value{i} = Compute({i});"))}\n```\n";
         var note = $"# Code sample\n\n{fence}Trailing prose after the fence.\n";
 

@@ -283,7 +283,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         }
     }
 
-    private sealed class StubChunker : IChunker
+    private sealed class StubChunker : IMarkdownChunker
     {
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }

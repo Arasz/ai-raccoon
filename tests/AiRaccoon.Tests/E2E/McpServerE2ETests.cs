@@ -255,7 +255,7 @@ public class McpServerE2ETests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, new EmbeddingService());
         var exit = await TestData.CreateConfigCommands(store, settings: new SettingsCommands(), sync: new SyncCommands())
             .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());

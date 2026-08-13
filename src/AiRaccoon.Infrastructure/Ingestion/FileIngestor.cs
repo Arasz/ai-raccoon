@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
@@ -20,7 +21,6 @@ public sealed class FileIngestor(
     TimeProvider timeProvider) : IFileIngestor
 {
     private const int DefaultMaxTokens = 256;
-    private const int DefaultOverlayTokens = 48;
 
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
@@ -172,7 +172,7 @@ public sealed class FileIngestor(
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(provider))
         {
-            return (DefaultMaxTokens, DefaultOverlayTokens);
+            return (DefaultMaxTokens, ChunkingDefaults.OverlayTokens);
         }
 
         var model = await connection.QuerySingleOrDefaultAsync<string?>(
@@ -180,7 +180,7 @@ public sealed class FileIngestor(
             .ConfigureAwait(false);
         var context = EmbeddingService.ContextTokensFor(provider, model);
         return (Math.Min(DefaultMaxTokens, context),
-            Math.Min(DefaultOverlayTokens, Math.Max(0, context - 1)));
+            Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, context - 1)));
     }
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,

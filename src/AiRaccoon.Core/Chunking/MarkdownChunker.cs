@@ -6,12 +6,22 @@ namespace AiRaccoon.Core.Chunking;
 ///     Line-granular markdown splitter: deterministic, token-bounded and code-fence-aware.
 ///     Fences (``` and ~~~) are atomic units — a boundary never falls inside one, even past maxTokens.
 /// </summary>
-public static class MarkdownChunker
+public sealed class MarkdownChunker : IMarkdownChunker
 {
-    public static IReadOnlyList<string> Split(string text, int maxTokens, int overlayTokens, TokenCount countTokens)
+    private readonly TokenCount _countTokens;
+
+    public MarkdownChunker(TokenCount countTokens)
+    {
+        Guard.IsNotNull(countTokens);
+        _countTokens = countTokens;
+    }
+
+    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
+        Split(text, maxTokens, overlayTokens, _countTokens);
+
+    private static IReadOnlyList<string> Split(string text, int maxTokens, int overlayTokens, TokenCount countTokens)
     {
         Guard.IsNotNull(text);
-        Guard.IsNotNull(countTokens);
         Guard.IsGreaterThan(maxTokens, 0);
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
