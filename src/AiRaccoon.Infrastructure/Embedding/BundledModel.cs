@@ -120,15 +120,23 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
             : null;
     }
 
-    private static string? ResolveBundled(string fileName)
+    private static string? ResolveBundled(string fileName) => ResolveBundled(fileName, AppContext.BaseDirectory);
+
+    internal static string? ResolveBundled(string fileName, string baseDirectory)
     {
         var relative = Path.Combine("Models", fileName);
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        for (var dir = new DirectoryInfo(baseDirectory); dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, relative);
             if (File.Exists(candidate))
             {
                 return candidate;
+            }
+
+            var flatCandidate = Path.Combine(dir.FullName, fileName);
+            if (File.Exists(flatCandidate))
+            {
+                return flatCandidate;
             }
         }
 
