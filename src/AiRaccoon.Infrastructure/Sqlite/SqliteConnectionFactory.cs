@@ -237,7 +237,12 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         var csb = new SqliteConnectionStringBuilder
         {
             DataSource = BankPath,
-            Mode = SqliteOpenMode.ReadWriteCreate
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            // Wait up to 5s for the write lock instead of failing SQLITE_BUSY immediately: the
+            // watch digest fans out concurrent writes (concurrency 4) through BEGIN IMMEDIATE, and a
+            // lost-race failure drops the event for good (no re-enqueue), so contention must wait,
+            // not throw.
+            DefaultTimeout = 5
         };
         if (key is not null)
         {
