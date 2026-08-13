@@ -49,7 +49,7 @@
             "name": "all-MiniLM-L6-v2.Q5_K_M.gguf",
             "kind": "model",
             "url": "https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.Q5_K_M.gguf",
-            "sha256": "972A3E153F25159B7EC0883A3C82D1CFF442E25F7F490649366DA50A79EA4157",
+            "sha256": "908c82ac3849f9ca23158117cec614bd8ec404040d8794c35b4c81242bf315e3",
             "localSource": "~/.ai-raccoon/models/all-MiniLM-L6-v2.Q5_K_M.gguf"
         }
     ]
