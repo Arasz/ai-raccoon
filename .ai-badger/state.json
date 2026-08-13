@@ -1,16 +1,23 @@
 {
-    "lastUpdated": "2026-08-11T16:25:01Z",
+  "lastUpdated": "2026-08-13T04:05:55.152961+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
-        "id": "re-evaluate-round-3",
-        "title": "Re-evaluate round-3 winner A with owner gate",
-        "finished": "2026-08-11T16:25:01.152116+00:00",
-        "pr": "260 (draft)",
-        "summary": "Owner gate for round-3 promotion scoring. 5/5 decisions: C1 APPROVE (lane A = shipped scorer v2 in 1.6.4), D1 APPROVE (keep recentred evidence + refitted priors), D2 APPROVE (portability restricted to six doc channels), D3 DEFER (n=2 insufficient for measurement retuning), D4 APPROVE (judge scorer quality post-hygiene). Evidence report: 10 findings (F1-F10). Diagnostic stale \"never shipped\" claim corrected. Reconciled with architect (PARTIALLY_SUFFICIENT_MUST_FIX) and code-reviewer (REQUEST_CHANGES_FOR_GATE_INTEGRITY, PASS_WITH_TEST_DEBT) reviews. Gate debt documented: reusable change gate needs non-vacuous fixture check, Portability vs organic tech-breadth ambiguity, real-data fixture absent. No production code change. Build 0/0; promotion tests 58/0/1; full suite 2187/2/6 (pre-existing environmental failures)."
+      "id": "fix-after-refactor",
+      "title": "Restore build and tests after the dependencies refactor",
+      "finished": "2026-08-13T04:05:55.152841+00:00",
+      "pr": "265",
+      "summary": "Repaired everything the dependencies-management refactor (d6a9bb65/12fb1569/af38d804) broke, without reverting any of the refactor. Production: CliOptionReader.ReadOptions had an inverted ternary (clean parse = failure); CliArgs failure path returned true; serve lost the root --port fallback and read bool flags (--restart/--mcp-entry) with requireTokens=true though S.CL bool options carry no tokens; NodeRunner.RestartRefusal 'is not var' pattern never matched; EmitBoundUrl dropped /mcp and mis-parsed the port; observability commands printed to stderr; proxy named client was registered as nameof(BackendSessions) while BackendSessions asks for BackendLauncher.BackendSessionClient, silently unwiring JsonRpcErrorHandler (-32603 collapse). DI: ConfigCommands never registered in RegisterCommands; RegisterExtractionServices/RegisterWorkspaceService were dead code; file ingestion missing from the core graph though SqliteMemoryStore needs IFileIngestor; IReadOnlyCollection<IFileTypeHandler> unregistered; JsonFileTypeChunker ctors ambiguous for DI; SqliteConnectionFactory/ToolCallMetrics concretes lost; IdleWatchdog + BackendLauncher TimeSpan budgets unregistered; 7 classes + SweepService + SharedExtractionRunner + WorkspaceService + SyncService still took concretes instead of interfaces; WatchCommands/EncryptionCommands lost their ArgumentNullException guards. Tests: ~75 files migrated to the new ctor orders/command APIs; AppRunner-based CliCommandRunnerTests with a Console-capture race fixed (redirect moved inside EnvVarGate). Gates: build 0/0; full suite 2244/0/6 (pre-refactor baseline 2187/2/6); live CLI test: access/encryption verbs exit 0 and write the bank, serve --port 0 bound 61657, printed http://127.0.0.1:61657/mcp, token-gated 401 on /mcp, /observability serves ServerInfo JSON."
     },
-      {
+    {
+      "id": "re-evaluate-round-3",
+      "title": "Re-evaluate round-3 winner A with owner gate",
+      "finished": "2026-08-11T16:25:01.152116+00:00",
+      "pr": "260 (draft)",
+      "summary": "Owner gate for round-3 promotion scoring. 5/5 decisions: C1 APPROVE (lane A = shipped scorer v2 in 1.6.4), D1 APPROVE (keep recentred evidence + refitted priors), D2 APPROVE (portability restricted to six doc channels), D3 DEFER (n=2 insufficient for measurement retuning), D4 APPROVE (judge scorer quality post-hygiene). Evidence report: 10 findings (F1-F10). Diagnostic stale \"never shipped\" claim corrected. Reconciled with architect (PARTIALLY_SUFFICIENT_MUST_FIX) and code-reviewer (REQUEST_CHANGES_FOR_GATE_INTEGRITY, PASS_WITH_TEST_DEBT) reviews. Gate debt documented: reusable change gate needs non-vacuous fixture check, Portability vs organic tech-breadth ambiguity, real-data fixture absent. No production code change. Build 0/0; promotion tests 58/0/1; full suite 2187/2/6 (pre-existing environmental failures)."
+    },
+    {
       "id": "mem-cleanup",
       "title": "Memory cleanup: migrate 59 legacy shared rows, remove file logging (ai-raccoon provider + ai-badger), sweep stale workspaces + tombstones",
       "finished": "2026-08-11T15:30:46Z",
