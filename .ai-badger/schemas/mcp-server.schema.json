@@ -43,6 +43,30 @@
         "install": {
           "type": "string",
           "description": "Where to get it — an install URL or the exact command."
+        },
+        "local": {
+          "type": "object",
+          "description": "Local/project-scoped installation options.",
+          "additionalProperties": false,
+          "properties": {
+            "summary": { "type": "string" },
+            "check": { "type": "string" },
+            "install": { "type": "string" },
+            "uv": { "type": "string" },
+            "command": { "type": "string" }
+          }
+        },
+        "global": {
+          "type": "object",
+          "description": "Global/user-scoped installation options.",
+          "additionalProperties": false,
+          "properties": {
+            "summary": { "type": "string" },
+            "check": { "type": "string" },
+            "install": { "type": "string" },
+            "uv": { "type": "string" },
+            "command": { "type": "string" }
+          }
         }
       }
     }

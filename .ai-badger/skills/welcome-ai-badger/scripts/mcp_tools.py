@@ -233,6 +233,10 @@ class McpTools:
                 parts.append(f"check: {prereq['check']}")
             if prereq.get("install"):
                 parts.append(f"install: {prereq['install']}")
+            if prereq.get("local", {}).get("install"):
+                parts.append(f"local: {prereq['local']['install']}")
+            if prereq.get("global", {}).get("install"):
+                parts.append(f"global: {prereq['global']['install']}")
             self.ctx.notes.append(
                 "prerequisite — " + "; ".join(parts) + ". ai-badger declares the server, it "
                 "does not install it."
