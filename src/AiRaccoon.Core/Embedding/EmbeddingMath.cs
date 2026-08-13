@@ -35,7 +35,7 @@ public static class EmbeddingMath
             return pooled;
         }
 
-        TensorPrimitives.Divide(pooled, (float)active, pooled);
+        TensorPrimitives.Divide(pooled, active, pooled);
 
         var norm = TensorPrimitives.Norm((ReadOnlySpan<float>)pooled);
         if (!(norm > 0))

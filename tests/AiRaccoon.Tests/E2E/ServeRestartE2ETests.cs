@@ -3,13 +3,14 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using AiRaccoon.Tests.Unit.Setup.Serve;
 using Shouldly;
 using Xunit;
+using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -126,11 +127,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     private ServeRun StartRestartInProcess(int port)
     {
         CliArgs.TryParse(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"], out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
-        return new ServeRun(ServeRunner.RunAsync(parsed, parsed.Options.ToServerConfig(), stdout, stderr, cts.Token),
+        return new ServeRun(TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
             stdout, stderr, cts);
     }
 

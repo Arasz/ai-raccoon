@@ -13,22 +13,20 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// </summary>
 public sealed partial class WatchHostedService : BackgroundService
 {
-    private readonly IMemoryStore _memory;
-    private readonly IWatchStore _store;
-    private readonly WatchPipeline _pipeline;
-    private readonly WatchEventSource _eventSource;
-    private readonly WatchCatchUp _catchUp;
-    private readonly TimeProvider _timeProvider;
-    private readonly IOperationTelemetry _telemetry;
-    private readonly ILogger<WatchHostedService> _logger;
-    private readonly Lock _activeGate = new();
-    private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
-    private readonly HashSet<(string ProjectId, string Path)> _registered = new(WatchKeyComparer.Instance);
-
-    public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
-
     /// <summary>Span name and `operation` tag of one reconcile pass.</summary>
     internal const string OperationName = "watch.reconcile";
+
+    private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
+    private readonly Lock _activeGate = new();
+    private readonly WatchCatchUp _catchUp;
+    private readonly WatchEventSource _eventSource;
+    private readonly ILogger<WatchHostedService> _logger;
+    private readonly IMemoryStore _memory;
+    private readonly WatchPipeline _pipeline;
+    private readonly HashSet<(string ProjectId, string Path)> _registered = new(WatchKeyComparer.Instance);
+    private readonly IWatchStore _store;
+    private readonly IOperationTelemetry _telemetry;
+    private readonly TimeProvider _timeProvider;
 
     public WatchHostedService(IMemoryStore memory, IWatchStore store, WatchPipeline pipeline,
         WatchEventSource eventSource, WatchCatchUp catchUp, TimeProvider timeProvider,
@@ -46,6 +44,8 @@ public sealed partial class WatchHostedService : BackgroundService
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
     }
+
+    public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
 
     private void OnWatchUnregistered(string projectId, string path)
     {
@@ -187,7 +187,7 @@ public sealed partial class WatchHostedService : BackgroundService
         (string ProjectId, string Path)[] stale;
         lock (_activeGate)
         {
-            stale = _registered.Where(k => !seen.Contains(k)).ToArray();
+            stale = [.. _registered.Where(k => !seen.Contains(k))];
         }
 
         foreach (var s in stale)

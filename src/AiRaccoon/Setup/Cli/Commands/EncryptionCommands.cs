@@ -6,7 +6,7 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using CommunityToolkit.Diagnostics;
+using AiRaccoon.Setup.Extensions;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -18,6 +18,31 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed partial class EncryptionCommands
 {
+    private readonly ISqliteConnectionFactory _bankConnectionFactory;
+    private readonly ICliSecretManager _bws;
+    private readonly IEncryptionKeyProvider _env;
+    private readonly IEncryptionSourceSidecar _sidecar;
+    private readonly ILogger<EncryptionCommands> _logger;
+
+    public EncryptionCommands(
+        ISqliteConnectionFactory bank,
+        ICliSecretManager bws,
+        IEncryptionKeyProvider env,
+        IEncryptionSourceSidecar sidecar,
+        ILogger<EncryptionCommands> logger)
+    {
+        ArgumentNullException.ThrowIfNull(bank);
+        ArgumentNullException.ThrowIfNull(bws);
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(sidecar);
+        ArgumentNullException.ThrowIfNull(logger);
+        _bankConnectionFactory = bank;
+        _bws = bws;
+        _env = env;
+        _sidecar = sidecar;
+        _logger = logger;
+    }
+
     /// <summary>Env vars an operator can set to offer their own project/secret id as the interactive default, instead of the fallback placeholder.</summary>
     public const string ProjectIdEnvVar = "AIRACCOON_BITWARDEN_PROJECT_ID";
 
@@ -26,10 +51,6 @@ public sealed partial class EncryptionCommands
     // Obviously fake — no default should identify a real vault entry (no hardcoded secrets).
     private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
     private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
-
-    private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
-
-    private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
     private const string RotationWarning =
         "ai-raccoon: warning: rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — rotate the secret and rekey the bank together";
@@ -40,31 +61,13 @@ public sealed partial class EncryptionCommands
     private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
 
-    private readonly SqliteConnectionFactory _bank;
-    private readonly ICliSecretManager _bws;
-    private readonly IEncryptionKeyProvider _env;
-    private readonly ILogger _logger;
-    private readonly IEncryptionSourceSidecar _sidecar;
+    private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
 
-    public EncryptionCommands(SqliteConnectionFactory bank, ICliSecretManager bws,
-        IEncryptionKeyProvider env, IEncryptionSourceSidecar sidecar, ILogger logger)
-    {
-        Guard.IsNotNull(bank);
-        Guard.IsNotNull(bws);
-        Guard.IsNotNull(env);
-        Guard.IsNotNull(sidecar);
-        Guard.IsNotNull(logger);
-
-        _bank = bank;
-        _bws = bws;
-        _env = env;
-        _sidecar = sidecar;
-        _logger = logger;
-    }
+    private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
     public async Task<int> BitwardenAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin,
-        CancellationToken cancellationToken)
+        StandardStreams streams,
+        CancellationToken ctx)
     {
         try
         {
@@ -73,12 +76,12 @@ public sealed partial class EncryptionCommands
         catch (BwsInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
-            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
-        var projectId = await PromptAsync(stderr, stdin, $"project id [{DefaultProjectId}]", DefaultProjectId, cancellationToken);
-        var secretId = await PromptAsync(stderr, stdin, $"secret id [{DefaultSecretId}]", DefaultSecretId, cancellationToken);
+        var projectId = await PromptAsync(streams, $"project id [{DefaultProjectId}]", DefaultProjectId, ctx);
+        var secretId = await PromptAsync(streams, $"secret id [{DefaultSecretId}]", DefaultSecretId, ctx);
 
         var token = parseResult.GetResult("-t") is not null ? parseResult.GetValue<string>("-t") : null;
         BwsResult fetched;
@@ -89,7 +92,7 @@ public sealed partial class EncryptionCommands
         catch (BwsInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
-            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
@@ -97,7 +100,7 @@ public sealed partial class EncryptionCommands
         {
             var errorLine = fetched.FirstErrorLine;
             Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
-            await stderr.WriteLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
+            await streams.WriteErrorLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
             return 1;
         }
 
@@ -108,26 +111,25 @@ public sealed partial class EncryptionCommands
         }
         catch (EncryptionKeyException ex)
         {
-            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
         var derived = DeriveAndZeroSeed(seed);
 
-        await stderr.WriteLineAsync(RotationWarning);
+        await streams.WriteErrorLineAsync(RotationWarning);
 
-        var bankPath = _bank.BankPath;
+        var bankPath = _bankConnectionFactory.BankPath;
         if (File.Exists(bankPath))
         {
             Exception? openError = null;
             try
             {
-                using (await _bank.OpenBankAsync(cancellationToken))
+                await using (await _bankConnectionFactory.OpenBankAsync(ctx))
                 {
                 }
             }
-            // Post-ADR-0012 a bank that fails to open under the resolved key surfaces as
-            // BankKeyMismatchException, not a bare SqliteException; both mean "did not open" here.
+
             catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
             {
                 openError = ex;
@@ -136,106 +138,108 @@ public sealed partial class EncryptionCommands
             if (openError is null)
             {
                 Log.RekeyingBank(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
-                await _bank.RekeyBankAsync(derived, cancellationToken);
+                await _bankConnectionFactory.RekeyBankAsync(derived, ctx);
                 Log.BankRekeyed(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
             }
-            else if (await TryOpenAsync(_bank, derived, cancellationToken))
+            else if (await IsCorrectKey(derived, ctx))
             {
             }
             else
             {
                 var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
                 if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
-                    await TryOpenAsync(_bank, envPassphrase, cancellationToken))
+                    await IsCorrectKey(envPassphrase, ctx))
                 {
                     _sidecar.Delete();
-                    await stderr.WriteLineAsync("ai-raccoon: bank is env-keyed; source was not switched");
+                    await streams.WriteErrorLineAsync("ai-raccoon: bank is env-keyed; source was not switched");
                     return 0;
                 }
 
-                await stderr.WriteLineAsync(MismatchText);
+                await streams.WriteErrorLineAsync(MismatchText);
                 return 1;
             }
         }
 
         _sidecar.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
-        await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, cancellationToken);
-        await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, cancellationToken);
-        await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, cancellationToken);
+        await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, ctx);
+        await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, ctx);
+        await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, ctx);
 
-        await stdout.WriteLineAsync("encryption source set to bitwarden");
+        await streams.WriteOutputLineAsync("encryption source set to bitwarden");
         return 0;
     }
+
+    private async Task<bool> IsCorrectKey(string key, CancellationToken ctx) => (await _bankConnectionFactory.ProbeUsingEncryptionKey(key, ctx)).IsCorrectKey;
 
     /// <summary>
     ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation. Explicit rather than
     ///     automatic on open: a rekey needs exclusive access to the bank
     ///     (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 3).
     /// </summary>
-    public async Task<int> MigrateAsync(TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    public async Task<int> MigrateAsync(StandardStreams streams, CancellationToken cancellationToken)
     {
-        if (!File.Exists(_bank.BankPath))
+        if (!File.Exists(_bankConnectionFactory.BankPath))
         {
-            await stdout.WriteLineAsync("no bank to migrate");
+            await streams.WriteOutputLineAsync("no bank to migrate");
             return 0;
         }
 
         bool rekeyed;
         try
         {
-            Log.MigratingBank(_logger, _bank.BankPath);
-            rekeyed = await _bank.MigrateLegacyKeyAsync(cancellationToken);
+            Log.MigratingBank(_logger, _bankConnectionFactory.BankPath);
+            rekeyed = await _bankConnectionFactory.MigrateLegacyKeyAsync(cancellationToken);
         }
         catch (BankKeyMismatchException ex)
         {
-            Log.MigrationRefused(_logger, _bank.BankPath, ex);
-            await stderr.WriteLineAsync($"ai-raccoon: {ex.Message}");
+            Log.MigrationRefused(_logger, _bankConnectionFactory.BankPath, ex);
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return 1;
         }
 
         if (rekeyed)
         {
-            Log.BankMigrated(_logger, _bank.BankPath);
-            await stdout.WriteLineAsync("bank rekeyed to the current key derivation");
+            Log.BankMigrated(_logger, _bankConnectionFactory.BankPath);
+            await streams.WriteOutputLineAsync("bank rekeyed to the current key derivation");
             return 0;
         }
 
-        await stdout.WriteLineAsync("bank is already on the current key derivation; nothing to do");
+        await streams.WriteOutputLineAsync("bank is already on the current key derivation; nothing to do");
         return 0;
     }
 
-    public async Task<int> ShowAsync(IMemoryStore store, TextWriter stdout,
+    public async Task<int> ShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        await using var probe = await _bank.OpenBankAsync(cancellationToken);
+        await using var probe = await _bankConnectionFactory.OpenBankAsync(cancellationToken);
 
         var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
-        var sidecar = _sidecar.Read();
-        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || sidecar?.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
+        var encryptionData = _sidecar.Read();
+        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || encryptionData.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
             var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
-                            ?? sidecar?.ProjectId ?? "(unset)";
+                            ?? encryptionData.ProjectId ?? "(unset)";
             var secretId = await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken)
-                           ?? sidecar?.SecretId ?? "(unset)";
-            await stdout.WriteLineAsync("source: bitwarden");
-            await stdout.WriteLineAsync($"projectId: {projectId}");
-            await stdout.WriteLineAsync($"secretId: {secretId}");
+                           ?? encryptionData.SecretId ?? "(unset)";
+            await streams.WriteOutputLineAsync("source: bitwarden");
+            await streams.WriteOutputLineAsync($"projectId: {projectId}");
+            await streams.WriteOutputLineAsync($"secretId: {secretId}");
             return 0;
         }
 
-        await stdout.WriteLineAsync("source: env");
+        await streams.WriteOutputLineAsync("source: env");
         return 0;
     }
 
-    public async Task<int> UnsetAsync(IMemoryStore store, TextWriter stdout, TextWriter stderr,
+    public async Task<int> UnsetAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        var bankPath = _bank.BankPath;
+        var bankPath = _bankConnectionFactory.BankPath;
         var bankExists = File.Exists(bankPath);
 
         if (bankExists)
         {
-            using (await _bank.OpenBankAsync(cancellationToken))
+            await using (await _bankConnectionFactory.OpenBankAsync(cancellationToken))
             {
             }
 
@@ -247,14 +251,14 @@ public sealed partial class EncryptionCommands
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
 
                 Log.RekeyingBank(_logger, EnvEncryptionKeyProvider.EncryptionSource);
-                await _bank.RekeyBankAsync(envPassphrase, cancellationToken);
+                await _bankConnectionFactory.RekeyBankAsync(envPassphrase, cancellationToken);
                 Log.BankRekeyed(_logger, EnvEncryptionKeyProvider.EncryptionSource);
                 _sidecar.Delete();
             }
             else
             {
                 Log.UnsetSkippedRekey(_logger);
-                await stderr.WriteLineAsync(
+                await streams.WriteErrorLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
                 return 1;
             }
@@ -267,15 +271,15 @@ public sealed partial class EncryptionCommands
             _sidecar.Delete();
         }
 
-        await stdout.WriteLineAsync("encryption source reset to env");
+        await streams.WriteOutputLineAsync("encryption source reset to env");
         return 0;
     }
 
-    private static async Task<string> PromptAsync(TextWriter stderr, TextReader stdin, string label, string fallback,
+    private static async Task<string> PromptAsync(StandardStreams streams, string label, string fallback,
         CancellationToken cancellationToken)
     {
-        await stderr.WriteAsync($"{label}: ");
-        var value = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+        await streams.WriteErrorAsync($"{label}: ");
+        var value = (await streams.ReadLineAsync(cancellationToken))?.Trim();
         return string.IsNullOrEmpty(value) ? fallback : value;
     }
 
@@ -289,20 +293,6 @@ public sealed partial class EncryptionCommands
         finally
         {
             CryptographicOperations.ZeroMemory(seed);
-        }
-    }
-
-    private static async Task<bool> TryOpenAsync(SqliteConnectionFactory bank, string key,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var probe = await bank.OpenBankWithKeyAsync(key, cancellationToken);
-            return true;
-        }
-        catch (SqliteException)
-        {
-            return false;
         }
     }
 

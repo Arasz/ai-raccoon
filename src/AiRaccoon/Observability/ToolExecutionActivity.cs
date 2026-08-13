@@ -22,15 +22,15 @@ public sealed class ToolExecutionActivity : IDisposable
     private const string ToolsCallMethodName = "tools/call";
 
     private readonly Activity? _activity;
+    private readonly string _metricProjectId;
     private readonly ToolCallMetrics _metrics;
     private readonly Stopwatch _stopwatch;
     private readonly string _toolName;
-    private readonly string _metricProjectId;
     private bool _recorded;
 
     /// <summary>
-    ///     The span always tags <paramref name="projectId"/>. The counter tags
-    ///     <paramref name="metricProjectId"/> when given, or <paramref name="projectId"/> otherwise —
+    ///     The span always tags <paramref name="projectId" />. The counter tags
+    ///     <paramref name="metricProjectId" /> when given, or <paramref name="projectId" /> otherwise —
     ///     callers whose span id is unbounded (e.g. a joined composite) must pass a bounded value.
     /// </summary>
     public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId, string? metricProjectId = null)

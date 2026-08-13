@@ -5,6 +5,7 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
@@ -25,7 +26,7 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         }
 
         _container = options.Container;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureBlobCloudStore>.Instance;
+        _logger = logger ?? NullLogger<AzureBlobCloudStore>.Instance;
         _blobs = CreateClient(options);
     }
 
@@ -37,37 +38,7 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
 
         _blobs = blobs;
         _container = container;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureBlobCloudStore>.Instance;
-    }
-
-    /// <summary>
-    ///     Builds the blob client for the configured mode: connection string when present
-    ///     (tie-break), else the account name with DefaultAzureCredential (--cli mode).
-    /// </summary>
-    internal static BlobServiceClient CreateClient(SyncOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
-        {
-            try
-            {
-                return new BlobServiceClient(options.ConnectionString);
-            }
-            catch (Exception ex) when (ex is ArgumentException or FormatException)
-            {
-                throw new SyncNotConfiguredException(ex);
-            }
-        }
-
-        try
-        {
-            return new BlobServiceClient(
-                new Uri($"https://{options.Account}.blob.core.windows.net"),
-                new DefaultAzureCredential());
-        }
-        catch (Exception ex) when (ex is ArgumentException or FormatException)
-        {
-            throw new SyncNotConfiguredException(ex);
-        }
+        _logger = logger ?? NullLogger<AzureBlobCloudStore>.Instance;
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
@@ -163,6 +134,36 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         {
             Log.PushFailed(_logger, ex.Message);
             throw new SyncNetworkException($"Azure push failed: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    ///     Builds the blob client for the configured mode: connection string when present
+    ///     (tie-break), else the account name with DefaultAzureCredential (--cli mode).
+    /// </summary>
+    internal static BlobServiceClient CreateClient(SyncOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+        {
+            try
+            {
+                return new BlobServiceClient(options.ConnectionString);
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException)
+            {
+                throw new SyncNotConfiguredException(ex);
+            }
+        }
+
+        try
+        {
+            return new BlobServiceClient(
+                new Uri($"https://{options.Account}.blob.core.windows.net"),
+                new DefaultAzureCredential());
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            throw new SyncNotConfiguredException(ex);
         }
     }
 

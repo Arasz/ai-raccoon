@@ -33,7 +33,7 @@ public sealed class SnippetLazinessTests
             })
             .ToList();
 
-        var results = SqliteMemoryStore.BuildDualVectorResults(rows.Select(r => (r, 0.0)).ToList());
+        var results = SqliteMemoryStore.BuildDualVectorResults([.. rows.Select(r => (r, 0.0))]);
 
         results.Count.ShouldBe(25);
         results.ShouldAllBe(r => r.Snippet.Length == 0,

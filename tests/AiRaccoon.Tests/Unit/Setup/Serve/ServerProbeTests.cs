@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Tests.E2E;
 using Shouldly;
 using Xunit;
@@ -31,7 +31,7 @@ public sealed class ServerProbeTests : IDisposable
     {
         var port = HoldForeignListener();
 
-        var responds = await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+        var responds = await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
 
         responds.ShouldBeFalse();
     }
@@ -56,7 +56,7 @@ public sealed class ServerProbeTests : IDisposable
         await caller.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() =>
-            ServerProbe.ForLoopback().RespondsAsync(port, caller.Token));
+            TestData.CreateServerProbe().RespondsAsync(port, caller.Token));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class ServerProbeTests : IDisposable
     {
         var port = HoldSilentListener();
 
-        var responds = await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+        var responds = await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
 
         responds.ShouldBeFalse();
     }

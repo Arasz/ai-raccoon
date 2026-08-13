@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -183,8 +182,8 @@ public sealed class WatchDigestConcurrencyTests
             };
             Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var time = new FakeTimeProvider(FixedNow);
-            Memory = new SqliteMemoryStore(Factory, time, Gate, new EmbeddingService(),
-                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory));
+            Memory = TestData.CreateMemoryStore(Factory,
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, new EmbeddingService());
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time,
                 NullLogger<WatchDigestExecutor>.Instance);
@@ -207,28 +206,21 @@ public sealed class WatchDigestConcurrencyTests
     /// </summary>
     private sealed class GateChunker : IChunker
     {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly IChunker _inner = new TokenizerChunker();
 
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
         private readonly ManualResetEventSlim _release = new(false);
-
-        private Exception? _failure;
 
         private bool _armed;
 
         private int _calls;
 
+        private Exception? _failure;
+
         /// <summary>Chunk calls made while armed — one per full re-chunk of the file.</summary>
         public int Calls => Volatile.Read(ref _calls);
 
         public Task Entered => _entered.Task;
-
-        public void Arm() => _armed = true;
-
-        public void FailWith(Exception failure) => _failure = failure;
-
-        public void Release() => _release.Set();
 
         public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
         {
@@ -251,5 +243,11 @@ public sealed class WatchDigestConcurrencyTests
 
             return _inner.Chunk(text, maxTokens, overlayTokens);
         }
+
+        public void Arm() => _armed = true;
+
+        public void FailWith(Exception failure) => _failure = failure;
+
+        public void Release() => _release.Set();
     }
 }

@@ -93,7 +93,7 @@ public class S3CloudStoreTests
     private static IAmazonS3 ThrowingS3(Exception exception)
     {
         var proxy = DispatchProxy.Create<IAmazonS3, ThrowingS3Proxy>();
-        ((ThrowingS3Proxy)(object)proxy).Exception = exception;
+        ((ThrowingS3Proxy)proxy).Exception = exception;
         return proxy;
     }
 

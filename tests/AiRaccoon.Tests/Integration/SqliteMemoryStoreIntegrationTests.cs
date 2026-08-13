@@ -1,16 +1,15 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -27,17 +26,17 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
     private readonly string _dataRoot = CreateTempRoot();
     private readonly SqliteConnectionFactory _factory;
+    private readonly SqlitePromotionQueueStore _queue;
     private readonly SqliteMemoryStore _store;
     private readonly WorkspaceService _workspaces;
-    private readonly SqlitePromotionQueueStore _queue;
 
     public SqliteMemoryStoreIntegrationTests()
     {
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
         _queue = new SqlitePromotionQueueStore(_factory, new FakeTimeProvider(FixedNow));
     }

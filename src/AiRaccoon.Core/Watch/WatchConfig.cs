@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Globalization;
+using AiRaccoon.Core.Ingestion;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Watch;

@@ -1,12 +1,10 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,13 +24,13 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 public sealed class MemoryToolsAccessModeTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+    private readonly PromotionTools _promotion;
+    private readonly ShareTools _share;
 
     private readonly FakeStore _store = new();
-    private readonly MemoryTools _tools;
-    private readonly ShareTools _share;
-    private readonly WorkspaceTools _workspace;
     private readonly SweepTools _sweep;
-    private readonly PromotionTools _promotion;
+    private readonly MemoryTools _tools;
+    private readonly WorkspaceTools _workspace;
 
     public MemoryToolsAccessModeTests()
     {
@@ -175,6 +173,31 @@ public sealed class MemoryToolsAccessModeTests
             _sweep.Sweep("acme-web", false, TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("memory_sweep requires mode full (current rw)");
+    }
+
+    [Fact]
+    public async Task RoMode_PromotionListAllowed_AndDiscardDenied()
+    {
+        SetMode(perProject: "ro");
+
+        var list = await _promotion.List("acme-web", cancellationToken: TestContext.Current.CancellationToken);
+        list.Data!.Rows.ShouldBeEmpty();
+
+        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
+            _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("memory_promotion_discard requires mode rw (current ro)");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task PromotionList_RejectsANonPositiveLimit(int limit)
+    {
+        SetMode(perProject: "rw");
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _promotion.List("acme-web", limit, cancellationToken: TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("invalid-params: limit must be at least 1");
     }
 
     private sealed class FakeStore : IMemoryStore
@@ -322,30 +345,5 @@ public sealed class MemoryToolsAccessModeTests
         public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new Workspace(workspaceId, projectId));
-    }
-
-    [Fact]
-    public async Task RoMode_PromotionListAllowed_AndDiscardDenied()
-    {
-        SetMode(perProject: "ro");
-
-        var list = await _promotion.List("acme-web", cancellationToken: TestContext.Current.CancellationToken);
-        list.Data!.Rows.ShouldBeEmpty();
-
-        var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
-            _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("memory_promotion_discard requires mode rw (current ro)");
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public async Task PromotionList_RejectsANonPositiveLimit(int limit)
-    {
-        SetMode(perProject: "rw");
-
-        var ex = await Should.ThrowAsync<McpException>(() =>
-            _promotion.List("acme-web", limit, cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("invalid-params: limit must be at least 1");
     }
 }

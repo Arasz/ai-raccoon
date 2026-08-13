@@ -33,8 +33,8 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
         _workspaces = new SqliteWorkspaceStore(factory);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -137,7 +137,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         var results = await VectorOnlySearchAsync("arctic foxes", SearchScope.Project, limit: 10);
 
         results.Count.ShouldBe(3);
-        results.Select(r => r.Hash).ShouldBe(entries.Select(e => e.Hash).ToList(), ignoreOrder: true);
+        results.Select(r => r.Hash).ShouldBe([.. entries.Select(e => e.Hash)], ignoreOrder: true);
     }
 
     private async Task<IReadOnlyList<MemorySearchResult>> VectorOnlySearchAsync(string query, SearchScope scope,

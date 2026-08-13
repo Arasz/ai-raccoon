@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -12,11 +13,11 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public class FileIngestorJsonIntegrationTests : IDisposable
 {
-    private readonly string _testDir;
-    private readonly SqliteConnectionFactory _factory;
     private readonly SqliteConnection _conn;
-    private readonly SqliteMemorySourceStore _sourceStore;
+    private readonly SqliteConnectionFactory _factory;
     private readonly FileIngestor _ingestor;
+    private readonly SqliteMemorySourceStore _sourceStore;
+    private readonly string _testDir;
 
     public FileIngestorJsonIntegrationTests()
     {
@@ -28,8 +29,8 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         _conn = _factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         _sourceStore = new SqliteMemorySourceStore(_factory);
-        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(), new JsonFileTypeHandler()]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(new EmbeddingService()), TimeProvider.System, _sourceStore);
+        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new TokenizerChunker()), new JsonFileTypeHandler(new JsonFileTypeChunker())]);
+        _ingestor = new FileIngestor(matcher, new EntryEmbedder(new EmbeddingService()), _sourceStore, TimeProvider.System);
 
         // Configure global scope to include testDir
         using var scopeCmd = _conn.CreateCommand();
@@ -39,20 +40,29 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         scopeCmd.ExecuteNonQuery();
     }
 
+    public void Dispose()
+    {
+        _conn.Dispose();
+        if (Directory.Exists(_testDir))
+        {
+            Directory.Delete(_testDir, true);
+        }
+    }
+
     [Fact]
     public async Task IngestFileAsync_IngestsJsonFile_AndCreatesChunksInDb()
     {
         var jsonPath = Path.Combine(_testDir, "config.json");
         var jsonContent = """
-        {
-          "app": "ai-raccoon",
-          "version": "1.7.0",
-          "features": {
-            "json_chunking": true,
-            "extensible_handlers": true
-          }
-        }
-        """;
+                          {
+                            "app": "ai-raccoon",
+                            "version": "1.7.0",
+                            "features": {
+                              "json_chunking": true,
+                              "extensible_handlers": true
+                            }
+                          }
+                          """;
         await File.WriteAllTextAsync(jsonPath, jsonContent, TestContext.Current.CancellationToken);
 
         var count = await _ingestor.IngestFileAsync(_conn, "test_project", jsonPath, null, TestContext.Current.CancellationToken);
@@ -82,14 +92,5 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         var count = await _ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, count); // json + md = 2 files indexed, png skipped
-    }
-
-    public void Dispose()
-    {
-        _conn.Dispose();
-        if (Directory.Exists(_testDir))
-        {
-            Directory.Delete(_testDir, true);
-        }
     }
 }

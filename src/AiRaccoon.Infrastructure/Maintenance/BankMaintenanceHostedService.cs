@@ -11,19 +11,20 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     Bank maintenance loop: WAL checkpoint (TRUNCATE) at startup, shutdown and on the
 ///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010).
 /// </summary>
-public sealed partial class BankMaintenanceHostedService : BackgroundService
+public sealed partial class BankMaintenanceHostedService(
+    ISqliteConnectionFactory factory,
+    TimeProvider timeProvider,
+    IOperationTelemetry telemetry,
+    ILogger<BankMaintenanceHostedService> logger)
+    : BackgroundService
 {
     /// <summary>Contended checkpoints defer quickly instead of blocking the maintenance connection.</summary>
     private const int CheckpointBusyTimeoutMs = 250;
 
-    private readonly SqliteConnectionFactory _factory;
-    private readonly TimeProvider _timeProvider;
-    private readonly IOperationTelemetry _telemetry;
-    private readonly ILogger<BankMaintenanceHostedService> _logger;
-    private DateTimeOffset? _lastVacuumUtc;
-
     /// <summary>Span name and `operation` tag of one maintenance pass.</summary>
     internal const string OperationName = "bank.maintenance";
+
+    private DateTimeOffset? _lastVacuumUtc;
 
     /// <summary>Completed after each maintenance pass (startup + ticks); test seam.</summary>
     internal TickSignal Ticks { get; } = new();
@@ -33,15 +34,6 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
 
     /// <summary>Completed after each post-tick interval re-read; test seam.</summary>
     internal TickSignal IntervalReReads { get; } = new();
-
-    public BankMaintenanceHostedService(SqliteConnectionFactory factory, TimeProvider timeProvider,
-        IOperationTelemetry telemetry, ILogger<BankMaintenanceHostedService> logger)
-    {
-        _factory = factory;
-        _timeProvider = timeProvider;
-        _telemetry = telemetry;
-        _logger = logger;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -57,7 +49,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.RunFailed(_logger, ex);
+            Log.RunFailed(logger, ex);
         }
         finally
         {
@@ -65,7 +57,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
 
         using var timer = new PeriodicTimer(await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
-            _timeProvider);
+            timeProvider);
         TimerArmed.Increment();
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -79,7 +71,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                Log.RunFailed(_logger, ex);
+                Log.RunFailed(logger, ex);
             }
             finally
             {
@@ -96,7 +88,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     {
         try
         {
-            await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -108,7 +100,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.ShutdownCheckpointFailed(_logger, ex);
+            Log.ShutdownCheckpointFailed(logger, ex);
         }
 
         await base.StopAsync(cancellationToken);
@@ -117,7 +109,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     /// <summary>One maintenance pass: WAL checkpoint, then vacuum+analyze if due. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = _telemetry.Begin(OperationName);
+        using var pass = telemetry.Begin(OperationName);
         try
         {
             await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
@@ -139,12 +131,12 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         // Hourly-or-slower cadence (WP13 span-volume fix): spanning every pass costs nothing here,
         // so every pass is worth reading rather than distinguishing checkpoint-only from vacuumed.
         pass.NoteWork();
-        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
 
-            var now = _timeProvider.GetUtcNow();
+            var now = timeProvider.GetUtcNow();
             if (_lastVacuumUtc is null)
             {
                 // Seed on first run: short-lived processes never vacuum (the clock resets per process).
@@ -171,7 +163,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
             {
                 // A contended VACUUM defers like a contended checkpoint: Warning, clock
                 // untouched so the next tick retries — never an Error.
-                Log.VacuumDeferred(_logger);
+                Log.VacuumDeferred(logger);
                 return;
             }
 
@@ -187,7 +179,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
 
             _lastVacuumUtc = now;
             pass.Tag("vacuumed", "true");
-            Log.Vacuum(_logger);
+            Log.Vacuum(logger);
         }
         finally
         {
@@ -218,11 +210,11 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         var busyFrames = reader.GetInt32(0);
         if (busyFrames > 0)
         {
-            Log.CheckpointDeferred(_logger, busyFrames);
+            Log.CheckpointDeferred(logger, busyFrames);
         }
         else
         {
-            Log.Checkpoint(_logger);
+            Log.Checkpoint(logger);
         }
     }
 
@@ -238,7 +230,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
     {
         try
         {
-            await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
             var minutes = await ReadIntervalAsync(connection,
                 BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal,
                 BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes, cancellationToken).ConfigureAwait(false);
@@ -250,7 +242,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.IntervalReadFailed(_logger, ex);
+            Log.IntervalReadFailed(logger, ex);
             return TimeSpan.FromMinutes(BankMaintenanceConfigKeys.DefaultCheckpointIntervalMinutes);
         }
     }
@@ -269,7 +261,7 @@ public sealed partial class BankMaintenanceHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.IntervalReadFailed(_logger, ex);
+            Log.IntervalReadFailed(logger, ex);
             return BankMaintenanceConfigKeys.DefaultVacuumIntervalDays;
         }
     }

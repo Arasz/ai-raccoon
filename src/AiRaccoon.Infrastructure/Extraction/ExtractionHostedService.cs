@@ -10,34 +10,22 @@ namespace AiRaccoon.Infrastructure.Extraction;
 ///     each project's committed memories to the shared tier (dedup, idempotent, never delete).
 ///     Off by default, settings-driven, and best-effort per project.
 /// </summary>
-public sealed partial class ExtractionHostedService : BackgroundService
+public sealed partial class ExtractionHostedService(
+    IMemoryStore store,
+    ISharedExtractionRunner extraction,
+    IPromotionQueue queue,
+    TimeProvider timeProvider,
+    IOperationTelemetry telemetry,
+    ILogger<ExtractionHostedService> logger)
+    : BackgroundService
 {
-    private readonly IMemoryStore _store;
-    private readonly SharedExtractionRunner _extraction;
-    private readonly IPromotionQueue _queue;
-    private readonly TimeProvider _timeProvider;
-    private readonly IOperationTelemetry _telemetry;
-    private readonly ILogger<ExtractionHostedService> _logger;
-
     /// <summary>Span name and `operation` tag of one extraction pass.</summary>
     internal const string OperationName = "extraction.pass";
-
-    public ExtractionHostedService(IMemoryStore store, SharedExtractionRunner extraction,
-        IPromotionQueue queue, TimeProvider timeProvider, IOperationTelemetry telemetry,
-        ILogger<ExtractionHostedService> logger)
-    {
-        _store = store;
-        _extraction = extraction;
-        _queue = queue;
-        _timeProvider = timeProvider;
-        _telemetry = telemetry;
-        _logger = logger;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
-            _timeProvider);
+            timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
@@ -50,7 +38,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                Log.RunFailed(_logger, ex);
+                Log.RunFailed(logger, ex);
             }
 
             // Re-read the interval so config changes apply without a restart.
@@ -71,7 +59,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.IntervalReadFailed(_logger, ex);
+            Log.IntervalReadFailed(logger, ex);
             return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
         }
     }
@@ -79,7 +67,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
     /// <summary>One extraction pass: enabled check, per-project propose/promote. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = _telemetry.Begin(OperationName);
+        using var pass = telemetry.Begin(OperationName);
         try
         {
             var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
@@ -103,33 +91,35 @@ public sealed partial class ExtractionHostedService : BackgroundService
         }
     }
 
-    /// <summary>Runs the pass and returns the number of projects whose propose/promote threw
-    /// (H8): RunOnceAsync uses this to decide Succeeded vs PartiallyFailed.</summary>
+    /// <summary>
+    ///     Runs the pass and returns the number of projects whose propose/promote threw
+    ///     (H8): RunOnceAsync uses this to decide Succeeded vs PartiallyFailed.
+    /// </summary>
     private async Task<int> RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         // Default 30-minute cadence (WP13 span-volume fix): low-volume enough that spanning every
         // pass costs nothing, so every pass is worth reading rather than distinguishing on candidates.
         pass.NoteWork();
         var enabled = ExtractionConfigKeys.ParseEnabled(
-            await _store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken)
+            await store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken)
                 .ConfigureAwait(false));
         if (!enabled)
         {
-            Log.Skipped(_logger);
+            Log.Skipped(logger);
             return 0;
         }
 
         var mode = ExtractionConfigKeys.ParseMode(
-            await _store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken)
+            await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken)
                 .ConfigureAwait(false));
-        var projects = await _store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        var projects = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
         if (projects.Count == 0)
         {
-            Log.NoProjects(_logger);
+            Log.NoProjects(logger);
             return 0;
         }
 
-        var sharedIndex = await _store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         var promotedTotal = 0;
         var failures = 0;
         foreach (var projectId in projects)
@@ -139,30 +129,30 @@ public sealed partial class ExtractionHostedService : BackgroundService
                 if (mode == ExtractMode.Promote)
                 {
                     // Promote-from-queue: the propose tier is the source of truth.
-                    var outcome = await _queue
+                    var outcome = await queue
                         .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                         .ConfigureAwait(false);
                     promotedTotal += outcome.PromotedHashes.Count;
                     var candidateCount = outcome.PromotedHashes.Count + outcome.Absorbed
-                        + outcome.SkippedDuplicates + outcome.Failures.Count;
-                    Log.Pass(_logger, projectId, mode, candidateCount, outcome.PromotedHashes.Count,
+                                                                      + outcome.SkippedDuplicates + outcome.Failures.Count;
+                    Log.Pass(logger, projectId, mode, candidateCount, outcome.PromotedHashes.Count,
                         outcome.Absorbed);
                     if (outcome.Failures.Count > 0)
                     {
                         // One summary per batch; the per-failure detail lives in the outcome,
                         // and the failure count is metered (ai_raccoon.queue.promote_failures).
-                        Log.PromoteFailures(_logger, projectId, outcome.Failures.Count);
+                        Log.PromoteFailures(logger, projectId, outcome.Failures.Count);
                     }
 
                     continue;
                 }
 
-                var candidates = await _extraction.ProposeAsync(projectId, sharedIndex,
-                        includeTtlRows: false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
+                var candidates = await extraction.ProposeAsync(projectId, sharedIndex,
+                        false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Per-pass summary only; candidate counts are metered, not logged per row.
-                Log.Pass(_logger, projectId, mode, candidates.Count, 0, 0);
+                Log.Pass(logger, projectId, mode, candidates.Count, 0, 0);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -170,7 +160,7 @@ public sealed partial class ExtractionHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                Log.ProjectFailed(_logger, projectId, ex);
+                Log.ProjectFailed(logger, projectId, ex);
                 failures++;
             }
         }
@@ -178,14 +168,14 @@ public sealed partial class ExtractionHostedService : BackgroundService
         pass.Tag("projects", projects.Count.ToString());
         pass.Tag("promoted", promotedTotal.ToString());
         // "failures" is tagged by PartiallyFailed (RunOnceAsync), not here — one place sets it.
-        Log.RunCompleted(_logger, projects.Count, promotedTotal);
+        Log.RunCompleted(logger, projects.Count, promotedTotal);
         return failures;
     }
 
     private async Task<TimeSpan> ReadIntervalAsync(CancellationToken cancellationToken)
     {
         var minutes = ExtractionConfigKeys.ParseIntervalMinutes(
-            await _store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken)
+            await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken)
                 .ConfigureAwait(false));
         return TimeSpan.FromMinutes(minutes);
     }

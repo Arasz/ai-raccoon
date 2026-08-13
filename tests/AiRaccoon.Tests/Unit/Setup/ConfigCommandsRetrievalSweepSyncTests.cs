@@ -18,12 +18,13 @@ public class ConfigCommandsRetrievalSweepSyncTests
         TextReader? stdin = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(settings: new SettingsCommands(), sync: new SyncCommands()).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, settings: new SettingsCommands(), sync: new SyncCommands())
+            .RunAsync(parsed!, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

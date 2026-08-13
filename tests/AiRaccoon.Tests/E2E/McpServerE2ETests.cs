@@ -8,11 +8,11 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Unit.Embedding;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -248,17 +248,16 @@ public class McpServerE2ETests : IAsyncLifetime
         // Runs the real config-command pipeline against the factory's bank — the same
         // composition Program.cs uses for `ai-raccoon <verb>`.
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var options = new InfrastructureOptions { DataRoot = _factory.DataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = new SqliteMemoryStore(factory,
-            TimeProvider.System, new TokenizerChunker(), new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
-        var exit = await new ConfigCommands(new SettingsCommands(), new SyncCommands())
-            .RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, CancellationToken.None);
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), TimeProvider.System, new EmbeddingService());
+        var exit = await TestData.CreateConfigCommands(store, settings: new SettingsCommands(), sync: new SyncCommands())
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), CancellationToken.None);
         exit.ShouldBe(0, stderr.ToString());
     }
 

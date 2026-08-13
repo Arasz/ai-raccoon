@@ -1,10 +1,10 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using AiRaccoon.Core.Observability;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
 using Xunit;
+using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -17,6 +17,9 @@ namespace AiRaccoon.Tests.Unit.Observability;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class BackgroundInstrumentationCoverageTests
 {
+    private static readonly MethodInfo NoteWorkMethod = typeof(IOperationScope).GetMethod(nameof(IOperationScope.NoteWork))
+                                                        ?? throw new InvalidOperationException("IOperationScope.NoteWork not found by reflection.");
+
     [Fact]
     public void EveryHostedService_TakesTheOperationTelemetryPort()
     {
@@ -72,11 +75,7 @@ public sealed class BackgroundInstrumentationCoverageTests
             .Where(t => t is { IsAbstract: false, IsInterface: false } && typeof(IHostedService).IsAssignableFrom(t))
     ];
 
-    private static readonly MethodInfo NoteWorkMethod = typeof(IOperationScope).GetMethod(nameof(IOperationScope.NoteWork))
-        ?? throw new InvalidOperationException("IOperationScope.NoteWork not found by reflection.");
-
-    private static bool InvokesNoteWork(Type hostedServiceType) =>
-        MethodsToScan(hostedServiceType).Any(m => CallsNoteWork(m));
+    private static bool InvokesNoteWork(Type hostedServiceType) => MethodsToScan(hostedServiceType).Any(m => CallsNoteWork(m));
 
     /// <summary>Every method declared directly on the type, plus (for an async method) the
     /// compiler-generated state machine's MoveNext — that is where an `await`-laced pass's real
@@ -84,7 +83,7 @@ public sealed class BackgroundInstrumentationCoverageTests
     private static IEnumerable<MethodBase> MethodsToScan(Type type)
     {
         const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
-            | BindingFlags.Static | BindingFlags.DeclaredOnly;
+                                 | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
         foreach (var method in type.GetMethods(all))
         {

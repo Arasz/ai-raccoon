@@ -30,6 +30,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // The same seed under the pre-ADR-0012 construction SHA-256(Label ‖ seed) — what the migrate
     // verb has to find on disk and rekey away from.
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
+
     // Obviously fake sidecar fixture ids, unrelated to the interactive-default behaviour below —
     // not real Bitwarden vault entries.
     private const string FixtureProjectId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -46,7 +47,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     // via TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    private FakeLogger? _lastLogger;
+    private FakeLogger<EncryptionCommands>? _lastLogger;
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
@@ -62,20 +63,21 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     private async Task<RunResult> Run(string[] args, FakeConfigStore store, FakeBwsRunner runner, TextReader? stdin = null, string? envPassphrase = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider(envPassphrase), new BitwardenEncryptionKeyProvider(runner)]));
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var logger = new FakeLogger();
+        var logger = new FakeLogger<EncryptionCommands>();
         _lastLogger = logger;
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
         var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
-        var exit = await new ConfigCommands(encryptionCommands: encryptionCommands).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, stdin ?? TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, encryptionCommands: encryptionCommands)
+            .RunAsync(parsed!, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
@@ -289,7 +291,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         sidecar.ShouldNotBeNull();
         sidecar.Source.ShouldBe("bitwarden");
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 801 && r.Level == LogLevel.Information
-                                                                             && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
+                                                                               && r.Message.Contains("Bank rekeyed to the bitwarden encryption key", StringComparison.Ordinal));
         // The bank now opens with the derived key (via the resolver: sidecar → bws fetch).
         await using (await bank.OpenBankAsync(TestContext.Current.CancellationToken))
         {
@@ -574,7 +576,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bank");
     }
 
@@ -587,7 +589,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 null!,
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bws");
     }
 
@@ -600,7 +602,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("env");
     }
 
@@ -613,7 +615,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
-                new FakeLogger()));
+                new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("sidecar");
     }
 

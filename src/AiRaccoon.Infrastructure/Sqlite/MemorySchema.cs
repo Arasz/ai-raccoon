@@ -13,242 +13,8 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static class MemorySchema
 {
-    // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
-    // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
-    private static readonly string Ddl = $"""
-                               CREATE TABLE IF NOT EXISTS workspaces (
-                                   id TEXT PRIMARY KEY,
-                                   project_id TEXT NOT NULL,
-                                   agent_id TEXT NULL,
-                                   name TEXT NULL,
-                                   status TEXT NOT NULL,
-                                   created_at INTEGER NOT NULL,
-                                   closed_at INTEGER NULL
-                               );
-
-                               CREATE TABLE IF NOT EXISTS entries (
-                                   id INTEGER PRIMARY KEY,
-                                   hash TEXT,
-                                   path TEXT,
-                                   value TEXT,
-                                   source_file TEXT,
-                                   section TEXT,
-                                   scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                                   project_id TEXT NULL,
-                                   context_label TEXT NULL,
-                                   workspace_id TEXT NULL,
-                                   agent_id TEXT NULL,
-                                   created_at INTEGER NOT NULL,
-                                   updated_at INTEGER NOT NULL,
-                                   access_count INTEGER NOT NULL DEFAULT 0,
-                                   last_accessed_at INTEGER NULL,
-                                   rating REAL NOT NULL DEFAULT 0.5,
-                                   ttl_days INTEGER NULL,
-                                   embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
-                                   embedding BLOB NULL,
-                                   heading_path TEXT NULL,
-                                   structure_embedding BLOB NULL,
-                                   chunk_index INTEGER NOT NULL DEFAULT 0,
-                                   total_chunks INTEGER NOT NULL DEFAULT 0,
-                                   source_id INTEGER NULL,
-                                   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
-                                   CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
-                               );
-
-                               CREATE TABLE IF NOT EXISTS settings (
-                                   key TEXT PRIMARY KEY,
-                                   value TEXT NOT NULL
-                               );
-
-                               CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
-                                   value,
-                                   source_file,
-                                   section,
-                                   content='entries',
-                                   content_rowid='id'
-                               );
-
-                               -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
-                               -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key
-                               -- (docs/plans/2026-08-08-search-knn-perf.md §3.1), queried instead of a WHERE
-                               -- filter; cosine is declared explicitly so a bare MATCH cannot fall back to L2.
-                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
-
-                               -- Structure modality: heading-path vectors, rowid = entry id. Written by the
-                               -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
-                               CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
-
-                               CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
-                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
-                               END;
-
-                               -- Mirrors vec_entries_au: fires when the embed transition writes
-                               -- structure_embedding (MarkEmbedded/MarkStructure).
-                               CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
-                               WHEN NEW.structure_embedding IS NOT NULL
-                               BEGIN
-                                   DELETE FROM vec_structure WHERE rowid = NEW.id;
-                                   INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
-                               END;
-
-                               -- Clear arm for vec_structure: merge-reindex invalidates a row by setting
-                               -- embed_state back to 'pending' (see SyncService's reindex UPDATE, which also
-                               -- nulls structure_embedding/heading_path); without this the vec_structure row
-                               -- survives a deliberately invalidated content vector. Mirrors vec_entries_pending.
-                               CREATE TRIGGER IF NOT EXISTS vec_structure_pending AFTER UPDATE OF embed_state ON entries
-                               WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                               BEGIN
-                                   DELETE FROM vec_structure WHERE rowid = OLD.id;
-                               END;
-
-                               CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
-                                   INSERT INTO entries_fts(rowid, value, source_file, section)
-                                   VALUES (new.id, new.value, new.source_file, new.section);
-                               END;
-
-                               CREATE TRIGGER IF NOT EXISTS entries_fts_ad AFTER DELETE ON entries BEGIN
-                                   INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                                   VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                               END;
-
-                               CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
-                                   INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                                   VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                                   INSERT INTO entries_fts(rowid, value, source_file, section)
-                                   VALUES (new.id, new.value, new.source_file, new.section);
-                               END;
-
-                               -- vec0 has no triggers: embedding rows follow embed_state. Marking embedded
-                               -- upserts the vec row (delete-then-insert, so a re-embed replaces rather than
-                               -- duplicates); marking pending or deleting the entry removes it.
-                               CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
-                               WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                               BEGIN
-                                   DELETE FROM vec_entries WHERE rowid = NEW.id;
-                                   INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
-                               END;
-
-                               CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
-                               WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                               BEGIN
-                                   DELETE FROM vec_entries WHERE rowid = OLD.id;
-                               END;
-
-                               CREATE TRIGGER IF NOT EXISTS vec_entries_ad AFTER DELETE ON entries BEGIN
-                                   DELETE FROM vec_entries WHERE rowid = OLD.id;
-                               END;
-
-                               -- promotion_queue_entries_ad (ADR-0023) is *not* declared here. Its guard
-                               -- needed a body replacement (H4, see EnsurePromotionQueueTriggerScopeGuardAsync
-                               -- below), and CREATE TRIGGER IF NOT EXISTS can only ever create — replacing a
-                               -- body needs a DROP first, which is a real schema write and must not run on
-                               -- every open the way every other statement here (all IF NOT EXISTS, all
-                               -- no-ops once the object exists) safely can.
-
-                               CREATE TABLE IF NOT EXISTS sync_meta (
-                                   key TEXT PRIMARY KEY,
-                                   value TEXT NOT NULL
-                               );
-
-                               CREATE TABLE IF NOT EXISTS sync_tombstones (
-                                   hash TEXT NOT NULL,
-                                   scope TEXT NOT NULL,
-                                   deleted_at INTEGER NOT NULL,
-                                   PRIMARY KEY (hash, scope)
-                               );
-
-                               -- File-watcher feature: persisted watch registrations and per-path
-                               -- fingerprints (hash-skip). Normalized paths; runtime state is not persisted.
-                               CREATE TABLE IF NOT EXISTS watches (
-                                   project_id            TEXT NOT NULL,
-                                   path                  TEXT NOT NULL,
-                                   created_at            INTEGER NOT NULL,
-                                   last_change_ts        INTEGER NOT NULL,       -- catch-up watermark (D1)
-                                   scan_owner            TEXT NULL,              -- cross-process scan lease (D2)
-                                   scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
-                                   PRIMARY KEY (project_id, path)
-                               );
-
-                               CREATE TABLE IF NOT EXISTS watch_files (
-                                   project_id      TEXT NOT NULL,
-                                   path            TEXT NOT NULL,
-                                   file_hash       TEXT NOT NULL,          -- SHA-256(path + full content)
-                                   updated_at      INTEGER NOT NULL,
-                                   PRIMARY KEY (project_id, path)
-                               );
-
-                               -- Propose tier: candidates waiting for promotion review, kept separate from
-                               -- entries — queue rows are never searchable and never counted by memory_stats.
-                               -- Capacity/eviction lives on this table only (the shared tier stays curated and sweep-exempt).
-                               CREATE TABLE IF NOT EXISTS promotion_queue (
-                                   id          INTEGER PRIMARY KEY,
-                                   project_id  TEXT NOT NULL,
-                                   hash        TEXT NOT NULL,
-                                   path        TEXT NULL,
-                                   value       TEXT NOT NULL,
-                                   source_file TEXT NULL,
-                                   score       REAL NOT NULL,
-                                   reasons     TEXT NOT NULL DEFAULT '[]',
-                                   scorer_version INTEGER NOT NULL DEFAULT 0,
-                                   created_at  INTEGER NOT NULL,
-                                   updated_at  INTEGER NOT NULL,
-                                   UNIQUE (project_id, hash)
-                               );
-
-                               -- Agent rejections (memory_promotion_discard): a permanent per-project
-                               -- "no" for a content identity — propose never re-queues it (docs/adr/0026).
-                               CREATE TABLE IF NOT EXISTS promotion_discards (
-                                   project_id   TEXT NOT NULL,
-                                   hash         TEXT NOT NULL,
-                                   discarded_at INTEGER NOT NULL,
-                                   PRIMARY KEY (project_id, hash)
-                               );
-
-                               CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
-                               CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
-                               CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
-                               CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
-                               CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
-                               CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
-                               CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
-
-                               CREATE TABLE IF NOT EXISTS memory_source (
-                                   id            INTEGER PRIMARY KEY,
-                                   source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
-                                   source_locator TEXT NOT NULL,
-                                   section       TEXT NULL,
-                                   heading_path  TEXT NULL
-                               );
-
-                               CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
-                                   ON memory_source(source_type, source_locator, COALESCE(section, ''));
-
-                               -- Search-quality metric: tracks every memory_search call with correlation-id,
-                               -- follow-through (did the agent use the result?), and usefulness grade.
-                               -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
-                               CREATE TABLE IF NOT EXISTS search_quality (
-                                   id                INTEGER PRIMARY KEY,
-                                   correlation_id    TEXT NOT NULL UNIQUE,
-                                   query             TEXT NOT NULL,
-                                   scope             TEXT,
-                                   project_id        TEXT,
-                                   session_id        TEXT,
-                                   result_count      INTEGER,
-                                   top_source_files  TEXT,       -- JSON array of SourceFile paths
-                                   follow_through_count INTEGER  DEFAULT 0,
-                                   follow_through_files TEXT,    -- JSON array of files read after search
-                                   usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
-                                   grade_note        TEXT,
-                                   created_at        INTEGER NOT NULL
-                               );
-
-                               CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
-
-                               """;
-
-
     /// <summary>
-    ///     Bucket uniqueness. Not part of <see cref="Ddl"/>: on a legacy bank the duplicates
+    ///     Bucket uniqueness. Not part of <see cref="Ddl" />: on a legacy bank the duplicates
     ///     must be deleted before the index can be created, which is the ladder's job. A fresh
     ///     bank has no rows to violate it, so it gets the indexes directly.
     /// </summary>
@@ -264,13 +30,266 @@ internal static class MemorySchema
 
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
-    ///     matching ladder step in <see cref="MigrateToV1Async"/>/<see cref="MigrateToV2Async"/>/
-    ///     <see cref="MigrateToV3Async"/>/<see cref="MigrateToV4Async"/> (ADR-0011). Not every schema
+    ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
+    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
-    ///     open belongs in the unconditional <see cref="Ddl"/> instead (ADR-0023 amendment) — the
+    ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
     internal const int CurrentVersion = 5;
+
+    /// <summary>
+    ///     The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
+    ///     matches what ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject) — a
+    ///     custom- or workspace-scoped sibling cannot back a promotable candidate, so it must not read
+    ///     as "still live" here either.
+    /// </summary>
+    private const string PromotionQueueTriggerDdl = """
+                                                    CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                                                        DELETE FROM promotion_queue
+                                                        WHERE project_id = OLD.project_id AND hash = OLD.hash
+                                                          AND NOT EXISTS (SELECT 1 FROM entries e
+                                                                          WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                                            AND e.scope = 'project');
+                                                    END;
+                                                    """;
+
+    private const int DefaultEmbeddingDimension = 384;
+
+    // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
+    // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
+    private static readonly string Ddl = $"""
+                                          CREATE TABLE IF NOT EXISTS workspaces (
+                                              id TEXT PRIMARY KEY,
+                                              project_id TEXT NOT NULL,
+                                              agent_id TEXT NULL,
+                                              name TEXT NULL,
+                                              status TEXT NOT NULL,
+                                              created_at INTEGER NOT NULL,
+                                              closed_at INTEGER NULL
+                                          );
+
+                                          CREATE TABLE IF NOT EXISTS entries (
+                                              id INTEGER PRIMARY KEY,
+                                              hash TEXT,
+                                              path TEXT,
+                                              value TEXT,
+                                              source_file TEXT,
+                                              section TEXT,
+                                              scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                                              project_id TEXT NULL,
+                                              context_label TEXT NULL,
+                                              workspace_id TEXT NULL,
+                                              agent_id TEXT NULL,
+                                              created_at INTEGER NOT NULL,
+                                              updated_at INTEGER NOT NULL,
+                                              access_count INTEGER NOT NULL DEFAULT 0,
+                                              last_accessed_at INTEGER NULL,
+                                              rating REAL NOT NULL DEFAULT 0.5,
+                                              ttl_days INTEGER NULL,
+                                              embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                                              embedding BLOB NULL,
+                                              heading_path TEXT NULL,
+                                              structure_embedding BLOB NULL,
+                                              chunk_index INTEGER NOT NULL DEFAULT 0,
+                                              total_chunks INTEGER NOT NULL DEFAULT 0,
+                                              source_id INTEGER NULL,
+                                              FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+                                              CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
+                                          );
+
+                                          CREATE TABLE IF NOT EXISTS settings (
+                                              key TEXT PRIMARY KEY,
+                                              value TEXT NOT NULL
+                                          );
+
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
+                                              value,
+                                              source_file,
+                                              section,
+                                              content='entries',
+                                              content_rowid='id'
+                                          );
+
+                                          -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
+                                          -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key
+                                          -- (docs/plans/2026-08-08-search-knn-perf.md §3.1), queried instead of a WHERE
+                                          -- filter; cosine is declared explicitly so a bare MATCH cannot fall back to L2.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+
+                                          -- Structure modality: heading-path vectors, rowid = entry id. Written by the
+                                          -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
+                                              DELETE FROM vec_structure WHERE rowid = OLD.id;
+                                          END;
+
+                                          -- Mirrors vec_entries_au: fires when the embed transition writes
+                                          -- structure_embedding (MarkEmbedded/MarkStructure).
+                                          CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
+                                          WHEN NEW.structure_embedding IS NOT NULL
+                                          BEGIN
+                                              DELETE FROM vec_structure WHERE rowid = NEW.id;
+                                              INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
+                                          END;
+
+                                          -- Clear arm for vec_structure: merge-reindex invalidates a row by setting
+                                          -- embed_state back to 'pending' (see SyncService's reindex UPDATE, which also
+                                          -- nulls structure_embedding/heading_path); without this the vec_structure row
+                                          -- survives a deliberately invalidated content vector. Mirrors vec_entries_pending.
+                                          CREATE TRIGGER IF NOT EXISTS vec_structure_pending AFTER UPDATE OF embed_state ON entries
+                                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                                          BEGIN
+                                              DELETE FROM vec_structure WHERE rowid = OLD.id;
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
+                                              INSERT INTO entries_fts(rowid, value, source_file, section)
+                                              VALUES (new.id, new.value, new.source_file, new.section);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS entries_fts_ad AFTER DELETE ON entries BEGIN
+                                              INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                              VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                                              INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                                              VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                                              INSERT INTO entries_fts(rowid, value, source_file, section)
+                                              VALUES (new.id, new.value, new.source_file, new.section);
+                                          END;
+
+                                          -- vec0 has no triggers: embedding rows follow embed_state. Marking embedded
+                                          -- upserts the vec row (delete-then-insert, so a re-embed replaces rather than
+                                          -- duplicates); marking pending or deleting the entry removes it.
+                                          CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
+                                          WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                                          BEGIN
+                                              DELETE FROM vec_entries WHERE rowid = NEW.id;
+                                              INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                                          BEGIN
+                                              DELETE FROM vec_entries WHERE rowid = OLD.id;
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_entries_ad AFTER DELETE ON entries BEGIN
+                                              DELETE FROM vec_entries WHERE rowid = OLD.id;
+                                          END;
+
+                                          -- promotion_queue_entries_ad (ADR-0023) is *not* declared here. Its guard
+                                          -- needed a body replacement (H4, see EnsurePromotionQueueTriggerScopeGuardAsync
+                                          -- below), and CREATE TRIGGER IF NOT EXISTS can only ever create — replacing a
+                                          -- body needs a DROP first, which is a real schema write and must not run on
+                                          -- every open the way every other statement here (all IF NOT EXISTS, all
+                                          -- no-ops once the object exists) safely can.
+
+                                          CREATE TABLE IF NOT EXISTS sync_meta (
+                                              key TEXT PRIMARY KEY,
+                                              value TEXT NOT NULL
+                                          );
+
+                                          CREATE TABLE IF NOT EXISTS sync_tombstones (
+                                              hash TEXT NOT NULL,
+                                              scope TEXT NOT NULL,
+                                              deleted_at INTEGER NOT NULL,
+                                              PRIMARY KEY (hash, scope)
+                                          );
+
+                                          -- File-watcher feature: persisted watch registrations and per-path
+                                          -- fingerprints (hash-skip). Normalized paths; runtime state is not persisted.
+                                          CREATE TABLE IF NOT EXISTS watches (
+                                              project_id            TEXT NOT NULL,
+                                              path                  TEXT NOT NULL,
+                                              created_at            INTEGER NOT NULL,
+                                              last_change_ts        INTEGER NOT NULL,       -- catch-up watermark (D1)
+                                              scan_owner            TEXT NULL,              -- cross-process scan lease (D2)
+                                              scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
+                                              PRIMARY KEY (project_id, path)
+                                          );
+
+                                          CREATE TABLE IF NOT EXISTS watch_files (
+                                              project_id      TEXT NOT NULL,
+                                              path            TEXT NOT NULL,
+                                              file_hash       TEXT NOT NULL,          -- SHA-256(path + full content)
+                                              updated_at      INTEGER NOT NULL,
+                                              PRIMARY KEY (project_id, path)
+                                          );
+
+                                          -- Propose tier: candidates waiting for promotion review, kept separate from
+                                          -- entries — queue rows are never searchable and never counted by memory_stats.
+                                          -- Capacity/eviction lives on this table only (the shared tier stays curated and sweep-exempt).
+                                          CREATE TABLE IF NOT EXISTS promotion_queue (
+                                              id          INTEGER PRIMARY KEY,
+                                              project_id  TEXT NOT NULL,
+                                              hash        TEXT NOT NULL,
+                                              path        TEXT NULL,
+                                              value       TEXT NOT NULL,
+                                              source_file TEXT NULL,
+                                              score       REAL NOT NULL,
+                                              reasons     TEXT NOT NULL DEFAULT '[]',
+                                              scorer_version INTEGER NOT NULL DEFAULT 0,
+                                              created_at  INTEGER NOT NULL,
+                                              updated_at  INTEGER NOT NULL,
+                                              UNIQUE (project_id, hash)
+                                          );
+
+                                          -- Agent rejections (memory_promotion_discard): a permanent per-project
+                                          -- "no" for a content identity — propose never re-queues it (docs/adr/0026).
+                                          CREATE TABLE IF NOT EXISTS promotion_discards (
+                                              project_id   TEXT NOT NULL,
+                                              hash         TEXT NOT NULL,
+                                              discarded_at INTEGER NOT NULL,
+                                              PRIMARY KEY (project_id, hash)
+                                          );
+
+                                          CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
+                                          CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
+                                          CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_promotion_queue_project ON promotion_queue(project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_promotion_queue_score ON promotion_queue(score);
+
+                                          CREATE TABLE IF NOT EXISTS memory_source (
+                                              id            INTEGER PRIMARY KEY,
+                                              source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
+                                              source_locator TEXT NOT NULL,
+                                              section       TEXT NULL,
+                                              heading_path  TEXT NULL
+                                          );
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
+                                              ON memory_source(source_type, source_locator, COALESCE(section, ''));
+
+                                          -- Search-quality metric: tracks every memory_search call with correlation-id,
+                                          -- follow-through (did the agent use the result?), and usefulness grade.
+                                          -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
+                                          CREATE TABLE IF NOT EXISTS search_quality (
+                                              id                INTEGER PRIMARY KEY,
+                                              correlation_id    TEXT NOT NULL UNIQUE,
+                                              query             TEXT NOT NULL,
+                                              scope             TEXT,
+                                              project_id        TEXT,
+                                              session_id        TEXT,
+                                              result_count      INTEGER,
+                                              top_source_files  TEXT,       -- JSON array of SourceFile paths
+                                              follow_through_count INTEGER  DEFAULT 0,
+                                              follow_through_files TEXT,    -- JSON array of files read after search
+                                              usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
+                                              grade_note        TEXT,
+                                              created_at        INTEGER NOT NULL
+                                          );
+
+                                          CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
+
+                                          """;
+
+    private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -401,34 +420,20 @@ internal static class MemorySchema
             .ConfigureAwait(false);
     }
 
-    /// <summary>The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
-    /// matches what ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject) — a
-    /// custom- or workspace-scoped sibling cannot back a promotable candidate, so it must not read
-    /// as "still live" here either.</summary>
-    private const string PromotionQueueTriggerDdl = """
-                                                     CREATE TRIGGER promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
-                                                         DELETE FROM promotion_queue
-                                                         WHERE project_id = OLD.project_id AND hash = OLD.hash
-                                                           AND NOT EXISTS (SELECT 1 FROM entries e
-                                                                           WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
-                                                                             AND e.scope = 'project');
-                                                     END;
-                                                     """;
-
     /// <summary>
     ///     H4 (ADR-0023 amendment): the trigger's guard needed a body *replacement*
     ///     (<c>AND e.scope = 'project'</c>), and <c>CREATE TRIGGER IF NOT EXISTS</c> — the mechanism
-    ///     every other object in <see cref="Ddl"/> relies on — can only ever create, never replace. An
+    ///     every other object in <see cref="Ddl" /> relies on — can only ever create, never replace. An
     ///     unconditional <c>DROP TRIGGER</c> + <c>CREATE TRIGGER</c> on every open was tried and
     ///     rejected: unlike the no-op <c>IF NOT EXISTS</c> statements around it, that pair is a real
-    ///     schema write every time, and <see cref="SqliteConnectionFactory"/> opens unpooled,
+    ///     schema write every time, and <see cref="SqliteConnectionFactory" /> opens unpooled,
     ///     per-operation connections — SweepService opens one per entry, so a large bank would turn
     ///     one maintenance pass into thousands of schema writes, each bumping
     ///     <c>PRAGMA schema_version</c> (forcing every other connection's prepared-statement cache to
     ///     re-prepare) and each opening a window between the DROP and the CREATE where the trigger
     ///     does not exist — a concurrent delete landing in that window would produce exactly the
     ///     orphan ADR-0023 exists to prevent. Probing first (one indexed <c>sqlite_master</c> read,
-    ///     same shape as <see cref="MigrateIngestScopeKeysAsync"/> above) avoids all three: no write,
+    ///     same shape as <see cref="MigrateIngestScopeKeysAsync" /> above) avoids all three: no write,
     ///     no cookie bump, no window, on every open after the first corrected one.
     /// </summary>
     private static async Task EnsurePromotionQueueTriggerScopeGuardAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -446,10 +451,10 @@ internal static class MemorySchema
         await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"""
-                    DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
+                     DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
 
-                    {PromotionQueueTriggerDdl}
-                    """,
+                     {PromotionQueueTriggerDdl}
+                     """,
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
@@ -461,14 +466,14 @@ internal static class MemorySchema
     /// <summary>PRAGMA user_version takes no parameter binding, hence the interpolation of an int constant.</summary>
     private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
-            new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken))
+                new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
     /// <summary>
     ///     Ladder step 1 — everything shipped before the version marker existed: entries/watch-lease
     ///     columns, the ingest-scope key move, the FTS rebuild and the bucket-uniqueness indexes.
     ///     Idempotent; returns false when the soft bucket-index step didn't complete (bank stays
-    ///     unstamped, retried next open) — must finish before <see cref="MigrateToV2Async"/>.
+    ///     unstamped, retried next open) — must finish before <see cref="MigrateToV2Async" />.
     /// </summary>
     private static async Task<bool> MigrateToV1Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -702,10 +707,6 @@ internal static class MemorySchema
         return true;
     }
 
-    private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
-
-    private const int DefaultEmbeddingDimension = 384;
-
     /// <summary>
     ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
     ///     and rebuilds vec_entries/vec_structure with the vec0 partition key. Rethrows on failure —
@@ -765,27 +766,27 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         $"""
-                        DROP TRIGGER IF EXISTS vec_entries_au;
-                        DROP TRIGGER IF EXISTS vec_entries_pending;
-                        DROP TRIGGER IF EXISTS vec_entries_ad;
+                         DROP TRIGGER IF EXISTS vec_entries_au;
+                         DROP TRIGGER IF EXISTS vec_entries_pending;
+                         DROP TRIGGER IF EXISTS vec_entries_ad;
 
-                        CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
-                        WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                        BEGIN
-                            DELETE FROM vec_entries WHERE rowid = NEW.id;
-                            INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
-                        END;
+                         CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
+                         WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                         BEGIN
+                             DELETE FROM vec_entries WHERE rowid = NEW.id;
+                             INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                         END;
 
-                        CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
-                        WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                        BEGIN
-                            DELETE FROM vec_entries WHERE rowid = OLD.id;
-                        END;
+                         CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                         BEGIN
+                             DELETE FROM vec_entries WHERE rowid = OLD.id;
+                         END;
 
-                        CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
-                            DELETE FROM vec_entries WHERE rowid = OLD.id;
-                        END;
-                        """,
+                         CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
+                             DELETE FROM vec_entries WHERE rowid = OLD.id;
+                         END;
+                         """,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
@@ -804,7 +805,7 @@ internal static class MemorySchema
 
     /// <summary>
     ///     Ladder step 3: a bank-wide self-heal recompute of chunk_index/total_chunks, reusing the
-    ///     exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService"/>'s merge uses. Heals rows
+    ///     exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s merge uses. Heals rows
     ///     an older binary wrote without running the write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3).
     /// </summary>
     private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken)
@@ -1006,7 +1007,7 @@ internal static class MemorySchema
         }
     }
 
-    /// <summary>Drops and recreates one vec0 table in the partitioned shape, repopulating it from <paramref name="sourceColumn"/>.</summary>
+    /// <summary>Drops and recreates one vec0 table in the partitioned shape, repopulating it from <paramref name="sourceColumn" />.</summary>
     private static async Task RebuildVecTableAsync(SqliteConnection connection, string table, int dimension,
         string sourceColumn, string wherePredicate, CancellationToken cancellationToken)
     {
@@ -1021,9 +1022,9 @@ internal static class MemorySchema
         await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"""
-                    INSERT INTO {table}(rowid, ctx, embedding)
-                    SELECT id, {MemorySql.ContextKeyExpression("")}, {sourceColumn} FROM entries WHERE {wherePredicate}
-                    """,
+                     INSERT INTO {table}(rowid, ctx, embedding)
+                     SELECT id, {MemorySql.ContextKeyExpression("")}, {sourceColumn} FROM entries WHERE {wherePredicate}
+                     """,
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }

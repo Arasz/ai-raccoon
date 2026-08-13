@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using AiRaccoon.Observability;
-using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
 using Xunit;
 

@@ -94,9 +94,11 @@ public sealed class SharedExtractionRunnerTests
     public async Task ProposeAsync_HonoursTheLimit_ForTheReturnedCandidates()
     {
         var (store, _, _, runner) = NewStack();
-        store.Candidates["acme"] = Enumerable.Range(0, 10)
-            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
-            .ToList();
+        store.Candidates["acme"] =
+        [
+            .. Enumerable.Range(0, 10)
+                .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
+        ];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
@@ -111,9 +113,11 @@ public sealed class SharedExtractionRunnerTests
     public async Task ProposeAsync_BoundsBrandNewCandidatesToTheDisplayLimit()
     {
         var (store, queue, _, runner) = NewStack();
-        store.Candidates["acme"] = Enumerable.Range(0, 10)
-            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
-            .ToList();
+        store.Candidates["acme"] =
+        [
+            .. Enumerable.Range(0, 10)
+                .Select(i => Row($"h{i:00}", $"organic fact {i} about beta"))
+        ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
@@ -155,9 +159,11 @@ public sealed class SharedExtractionRunnerTests
     public async Task ProposeAsync_AppliesThePerDocumentCap_ToNewlyQueuedCandidates()
     {
         var (store, queue, _, runner) = NewStack();
-        store.Candidates["acme"] = Enumerable.Range(0, 5)
-            .Select(i => Row($"h{i:00}", $"organic fact {i} about beta", sourceFile: "doc.md"))
-            .ToList();
+        store.Candidates["acme"] =
+        [
+            .. Enumerable.Range(0, 5)
+                .Select(i => Row($"h{i:00}", $"organic fact {i} about beta", sourceFile: "doc.md"))
+        ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
@@ -184,7 +190,7 @@ public sealed class SharedExtractionRunnerTests
             includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
 
         queue.LastProject.ShouldBeNull("the only new candidate belongs to an already-capped document, "
-            + "and none of the already-queued rows are in this pass's eligible pool to refresh");
+                                       + "and none of the already-queued rows are in this pass's eligible pool to refresh");
     }
 
     /// <summary>Regression pin for the refresh stream: rows already in the queue keep being refreshed

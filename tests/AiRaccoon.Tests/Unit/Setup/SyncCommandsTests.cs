@@ -18,20 +18,19 @@ public class SyncCommandsTests
         TextReader? stdin = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
+        var streams = new StandardStreams(stdin ?? TextReader.Null, stdout, stderr);
         var commands = new SyncCommands();
-        var exit = parsed.CommandPath switch
+        var exit = parsed!.CommandPath switch
         {
-            ["sync", "add", "s3"] => await commands.AddS3Async(parsed.ParseResult, store, stdout, stderr,
-                stdin ?? TextReader.Null, TestContext.Current.CancellationToken),
-            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed.ParseResult, store, stdout, stderr,
-                stdin ?? TextReader.Null, TestContext.Current.CancellationToken),
-            ["sync", "remove"] => await commands.RemoveAsync(store, stdout, TestContext.Current.CancellationToken),
-            ["sync", "show"] => await commands.ShowAsync(store, stdout, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
+            ["sync", "add", "s3"] => await commands.AddS3Async(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sync", "remove"] => await commands.RemoveAsync(store, streams, TestContext.Current.CancellationToken),
+            ["sync", "show"] => await commands.ShowAsync(store, streams, TestContext.Current.CancellationToken),
+            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed!.CommandPath)}")
         };
         return (exit, stdout.ToString(), stderr.ToString());
     }

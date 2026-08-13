@@ -11,7 +11,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
 ///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
-public sealed class EmbeddingService
+public sealed class EmbeddingService : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -28,6 +28,19 @@ public sealed class EmbeddingService
     // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
     private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
         new(StringComparer.Ordinal);
+
+    public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var provider = settings.Provider.ToLowerInvariant();
+        return provider switch
+        {
+            "local" or "openai" => _engines.GetOrAdd(EngineFingerprint(provider, settings.Model, settings.BaseUrl),
+                _ => provider == "local" ? CreateLocal(settings) : CreateOpenAi(settings)),
+            _ => throw new ArgumentOutOfRangeException(nameof(settings), settings.Provider,
+                "Unknown embedding provider; expected 'local' or 'openai'.")
+        };
+    }
 
 
     /// <summary>
@@ -54,19 +67,6 @@ public sealed class EmbeddingService
                 $"openai:{model}@{(string.IsNullOrWhiteSpace(baseUrl) ? DefaultOpenAiEndpoint : baseUrl)}",
             var other => other
         };
-
-    public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
-    {
-        ArgumentNullException.ThrowIfNull(settings);
-        var provider = settings.Provider.ToLowerInvariant();
-        return provider switch
-        {
-            "local" or "openai" => _engines.GetOrAdd(EngineFingerprint(provider, settings.Model, settings.BaseUrl),
-                _ => provider == "local" ? CreateLocal(settings) : CreateOpenAi(settings)),
-            _ => throw new ArgumentOutOfRangeException(nameof(settings), settings.Provider,
-                "Unknown embedding provider; expected 'local' or 'openai'.")
-        };
-    }
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {

@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -21,12 +21,13 @@ public class ConfigCommandsWatchTests
     private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store, FakeWatchStore? watchStore = null)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(watch: new WatchCommands(watchStore ?? new FakeWatchStore())).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, watch: new WatchCommands(watchStore ?? new FakeWatchStore()))
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

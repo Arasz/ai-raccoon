@@ -1,11 +1,10 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using Dapper;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -23,11 +22,11 @@ namespace AiRaccoon.Tests.Unit.storage;
 public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+    private readonly string _contentRoot = TestData.CreateTempRoot("airaccoon-ingest-content");
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-ingest-scope");
-    private readonly string _contentRoot = TestData.CreateTempRoot("airaccoon-ingest-content");
-    private readonly string _outsideRoot = TestData.CreateTempRoot("airaccoon-ingest-outside");
     private readonly SqliteConnectionFactory _factory;
+    private readonly string _outsideRoot = TestData.CreateTempRoot("airaccoon-ingest-outside");
     private readonly SqliteMemoryStore _store;
 
     public SqliteMemoryStoreIngestScopeTests()
@@ -37,8 +36,8 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new StubChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
     }
 
     public void Dispose()
@@ -242,7 +241,6 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

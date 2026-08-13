@@ -2,9 +2,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Observability;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -67,7 +68,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
             var json = await GetObservabilityAsync(port);
 
             json.RootElement.GetProperty("version").GetString()
-                .ShouldBe(typeof(AiRaccoon.Observability.ServerInfo).Assembly
+                .ShouldBe(typeof(ServerInfo).Assembly
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion);
         }
         finally

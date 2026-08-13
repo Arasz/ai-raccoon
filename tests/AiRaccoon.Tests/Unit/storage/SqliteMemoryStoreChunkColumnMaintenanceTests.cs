@@ -1,16 +1,15 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.storage;
 
@@ -35,8 +34,8 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new ParagraphChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new ParagraphChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
         _workspaces = new SqliteWorkspaceStore(_factory);
         await AllowIngestScopeAsync(_dataRoot);
     }
@@ -284,10 +283,10 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var bucket = context == ContextNaming.SharedContext
-            ? ("shared", projectId, (string?)null, (string?)null)
+            ? ("shared", projectId, null, null)
             : context.StartsWith("project:", StringComparison.Ordinal)
                 ? ("project", context["project:".Length..], (string?)null, (string?)null)
-                : ((string?)"custom", projectId, context, (string?)null);
+                : ((string?)"custom", projectId, context, null);
 
         var rows = await connection.QueryAsync<ChunkRow>(
             new CommandDefinition(
@@ -296,7 +295,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
                 "AND source_file = @sourceFile ORDER BY id",
                 new { scope = bucket.Item1, projectId = bucket.Item2, contextLabel = bucket.Item3, sourceFile },
                 cancellationToken: TestContext.Current.CancellationToken));
-        return rows.ToList();
+        return [.. rows];
     }
 
     private Task AllowIngestScopeAsync(string path) =>
@@ -335,7 +334,6 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
 
     private sealed class ParagraphChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 }

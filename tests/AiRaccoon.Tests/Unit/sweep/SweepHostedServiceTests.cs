@@ -30,17 +30,17 @@ public sealed class SweepHostedServiceTests : IDisposable
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("sweep-hosted-service");
-    private readonly FakeTimeProvider _time;
-    private readonly SqliteMemoryStore _store;
     private readonly SweepHostedService _service;
+    private readonly SqliteMemoryStore _store;
+    private readonly FakeTimeProvider _time;
 
     public SweepHostedServiceTests()
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
-        _store = new SqliteMemoryStore(factory, _time, new StubChunker(), new EmbeddingService(),
-            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory));
+        _store = TestData.CreateMemoryStore(factory,
+            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new StubChunker(), _time, new EmbeddingService());
         _service = new SweepHostedService(_store, new SweepService(_store, _time), _time,
             TestTelemetry.None, new FakeLogger<SweepHostedService>());
     }

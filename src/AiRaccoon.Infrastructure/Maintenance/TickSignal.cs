@@ -27,7 +27,7 @@ internal sealed class TickSignal
         lock (_gate)
         {
             _count++;
-            ready = _waiters.Where(w => w.Target <= _count).Select(w => w.Completion).ToList();
+            ready = [.. _waiters.Where(w => w.Target <= _count).Select(w => w.Completion)];
             _waiters.RemoveAll(w => w.Target <= _count);
         }
 

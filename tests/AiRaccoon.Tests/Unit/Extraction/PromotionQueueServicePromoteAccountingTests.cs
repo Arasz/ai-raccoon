@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
@@ -27,10 +26,10 @@ namespace AiRaccoon.Tests.Unit.Extraction;
 public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 9, 0, 0, 0, TimeSpan.Zero);
+    private readonly FakeTimeProvider _clock;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-promote-accounting");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _clock;
     private readonly RecordingMetrics _metrics;
     private readonly PromotionQueueService _service;
 
@@ -42,8 +41,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        var store = TestData.CreateMemoryStore(_factory,
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
@@ -75,8 +74,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             new { value }, cancellationToken: ct));
     }
 
-    private static QueueCandidate Candidate(string hash, string path, string value, double score) =>
-        new(hash, path, value, null, score, ["organic-write"]);
+    private static QueueCandidate Candidate(string hash, string path, string value, double score) => new(hash, path, value, null, score, ["organic-write"]);
 
     [Fact]
     public async Task Promote_TwoChunksOfOneFile_BothChunksShared()
@@ -161,8 +159,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         var logger = new ListLogger();
         var service = new PromotionQueueService(
             new SqlitePromotionQueueStore(_factory, _clock),
-            new SqliteMemoryStore(_factory, _clock, new StubChunker(), new EmbeddingService(),
-                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory)),
+            TestData.CreateMemoryStore(_factory,
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService()),
             new UniformCountEvictionPolicy(), new SpyMetrics(), logger, _clock);
         await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
         await SeedChunkAsync("acme", "h2", "docs/a.md", "chunk two", TestContext.Current.CancellationToken);
@@ -173,7 +171,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         await service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
 
         logger.Messages.ShouldContain(m => m.Contains(
-            "Promoted from the queue for acme: 2 shared, 0 absorbed (already shared), 0 duplicate-skipped"),
+                "Promoted from the queue for acme: 2 shared, 0 absorbed (already shared), 0 duplicate-skipped"),
             "the log line must report promoted and absorbed in their real order — a swapped pair was shipped once and caught live");
     }
 
@@ -183,12 +181,13 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public List<PromotionQueueRow> Rows { get; } = [];
 
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PromotionQueueRow>>(
-                Rows.Where(r => projectId is null || r.ProjectId == projectId).ToList());
+                [.. Rows.Where(r => projectId is null || r.ProjectId == projectId)]);
 
         public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
             CancellationToken cancellationToken = default)
@@ -211,16 +210,24 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         }
 
         public Task<PromotionQueueRow?> EvictVictimAsync(string projectId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task<int> PruneRejectedAsync(string projectId,
-            CancellationToken cancellationToken = default) => Task.FromResult(0);
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 
     /// <summary>
@@ -232,14 +239,13 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     /// </summary>
     private sealed class RaceLosingShareStore : IMemoryStore
     {
+        private readonly HashSet<string> _createdByHash = new(StringComparer.Ordinal);
         public List<string> CreatedShares { get; } = [];
         public Dictionary<string, string> HashPaths { get; } = new(StringComparer.Ordinal);
-        private readonly HashSet<string> _createdByHash = new(StringComparer.Ordinal);
 
         public int SharedRows => _createdByHash.Count;
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SharedIndex([], []));
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(new SharedIndex([], []));
 
         public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
@@ -257,73 +263,82 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             return Task.FromResult(new MemoryEntryResult(entry, Created: true));
         }
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<bool> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> DeleteContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
             bool includeTtlRows, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
             string? context, string? sourceFile = null, string? section = null,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<int> DeleteSourcePathAsync(string projectId, string path,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class SpyMetrics : IPromotionQueueMetrics
@@ -340,8 +355,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
     private sealed class StubChunker : IChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-            text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
     private sealed class ListLogger : ILogger<PromotionQueueService>
@@ -350,6 +364,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
+
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter) =>
             Messages.Add(formatter(state, exception));

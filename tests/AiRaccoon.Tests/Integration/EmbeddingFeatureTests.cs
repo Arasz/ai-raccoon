@@ -5,10 +5,10 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Embedding;
 using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -34,8 +34,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = new SqliteMemoryStore(_factory, new FakeTimeProvider(FixedNow), new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new TokenizerChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }
 
@@ -204,12 +204,12 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_EmbedPending_DistinctHeadingPathsAreEmbeddedOncePerBatch()
     {
         const string heading = """
-                                # Guide
+                               # Guide
 
-                                ## Setup
+                               ## Setup
 
 
-                                """;
+                               """;
         await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step one."),
             TestContext.Current.CancellationToken);
         await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step two."),
@@ -351,6 +351,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 new MemoryWriteRequest("acme", $"# Doc {i}\n\n## Section\n\nBody paragraph number {i}."),
                 TestContext.Current.CancellationToken);
         }
+
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
         await SimulatePreWp5ShapeForProjectAsync("acme");
         (await CountVecStructureRowsAsync()).ShouldBe(0, "the pre-WP5 simulation must have actually erased every structure row");
@@ -377,6 +378,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
                 new MemoryWriteRequest("acme", $"# Doc {i}\n\n## Section\n\nBody paragraph number {i}."),
                 TestContext.Current.CancellationToken);
         }
+
         await SimulatePreWp5ShapeForProjectAsync("acme");
         _openAi.Requests.Clear();
 

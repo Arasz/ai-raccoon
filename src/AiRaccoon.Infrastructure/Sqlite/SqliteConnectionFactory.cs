@@ -12,29 +12,14 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
 ///     every table lives in memory.db (FR-NM-1; see docs/work/features-native-memory/native-memory.feature).
 /// </summary>
-public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyResolver keyResolver)
+public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyResolver keyResolver) : ISqliteConnectionFactory
 {
     static SqliteConnectionFactory()
     {
-        // Dapper maps columns to constructor parameters case-insensitively but not across
-        // underscores; our schema uses snake_case (created_at, access_count, …).
         DefaultTypeMap.MatchNamesWithUnderscores = true;
     }
 
     public string BankPath => BankPathFor(options);
-
-    /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
-    private static string BankDirectoryFor(InfrastructureOptions options) =>
-        options.Scope switch
-        {
-            InstallScope.User => options.DataRoot,
-            InstallScope.Project => Path.Combine(options.DataRoot, ".ai-raccoon"),
-            _ => throw new ArgumentOutOfRangeException(nameof(options.Scope), options.Scope,
-                "Unknown install scope.")
-        };
-
-    /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
-    public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
 
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>
         await OpenBankWithResolvedKeyAsync(keyResolver.Resolve(), cancellationToken).ConfigureAwait(false);
@@ -110,8 +95,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     ///     (docs/plans/encryption-bitwarden-implementation.md) — then verifies by reopening. The
     ///     current-key pool is drained first; callers must not hold an open bank connection.
     /// </summary>
-    public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) =>
-        RekeyBankAsync(newKey, keyResolver.Resolve().Passphrase, cancellationToken);
+    public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) => RekeyBankAsync(newKey, keyResolver.Resolve().Passphrase, cancellationToken);
 
     /// <summary>
     ///     As <see cref="RekeyBankAsync(string,CancellationToken)" />, but with the bank's current
@@ -141,6 +125,26 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         // Verify: the bank must reopen with the new key, or the rekey did not land.
         await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
+    public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
+    {
+        var connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
+    private static string BankDirectoryFor(InfrastructureOptions options) =>
+        options.Scope switch
+        {
+            InstallScope.User => options.DataRoot,
+            InstallScope.Project => Path.Combine(options.DataRoot, ".ai-raccoon"),
+            _ => throw new ArgumentOutOfRangeException(nameof(options.Scope), options.Scope,
+                "Unknown install scope.")
+        };
+
+    /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
+    public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
 
     /// <summary>Turns a failed open into the specific reason, without ever writing to the bank.</summary>
     private async Task<BankKeyMismatchException> DiagnoseAsync(ResolvedKey resolvedKey, SqliteException openFailure,
@@ -193,15 +197,10 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         }
     }
 
-    /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
-    public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
-    {
-        var connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
-        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Opens the connection under the given key (null = unencrypted) with the shared
-    /// pragmas — the step that fails on a wrong key.</summary>
+    /// <summary>
+    ///     Opens the connection under the given key (null = unencrypted) with the shared
+    ///     pragmas — the step that fails on a wrong key.
+    /// </summary>
     private async Task<SqliteConnection> OpenConnectionAsync(string? key, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(BankDirectoryFor(options));
@@ -211,9 +210,11 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         return connection;
     }
 
-    /// <summary>Loads vec0 and ensures the schema on an already-open connection. Disposes and
-    /// rethrows on failure so a failed post-open step never leaks a pooled, checked-out
-    /// connection.</summary>
+    /// <summary>
+    ///     Loads vec0 and ensures the schema on an already-open connection. Disposes and
+    ///     rethrows on failure so a failed post-open step never leaks a pooled, checked-out
+    ///     connection.
+    /// </summary>
     internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         try

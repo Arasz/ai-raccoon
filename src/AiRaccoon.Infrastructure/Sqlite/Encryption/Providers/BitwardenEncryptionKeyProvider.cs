@@ -12,9 +12,8 @@ namespace AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 /// </summary>
 public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretManager) : IEncryptionKeyProvider
 {
-    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
-
     public const string EncryptionSource = "bitwarden";
+    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
 
     public string Source => EncryptionSource;
 

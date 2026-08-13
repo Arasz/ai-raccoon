@@ -1,10 +1,11 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 
 namespace AiRaccoon.Setup.Cli;
 
 public static class CliOptionsExtensions
 {
-    extension(CliOptions options)
+    extension(RootCliOptions options)
     {
         private string ExpandedDataRoot()
         {

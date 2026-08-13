@@ -1,16 +1,14 @@
-using AiRaccoon.Core.Ingestion;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,15 +24,15 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 public class MemoryToolsTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+    private readonly FakePromotionQueue _queue = new();
+    private readonly ShareTools _share;
 
     private readonly FakeStore _store = new();
-    private readonly FakeSyncService _sync = new();
-    private readonly FakePromotionQueue _queue = new();
-    private readonly MemoryTools _tools;
-    private readonly ShareTools _share;
-    private readonly WorkspaceTools _workspace;
     private readonly SweepTools _sweep;
+    private readonly FakeSyncService _sync = new();
     private readonly SyncTools _syncTools;
+    private readonly MemoryTools _tools;
+    private readonly WorkspaceTools _workspace;
 
     public MemoryToolsTests()
     {
@@ -222,6 +220,7 @@ public class MemoryToolsTests
         result.Data!.PromotedHashes.ShouldBeEmpty();
         _store.Shared.ShouldBeNull();
     }
+
     [Fact]
     public async Task Write_DelegatesToStore_AndMapsResult()
     {
@@ -512,6 +511,8 @@ public class MemoryToolsTests
 
         public Exception? WriteError { get; set; }
 
+        public Exception? IngestError { get; set; }
+
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
@@ -557,8 +558,6 @@ public class MemoryToolsTests
         public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(ProjectIds);
 
         public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
-
-        public Exception? IngestError { get; set; }
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>

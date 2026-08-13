@@ -20,6 +20,37 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
 {
     private const string FixtureEnvVar = "AIRACCOON_SCORING_EVAL_FIXTURE";
 
+    private const string NeutralText =
+        "The scheduling component tracks each background job by its identifier and records the queue " +
+        "it belongs to along with the time it entered that queue. Downstream consumers read this " +
+        "record to decide which jobs to retry and which to archive once processing finishes normally. " +
+        "The component keeps no direct reference to the worker that eventually claims a job, relying " +
+        "instead on the queue metadata to route work correctly across the cluster nodes involved in " +
+        "processing this kind of background task end to end.";
+
+    /// <summary>Five archetypes whose priors (docs/adr/0018-promotion-scoring-v2.md) are strictly
+    /// increasing and, for content shaped like <see cref="NeutralText" />, exactly equal to the
+    /// measured score (0.35 / 0.70 / 1.45 / 2.15 / 2.55 — no content-evidence adjustment fires).</summary>
+    private static readonly string[] CoreArchetypePaths =
+    [
+        "docs/README.md", // DocIndex     0.35
+        "docs/plans/plan-notes.md", // Plan   0.70
+        "docs/reference/api-notes.md", // Reference 1.45
+        "docs/explanation/notes.md", // Explanation 2.15
+        "docs/adr/0001-decision.md" // Adr    2.55
+    ];
+
+    /// <summary>Three more archetypes, priors 0.95 / 1.30 / 2.30, used to build an id-gt-1000 "organic"
+    /// subset whose own ranking can be set independently of the core rows'.</summary>
+    private static readonly string[] OutlierArchetypePaths =
+    [
+        "docs/reviews/review-notes.md", // Review   0.95
+        "docs/work/notes.md", // WorkNote  1.30
+        "docs/charter-doc.md" // Charter   2.30
+    ];
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     [Fact]
     public void ScoresCorrelateWithHandLabeledUsefulness()
     {
@@ -190,42 +221,13 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         Should.NotThrow(() => Verify(manifestPath));
     }
 
-    /// <summary>Five archetypes whose priors (docs/adr/0018-promotion-scoring-v2.md) are strictly
-    /// increasing and, for content shaped like <see cref="NeutralText" />, exactly equal to the
-    /// measured score (0.35 / 0.70 / 1.45 / 2.15 / 2.55 — no content-evidence adjustment fires).</summary>
-    private static readonly string[] CoreArchetypePaths =
-    [
-        "docs/README.md", // DocIndex     0.35
-        "docs/plans/plan-notes.md", // Plan   0.70
-        "docs/reference/api-notes.md", // Reference 1.45
-        "docs/explanation/notes.md", // Explanation 2.15
-        "docs/adr/0001-decision.md" // Adr    2.55
-    ];
-
-    /// <summary>Three more archetypes, priors 0.95 / 1.30 / 2.30, used to build an id-gt-1000 "organic"
-    /// subset whose own ranking can be set independently of the core rows'.</summary>
-    private static readonly string[] OutlierArchetypePaths =
-    [
-        "docs/reviews/review-notes.md", // Review   0.95
-        "docs/work/notes.md", // WorkNote  1.30
-        "docs/charter-doc.md" // Charter   2.30
-    ];
-
-    private const string NeutralText =
-        "The scheduling component tracks each background job by its identifier and records the queue " +
-        "it belongs to along with the time it entered that queue. Downstream consumers read this " +
-        "record to decide which jobs to retry and which to archive once processing finishes normally. " +
-        "The component keeps no direct reference to the worker that eventually claims a job, relying " +
-        "instead on the queue metadata to route work correctly across the cluster nodes involved in " +
-        "processing this kind of background task end to end.";
-
     private static List<(int Id, string SourceFile, int Usefulness)> CoreRows(
         IReadOnlyList<int> usefulness, int startId = 1) =>
-        CoreArchetypePaths.Select((path, i) => (startId + i, path, usefulness[i])).ToList();
+        [.. CoreArchetypePaths.Select((path, i) => (startId + i, path, usefulness[i]))];
 
     private static List<(int Id, string SourceFile, int Usefulness)> OutlierRows(
         IReadOnlyList<int> usefulness, int startId) =>
-        OutlierArchetypePaths.Select((path, i) => (startId + i, path, usefulness[i])).ToList();
+        [.. OutlierArchetypePaths.Select((path, i) => (startId + i, path, usefulness[i]))];
 
     private static string CreateTempDir()
     {
@@ -287,7 +289,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         var allProjectIds = labeled.Select(c => c.ProjectId).Distinct().ToList();
         var scores = labeled.ToDictionary(c => c.Id, c => Score(c, allProjectIds));
         var fullSpearman = Spearman(
-            labeled.Select(c => scores[c.Id]).ToList(), labeled.Select(c => (double)c.Usefulness).ToList());
+            [.. labeled.Select(c => scores[c.Id])], [.. labeled.Select(c => (double)c.Usefulness)]);
         output.WriteLine(Invariant($"{fixture.Name}: full-set Spearman {fullSpearman:F3} (n={labeled.Count})"));
 
         if (fixture.MinSpearman is { } minSpearman && fullSpearman < minSpearman)
@@ -329,8 +331,8 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         }
 
         var subsetSpearman = Spearman(
-            subsetCandidates.Select(c => scores[c.Id]).ToList(),
-            subsetCandidates.Select(c => (double)c.Usefulness).ToList());
+            [.. subsetCandidates.Select(c => scores[c.Id])],
+            [.. subsetCandidates.Select(c => (double)c.Usefulness)]);
         output.WriteLine(Invariant(
             $"{fixtureName}/{subset.Name}: Spearman {subsetSpearman:F3} (n={subsetCandidates.Count})"));
 
@@ -357,8 +359,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         return labeled;
     }
 
-    private static string ResolvePath(string path, string manifestDir) =>
-        Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(manifestDir, path));
+    private static string ResolvePath(string path, string manifestDir) => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(manifestDir, path));
 
     private static double Score(LabeledCandidate candidate, IReadOnlyList<string> allProjectIds)
     {
@@ -392,8 +393,8 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
 
         var allProjectIds = candidates.Select(c => c.ProjectId).Distinct().ToList();
         var scores = candidates.ToDictionary(c => c.Id, c => Score(c, allProjectIds));
-        var subset = idFilter is null ? candidates : candidates.Where(c => idFilter(c.Id)).ToList();
-        return Spearman(subset.Select(c => scores[c.Id]).ToList(), subset.Select(c => (double)c.Usefulness).ToList());
+        var subset = idFilter is null ? candidates : [.. candidates.Where(c => idFilter(c.Id))];
+        return Spearman([.. subset.Select(c => scores[c.Id])], [.. subset.Select(c => (double)c.Usefulness)]);
     }
 
     /// <summary>Average-rank Spearman, matching promotion-scoring-eval/eval.py's rank() so the C#
@@ -436,39 +437,27 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         return ranks;
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     private sealed class LabeledCandidate
     {
-        [JsonPropertyName("id")]
-        public int Id { get; init; }
+        [JsonPropertyName("id")] public int Id { get; init; }
 
-        [JsonPropertyName("project_id")]
-        public string ProjectId { get; init; } = "";
+        [JsonPropertyName("project_id")] public string ProjectId { get; init; } = "";
 
-        [JsonPropertyName("hash")]
-        public string Hash { get; init; } = "";
+        [JsonPropertyName("hash")] public string Hash { get; init; } = "";
 
-        [JsonPropertyName("path")]
-        public string Path { get; init; } = "";
+        [JsonPropertyName("path")] public string Path { get; init; } = "";
 
-        [JsonPropertyName("value")]
-        public string Value { get; init; } = "";
+        [JsonPropertyName("value")] public string Value { get; init; } = "";
 
-        [JsonPropertyName("source_file")]
-        public string? SourceFile { get; init; }
+        [JsonPropertyName("source_file")] public string? SourceFile { get; init; }
 
-        [JsonPropertyName("created_at")]
-        public long CreatedAt { get; init; }
+        [JsonPropertyName("created_at")] public long CreatedAt { get; init; }
 
-        [JsonPropertyName("access_count")]
-        public int AccessCount { get; init; }
+        [JsonPropertyName("access_count")] public int AccessCount { get; init; }
 
-        [JsonPropertyName("rating")]
-        public double Rating { get; init; }
+        [JsonPropertyName("rating")] public double Rating { get; init; }
 
-        [JsonPropertyName("usefulness")]
-        public int Usefulness { get; init; }
+        [JsonPropertyName("usefulness")] public int Usefulness { get; init; }
     }
 
     /// <summary>One manifest declares every fixture to check and the gate(s) each must clear. Every
@@ -476,21 +465,18 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
     /// <see cref="MinSpearman" /> gets only the floor checked.</summary>
     private sealed class FixtureManifest
     {
-        [JsonPropertyName("fixtures")]
-        public List<FixtureSpec> Fixtures { get; init; } = [];
+        [JsonPropertyName("fixtures")] public List<FixtureSpec> Fixtures { get; init; } = [];
     }
 
     private sealed class FixtureSpec
     {
-        [JsonPropertyName("name")]
-        public string Name { get; init; } = "";
+        [JsonPropertyName("name")] public string Name { get; init; } = "";
 
         /// <summary>Absolute, or resolved relative to the manifest's own directory.</summary>
         [JsonPropertyName("path")]
         public string Path { get; init; } = "";
 
-        [JsonPropertyName("minSpearman")]
-        public double? MinSpearman { get; init; }
+        [JsonPropertyName("minSpearman")] public double? MinSpearman { get; init; }
 
         [JsonPropertyName("prototypeSpearman")]
         public double? PrototypeSpearman { get; init; }
@@ -498,21 +484,17 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         [JsonPropertyName("prototypeTolerance")]
         public double? PrototypeTolerance { get; init; }
 
-        [JsonPropertyName("subsets")]
-        public List<SubsetSpec>? Subsets { get; init; }
+        [JsonPropertyName("subsets")] public List<SubsetSpec>? Subsets { get; init; }
     }
 
     /// <summary>A named slice of a fixture's rows, filtered by id, with its own gate — generalizes the
     /// v2 organic-subset check (previously a hardcoded `c.Id > 1000` filter).</summary>
     private sealed class SubsetSpec
     {
-        [JsonPropertyName("name")]
-        public string Name { get; init; } = "";
+        [JsonPropertyName("name")] public string Name { get; init; } = "";
 
-        [JsonPropertyName("minIdExclusive")]
-        public int? MinIdExclusive { get; init; }
+        [JsonPropertyName("minIdExclusive")] public int? MinIdExclusive { get; init; }
 
-        [JsonPropertyName("minSpearman")]
-        public double? MinSpearman { get; init; }
+        [JsonPropertyName("minSpearman")] public double? MinSpearman { get; init; }
     }
 }

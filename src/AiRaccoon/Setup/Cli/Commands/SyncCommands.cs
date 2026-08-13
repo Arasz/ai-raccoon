@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
@@ -11,8 +10,8 @@ namespace AiRaccoon.Setup.Cli.Commands;
 public sealed class SyncCommands
 {
     public async Task<int> AddS3Async(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin,
-        CancellationToken cancellationToken)
+        StandardStreams streams,
+        CancellationToken ctx)
     {
         var url = parseResult.GetValue<string>("url")!;
         var bucket = parseResult.GetValue<string>("--bucket")!;
@@ -25,19 +24,19 @@ public sealed class SyncCommands
         if (!useChain)
         {
             // Secrets are entered interactively (single-channel ruling; never on argv).
-            await stderr.WriteAsync("S3 access key (empty aborts): ");
-            accessKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+            await streams.WriteErrorAsync("S3 access key (empty aborts): ");
+            accessKey = (await streams.ReadLineAsync(ctx))?.Trim();
             if (string.IsNullOrEmpty(accessKey))
             {
-                await stderr.WriteLineAsync("ai-raccoon: access key required — sync not configured");
+                await streams.WriteErrorLineAsync("ai-raccoon: access key required — sync not configured");
                 return 1;
             }
 
-            await stderr.WriteAsync("S3 secret key (empty aborts): ");
-            secretKey = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+            await streams.WriteErrorAsync("S3 secret key (empty aborts): ");
+            secretKey = (await streams.ReadLineAsync(ctx))?.Trim();
             if (string.IsNullOrEmpty(secretKey))
             {
-                await stderr.WriteLineAsync("ai-raccoon: secret key required — sync not configured");
+                await streams.WriteErrorLineAsync("ai-raccoon: secret key required — sync not configured");
                 return 1;
             }
         }
@@ -49,47 +48,47 @@ public sealed class SyncCommands
                      SyncSettingsKeys.ConnectionString, SyncSettingsKeys.Container, SyncSettingsKeys.AzureAccount
                  })
         {
-            await store.DeleteSettingAsync(key, cancellationToken);
+            await store.DeleteSettingAsync(key, ctx);
         }
 
         if (useChain)
         {
             // Chain mode: stale persisted keys would win the tie-break — clear them.
-            await store.DeleteSettingAsync(SyncSettingsKeys.AccessKey, cancellationToken);
-            await store.DeleteSettingAsync(SyncSettingsKeys.SecretKey, cancellationToken);
+            await store.DeleteSettingAsync(SyncSettingsKeys.AccessKey, ctx);
+            await store.DeleteSettingAsync(SyncSettingsKeys.SecretKey, ctx);
         }
         else
         {
-            await store.DeleteSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken);
+            await store.DeleteSettingAsync(SyncSettingsKeys.S3Chain, ctx);
         }
 
         // Writing provider=s3 makes the switch real: without it the factory would read
         // provider=azure and no azure rows → NullCloudStore → silently dead sync.
-        await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, cancellationToken);
-        await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, cancellationToken);
-        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, cancellationToken);
+        await store.SetSettingAsync(SyncSettingsKeys.Provider, "s3", ctx);
+        await store.SetSettingAsync(SyncSettingsKeys.Endpoint, url, ctx);
+        await store.SetSettingAsync(SyncSettingsKeys.Bucket, bucket, ctx);
+        await UpsertOrDeleteAsync(store, SyncSettingsKeys.Region, region, ctx);
+        await UpsertOrDeleteAsync(store, SyncSettingsKeys.ObjectKey, objectKey, ctx);
         if (useChain)
         {
-            await store.SetSettingAsync(SyncSettingsKeys.S3Chain, "true", cancellationToken);
+            await store.SetSettingAsync(SyncSettingsKeys.S3Chain, "true", ctx);
         }
         else
         {
             await store.SetSettingAsync(SyncSettingsKeys.AccessKey,
-                accessKey ?? ThrowHelper.ThrowArgumentNullException<string>(nameof(accessKey)), cancellationToken);
+                accessKey ?? ThrowHelper.ThrowArgumentNullException<string>(nameof(accessKey)), ctx);
             await store.SetSettingAsync(SyncSettingsKeys.SecretKey,
-                secretKey ?? ThrowHelper.ThrowArgumentNullException<string>(nameof(secretKey)), cancellationToken);
+                secretKey ?? ThrowHelper.ThrowArgumentNullException<string>(nameof(secretKey)), ctx);
         }
 
-        await stdout.WriteLineAsync(useChain
+        await streams.WriteOutputLineAsync(useChain
             ? $"sync configured: {url} bucket {bucket} (AWS credential chain)"
             : $"sync configured: {url} bucket {bucket}");
         return 0;
     }
 
     public async Task<int> AddAzureAsync(ParseResult parseResult, IMemoryStore store,
-        TextWriter stdout, TextWriter stderr, TextReader stdin,
+        StandardStreams streams,
         CancellationToken cancellationToken)
     {
         var container = parseResult.GetValue<string>("container")!;
@@ -103,7 +102,7 @@ public sealed class SyncCommands
             account = Optional(parseResult, "--account");
             if (account is null)
             {
-                await stderr.WriteLineAsync("ai-raccoon: --account is required with --cli");
+                await streams.WriteErrorLineAsync("ai-raccoon: --account is required with --cli");
                 return 1;
             }
         }
@@ -112,11 +111,11 @@ public sealed class SyncCommands
             // Secrets are entered interactively (single-channel ruling; never on argv).
             // Prompt + validate BEFORE any settings write: an abort must leave the current
             // provider untouched (partial writes would spread via the settings merge).
-            await stderr.WriteAsync("Azure Blob connection string (empty aborts): ");
-            connectionString = (await stdin.ReadLineAsync(cancellationToken))?.Trim();
+            await streams.WriteErrorAsync("Azure Blob connection string (empty aborts): ");
+            connectionString = (await streams.ReadLineAsync(cancellationToken))?.Trim();
             if (string.IsNullOrEmpty(connectionString))
             {
-                await stderr.WriteLineAsync("ai-raccoon: connection string required — sync not configured");
+                await streams.WriteErrorLineAsync("ai-raccoon: connection string required — sync not configured");
                 return 1;
             }
         }
@@ -156,13 +155,13 @@ public sealed class SyncCommands
                 connectionString ?? ThrowHelper.ThrowArgumentNullException<string>(nameof(connectionString)), cancellationToken);
         }
 
-        await stdout.WriteLineAsync(useCli
+        await streams.WriteOutputLineAsync(useCli
             ? $"sync configured: azure container {container} (az CLI)"
             : $"sync configured: azure container {container}");
         return 0;
     }
 
-    public async Task<int> RemoveAsync(IMemoryStore store, TextWriter stdout,
+    public async Task<int> RemoveAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
         // Prefix-delete: "remove deletes ALL sync.* keys" holds by construction and can't drift
@@ -173,44 +172,44 @@ public sealed class SyncCommands
             await store.DeleteSettingAsync(key, cancellationToken);
         }
 
-        await stdout.WriteLineAsync("sync removed (sync off)");
+        await streams.WriteOutputLineAsync("sync removed (sync off)");
         return 0;
     }
 
-    public async Task<int> ShowAsync(IMemoryStore store, TextWriter stdout,
+    public async Task<int> ShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
         var rows = await store.GetSettingsByPrefixAsync("sync.", cancellationToken);
         if (rows.Count == 0)
         {
-            await stdout.WriteLineAsync("sync not configured");
+            await streams.WriteOutputLineAsync("sync not configured");
             return 0;
         }
 
         // Unknown values route as s3 (docs/plans/azure-blob-sync-plan.md R2); the raw row is printed so a typo is diagnosable.
         var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
-        await stdout.WriteLineAsync($"provider: {rawProvider}");
+        await streams.WriteOutputLineAsync($"provider: {rawProvider}");
         if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
         {
-            await stdout.WriteLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
-            await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
             var connectionState = rows.ContainsKey(SyncSettingsKeys.ConnectionString) ? "set" : "unset";
-            await stdout.WriteLineAsync($"connectionString: {connectionState}");
+            await streams.WriteOutputLineAsync($"connectionString: {connectionState}");
             var accountState = rows.ContainsKey(SyncSettingsKeys.AzureAccount) ? "set" : "unset";
-            await stdout.WriteLineAsync($"account: {accountState}");
+            await streams.WriteOutputLineAsync($"account: {accountState}");
             return 0;
         }
 
-        await stdout.WriteLineAsync($"endpoint: {rows.GetValueOrDefault(SyncSettingsKeys.Endpoint) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"bucket: {rows.GetValueOrDefault(SyncSettingsKeys.Bucket) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"region: {rows.GetValueOrDefault(SyncSettingsKeys.Region) ?? "(unset)"}");
-        await stdout.WriteLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
+        await streams.WriteOutputLineAsync($"endpoint: {rows.GetValueOrDefault(SyncSettingsKeys.Endpoint) ?? "(unset)"}");
+        await streams.WriteOutputLineAsync($"bucket: {rows.GetValueOrDefault(SyncSettingsKeys.Bucket) ?? "(unset)"}");
+        await streams.WriteOutputLineAsync($"region: {rows.GetValueOrDefault(SyncSettingsKeys.Region) ?? "(unset)"}");
+        await streams.WriteOutputLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");
         var accessState = rows.ContainsKey(SyncSettingsKeys.AccessKey) ? "set" : "unset";
         var secretState = rows.ContainsKey(SyncSettingsKeys.SecretKey) ? "set" : "unset";
-        await stdout.WriteLineAsync($"accessKey: {accessState}");
-        await stdout.WriteLineAsync($"secretKey: {secretState}");
+        await streams.WriteOutputLineAsync($"accessKey: {accessState}");
+        await streams.WriteOutputLineAsync($"secretKey: {secretState}");
         var chain = bool.TryParse(rows.GetValueOrDefault(SyncSettingsKeys.S3Chain), out var parsedChain) && parsedChain;
-        await stdout.WriteLineAsync($"chain: {(chain ? "true" : "false")}");
+        await streams.WriteOutputLineAsync($"chain: {(chain ? "true" : "false")}");
         return 0;
     }
 

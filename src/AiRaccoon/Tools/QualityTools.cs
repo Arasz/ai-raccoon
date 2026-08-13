@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.SearchQuality;
 using ModelContextProtocol.Server;
@@ -21,8 +20,10 @@ public sealed class QualityTools(
         "Call this when the agent opens a file that was returned by memory_search.")]
     public async Task<ApiEnvelope<FollowThroughResult>> RecordFollowThrough(
         [Description("The project id.")] string projectId,
-        [Description("The correlationId returned by the preceding memory_search call.")] string correlationId,
-        [Description("Absolute path of the file the agent read.")] string filePath,
+        [Description("The correlationId returned by the preceding memory_search call.")]
+        string correlationId,
+        [Description("Absolute path of the file the agent read.")]
+        string filePath,
         CancellationToken cancellationToken = default)
     {
         await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordFollowThrough, cancellationToken);
@@ -39,9 +40,12 @@ public sealed class QualityTools(
         "Updates the existing quality record keyed by correlationId.")]
     public async Task<ApiEnvelope<GradeResult>> RecordGrade(
         [Description("The project id.")] string projectId,
-        [Description("The correlationId returned by the preceding memory_search call.")] string correlationId,
-        [Description("Usefulness grade 1-5 (5=best).")] int grade,
-        [Description("Optional note explaining the grade.")] string? note = null,
+        [Description("The correlationId returned by the preceding memory_search call.")]
+        string correlationId,
+        [Description("Usefulness grade 1-5 (5=best).")]
+        int grade,
+        [Description("Optional note explaining the grade.")]
+        string? note = null,
         CancellationToken cancellationToken = default)
     {
         await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordGrade, cancellationToken);
@@ -53,5 +57,6 @@ public sealed class QualityTools(
     }
 
     public sealed record FollowThroughResult(bool Recorded);
+
     public sealed record GradeResult(bool Recorded);
 }

@@ -1,17 +1,19 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
 using Xunit;
+using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
+using ObservabilityRunner = AiRaccoon.Hosting.Node.ObservabilityRunner;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -253,30 +255,29 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    private ServerConfig Config(int port) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
+    private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
 
     private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port)
     {
         CliArgs.TryParse(["serve", "observability", kind, "--port", port.ToString()], out var parsed);
-        parsed.Errors.ShouldBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = await ObservabilityRunner.RunAsync(parsed, stdout, stderr, TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateObservabilityRunner().RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new ObservabilityRun(exit, stdout.ToString(), stderr.ToString());
     }
 
     private static ServeRun StartServe(string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        var config = parsed.Options.ToServerConfig();
+        parsed!.Errors.ShouldBeEmpty();
+        var config = parsed!.Options.ToServerConfig();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
-        var exit = ServeRunner.RunAsync(parsed, config, stdout, stderr, cts.Token);
+        var exit = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

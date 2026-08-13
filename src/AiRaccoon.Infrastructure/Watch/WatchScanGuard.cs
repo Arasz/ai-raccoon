@@ -1,24 +1,25 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
-///     Per-(projectId, path) scan single-flight: a <see cref="Run"/> call for a watch already
-///     scanning joins the in-flight scan instead of starting a second one; <see cref="Cancel"/>
-///     (fed by <see cref="WatchPipeline.UnregisterWatch"/>) cancels only that watch's scan.
+///     Per-(projectId, path) scan single-flight: a <see cref="Run" /> call for a watch already
+///     scanning joins the in-flight scan instead of starting a second one; <see cref="Cancel" />
+///     (fed by <see cref="WatchPipeline.UnregisterWatch" />) cancels only that watch's scan.
 /// </summary>
-public sealed class WatchScanGuard : IDisposable
+public sealed class WatchScanGuard : IWatchScanGuard
 {
-    private readonly Lock _gate = new();
     private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
+    private readonly Lock _gate = new();
 
     public int StartedScans { get; private set; }
 
     public int SkippedScans { get; private set; }
 
-    /// <summary>Starts <paramref name="scan"/> for the watch unless one is already running, in which
-    /// case the caller joins the running scan's task. The scan always runs off-thread (async).</summary>
+    /// <summary>
+    ///     Starts <paramref name="scan" /> for the watch unless one is already running, in which
+    ///     case the caller joins the running scan's task. The scan always runs off-thread (async).
+    /// </summary>
     public Task Run(string projectId, string path, Func<CancellationToken, Task> scan,
         CancellationToken cancellationToken = default)
     {
@@ -46,16 +47,16 @@ public sealed class WatchScanGuard : IDisposable
             }
             catch (OperationCanceledException) when (entry.Cts.IsCancellationRequested)
             {
-                Complete(entry, key, faulted: null, cancelled: true);
+                Complete(entry, key, null, true);
                 return;
             }
             catch (Exception ex)
             {
-                Complete(entry, key, faulted: ex, cancelled: false);
+                Complete(entry, key, ex, false);
                 return;
             }
 
-            Complete(entry, key, faulted: null, cancelled: false);
+            Complete(entry, key, null, false);
         });
 
         return entry.Completion.Task;
@@ -98,9 +99,11 @@ public sealed class WatchScanGuard : IDisposable
 
     public void Dispose() => CancelAll();
 
-    /// <summary>Removes the entry (if it is still the one this run inserted), disposes its CTS,
-    /// and completes the joined callers' task — runs on every exit path so a watch is never
-    /// left permanently unscannable (a leaked entry has no TTL to rescue it).</summary>
+    /// <summary>
+    ///     Removes the entry (if it is still the one this run inserted), disposes its CTS,
+    ///     and completes the joined callers' task — runs on every exit path so a watch is never
+    ///     left permanently unscannable (a leaked entry has no TTL to rescue it).
+    /// </summary>
     private void Complete(Entry entry, (string ProjectId, string Path) key, Exception? faulted, bool cancelled)
     {
         lock (_gate)

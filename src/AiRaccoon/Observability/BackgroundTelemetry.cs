@@ -21,9 +21,9 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
     private const string ResultError = "error";
     private const string ResultPartial = "partial";
     private const string ResultUnknown = "unknown";
+    private readonly Histogram<double> _duration;
 
     private readonly Counter<long> _passes;
-    private readonly Histogram<double> _duration;
 
     public BackgroundTelemetry()
     {
@@ -31,8 +31,8 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         ActivitySource = new ActivitySource(OtlpNames.BackgroundScope);
         _passes = Meter.CreateCounter<long>(
             OtlpNames.BackgroundPasses,
-            unit: "{pass}",
-            description: "Background passes, by operation and result");
+            "{pass}",
+            "Background passes, by operation and result");
 
         // Background passes run from milliseconds (an idle check) to minutes (a vacuum), so the
         // boundaries reach further out than the tool histogram's.
@@ -40,7 +40,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         {
             HistogramBucketBoundaries = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60, 300, 900]
         };
-        _duration = Meter.CreateHistogram<double>(
+        _duration = Meter.CreateHistogram(
             OtlpNames.BackgroundPassDuration,
             "s",
             "Duration of a background pass",
@@ -54,16 +54,16 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
     /// <summary>ActivitySource named "AiRaccoon.Background" — a pass is not a tool call.</summary>
     public ActivitySource ActivitySource { get; }
 
-    public IOperationScope Begin(string operation)
-    {
-        Guard.IsNotNullOrWhiteSpace(operation);
-        return new Scope(this, operation);
-    }
-
     public void Dispose()
     {
         ActivitySource.Dispose();
         Meter.Dispose();
+    }
+
+    public IOperationScope Begin(string operation)
+    {
+        Guard.IsNotNullOrWhiteSpace(operation);
+        return new Scope(this, operation);
     }
 
     private void Record(string operation, TimeSpan elapsed, string result, string? errorType)
@@ -78,24 +78,16 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         _duration.Record(elapsed.TotalSeconds, tags);
     }
 
-    private sealed class Scope : IOperationScope
+    private sealed class Scope(BackgroundTelemetry owner, string operation) : IOperationScope
     {
-        private readonly BackgroundTelemetry _owner;
-        private readonly string _operation;
-        private readonly long _startedAt;
-        private readonly DateTimeOffset _startedAtUtc;
         private readonly List<KeyValuePair<string, string>> _pendingTags = [];
+        private readonly long _startedAt = Stopwatch.GetTimestamp();
+        private readonly DateTimeOffset _startedAtUtc = DateTimeOffset.UtcNow;
         private Activity? _activity;
-        private bool _worthy;
         private bool _recorded;
+        private bool _worthy;
 
-        public Scope(BackgroundTelemetry owner, string operation)
-        {
-            _owner = owner;
-            _operation = operation;
-            _startedAt = Stopwatch.GetTimestamp();
-            _startedAtUtc = DateTimeOffset.UtcNow;
-        }
+        private TimeSpan Elapsed => Stopwatch.GetElapsedTime(_startedAt);
 
         public void Tag(string key, string value)
         {
@@ -124,7 +116,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
             _activity?.SetStatus(ActivityStatusCode.Ok);
             _activity?.SetTag(ResultTag, ResultSuccess);
-            _owner.Record(_operation, Elapsed, ResultSuccess, null);
+            owner.Record(operation, Elapsed, ResultSuccess, null);
         }
 
         public void Failed(Exception exception)
@@ -141,7 +133,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             _activity?.SetTag(ResultTag, ResultError);
             _activity?.SetTag(ErrorTypeTag, errorType);
             _activity?.AddException(exception);
-            _owner.Record(_operation, Elapsed, ResultError, errorType);
+            owner.Record(operation, Elapsed, ResultError, errorType);
         }
 
         public void PartiallyFailed(int failureCount)
@@ -156,7 +148,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             _activity?.SetStatus(ActivityStatusCode.Ok);
             _activity?.SetTag(ResultTag, ResultPartial);
             _activity?.SetTag(FailuresTag, failureCount.ToString());
-            _owner.Record(_operation, Elapsed, ResultPartial, null);
+            owner.Record(operation, Elapsed, ResultPartial, null);
         }
 
         public void Dispose()
@@ -165,13 +157,11 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             {
                 StartSpan(); // an abandoned pass is a hole, not a success: always worth reading
                 _activity?.SetTag(ResultTag, ResultUnknown);
-                _owner.Record(_operation, Elapsed, ResultUnknown, null);
+                owner.Record(operation, Elapsed, ResultUnknown, null);
             }
 
             _activity?.Dispose();
         }
-
-        private TimeSpan Elapsed => Stopwatch.GetElapsedTime(_startedAt);
 
         /// <summary>Claims the one measurement this scope is allowed to record.</summary>
         private bool Take()
@@ -185,11 +175,13 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             return true;
         }
 
-        /// <summary>Materializes the span, backdated to when the pass actually started, and
-        /// applies any tags recorded before the pass was known to be worth reading.</summary>
+        /// <summary>
+        ///     Materializes the span, backdated to when the pass actually started, and
+        ///     applies any tags recorded before the pass was known to be worth reading.
+        /// </summary>
         private void StartSpan()
         {
-            _activity = _owner.ActivitySource.StartActivity(_operation, ActivityKind.Internal,
+            _activity = owner.ActivitySource.StartActivity(operation, ActivityKind.Internal,
                 default(ActivityContext), null, null, _startedAtUtc);
             if (_activity is null)
             {

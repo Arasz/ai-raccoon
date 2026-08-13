@@ -5,13 +5,13 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     default 4, clamped 1-16) and round-robin admission across watches so one watch's flood
 ///     cannot starve others (docs/features/file-watcher/file-watcher.feature rule 12).
 /// </summary>
-public sealed class WatchScheduler
+public sealed class WatchScheduler : IWatchScheduler
 {
     private const int DefaultConcurrency = 4;
     private const int MaxConcurrency = 16;
+    private readonly Lock _gate = new();
 
     private readonly Dictionary<string, (SemaphoreSlim Gate, int Limit)> _projectGates = new(StringComparer.Ordinal);
-    private readonly object _gate = new();
 
     public async Task RunBatchAsync(
         IReadOnlyList<WatchJob> jobs,

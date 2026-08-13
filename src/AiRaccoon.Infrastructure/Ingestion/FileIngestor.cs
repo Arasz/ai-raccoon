@@ -1,7 +1,6 @@
-using AiRaccoon.Core.Chunking;
+using System.Diagnostics.CodeAnalysis;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -14,49 +13,19 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     Takes an already-open connection rather than opening its own — every caller has already
 ///     opened the bank once for the whole walk, so the compiler enforces one-bank-open-per-ingest.
 /// </summary>
-internal sealed class FileIngestor
+public sealed class FileIngestor(
+    IFileTypeMatcher fileTypeMatcher,
+    IEntryEmbedder embedder,
+    IMemorySourceStore sourceStore,
+    TimeProvider timeProvider) : IFileIngestor
 {
     private const int DefaultMaxTokens = 256;
     private const int DefaultOverlayTokens = 48;
 
-    private readonly IFileTypeMatcher _fileTypeMatcher;
-    private readonly EntryEmbedder _embedder;
-    private readonly TimeProvider _timeProvider;
-    private readonly SqliteMemorySourceStore _sourceStore;
-
-    public FileIngestor(
-        IFileTypeMatcher? fileTypeMatcher,
-        IChunker chunker,
-        EntryEmbedder embedder,
-        TimeProvider timeProvider,
-        SqliteMemorySourceStore sourceStore)
-    {
-        _fileTypeMatcher = fileTypeMatcher ?? new FileTypeMatcher([new MarkdownFileTypeHandler(chunker), new JsonFileTypeHandler()]);
-        _embedder = embedder;
-        _timeProvider = timeProvider;
-        _sourceStore = sourceStore;
-    }
-
-    public FileIngestor(
-        IFileTypeMatcher? fileTypeMatcher,
-        EntryEmbedder embedder,
-        TimeProvider timeProvider,
-        SqliteMemorySourceStore sourceStore)
-        : this(fileTypeMatcher, new TokenizerChunker(), embedder, timeProvider, sourceStore)
-    {
-    }
-
-    public FileIngestor(
-        IChunker chunker,
-        EntryEmbedder embedder,
-        TimeProvider timeProvider,
-        SqliteMemorySourceStore sourceStore)
-        : this(null, chunker, embedder, timeProvider, sourceStore)
-    {
-    }
-
-    /// <summary>Set <paramref name="embedInline"/> false when the caller holds a write transaction: embedding
-    /// runs the engine per chunk, and a lock held that long stalls another process's first bank open.</summary>
+    /// <summary>
+    ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
+    ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
+    /// </summary>
     public async Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken, bool embedInline = true)
     {
@@ -113,10 +82,10 @@ internal sealed class FileIngestor
             return 0;
         }
 
-        var now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
         // Resolve source once for all chunks from this file.
-        var source = await _sourceStore.ResolveOrCreateOnConnectionAsync(
+        var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
             connection, SourceType.File, path, null, null, cancellationToken).ConfigureAwait(false);
 
         var inserted = 0;
@@ -180,7 +149,7 @@ internal sealed class FileIngestor
 
             if (embedInline)
             {
-                await _embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
+                await embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -240,8 +209,7 @@ internal sealed class FileIngestor
         }
     }
 
-    private static bool IsInScope(IReadOnlyList<string> scope, string path) =>
-        scope.Any(entry => IngestPath.IsWithinScope(path, entry));
+    private static bool IsInScope(IReadOnlyList<string> scope, string path) => scope.Any(entry => IngestPath.IsWithinScope(path, entry));
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>
@@ -249,15 +217,15 @@ internal sealed class FileIngestor
                 Def(MemorySql.SelectSetting, new { key }, cancellationToken))
             .ConfigureAwait(false);
 
-    private bool IsIndexableFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IFileTypeHandler? handler)
+    private bool IsIndexableFile(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {
-        if (IsHidden(path))
+        if (!IsHidden(path))
         {
-            handler = null;
-            return false;
+            return fileTypeMatcher.TryGetHandler(path, out handler);
         }
 
-        return _fileTypeMatcher.TryGetHandler(path, out handler);
+        handler = null;
+        return false;
     }
 
     private static bool IsHidden(string path)

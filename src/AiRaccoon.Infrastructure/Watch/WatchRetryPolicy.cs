@@ -6,14 +6,11 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     Per-watch consecutive-failure counter with exponential backoff: after 5 consecutive
 ///     failures a watch stops being checked (registration + status kept, docs/features/file-watcher/file-watcher.feature rule 14).
 /// </summary>
-public sealed class WatchRetryPolicy
+public sealed class WatchRetryPolicy : IWatchRetryPolicy
 {
     private const int MaxFailures = 5;
 
     private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
-
-    /// <summary>Backoff after failure #n: 1s, 2s, 4s, 8s (exponential).</summary>
-    public static TimeSpan BackoffFor(int consecutiveFailures) => TimeSpan.FromSeconds(1L << consecutiveFailures - 1);
 
     /// <summary>True when the watch may attempt a digest now: not stopped and past any backoff.</summary>
     public bool ShouldAttempt(string projectId, string watchPath, DateTimeOffset now)
@@ -45,6 +42,9 @@ public sealed class WatchRetryPolicy
     public void RecordSuccess(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
 
     public void Forget(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
+
+    /// <summary>Backoff after failure #n: 1s, 2s, 4s, 8s (exponential).</summary>
+    public static TimeSpan BackoffFor(int consecutiveFailures) => TimeSpan.FromSeconds(1L << consecutiveFailures - 1);
 
     private sealed record Entry(int ConsecutiveFailures, DateTimeOffset? NextAttemptAt);
 }

@@ -7,8 +7,8 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Infrastructure.Chunking;
 
 /// <summary>
-/// Token-bounded chunker for JSON files. Preserves key structure and schema context for objects/arrays,
-/// with automatic fallback to line-based chunking for malformed JSON.
+///     Token-bounded chunker for JSON files. Preserves key structure and schema context for objects/arrays,
+///     with automatic fallback to line-based chunking for malformed JSON.
 /// </summary>
 public sealed class JsonFileTypeChunker : IChunker
 {
@@ -55,7 +55,7 @@ public sealed class JsonFileTypeChunker : IChunker
     }
 
     /// <summary>
-    /// Extract a compact structural schema summary from a JSON text representation.
+    ///     Extract a compact structural schema summary from a JSON text representation.
     /// </summary>
     public static string ExtractSchemaSummary(string jsonText)
     {
@@ -94,6 +94,7 @@ public sealed class JsonFileTypeChunker : IChunker
             {
                 return "[]";
             }
+
             return "[" + BuildNodeSchema(arr[0]) + "]";
         }
 
@@ -209,12 +210,13 @@ public sealed class JsonFileTypeChunker : IChunker
             {
                 sb.Append(',');
             }
+
             sb.AppendLine();
         }
+
         sb.Append('}');
         return sb.ToString();
     }
 
-    private IReadOnlyList<string> ChunkFallback(string text, int maxTokens, int overlayTokens) =>
-        _fallbackChunker.Chunk(text, maxTokens, overlayTokens);
+    private IReadOnlyList<string> ChunkFallback(string text, int maxTokens, int overlayTokens) => _fallbackChunker.Chunk(text, maxTokens, overlayTokens);
 }

@@ -27,15 +27,19 @@ internal enum ProvenanceArchetype
     AutoMemoryNote
 }
 
-/// <summary>Classifies a candidate's provenance channel from its path/`source_file` shape (ported from
-/// scorer.py's channel(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).
-/// First-match-wins ordering.</summary>
+/// <summary>
+///     Classifies a candidate's provenance channel from its path/`source_file` shape (ported from
+///     scorer.py's channel(), see docs/adr/0018-promotion-scoring-v2.md round-3 lane-A section).
+///     First-match-wins ordering.
+/// </summary>
 internal static partial class ProvenanceArchetypeClassifier
 {
-    /// <summary>Priors are fitted, not hand-set — each channel's labelled mean, shrunk toward the
-    /// corpus mean and corrected by the evidence layer's own mean adjustment inside that channel
-    /// (see METHOD.md for the derivation). The six structural-noise channels below the 0.4 promotion
-    /// floor are hand-set instead: every labelled row in them is a 0.</summary>
+    /// <summary>
+    ///     Priors are fitted, not hand-set — each channel's labelled mean, shrunk toward the
+    ///     corpus mean and corrected by the evidence layer's own mean adjustment inside that channel
+    ///     (see METHOD.md for the derivation). The six structural-noise channels below the 0.4 promotion
+    ///     floor are hand-set instead: every labelled row in them is a 0.
+    /// </summary>
     private static readonly IReadOnlyDictionary<ProvenanceArchetype, double> Priors =
         new Dictionary<ProvenanceArchetype, double>
         {
@@ -61,8 +65,10 @@ internal static partial class ProvenanceArchetypeClassifier
             [ProvenanceArchetype.OtherDoc] = 1.17
         };
 
-    /// <summary>Channels whose payload is a considered technical document. The portability layer
-    /// only applies here: elsewhere a technology name is incidental.</summary>
+    /// <summary>
+    ///     Channels whose payload is a considered technical document. The portability layer
+    ///     only applies here: elsewhere a technology name is incidental.
+    /// </summary>
     internal static readonly HashSet<ProvenanceArchetype> DocFamily =
     [
         ProvenanceArchetype.Adr,
@@ -76,30 +82,31 @@ internal static partial class ProvenanceArchetypeClassifier
     internal static double Prior(ProvenanceArchetype archetype) => Priors[archetype];
 
     /// <summary>Kebab-case reason tag for the archetype, e.g. "auto-memory-note".</summary>
-    internal static string Tag(ProvenanceArchetype archetype) => archetype switch
-    {
-        ProvenanceArchetype.OrganicNote => "organic-note",
-        ProvenanceArchetype.Adr => "adr",
-        ProvenanceArchetype.Charter => "charter",
-        ProvenanceArchetype.Explanation => "explanation",
-        ProvenanceArchetype.Measurement => "measurement",
-        ProvenanceArchetype.ResearchSynthesis => "research-synthesis",
-        ProvenanceArchetype.Reference => "reference",
-        ProvenanceArchetype.WorkNote => "work-note",
-        ProvenanceArchetype.OtherDoc => "other-doc",
-        ProvenanceArchetype.CatalogPage => "catalog-page",
-        ProvenanceArchetype.ChangelogEntry => "changelog-entry",
-        ProvenanceArchetype.Plan => "plan",
-        ProvenanceArchetype.Review => "review",
-        ProvenanceArchetype.DocIndex => "doc-index",
-        ProvenanceArchetype.TurnMirror => "turn-mirror",
-        ProvenanceArchetype.Transcript => "transcript",
-        ProvenanceArchetype.RememberLog => "remember-log",
-        ProvenanceArchetype.AutoMemorySession => "auto-memory-session",
-        ProvenanceArchetype.AutoMemoryIndex => "auto-memory-index",
-        ProvenanceArchetype.AutoMemoryNote => "auto-memory-note",
-        _ => throw new ArgumentOutOfRangeException(nameof(archetype))
-    };
+    internal static string Tag(ProvenanceArchetype archetype) =>
+        archetype switch
+        {
+            ProvenanceArchetype.OrganicNote => "organic-note",
+            ProvenanceArchetype.Adr => "adr",
+            ProvenanceArchetype.Charter => "charter",
+            ProvenanceArchetype.Explanation => "explanation",
+            ProvenanceArchetype.Measurement => "measurement",
+            ProvenanceArchetype.ResearchSynthesis => "research-synthesis",
+            ProvenanceArchetype.Reference => "reference",
+            ProvenanceArchetype.WorkNote => "work-note",
+            ProvenanceArchetype.OtherDoc => "other-doc",
+            ProvenanceArchetype.CatalogPage => "catalog-page",
+            ProvenanceArchetype.ChangelogEntry => "changelog-entry",
+            ProvenanceArchetype.Plan => "plan",
+            ProvenanceArchetype.Review => "review",
+            ProvenanceArchetype.DocIndex => "doc-index",
+            ProvenanceArchetype.TurnMirror => "turn-mirror",
+            ProvenanceArchetype.Transcript => "transcript",
+            ProvenanceArchetype.RememberLog => "remember-log",
+            ProvenanceArchetype.AutoMemorySession => "auto-memory-session",
+            ProvenanceArchetype.AutoMemoryIndex => "auto-memory-index",
+            ProvenanceArchetype.AutoMemoryNote => "auto-memory-note",
+            _ => throw new ArgumentOutOfRangeException(nameof(archetype))
+        };
 
     internal static ProvenanceArchetype Classify(string path, string? sourceFile, string value)
     {
@@ -156,7 +163,7 @@ internal static partial class ProvenanceArchetypeClassifier
         }
 
         if (p.Contains("/adr/", StringComparison.Ordinal) || p.Contains("/decisions/", StringComparison.Ordinal) ||
-            (NumberedPrefix().IsMatch(basename) && !DatedPrefix().IsMatch(basename)))
+            NumberedPrefix().IsMatch(basename) && !DatedPrefix().IsMatch(basename))
         {
             return ProvenanceArchetype.Adr;
         }
@@ -241,9 +248,11 @@ internal static partial class ProvenanceArchetypeClassifier
         return idx >= 0 ? path[(idx + 1)..] : path;
     }
 
-    /// <summary>A Hermes conversation id used as a source, e.g. `hermes/20260809_125502_0d3cd9` — the
-    /// one case where `source_file` on a hex-path (organic) row carries real, negative information
-    /// (METHOD.md §7): a chat dump, whatever it looks like.</summary>
+    /// <summary>
+    ///     A Hermes conversation id used as a source, e.g. `hermes/20260809_125502_0d3cd9` — the
+    ///     one case where `source_file` on a hex-path (organic) row carries real, negative information
+    ///     (METHOD.md §7): a chat dump, whatever it looks like.
+    /// </summary>
     [GeneratedRegex(@"(^|/)hermes/(\d{6,}_|[0-9a-f]{8}-[0-9a-f]{4}-)", RegexOptions.IgnoreCase)]
     private static partial Regex TranscriptSource();
 

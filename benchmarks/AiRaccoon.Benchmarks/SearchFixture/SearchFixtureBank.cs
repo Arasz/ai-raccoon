@@ -2,6 +2,7 @@ using System.Text;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -71,13 +72,27 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
     public SqliteMemoryStore Store { get; }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _embeddings.DisposeAsync().ConfigureAwait(false);
+        if (Directory.Exists(_dataRoot))
+        {
+            Directory.Delete(_dataRoot, true);
+        }
+    }
+
     public static async Task<SearchFixtureBank> BuildAsync(CancellationToken cancellationToken = default)
     {
         var dataRoot = Directory.CreateTempSubdirectory("ai-raccoon-search-bench").FullName;
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
-        var store = new SqliteMemoryStore(factory, TimeProvider.System, new TokenizerChunker(),
-            new EmbeddingService(), NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        var sourceStore = new SqliteMemorySourceStore(factory);
+        var embeddingService = new EmbeddingService();
+        var fileTypeMatcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new TokenizerChunker()),
+            new JsonFileTypeHandler(new JsonFileTypeChunker())]);
+        var fileIngestor = new FileIngestor(fileTypeMatcher, new EntryEmbedder(embeddingService), sourceStore, TimeProvider.System);
+        var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embeddingService, TimeProvider.System,
+            NullLogger<SqliteMemoryStore>.Instance);
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.
@@ -217,15 +232,6 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
         var sentence = string.Join(' ', words);
         return $"{char.ToUpperInvariant(sentence[0])}{sentence[1..]}.";
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await _embeddings.DisposeAsync().ConfigureAwait(false);
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
     }
 
     private sealed class NoopEncryptionKeyResolver : IEncryptionKeyResolver

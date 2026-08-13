@@ -127,14 +127,15 @@ public class LoggerMessageEventIdTests
 
     /// <summary>Every [LoggerMessage] in the product assemblies, with the type that owns its id block.</summary>
     private static List<(int EventId, string Owner, string Location)> Entries() =>
-        ProductAssemblies.All()
+    [
+        .. ProductAssemblies.All()
             .SelectMany(a => a.GetTypes())
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
                                           BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .SelectMany(m => m.GetCustomAttributes<LoggerMessageAttribute>()
                 .Select(a => (a.EventId, Owner: OwnerOf(m.DeclaringType),
                     Location: $"{m.DeclaringType?.FullName ?? "<unknown>"}.{m.Name}")))
-            .ToList();
+    ];
 
     /// <summary>The outermost type — a nested `Log` class belongs to the id block of the class hosting it.</summary>
     private static string OwnerOf(Type? declaringType)

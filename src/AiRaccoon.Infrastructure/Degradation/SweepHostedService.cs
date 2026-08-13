@@ -12,18 +12,18 @@ namespace AiRaccoon.Infrastructure.Degradation;
 ///     The reaper: on its cadence it sweeps every project's committed entries against the stored
 ///     rating threshold and deletes the expired ones (see docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.15).
 /// </summary>
-public sealed partial class SweepHostedService : BackgroundService
+public sealed partial class SweepHostedService(
+    IMemoryStore store,
+    ISweepService sweeper,
+    TimeProvider timeProvider,
+    IOperationTelemetry telemetry,
+    ILogger<SweepHostedService> logger)
+    : BackgroundService
 {
     /// <summary>Never a setting: a dry-run knob would turn the reaper into a no-op. The kill switch is sweep.enabled.</summary>
     private const bool DryRun = false;
 
     internal const string OperationName = "sweep.reaper";
-
-    private readonly IMemoryStore _store;
-    private readonly SweepService _sweeper;
-    private readonly TimeProvider _timeProvider;
-    private readonly IOperationTelemetry _telemetry;
-    private readonly ILogger<SweepHostedService> _logger;
 
     /// <summary>Completed after each sweep pass; test seam.</summary>
     internal TickSignal Ticks { get; } = new();
@@ -34,21 +34,11 @@ public sealed partial class SweepHostedService : BackgroundService
     /// <summary>Completed after each post-tick interval re-read; test seam.</summary>
     internal TickSignal IntervalReReads { get; } = new();
 
-    public SweepHostedService(IMemoryStore store, SweepService sweeper, TimeProvider timeProvider,
-        IOperationTelemetry telemetry, ILogger<SweepHostedService> logger)
-    {
-        _store = store;
-        _sweeper = sweeper;
-        _timeProvider = timeProvider;
-        _telemetry = telemetry;
-        _logger = logger;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // No startup pass: nothing is due at process start, and the first tick is the first sweep.
         using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
-            _timeProvider);
+            timeProvider);
         TimerArmed.Increment();
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -62,7 +52,7 @@ public sealed partial class SweepHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                Log.RunFailed(_logger, ex);
+                Log.RunFailed(logger, ex);
             }
             finally
             {
@@ -78,7 +68,7 @@ public sealed partial class SweepHostedService : BackgroundService
     /// <summary>One sweep pass: kill-switch check, then a per-project sweep. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = _telemetry.Begin(OperationName);
+        using var pass = telemetry.Begin(OperationName);
         try
         {
             var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
@@ -102,15 +92,17 @@ public sealed partial class SweepHostedService : BackgroundService
         }
     }
 
-    /// <summary>Runs the pass and returns the number of projects whose sweep threw. Test seam
-    /// for RunOnceAsync's outcome decision (H8).</summary>
+    /// <summary>
+    ///     Runs the pass and returns the number of projects whose sweep threw. Test seam
+    ///     for RunOnceAsync's outcome decision (H8).
+    /// </summary>
     private async Task<int> RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         var enabled = SweepConfigKeys.ParseEnabled(
-            await _store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+            await store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
         if (!enabled)
         {
-            Log.Skipped(_logger);
+            Log.Skipped(logger);
             return 0;
         }
 
@@ -118,12 +110,12 @@ public sealed partial class SweepHostedService : BackgroundService
         // per-project Destructive gate exists for the caller's *consent to change it*, not for
         // reading it) and a timer has no caller to gate in the first place.
         var threshold = SweepThreshold.Parse(
-            await _store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken).ConfigureAwait(false));
+            await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken).ConfigureAwait(false));
 
-        var projects = await _store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        var projects = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
         if (projects.Count == 0)
         {
-            Log.NoProjects(_logger);
+            Log.NoProjects(logger);
             return 0;
         }
 
@@ -139,11 +131,11 @@ public sealed partial class SweepHostedService : BackgroundService
                 var mode = await ResolveModeAsync(projectId, cancellationToken).ConfigureAwait(false);
                 if (mode != AccessMode.Full)
                 {
-                    Log.SkippedMode(_logger, projectId, mode);
+                    Log.SkippedMode(logger, projectId, mode);
                     continue;
                 }
 
-                var outcome = await _sweeper.SweepAsync(projectId, threshold, DryRun, cancellationToken)
+                var outcome = await sweeper.SweepAsync(projectId, threshold, DryRun, cancellationToken)
                     .ConfigureAwait(false);
                 deletedTotal += LogDeletions(projectId, outcome);
             }
@@ -153,7 +145,7 @@ public sealed partial class SweepHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                Log.ProjectFailed(_logger, projectId, ex);
+                Log.ProjectFailed(logger, projectId, ex);
                 failures++;
             }
         }
@@ -166,18 +158,20 @@ public sealed partial class SweepHostedService : BackgroundService
             pass.Tag("deleted", deletedTotal.ToString());
         }
 
-        Log.RunCompleted(_logger, projects.Count, deletedTotal);
+        Log.RunCompleted(logger, projects.Count, deletedTotal);
         return failures;
     }
 
-    /// <summary>Resolves one project's effective access mode: per-project setting, else global
-    /// default, else rw (mirrors AiRaccoon.Access.MemoryAccessGuard.ResolveAsync's rule via the
-    /// same Core policy, without a project reference back to the host layer — clean layering).
-    /// Never throws for an unparsable value; propagates a genuine store failure to the caller's
-    /// per-project catch, which counts it as this project's failure rather than aborting the pass.</summary>
+    /// <summary>
+    ///     Resolves one project's effective access mode: per-project setting, else global
+    ///     default, else rw (mirrors AiRaccoon.Access.MemoryAccessGuard.ResolveAsync's rule via the
+    ///     same Core policy, without a project reference back to the host layer — clean layering).
+    ///     Never throws for an unparsable value; propagates a genuine store failure to the caller's
+    ///     per-project catch, which counts it as this project's failure rather than aborting the pass.
+    /// </summary>
     private async Task<AccessMode> ResolveModeAsync(string projectId, CancellationToken cancellationToken)
     {
-        var perProjectRaw = await _store
+        var perProjectRaw = await store
             .GetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), cancellationToken)
             .ConfigureAwait(false);
         if (AccessModePolicy.Parse(perProjectRaw) is { } perProject)
@@ -185,7 +179,7 @@ public sealed partial class SweepHostedService : BackgroundService
             return perProject;
         }
 
-        var globalRaw = await _store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken)
+        var globalRaw = await store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken)
             .ConfigureAwait(false);
         return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), null);
     }
@@ -196,7 +190,7 @@ public sealed partial class SweepHostedService : BackgroundService
         var deleted = outcome.DeletedHashes.ToHashSet(StringComparer.Ordinal);
         foreach (var candidate in outcome.Candidates.Where(c => deleted.Contains(c.Hash)))
         {
-            Log.Deleted(_logger, projectId, candidate.Hash, candidate.Rating, candidate.AgeDays);
+            Log.Deleted(logger, projectId, candidate.Hash, candidate.Rating, candidate.AgeDays);
         }
 
         return deleted.Count;
@@ -208,7 +202,7 @@ public sealed partial class SweepHostedService : BackgroundService
         try
         {
             var hours = SweepConfigKeys.ParseIntervalHours(
-                await _store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken)
+                await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken)
                     .ConfigureAwait(false));
             return TimeSpan.FromHours(hours);
         }
@@ -218,7 +212,7 @@ public sealed partial class SweepHostedService : BackgroundService
         }
         catch (Exception ex)
         {
-            Log.IntervalReadFailed(_logger, ex);
+            Log.IntervalReadFailed(logger, ex);
             return TimeSpan.FromHours(SweepConfigKeys.DefaultIntervalHours);
         }
     }

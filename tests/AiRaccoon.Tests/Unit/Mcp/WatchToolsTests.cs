@@ -1,8 +1,7 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -18,8 +17,8 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchToolsTests
 {
-    private readonly FakeWatchService _watch = new();
     private readonly WatchTools _tools;
+    private readonly FakeWatchService _watch = new();
 
     public WatchToolsTests()
     {
@@ -188,8 +187,7 @@ public sealed class WatchToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Status);
 
-        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<bool> IsPathAllowedAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
@@ -198,8 +196,7 @@ public sealed class WatchToolsTests
 
     private sealed class FakeAccessGuard : IMemoryAccessGuard
     {
-        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(AccessMode.Rw);
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(AccessMode.Rw);
 
         public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken = default) =>

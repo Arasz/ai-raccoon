@@ -1,0 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
+namespace AiRaccoon.Infrastructure.Ingestion;
+
+/// <summary>
+///     Matches file paths or extensions to registered file type handlers.
+/// </summary>
+public interface IFileTypeMatcher
+{
+    bool TryGetHandler(string path, [NotNullWhen(true)] out IFileTypeHandler? handler);
+}

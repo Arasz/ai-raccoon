@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Degradation;
 ///     Runs the degradation policy over a project's committed entries; the shared context is sweep-exempt (see
 ///     docs/work/features-agent-memory/spec-issue-1.md, FR-MEM-1.15). Ratings and TTLs are read on-row — the meta database is gone.
 /// </summary>
-public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider)
+public sealed class SweepService(IMemoryStore store, TimeProvider timeProvider) : ISweepService
 {
     public async Task<SweepOutcome> SweepAsync(
         string projectId, double threshold, bool dryRun, CancellationToken cancellationToken = default)

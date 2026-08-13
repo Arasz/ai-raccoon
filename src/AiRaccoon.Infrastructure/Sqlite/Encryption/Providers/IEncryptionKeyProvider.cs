@@ -26,8 +26,7 @@ public sealed record Passphrase(string Source)
     public string? LegacyValue { get; init; }
 
     /// <summary>Redacted: the default record ToString would print the bank key verbatim.</summary>
-    public override string ToString() =>
-        $"Passphrase {{ Source = {Source}, Value = {Redacted(Value)}, LegacyValue = {Redacted(LegacyValue)} }}";
+    public override string ToString() => $"Passphrase {{ Source = {Source}, Value = {Redacted(Value)}, LegacyValue = {Redacted(LegacyValue)} }}";
 
     private static string Redacted(string? value) => value is null ? "null" : "[redacted]";
 }

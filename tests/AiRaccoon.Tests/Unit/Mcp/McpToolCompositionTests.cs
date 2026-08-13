@@ -39,12 +39,13 @@ public sealed class McpToolCompositionTests : IDisposable
     }
 
     private static List<Type> ToolClasses() =>
-        typeof(MemoryTools).Assembly.GetTypes()
+    [
+        .. typeof(MemoryTools).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false })
             .Where(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .Any(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null))
             .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .ToList();
+    ];
 
     private ServiceProvider BuildCompositionRoot()
     {

@@ -1,9 +1,8 @@
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Setup;
-using Microsoft.Extensions.Logging;
-using OpenTelemetry.Resources;
+using AiRaccoon.Setup.Logging;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace AiRaccoon.Observability;
@@ -16,8 +15,10 @@ internal static partial class OtlpExport
 
     extension(IServiceCollection services)
     {
-        /// <summary>No-op unless OTLP is enabled (ADR 0009): zero threads, zero sockets when unconfigured.
-        /// resolvedState is a test seam — production callers always resolve from the environment.</summary>
+        /// <summary>
+        ///     No-op unless OTLP is enabled (ADR 0009): zero threads, zero sockets when unconfigured.
+        ///     resolvedState is a test seam — production callers always resolve from the environment.
+        /// </summary>
         internal IServiceCollection AddOtlpExport(InfrastructureOptions options, OtlpExportState? resolvedState = null)
         {
             var state = resolvedState ?? OtlpExportState.Resolve();
@@ -51,8 +52,10 @@ internal static partial class OtlpExport
         }
     }
 
-    /// <summary>Endpoint/protocol/timeout stay explicit; other exporter config flows through the SDK's
-    /// own OTEL_* parsing (docs/adr/0009-otlp-export.md). Internal, not private, for direct unit testing.</summary>
+    /// <summary>
+    ///     Endpoint/protocol/timeout stay explicit; other exporter config flows through the SDK's
+    ///     own OTEL_* parsing (docs/adr/0009-otlp-export.md). Internal, not private, for direct unit testing.
+    /// </summary>
     internal static void ConfigureExporter(OtlpExporterOptions options, OtlpExportState state, string signalPath)
     {
         options.Endpoint = SignalEndpoint(state, signalPath);
@@ -60,9 +63,11 @@ internal static partial class OtlpExport
         options.TimeoutMilliseconds = OtlpExportState.ExportTimeoutMilliseconds;
     }
 
-    /// <summary>Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the
-    /// base endpoint is used verbatim; http/protobuf appends the OTLP spec's signal path idempotently
-    /// (no doubling on a base that already carries it or ends with '/'). Internal, not private, for direct unit testing.</summary>
+    /// <summary>
+    ///     Resolves the per-exporter endpoint. gRPC carries the signal in the RPC method, so the
+    ///     base endpoint is used verbatim; http/protobuf appends the OTLP spec's signal path idempotently
+    ///     (no doubling on a base that already carries it or ends with '/'). Internal, not private, for direct unit testing.
+    /// </summary>
     internal static Uri SignalEndpoint(OtlpExportState state, string signalPath)
     {
         var endpoint = state.Endpoint!;
@@ -74,14 +79,15 @@ internal static partial class OtlpExport
         return new Uri(endpoint.TrimEnd('/') + signalPath);
     }
 
-    /// <summary>Matches the SDK's own AppendPathIfNotPresent: the path form or the path-plus-slash
-    /// form, case-insensitively.</summary>
+    /// <summary>
+    ///     Matches the SDK's own AppendPathIfNotPresent: the path form or the path-plus-slash
+    ///     form, case-insensitively.
+    /// </summary>
     private static bool HasSignalPath(string endpoint, string signalPath) =>
         endpoint.EndsWith(signalPath, StringComparison.OrdinalIgnoreCase) ||
         endpoint.EndsWith(signalPath + "/", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsHttpProtobuf(string? protocol) =>
-        string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
+    private static bool IsHttpProtobuf(string? protocol) => string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
 
     internal static partial class Log
     {

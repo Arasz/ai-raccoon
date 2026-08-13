@@ -1,5 +1,5 @@
-using AiRaccoon.Core;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Promotion;
@@ -17,6 +17,8 @@ public sealed partial class PromotionQueueService(
     ILogger<PromotionQueueService> logger,
     TimeProvider timeProvider) : IPromotionQueue
 {
+    private const string EvictionReason = "capacity";
+
     public async Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
     {
@@ -181,7 +183,7 @@ public sealed partial class PromotionQueueService(
             // The agent's "no" is permanent: propose must never re-queue these hashes
             // (docs/adr/0026). The claim path of PromoteAsync shares this store method and
             // never calls RememberDiscardsAsync — promotions are not rejections.
-            await queue.RememberDiscardsAsync(projectId, removed.Select(r => r.Hash).ToList(),
+            await queue.RememberDiscardsAsync(projectId, [.. removed.Select(r => r.Hash)],
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -198,8 +200,11 @@ public sealed partial class PromotionQueueService(
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
-        return (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
-            .Take(limit).ToList();
+        return
+        [
+            .. (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+            .Take(limit)
+        ];
     }
 
     public async Task<PromotionMeta> GetMetaAsync(string? projectId,
@@ -235,8 +240,6 @@ public sealed partial class PromotionQueueService(
 
         return cleared;
     }
-
-    private const string EvictionReason = "capacity";
 
     private async Task<int> ReadCapAsync(CancellationToken cancellationToken)
     {

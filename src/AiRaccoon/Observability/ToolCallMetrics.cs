@@ -8,7 +8,7 @@ namespace AiRaccoon.Observability;
 ///     Meter name is "AiRaccoon.MemoryTools" for discoverability by dotnet-counters.
 ///     project_id tags the counter but not the histogram, on cardinality grounds — see ADR 0002.
 /// </summary>
-public sealed class ToolCallMetrics : IDisposable
+public sealed class ToolCallMetrics : IToolCallMetrics
 {
     private readonly Counter<long> _invocationCount;
     private readonly Histogram<double> _invocationDuration;
@@ -20,8 +20,8 @@ public sealed class ToolCallMetrics : IDisposable
 
         _invocationCount = Meter.CreateCounter<long>(
             OtlpNames.ToolInvocations,
-            unit: "{invocation}",
-            description: "Number of MCP tool invocations");
+            "{invocation}",
+            "Number of MCP tool invocations");
 
         // Bucket boundaries prescribed by the MCP semantic convention for mcp.server.operation.duration
         // (open-telemetry/semantic-conventions-genai, docs/gen-ai/mcp.md, read at implementation time).
@@ -29,7 +29,7 @@ public sealed class ToolCallMetrics : IDisposable
         {
             HistogramBucketBoundaries = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60, 120, 300]
         };
-        _invocationDuration = Meter.CreateHistogram<double>(
+        _invocationDuration = Meter.CreateHistogram(
             OtlpNames.ToolDuration,
             "s",
             "Duration of MCP tool invocations",

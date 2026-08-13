@@ -2,11 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using AiRaccoon.Core.Chunking;
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -17,28 +14,20 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     IMemoryStore over the single-file memory.db (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2): plain SQL, FTS5 + vec0
+///     IMemoryStore over the single-file memory.db. Plain SQL, FTS5 + vec0
 ///     hybrid search, on-row metadata, embed_state driven by the configured engine.
 /// </summary>
 public sealed partial class SqliteMemoryStore(
-    SqliteConnectionFactory factory,
-    TimeProvider timeProvider,
-    IChunker chunker,
-    EmbeddingService embeddings,
-    ILogger<SqliteMemoryStore> logger,
+    ISqliteConnectionFactory factory,
     IMemorySourceStore sourceStore,
-    IFileTypeMatcher? fileTypeMatcher = null)
+    IFileIngestor fileIngestor,
+    IEmbeddingService embeddings,
+    TimeProvider timeProvider,
+    ILogger<SqliteMemoryStore> logger)
     : IMemoryStore
 {
+    private const string SharedScope = "shared";
     private readonly EntryEmbedder _embedder = new(embeddings);
-
-    // A field initializer can't reference another instance field (CS0236), so the shared
-    // _embedder is wired in lazily on first use rather than duplicated via a second `new`.
-    private FileIngestor? _ingestorInstance;
-    private FileIngestor Ingestor => _ingestorInstance ??= new FileIngestor(fileTypeMatcher, chunker, _embedder, timeProvider, (SqliteMemorySourceStore)sourceStore);
-
-    // The remote API key is a settings row (embedding.apiKey) — the single-channel ruling moved it
-    // out of process memory and environment.
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -61,11 +50,6 @@ public sealed partial class SqliteMemoryStore(
                 .ConfigureAwait(false);
         }
 
-        // Global content dedup within the project's committed set: identical content anywhere in
-        // committed rows (workspace_id IS NULL) returns the existing entry — no new row (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
-        // Skipped for a workspace-scoped write (H3): a committed row must never short-circuit a
-        // write the caller explicitly scoped to a workspace, or the workspace never gets its own
-        // row and memory_workspace_discard has nothing to take back.
         if (bucket.WorkspaceId is null)
         {
             var existing = await connection.QueryFirstOrDefaultAsync<EntryRow>(
@@ -88,7 +72,7 @@ public sealed partial class SqliteMemoryStore(
                         hash,
                         path,
                         value = request.Content,
-                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : (string?)null,
+                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
                         section = request.Section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
@@ -102,9 +86,7 @@ public sealed partial class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        // Bucket-key re-read, not last_insert_rowid: a concurrent same-bucket insert may have
-        // won the race (ON CONFLICT DO NOTHING), and pooled connections persist stale rowids.
-        var row = bucket.Scope == "shared"
+        var row = bucket.Scope == SharedScope
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
                     Def(MemorySql.SelectSharedEntryByPathAndHash,
                         new { path, hash }, cancellationToken))
@@ -120,13 +102,12 @@ public sealed partial class SqliteMemoryStore(
                             workspaceId = bucket.WorkspaceId
                         }, cancellationToken))
                 .ConfigureAwait(false);
+
         if (row is null)
         {
             throw new InvalidOperationException($"Insert stored no row for context '{context}'.");
         }
 
-        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): a write
-        // carrying a source_file can join or grow an existing (ctx, source_file) group.
         if (request.SourceFile is not null)
         {
             await RecomputeChunkColumnsAsync(connection, context, request.ProjectId, request.SourceFile,
@@ -144,25 +125,17 @@ public sealed partial class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // Hybrid modalities (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): a keyword list from FTS5 and a semantic list from vec0.
-        // No engine configured -> the query cannot be embedded, so the vec modality is absent
-        // and search degrades to FTS5-only results (never a crash).
         var queryVector = await _embedder.EmbedQueryAsync(connection, query.Query, cancellationToken)
             .ConfigureAwait(false);
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        // Source-path queries (docs/plans/retrieval-improvement-c.md §3 2c) match source/section
-        // columns with AND semantics so the exact chunk ranks first (see SourcePathQuery); the OR
-        // fallback does not apply. The source-affinity pass is also skipped — the exact chunk is
-        // the answer by construction and sibling boosts would displace it.
         var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
         if (isPathQuery)
         {
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
-        // Dual-vector fusion alpha (docs/plans/retrieval-improvement-c.md §3 Wave 6): the fixed
-        // blend between content and structure (heading-path) similarities, read once per search.
+
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
@@ -173,11 +146,6 @@ public sealed partial class SqliteMemoryStore(
         var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = SearchContexts.For(query).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
-        // Deferred FTS snippet (docs/plans/2026-08-08-search-knn-perf.md §WP7): records, per hash an
-        // FTS candidate produced, the exact @query text that matched it and its row id — resolution
-        // filters by rowid, not hash. The fallback re-query overwrites entries for hashes it also
-        // returns, which is correct: only the expression that produced the FINAL ftsResults list for
-        // a context should resolve its snippet.
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
 
@@ -187,49 +155,33 @@ public sealed partial class SqliteMemoryStore(
             var ctx = MemorySql.ContextKeyFor(context, query.ProjectId);
             var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
-            // FTS modality: primary expression first; a per-context under-match — at most as
-            // many rows as the query has terms, or at most as many as the caller asked for (a
-            // list that small cannot be a useful ranked signal on its own; A4/A6/C2 measured
-            // cases) — retries with the OR fallback. The boundary fires too: A4's AND primary
-            // matches exactly max(TokenCount, limit) rows yet excludes the target chunk.
-            // Decided per context so one weak context cannot force the fallback on the others;
-            // skipped when the keyword weight is zero (a weight-0 list contributes nothing to
-            // RRF).
             IReadOnlyList<MemorySearchResult> ftsResults = [];
             if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
                 ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Expression,
-                    SearchParameters(plan.Expression), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
+                        SearchParameters(plan.Expression), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
                     .ConfigureAwait(false);
                 if (plan.Fallback is not null && ftsResults.Count <= Math.Max(plan.TokenCount, query.Limit))
                 {
                     ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Fallback,
-                        SearchParameters(plan.Fallback), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
+                            SearchParameters(plan.Fallback), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
 
-            // Vector modality: independent of the FTS expression — run once per context; the
-            // dual-vector pass fuses the content and structure (heading-path) lists. Skipped
-            // when the semantic weight is zero (a weight-0 list contributes nothing to RRF).
             var vectorResults = queryVector is null || query.VectorWeight == 0
                 ? []
                 : await QueryDualVectorBatchAsync(connection,
                     VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
 
-            // Per-context modality candidates accumulate here; fused globally after the loop
-            // (see docs/adr/0006-rrf-parameter-optimization.md) so RRF compares each modality's
-            // absolute score instead of per-context rank position.
             ftsBatches.Add(ftsResults);
             vectorBatches.Add(vectorResults);
+            continue;
 
             DynamicParameters SearchParameters(string ftsExpression)
             {
                 var parameters = new DynamicParameters();
                 parameters.Add("query", ftsExpression);
-                // Per-modality candidate window (see docs/work/archive/2026-08-03-native-memory-plan.md §8): K = max(limit*3, 100) so RRF can
-                // fuse overlap candidates ranked 20-100 that a per-modality LIMIT @limit starves;
-                // the caller's limit and minScore still apply in the final merger pass.
                 parameters.Add("limit", limit);
                 if (queryVector is not null)
                 {
@@ -244,25 +196,21 @@ public sealed partial class SqliteMemoryStore(
                 return parameters;
             }
 
-            // The vector queries bind ctx as the vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md
-            // §3.4) instead of the {filter}/values pair SearchParameters builds for the FTS statement.
             DynamicParameters VectorParameters()
             {
                 var parameters = new DynamicParameters();
                 parameters.Add("ctx", ctx);
                 parameters.Add("limit", limit);
-                if (queryVector is not null)
-                {
-                    parameters.Add("queryVector", queryVector);
-                }
-
+                parameters.Add("queryVector", queryVector);
                 return parameters;
             }
         }
 
         var fused = ReciprocalRankFusion.Fuse(
-            [(ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
-             (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)],
+            [
+                (ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
+                (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)
+            ],
             query.RrfK, 0, int.MaxValue);
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
@@ -283,20 +231,11 @@ public sealed partial class SqliteMemoryStore(
         var source = await connection.QueryFirstOrDefaultAsync<SourceRow>(
                 Def(MemorySql.SelectSourceByHashAndProject, new { hash, projectId }, cancellationToken))
             .ConfigureAwait(false);
-        if (source is null)
-        {
-            throw new UnknownHashException(hash, projectId);
-        }
-
-        // Promotion creates a REAL shared-scope row under a VALUE-addressed path
-        // shared/<sha256(value)>.md: every promoted chunk gets its own row, and identical chunk
-        // content from different sources (e.g. the same section mirrored in two repos) dedupes to
-        // one row by construction — uq_entries_shared_bucket is on (path, hash). Provenance
-        // travels in source_file/section. AddContentAsync is idempotent: re-sharing finds the
-        // existing shared row.
-        return await AddContentAsync(projectId, $"shared/{ContentHash.OfValue(source.Value)}.md",
-                source.Value, ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
-            .ConfigureAwait(false);
+        return source is null
+            ? throw new UnknownHashException(hash, projectId)
+            : await AddContentAsync(projectId, $"shared/{ContentHash.OfValue(source.Value)}.md",
+                    source.Value, ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
@@ -317,23 +256,25 @@ public sealed partial class SqliteMemoryStore(
                     Def(MemorySql.SelectSetting,
                         new { key = ExtractionConfigKeys.ExcludePrefixesGlobal }, cancellationToken))
                 .ConfigureAwait(false));
-        return rows
-            .Where(r => r.SourceFile is null ||
-                        !excluded.Any(p => r.SourceFile.StartsWith(p, StringComparison.Ordinal)))
-            .Select(r => r.ToCandidate())
-            .ToList();
+        return
+        [
+            .. rows
+                .Where(r => r.SourceFile is null ||
+                            !excluded.Any(p => r.SourceFile.StartsWith(p, StringComparison.Ordinal)))
+                .Select(r => r.ToCandidate())
+        ];
     }
 
     public async Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<SharedRow>(
-                Def(MemorySql.SelectSharedIndex, cancellationToken))
+                Def(MemorySql.SelectSharedIndex, cancellationToken, cancellationToken))
             .ConfigureAwait(false);
         var indexed = rows.ToList();
         return new SharedIndex(
-            indexed.Select(r => r.Value).ToList(),
-            indexed.Select(r => r.Path).ToList());
+            [.. indexed.Select(r => r.Value)],
+            [.. indexed.Select(r => r.Path)]);
     }
 
     public async Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default)
@@ -342,7 +283,7 @@ public sealed partial class SqliteMemoryStore(
         var rows = await connection.QueryAsync<string>(
                 Def(MemorySql.SelectProjectIds, cancellationToken))
             .ConfigureAwait(false);
-        return rows.ToList();
+        return [.. rows];
     }
 
     public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
@@ -351,7 +292,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await DeleteCoreAsync(connection, projectId, hash, scope: null, cancellationToken)
+        return await DeleteCoreAsync(connection, projectId, hash, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -371,47 +312,6 @@ public sealed partial class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         return await DeleteCoreAsync(connection, projectId, hash, scope, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
-        string? scope, CancellationToken cancellationToken)
-    {
-        // Record a tombstone for committed rows so sync propagates the deletion; workspace
-        // rows never leave the bank and need none (FR-NM-8 s4). Scoped the same way as the
-        // delete below, so a sibling row in a different scope can never supply the tombstone for
-        // a row it wasn't the one deleted (H2).
-        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
-                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
-        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read
-        // alongside the scope lookup above, before the delete, so a removed chunk's siblings can
-        // be renumbered afterward.
-        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
-
-        var deleted = await connection.ExecuteAsync(
-                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
-
-        if (deleted > 0 && rowScope is not null)
-        {
-            await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertTombstone,
-                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                        cancellationToken))
-                .ConfigureAwait(false);
-        }
-
-        if (deleted > 0 && recomputeContext?.SourceFile is not null)
-        {
-            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
-                recomputeContext.WorkspaceId, projectId);
-            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return deleted > 0;
     }
 
     public async Task<int> DeleteContextAsync(string projectId, string context,
@@ -512,8 +412,8 @@ public sealed partial class SqliteMemoryStore(
                 await connection.ExecuteAsync(
                         Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
                     .ConfigureAwait(false);
-                await Ingestor
-                    .IngestFileAsync(connection, projectId, path, null, cancellationToken, embedInline: false)
+                await fileIngestor
+                    .IngestFileAsync(connection, projectId, path, null, cancellationToken, false)
                     .ConfigureAwait(false);
                 await connection.ExecuteAsync(
                         Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
@@ -580,7 +480,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await Ingestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
+        return await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -591,7 +491,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await Ingestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
+        return await fileIngestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -651,7 +551,7 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         if (existing is not null)
         {
-            return new MemoryEntryResult(ToEntry(existing), Created: false);
+            return new MemoryEntryResult(ToEntry(existing), false);
         }
 
         var hash = ContentHash.Of(path, content);
@@ -660,10 +560,6 @@ public sealed partial class SqliteMemoryStore(
         var source = await ResolveSourceAsync(connection, sourceFile, section, cancellationToken)
             .ConfigureAwait(false);
 
-        // Created from the ACTUAL insert outcome: Dapper's ExecuteAsync returns SQLite's change
-        // count, so the ON CONFLICT DO NOTHING loser (a concurrent same-(path,hash) writer) gets
-        // affected == 0 and reports Created=false — the only formula that keeps "promoted"
-        // honest for racing callers.
         var affected = await connection.ExecuteAsync(
                 Def(MemorySql.InsertEntry,
                     new
@@ -671,7 +567,7 @@ public sealed partial class SqliteMemoryStore(
                         hash,
                         path,
                         value = content,
-                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : (string?)null,
+                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
                         section,
                         scope = bucket.Scope,
                         projectId = bucket.ProjectId,
@@ -685,7 +581,7 @@ public sealed partial class SqliteMemoryStore(
                     cancellationToken))
             .ConfigureAwait(false);
 
-        var inserted = bucket.Scope == "shared"
+        var inserted = bucket.Scope == SharedScope
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
                     Def(MemorySql.SelectSharedEntryByPathAndHash,
                         new { path, hash }, cancellationToken))
@@ -709,7 +605,7 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, inserted.Id, content, cancellationToken).ConfigureAwait(false);
-        return new MemoryEntryResult(ToEntry(inserted), Created: affected == 1);
+        return new MemoryEntryResult(ToEntry(inserted), affected == 1);
     }
 
     public async Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
@@ -757,12 +653,6 @@ public sealed partial class SqliteMemoryStore(
         return await ReadSettingAsync(connection, key, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken))
-            .ConfigureAwait(false);
-
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -807,6 +697,47 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         return affected > 0;
     }
+
+    private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
+        string? scope, CancellationToken cancellationToken)
+    {
+        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
+                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+            .ConfigureAwait(false);
+
+        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
+            .ConfigureAwait(false);
+
+        var deleted = await connection.ExecuteAsync(
+                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+            .ConfigureAwait(false);
+
+        if (deleted > 0 && rowScope is not null)
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertTombstone,
+                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                        cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (deleted > 0 && recomputeContext?.SourceFile is not null)
+        {
+            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                recomputeContext.WorkspaceId, projectId);
+            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return deleted > 0;
+    }
+
+    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
+        CancellationToken cancellationToken) =>
+        await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key }, cancellationToken))
+            .ConfigureAwait(false);
 
     /// <summary>
     ///     Per-modality candidate window before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md):
@@ -859,11 +790,11 @@ public sealed partial class SqliteMemoryStore(
 
     /// <summary>Maps FTS candidate rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
-        [
-            .. rows.Select(row => new MemorySearchResult(
-                row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
-                row.SourceFile, row.ChunkIndex, row.TotalChunks))
-        ];
+    [
+        .. rows.Select(row => new MemorySearchResult(
+            row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
+            row.SourceFile, row.ChunkIndex, row.TotalChunks))
+    ];
 
     /// <summary>
     ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
@@ -879,13 +810,6 @@ public sealed partial class SqliteMemoryStore(
         {
             throw new UnknownWorkspaceException(workspaceId, projectId);
         }
-    }
-
-    private static partial class Log
-    {
-        [LoggerMessage(EventId = 900, Level = LogLevel.Warning,
-            Message = "Keyword search failed; degrading to the vector modality for this query")]
-        public static partial void KeywordModalityFailed(ILogger logger, Exception exception);
     }
 
     /// <summary>
@@ -933,11 +857,11 @@ public sealed partial class SqliteMemoryStore(
     /// </summary>
     internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
         IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
-        [
-            .. ranked.Select(item => new MemorySearchResult(
-                item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
-                item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
-        ];
+    [
+        .. ranked.Select(item => new MemorySearchResult(
+            item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
+    ];
 
     /// <summary>
     ///     Resolves the deferred snippet for each result still carrying the unresolved placeholder:
@@ -1024,9 +948,11 @@ public sealed partial class SqliteMemoryStore(
             : StructureFusion.DefaultAlpha;
     }
 
-    /// <summary>Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).
-    /// Scoped to the searching project's own row or the shared tier — a hash collision in another,
-    /// unrelated project must never be aged or rate-bumped by this search.</summary>
+    /// <summary>
+    ///     Rating-pipeline rewire: search hits bump the on-row access/rating columns (MetaStore is gone).
+    ///     Scoped to the searching project's own row or the shared tier — a hash collision in another,
+    ///     unrelated project must never be aged or rate-bumped by this search.
+    /// </summary>
     private async Task BumpAccessAsync(SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
         string projectId, CancellationToken cancellationToken)
     {
@@ -1096,10 +1022,9 @@ public sealed partial class SqliteMemoryStore(
 
     private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
 
-    private static string ContextStringOf(EntryRow row) =>
-        ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
+    private static string ContextStringOf(EntryRow row) => ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
 
-    /// <summary>Inverse of <see cref="EntryBucket.For"/>: the bucket columns a row was stored under, back to the context string that would retrieve it.</summary>
+    /// <summary>Inverse of <see cref="EntryBucket.For" />: the bucket columns a row was stored under, back to the context string that would retrieve it.</summary>
     private static string ContextStringOf(string? scope, string? contextLabel, string? workspaceId, string projectId)
     {
         if (workspaceId is not null)
@@ -1109,7 +1034,7 @@ public sealed partial class SqliteMemoryStore(
 
         return scope switch
         {
-            "shared" => ContextNaming.SharedContext,
+            SharedScope => ContextNaming.SharedContext,
             "project" => ContextNaming.ProjectContext(projectId),
             "custom" => contextLabel ?? "",
             _ => ""
@@ -1138,7 +1063,7 @@ public sealed partial class SqliteMemoryStore(
     {
         var (sourceType, locator) = ClassifySource(sourceFile);
         return await ((SqliteMemorySourceStore)sourceStore).ResolveOrCreateOnConnectionAsync(
-            connection, sourceType, locator, section, null, cancellationToken)
+                connection, sourceType, locator, section, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -1186,6 +1111,13 @@ public sealed partial class SqliteMemoryStore(
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 900, Level = LogLevel.Warning,
+            Message = "Keyword search failed; degrading to the vector modality for this query")]
+        public static partial void KeywordModalityFailed(ILogger logger, Exception exception);
+    }
 
     private sealed class EntryRow
     {

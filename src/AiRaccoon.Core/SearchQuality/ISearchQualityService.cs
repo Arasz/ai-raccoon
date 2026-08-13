@@ -3,7 +3,7 @@ namespace AiRaccoon.Core.SearchQuality;
 /// <summary>
 ///     Records memory_search quality signals: search event, follow-through (did the agent use the
 ///     result?), and usefulness grade. All three signals land on the same row, keyed by
-///     <see cref="RecordSearchAsync"/>'s <c>correlationId</c>.
+///     <see cref="RecordSearchAsync" />'s <c>correlationId</c>.
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md.
 /// </summary>
 public interface ISearchQualityService
@@ -24,7 +24,7 @@ public interface ISearchQualityService
 
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
-    ///     Updates the existing row by <paramref name="correlationId"/>.
+    ///     Updates the existing row by <paramref name="correlationId" />.
     /// </summary>
     Task RecordFollowThroughAsync(
         string correlationId,
@@ -33,7 +33,7 @@ public interface ISearchQualityService
 
     /// <summary>
     ///     Records a human usefulness grade (1-5) for the search.
-    ///     Updates the existing row by <paramref name="correlationId"/>.
+    ///     Updates the existing row by <paramref name="correlationId" />.
     /// </summary>
     Task RecordGradeAsync(
         string projectId,

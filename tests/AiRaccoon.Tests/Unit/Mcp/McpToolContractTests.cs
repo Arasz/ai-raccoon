@@ -1,6 +1,6 @@
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
@@ -18,10 +18,6 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class McpToolContractTests : IDisposable
 {
-    private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");
-
-    public void Dispose() => Directory.Delete(_dataRoot, true);
-
     /// <summary>
     ///     One line per tool: name(param:type!, param:type?) — `!` required, `?` optional, in
     ///     declaration order. A renamed parameter, a changed type, or a tightened/loosened
@@ -55,6 +51,10 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_write(projectId:string!, content:string!, workspaceId:string|null?, agentId:string|null?, context:string|null?, sourceFile:string|null?, section:string|null?)
                                             """;
 
+    private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");
+
+    public void Dispose() => Directory.Delete(_dataRoot, true);
+
     [Fact]
     public void InputSchemas_MatchTheDeclaredContract()
     {
@@ -84,9 +84,11 @@ public sealed class McpToolContractTests : IDisposable
         var host = McpServerSetup.CreateServerHost(
             new ServerConfig(7721, McpTransport.Stdio, TestData.CreateInfrastructureOptions(_dataRoot), default));
         var options = host.Services.GetRequiredService<IOptions<McpServerOptions>>().Value;
-        return (options.ToolCollection ?? throw new InvalidOperationException("no tools registered"))
+        return
+        [
+            .. (options.ToolCollection ?? throw new InvalidOperationException("no tools registered"))
             .OrderBy(t => t.ProtocolTool.Name, StringComparer.Ordinal)
-            .ToList();
+        ];
     }
 
     private static string Describe(McpServerTool tool)

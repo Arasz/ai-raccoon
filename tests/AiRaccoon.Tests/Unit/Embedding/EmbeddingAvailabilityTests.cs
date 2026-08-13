@@ -1,9 +1,9 @@
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Setup;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using EmbeddingAvailability = AiRaccoon.Setup.Models.EmbeddingAvailability;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
@@ -60,16 +60,13 @@ public sealed class EmbeddingAvailabilityTests
     {
         public Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default) => Task.FromResult(result);
 
-        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) =>
-            Task.FromResult(result);
+        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) => Task.FromResult(result);
     }
 
     private sealed class ThrowingBundledModel : IBundledModel
     {
-        public Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("boom");
+        public Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default) => throw new InvalidOperationException("boom");
 
-        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("boom");
+        public Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken) => throw new InvalidOperationException("boom");
     }
 }

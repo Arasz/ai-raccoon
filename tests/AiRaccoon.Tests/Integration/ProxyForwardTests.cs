@@ -2,7 +2,7 @@ using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Tests.E2E;
 using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,8 +28,8 @@ public sealed class ProxyForwardTests : IAsyncLifetime
 
     private readonly List<McpServerFactory> _reacquired = [];
     private McpClient _backend = null!;
-    private bool _failReacquire;
     private McpServerFactory _factory = null!;
+    private bool _failReacquire;
     private FakeEmbeddingEndpoint _openAi = null!;
     private McpClient _proxyClient = null!;
     private McpServer _proxyServer = null!;
@@ -53,7 +53,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
             ServerInfo = new Implementation { Name = LocalServerName, Version = "0.0.0" }
         };
         options.Filters.Message.IncomingFilters.Add(
-            ProxyForwarder.Create(_recorder, ReacquireAsync, NullLogger.Instance));
+            new ProxyForwarder(NullLogger<ProxyForwarder>.Instance).Create(_recorder, new ReacquireSessions(this)));
 
         var toProxy = new Pipe();
         var fromProxy = new Pipe();
@@ -85,7 +85,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     }
 
     /// <summary>Stands in for the runner's backend acquisition: a brand new server, counted.</summary>
-    private async Task<McpSession> ReacquireAsync(string? revision, CancellationToken cancellationToken)
+    private async Task<McpClient> ReacquireAsync(string? revision, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _reacquireCount);
         if (_failReacquire)
@@ -96,6 +96,17 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         var factory = new McpServerFactory();
         _reacquired.Add(factory);
         return await factory.CreateClientAsync();
+    }
+
+    /// <summary>Backs the forwarder's re-acquire path with this test's counted re-acquire.</summary>
+    private sealed class ReacquireSessions(ProxyForwardTests owner) : IBackendSessions
+    {
+        public string Url => string.Empty;
+
+        public Task<McpClient> OpenAsync(string? revision, CancellationToken ctx) =>
+            owner.ReacquireAsync(revision, ctx);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     [Fact]
@@ -235,13 +246,10 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     }
 
     /// <summary>Records what the forwarder hands the backend, then delegates to the live session.</summary>
-    private sealed class BackendRecorder : McpSession
+    private sealed class BackendRecorder(McpSession inner) : McpSession
     {
-        private readonly McpSession _inner;
         private readonly List<JsonRpcNotification> _notifications = [];
         private readonly List<JsonRpcRequest> _requests = [];
-
-        public BackendRecorder(McpSession inner) => _inner = inner;
 
         public IReadOnlyList<JsonRpcRequest> Requests
         {
@@ -249,7 +257,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
             {
                 lock (_requests)
                 {
-                    return _requests.ToArray();
+                    return [.. _requests];
                 }
             }
         }
@@ -260,14 +268,14 @@ public sealed class ProxyForwardTests : IAsyncLifetime
             {
                 lock (_notifications)
                 {
-                    return _notifications.ToArray();
+                    return [.. _notifications];
                 }
             }
         }
 
-        public override string? SessionId => _inner.SessionId;
+        public override string? SessionId => inner.SessionId;
 
-        public override string? NegotiatedProtocolVersion => _inner.NegotiatedProtocolVersion;
+        public override string? NegotiatedProtocolVersion => inner.NegotiatedProtocolVersion;
 
         public override Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request,
             CancellationToken cancellationToken = default)
@@ -277,7 +285,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
                 _requests.Add(request);
             }
 
-            return _inner.SendRequestAsync(request, cancellationToken);
+            return inner.SendRequestAsync(request, cancellationToken);
         }
 
         public override Task SendMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken = default)
@@ -290,23 +298,20 @@ public sealed class ProxyForwardTests : IAsyncLifetime
                 }
             }
 
-            return _inner.SendMessageAsync(message, cancellationToken);
+            return inner.SendMessageAsync(message, cancellationToken);
         }
 
         public override IAsyncDisposable RegisterNotificationHandler(string method,
             Func<JsonRpcNotification, CancellationToken, ValueTask> handler) =>
-            _inner.RegisterNotificationHandler(method, handler);
+            inner.RegisterNotificationHandler(method, handler);
 
         public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     /// <summary>Passthrough read side that keeps every byte the proxy sent to its client.</summary>
-    private sealed class ReadRecorder : Stream
+    private sealed class ReadRecorder(Stream inner) : Stream
     {
-        private readonly Stream _inner;
         private readonly StringBuilder _text = new();
-
-        public ReadRecorder(Stream inner) => _inner = inner;
 
         public string Text
         {
@@ -333,19 +338,19 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            var read = await _inner.ReadAsync(buffer, cancellationToken);
+            var read = await inner.ReadAsync(buffer, cancellationToken);
             Record(buffer.Span[..read]);
             return read;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var read = _inner.Read(buffer, offset, count);
+            var read = inner.Read(buffer, offset, count);
             Record(buffer.AsSpan(offset, read));
             return read;
         }
 
-        public override void Flush() => _inner.Flush();
+        public override void Flush() => inner.Flush();
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 

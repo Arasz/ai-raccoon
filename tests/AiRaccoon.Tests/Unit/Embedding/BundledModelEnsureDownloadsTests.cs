@@ -1,8 +1,8 @@
+using System.Net;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
-using System.Net;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
@@ -45,7 +45,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new ByteArrayContent("not the model"u8.ToArray())
+            Content = new ByteArrayContent([.. "not the model"u8])
         });
         using var http = new HttpClient(handler);
 
@@ -107,8 +107,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(respond(request));
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(respond(request));
     }
 
     private sealed class StubHttpClientFactory(HttpClient http) : IHttpClientFactory

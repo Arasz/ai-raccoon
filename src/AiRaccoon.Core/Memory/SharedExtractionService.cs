@@ -5,7 +5,7 @@ namespace AiRaccoon.Core.Memory;
 ///     content-shape evidence produce a ranked candidate list (docs/adr/0018-promotion-scoring-v2.md).
 ///     Dedup is exact against the shared tier; recency is a sort tie-break only, never part of the score.
 /// </summary>
-public sealed class SharedExtractionService
+public sealed class SharedExtractionService : ISharedExtractionService
 {
     /// <summary>Per-pass candidate cap, shared by the hosted loop and the MCP tool default (single source; see docs/work/archive/2026-08-06-extraction-followups-plan.md S10).</summary>
     public const int DefaultCandidateLimit = 20;
@@ -16,9 +16,11 @@ public sealed class SharedExtractionService
     /// <summary>Kept at 0.4 after re-examination for v3 (docs/adr/0018-promotion-scoring-v2.md).</summary>
     private const double CandidateFloor = 0.4;
 
-    /// <summary>Per-source-document cap on how many chunks of one document may occupy the propose
-    /// queue at once — set to 3 pending the final value from labeled data
-    /// (docs/work/2026-08-09-promotion-scoring-measurement.md: one document held 33 of 965 slots).</summary>
+    /// <summary>
+    ///     Per-source-document cap on how many chunks of one document may occupy the propose
+    ///     queue at once — set to 3 pending the final value from labeled data
+    ///     (docs/work/2026-08-09-promotion-scoring-measurement.md: one document held 33 of 965 slots).
+    /// </summary>
     public const int MaxQueuedPerSourceDocument = 3;
 
     /// <summary>Scoring and (in promote mode) selection of rows to share, capped at `limit`. Never mutates anything.</summary>
@@ -53,9 +55,11 @@ public sealed class SharedExtractionService
         return new ShareExtractResult(candidates, promoted);
     }
 
-    /// <summary>Every eligible candidate (above the floor, deduped against the shared tier), ranked
-    /// by score then recency — unbounded, so a caller can refresh a row's score without that row
-    /// having to re-enter the top of any display limit first.</summary>
+    /// <summary>
+    ///     Every eligible candidate (above the floor, deduped against the shared tier), ranked
+    ///     by score then recency — unbounded, so a caller can refresh a row's score without that row
+    ///     having to re-enter the top of any display limit first.
+    /// </summary>
     public IReadOnlyList<ShareCandidate> RankAll(
         string projectId,
         IReadOnlyList<string> allProjectIds,
@@ -112,10 +116,12 @@ public sealed class SharedExtractionService
         return ranked;
     }
 
-    /// <summary>Filters a ranked, not-yet-queued candidate stream to what each source document may
-    /// still admit, given how many of its chunks are already queued — keeping the highest-scoring
-    /// chunks first. Rows with a null source_file are organic notes with no document to flood and are
-    /// exempt (docs/work/2026-08-09-promotion-scoring-measurement.md).</summary>
+    /// <summary>
+    ///     Filters a ranked, not-yet-queued candidate stream to what each source document may
+    ///     still admit, given how many of its chunks are already queued — keeping the highest-scoring
+    ///     chunks first. Rows with a null source_file are organic notes with no document to flood and are
+    ///     exempt (docs/work/2026-08-09-promotion-scoring-measurement.md).
+    /// </summary>
     public static IReadOnlyList<ShareCandidate> CapPerSourceDocument(
         IReadOnlyList<ShareCandidate> rankedNotYetQueued, IReadOnlyDictionary<string, int> queuedCountsBySourceFile)
     {
@@ -153,9 +159,7 @@ public sealed class SharedExtractionService
         return sharedPaths.Contains($"shared/{row.Path}");
     }
 
-    private static string NormalizeWhitespace(string value) =>
-        string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
+    private static string NormalizeWhitespace(string value) => string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
 
-    private static string Truncate(string value) =>
-        value.Length <= PreviewLength ? value : value[..(PreviewLength - 1)] + "…";
+    private static string Truncate(string value) => value.Length <= PreviewLength ? value : value[..(PreviewLength - 1)] + "…";
 }

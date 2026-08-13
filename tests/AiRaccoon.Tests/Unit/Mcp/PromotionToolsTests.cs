@@ -1,7 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Shouldly;
 using Xunit;
@@ -21,8 +20,7 @@ public sealed class PromotionToolsTests
         return (queue, new PromotionTools(queue, gate));
     }
 
-    private static PromotionQueueRow Row(string hash, string value) =>
-        new("acme", hash, $"{hash}.md", value, null, 2.0, ["organic-note"], 1, 1);
+    private static PromotionQueueRow Row(string hash, string value) => new("acme", hash, $"{hash}.md", value, null, 2.0, ["organic-note"], 1, 1);
 
     [Fact]
     public async Task List_TruncatesTheValue_ByDefault()
@@ -62,10 +60,10 @@ public sealed class PromotionToolsTests
 
     private sealed class AllowingGuard : IMemoryAccessGuard
     {
-        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(AccessMode.Full);
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(AccessMode.Full);
 
         public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

@@ -1,8 +1,9 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Shouldly;
 using Xunit;
+using ProxyRunner = AiRaccoon.Hosting.Proxy.ProxyRunner;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
@@ -27,7 +28,7 @@ public sealed class ProxyRunnerTests : IDisposable
         var config = new ServerConfig(port, McpTransport.Proxy,
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
-        var exit = await ProxyRunner.RunAsync(config, stderr, TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
         var message = stderr.ToString();

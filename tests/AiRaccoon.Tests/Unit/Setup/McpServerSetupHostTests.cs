@@ -1,12 +1,13 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Cli;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Setup.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
@@ -89,7 +91,7 @@ public class McpServerSetupHostTests : IDisposable
     public async Task BothTransports_CreateWebHostWithStdio()
     {
         // Free port: 7721 may be held by a live server or a concurrent suite.
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
         await host.StartAsync(TestContext.Current.CancellationToken);
@@ -120,7 +122,7 @@ public class McpServerSetupHostTests : IDisposable
         // HTTP/S presence means the process can live long enough for the extraction
         // loop to matter; a pure-stdio process is per-connection and recycled.
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
@@ -148,7 +150,7 @@ public class McpServerSetupHostTests : IDisposable
     public void BothTransportsHost_RegistersTheSweepHostedService()
     {
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is SweepHostedService);
@@ -178,7 +180,7 @@ public class McpServerSetupHostTests : IDisposable
     public void BothTransportsHost_RegistersTheBankMaintenanceHostedService()
     {
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http]);
+            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is BankMaintenanceHostedService);

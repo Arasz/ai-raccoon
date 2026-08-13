@@ -1,8 +1,6 @@
 using AiRaccoon.Access;
-using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -19,8 +17,7 @@ public sealed class ShareExtractScoringScopeTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 6, 12, 0, 0, TimeSpan.Zero);
 
-    private static ExtractionCandidateRow Row(string hash, string value) =>
-        new(hash, $"{hash}.md", value, null, 0.5, 0, FixedNow.AddDays(-5), null);
+    private static ExtractionCandidateRow Row(string hash, string value) => new(hash, $"{hash}.md", value, null, 0.5, 0, FixedNow.AddDays(-5), null);
 
     [Fact]
     public async Task ShareExtract_ScoresTheSameCandidate_AsTheBackgroundLoop()

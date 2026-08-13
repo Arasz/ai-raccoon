@@ -13,12 +13,7 @@ namespace AiRaccoon.Tests.Unit.sync;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SyncServiceTests : IDisposable
 {
-    private readonly string _dataRoot;
-
-    public SyncServiceTests()
-    {
-        _dataRoot = TestData.CreateTempRoot("sync-test");
-    }
+    private readonly string _dataRoot = TestData.CreateTempRoot("sync-test");
 
     private string BankPath => Path.Combine(_dataRoot, "memory.db");
 
@@ -915,27 +910,6 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    /// <summary>Forces exactly one SyncConflictException on the first push, then delegates.</summary>
-    private sealed class ConflictOnceCloudStore(FakeCloudStore inner) : ICloudStore
-    {
-        public bool ConflictWasRaised { get; private set; }
-
-        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)
-            => inner.PullAsync(objectKey, cancellationToken);
-
-        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
-            CancellationToken cancellationToken = default)
-        {
-            if (!ConflictWasRaised)
-            {
-                ConflictWasRaised = true;
-                throw new SyncConflictException("Simulated concurrent write.");
-            }
-
-            return inner.PushAsync(objectKey, data, etag, cancellationToken);
-        }
-    }
-
     // Settings hold the sync credentials and embedding API key/base URL — a remote snapshot
     // must never overwrite them, whether from a hostile writer or a stale replica (ADR-0014).
     [Fact]
@@ -950,8 +924,8 @@ public class SyncServiceTests : IDisposable
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = $"""
-                                     INSERT INTO settings (key, value) VALUES ('{EmbeddingSettingsKeys.BaseUrl}', 'http://attacker.example.invalid')
-                                     """;
+                                      INSERT INTO settings (key, value) VALUES ('{EmbeddingSettingsKeys.BaseUrl}', 'http://attacker.example.invalid')
+                                      """;
                 await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
@@ -1465,5 +1439,25 @@ public class SyncServiceTests : IDisposable
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         resolutions.ShouldBe(2);
+    }
+
+    /// <summary>Forces exactly one SyncConflictException on the first push, then delegates.</summary>
+    private sealed class ConflictOnceCloudStore(FakeCloudStore inner) : ICloudStore
+    {
+        public bool ConflictWasRaised { get; private set; }
+
+        public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) => inner.PullAsync(objectKey, cancellationToken);
+
+        public Task<string> PushAsync(string objectKey, byte[] data, string? etag,
+            CancellationToken cancellationToken = default)
+        {
+            if (!ConflictWasRaised)
+            {
+                ConflictWasRaised = true;
+                throw new SyncConflictException("Simulated concurrent write.");
+            }
+
+            return inner.PushAsync(objectKey, data, etag, cancellationToken);
+        }
     }
 }

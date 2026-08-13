@@ -1,6 +1,6 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
@@ -8,7 +8,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     CliCommandRunner: the one-shot config-verb path shares the server's bank resolution
+///     AppRunner: the one-shot config-verb path shares the server's bank resolution
 ///     (--data-root/--install-scope) and wires the real bank, watch store, and encryption resolver.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -22,27 +22,40 @@ public sealed class CliCommandRunnerTests : IDisposable
     private async Task<(int Exit, string Out, string Err, ServerConfig Config)> Run(string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
-        var config = parsed.Options.ToServerConfig();
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
+        var config = parsed!.Options.ToServerConfig();
 
         // Serialized with the encryption tests: AIRACCOON_DB_PASSPHRASE is process-global and
         // must be cleared during a run so a dev machine's value cannot poison a fresh-bank test.
+        // The Console redirect lives inside the gate too: a prior holder's restore must not run
+        // between our SetOut and the AppRunner's stream capture.
         await TestData.EnvVarGate.WaitAsync();
-        var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         try
         {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-            var exit = await CliCommandRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
-                TestContext.Current.CancellationToken);
-            return (exit, stdout.ToString(), stderr.ToString(), config);
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+            var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
+            try
+            {
+                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
+                var exit = await new AppRunner().Run(args);
+                return (exit, stdout.ToString(), stderr.ToString(), config);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
         }
         finally
         {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
             TestData.EnvVarGate.Release();
         }
     }
@@ -102,16 +115,5 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         exit.ShouldBe(0);
         stdout.ShouldContain("source: env");
-    }
-
-    [Fact]
-    public async Task ServeVerb_IsNotRoutedToConfigCommands()
-    {
-        // Program.cs pre-routes ["serve"] to ServeRunner before the generic verb branch;
-        // CliCommandRunner's catch-all must never see serve.
-        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "serve"]);
-
-        exit.ShouldBe(1);
-        stderr.ShouldContain("unhandled command: serve");
     }
 }

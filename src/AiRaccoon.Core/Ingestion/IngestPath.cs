@@ -4,7 +4,7 @@ namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
 ///     Path identity for every disk-reading surface (docs/plans/file-watcher-implementation.md D3):
-///     normalizes to absolute, resolved, host-OS-case form; <see cref="IsWithinScope"/> resolves
+///     normalizes to absolute, resolved, host-OS-case form; <see cref="IsWithinScope" /> resolves
 ///     symlinks so containment can't be defeated by a link whose literal path reads as in-scope.
 /// </summary>
 public static class IngestPath
@@ -24,7 +24,7 @@ public static class IngestPath
     }
 
     /// <summary>
-    ///     <see cref="Normalize"/> plus every symlink along the path resolved to its real target — a
+    ///     <see cref="Normalize" /> plus every symlink along the path resolved to its real target — a
     ///     symlinked ancestor or leaf both count. Falls back to the normalized segment when it does
     ///     not exist or cannot be inspected, so a not-yet-created path still normalizes instead of throwing.
     /// </summary>
@@ -63,7 +63,7 @@ public static class IngestPath
     {
         try
         {
-            var target = File.ResolveLinkTarget(path, returnFinalTarget: true);
+            var target = File.ResolveLinkTarget(path, true);
             return target is null ? path : Path.TrimEndingDirectorySeparator(target.FullName);
         }
         catch (IOException)

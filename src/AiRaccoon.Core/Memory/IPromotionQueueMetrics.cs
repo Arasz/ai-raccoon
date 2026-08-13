@@ -16,14 +16,18 @@ public interface IPromotionQueueMetrics
     /// <summary>A row left the queue discarded by the agent, after waiting waitSeconds.</summary>
     void RecordDiscarded(string projectId, double waitSeconds);
 
-    /// <summary>Count of queue rows removed as residue — already shared or previously discarded
-    /// (docs/adr/0026) — in one propose/promote pass.</summary>
+    /// <summary>
+    ///     Count of queue rows removed as residue — already shared or previously discarded
+    ///     (docs/adr/0026) — in one propose/promote pass.
+    /// </summary>
     void RecordPruned(string projectId, int count);
 
     /// <summary>Count of promote candidates that failed in one pass (stale hash or share failure).</summary>
     void RecordFailed(string projectId, int count);
 
-    /// <summary>Publishes the queue's current persisted state — per-project depth and occupancy
-    /// against capacity — for the observable depth and utilization instruments to read.</summary>
+    /// <summary>
+    ///     Publishes the queue's current persisted state — per-project depth and occupancy
+    ///     against capacity — for the observable depth and utilization instruments to read.
+    /// </summary>
     void RecordSnapshot(PromotionQueueStats stats, int capacity);
 }

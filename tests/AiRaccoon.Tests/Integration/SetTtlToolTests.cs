@@ -2,13 +2,12 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
-using FluentValidation;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
+using FluentValidation;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -32,8 +31,8 @@ public sealed class SetTtlToolTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteMemoryStore(factory, _clock, new TokenizerChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory));
+        _store = TestData.CreateMemoryStore(factory,
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), new TokenizerChunker(), _clock, new EmbeddingService());
         var guard = new MemoryAccessGuard(_store);
         _tools = new SweepTools(
             new SweepService(_store, _clock),

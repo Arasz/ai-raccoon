@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
-using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Node;
 using Shouldly;
 using Xunit;
 

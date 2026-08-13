@@ -7,13 +7,15 @@ namespace AiRaccoon.Core.Memory;
 /// </summary>
 public sealed class SharedExtractionRunner(
     IMemoryStore store,
-    SharedExtractionService extraction,
+    ISharedExtractionService extraction,
     IPromotionQueue queue,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider) : ISharedExtractionRunner
 {
-    /// <summary>Ranks and queues one project's share-worthy entries; the shared index is a per-pass
-    /// input, read once by the caller and reused across projects. Cross-project scoring always
-    /// covers every known project id, fetched here rather than caller-supplied.</summary>
+    /// <summary>
+    ///     Ranks and queues one project's share-worthy entries; the shared index is a per-pass
+    ///     input, read once by the caller and reused across projects. Cross-project scoring always
+    ///     covers every known project id, fetched here rather than caller-supplied.
+    /// </summary>
     public async Task<IReadOnlyList<ShareCandidate>> ProposeAsync(
         string projectId,
         SharedIndex sharedIndex,
@@ -60,19 +62,23 @@ public sealed class SharedExtractionRunner(
             }
         }
 
-        return ranked.Take(limit).ToList();
+        return [.. ranked.Take(limit)];
     }
 
-    /// <summary>Queue candidates carry the FULL value and the extraction score; the preview-only
-    /// ShareCandidate is joined back to its source row for those fields.</summary>
+    /// <summary>
+    ///     Queue candidates carry the FULL value and the extraction score; the preview-only
+    ///     ShareCandidate is joined back to its source row for those fields.
+    /// </summary>
     private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
         IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
     {
         var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
-        return candidates
-            .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons, PromotionScorer.Version)
-                : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons, PromotionScorer.Version))
-            .ToList();
+        return
+        [
+            .. candidates
+                .Select(c => byHash.TryGetValue(c.Hash, out var row)
+                    ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons, PromotionScorer.Version)
+                    : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons, PromotionScorer.Version))
+        ];
     }
 }

@@ -78,8 +78,7 @@ internal static class ToolTelemetry
             : new ToolProject(Text(arguments, ProjectIdArgument) ?? string.Empty, null);
 
     /// <summary>A refusal is what <see cref="ToolRefusals" /> already calls one — no second list of what counts.</summary>
-    private static bool Refused(Exception exception) =>
-        ToolRefusals.PrefixFor(exception) is not null || exception is McpException;
+    private static bool Refused(Exception exception) => ToolRefusals.PrefixFor(exception) is not null || exception is McpException;
 
     private static string? Text(IDictionary<string, JsonElement>? arguments, string name) =>
         arguments?.TryGetValue(name, out var value) == true && value.ValueKind == JsonValueKind.String

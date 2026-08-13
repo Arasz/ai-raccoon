@@ -1,8 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
@@ -161,8 +162,7 @@ public sealed class ShutdownEndpointTests : IDisposable
 
     private ServerConfig GatedConfig(int port) => UngatedConfig(port) with { McpToken = Token };
 
-    private ServerConfig UngatedConfig(int port) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+    private ServerConfig UngatedConfig(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
     private static int FreePort()
     {

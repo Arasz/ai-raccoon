@@ -4,12 +4,14 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup.Serve;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using BackendLauncher = AiRaccoon.Hosting.Proxy.BackendLauncher;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
@@ -24,8 +26,17 @@ public sealed class BackendLauncherTests : IDisposable
 {
     private const int StdoutFd = 1;
 
+    /// <summary>An ai-raccoon MCP endpoint's answer to the probe: 400 with a JSON-RPC error body.</summary>
+    private static readonly string FakeServerResponse = Response("400 Bad Request", "application/json",
+        "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32700,\"message\":\"parse\"}}");
+
+    /// <summary>Anything but an MCP endpoint.</summary>
+    private static readonly string ForeignServerResponse = Response("200 OK", "text/plain", "ok");
+
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-backend-launcher");
     private readonly List<TcpListener> _listeners = [];
+
+    private static string ServeExecutable => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     public void Dispose()
     {
@@ -88,7 +99,7 @@ public sealed class BackendLauncherTests : IDisposable
 
         result.Url.ShouldBe(UrlFor(port));
         result.ServeExitCode.ShouldBeNull();
-        var live = await ServerProbe.ForLoopback().RespondsAsync(port, TestContext.Current.CancellationToken);
+        var live = await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
         live.ShouldBeTrue();
     }
 
@@ -127,8 +138,8 @@ public sealed class BackendLauncherTests : IDisposable
     {
         var port = FreePort();
         var clock = new FakeTimeProvider();
-        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
-            BackendLauncher.DefaultBudget, clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            clock, NullLogger<BackendLauncher>.Instance);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
@@ -174,8 +185,8 @@ public sealed class BackendLauncherTests : IDisposable
     {
         var port = FreePort();
         var clock = new FakeTimeProvider();
-        var launcher = new BackendLauncher(ServerProbe.ForLoopback(), NullLogger.Instance,
-            BackendLauncher.DefaultBudget, clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            clock, NullLogger<BackendLauncher>.Instance);
         using var caller = new CancellationTokenSource();
 
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
@@ -186,12 +197,10 @@ public sealed class BackendLauncherTests : IDisposable
             TestContext.Current.CancellationToken));
     }
 
-    private static BackendLauncher Launcher() => new(ServerProbe.ForLoopback(), NullLogger.Instance);
+    private static BackendLauncher Launcher() => new(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+        TimeProvider.System, NullLogger<BackendLauncher>.Instance);
 
     private static string UrlFor(int port) => $"http://127.0.0.1:{port}/mcp";
-
-    private static string ServeExecutable =>
-        Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     /// <summary>A short idle timeout so a spawned backend retires on its own — nothing here ever kills it.</summary>
     private string[] ServeArguments(int port) =>
@@ -199,13 +208,6 @@ public sealed class BackendLauncherTests : IDisposable
         "--data-root", _dataRoot, "serve", "--port", port.ToString(CultureInfo.InvariantCulture),
         "--idle-timeout", "20s"
     ];
-
-    /// <summary>An ai-raccoon MCP endpoint's answer to the probe: 400 with a JSON-RPC error body.</summary>
-    private static readonly string FakeServerResponse = Response("400 Bad Request", "application/json",
-        "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32700,\"message\":\"parse\"}}");
-
-    /// <summary>Anything but an MCP endpoint.</summary>
-    private static readonly string ForeignServerResponse = Response("200 OK", "text/plain", "ok");
 
     private static string Response(string status, string contentType, string body) =>
         $"HTTP/1.1 {status}\r\nContent-Type: {contentType}\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
@@ -262,6 +264,15 @@ public sealed class BackendLauncherTests : IDisposable
         return new EnvRestore(original);
     }
 
+    private sealed class EnvRestore(string? original) : IDisposable
+    {
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
+            TestData.EnvVarGate.Release();
+        }
+    }
+
     // DllImport rather than LibraryImport: the generated marshalling stub needs AllowUnsafeBlocks,
     // and three blittable int calls do not justify unsafe code across the whole test project.
 #pragma warning disable SYSLIB1054
@@ -274,13 +285,4 @@ public sealed class BackendLauncherTests : IDisposable
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
     private static extern int CloseFd(int fd);
 #pragma warning restore SYSLIB1054
-
-    private sealed class EnvRestore(string? original) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            TestData.EnvVarGate.Release();
-        }
-    }
 }

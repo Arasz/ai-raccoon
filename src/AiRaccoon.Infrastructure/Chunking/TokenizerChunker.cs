@@ -8,8 +8,7 @@ public sealed class TokenizerChunker : IChunker
 {
     private readonly TiktokenTokenizer _tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
 
-    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) =>
-        MarkdownChunker.Split(text, maxTokens, overlayTokens, CountTokens);
+    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => MarkdownChunker.Split(text, maxTokens, overlayTokens, CountTokens);
 
     public int CountTokens(string text) => _tokenizer.CountTokens(text);
 }

@@ -17,8 +17,7 @@ public static class SweepConfigKeys
     public const int MaxIntervalHours = 8760;
 
     /// <summary>On unless the setting explicitly says "false": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseEnabled(string? value) =>
-        !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+    public static bool ParseEnabled(string? value) => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
 
     public static int ParseIntervalHours(string? value) =>
         int.TryParse(value, out var hours)

@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;

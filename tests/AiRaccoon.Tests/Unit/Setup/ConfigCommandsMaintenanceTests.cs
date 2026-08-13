@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
@@ -31,12 +32,13 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     private async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed!.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ConfigCommands(maintenance: new MaintenanceCommands(_factory)).RunAsync(parsed.CommandPath, parsed.ParseResult, store, stdout, stderr, TextReader.Null, cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory))
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -178,7 +180,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("reclaimable:");
         outp.ShouldContain("freelist");
         // Decimal separator must be invariant (a locale with comma decimals would break parsing).
-        System.Text.RegularExpressions.Regex.IsMatch(outp, @"\d+\.\d+ MB").ShouldBeTrue();
+        Regex.IsMatch(outp, @"\d+\.\d+ MB").ShouldBeTrue();
     }
 
     [Fact]

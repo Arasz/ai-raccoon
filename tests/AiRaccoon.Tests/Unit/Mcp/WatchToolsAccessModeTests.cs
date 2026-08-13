@@ -2,7 +2,6 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Observability;
 using AiRaccoon.Tools;
 using Shouldly;
 using Xunit;
@@ -96,18 +95,15 @@ public sealed class WatchToolsAccessModeTests
 
     private sealed class FakeWatchService : IWatchService
     {
-        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<WatchStatus>>([]);
 
-        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<bool> IsPathAllowedAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
@@ -118,15 +114,13 @@ public sealed class WatchToolsAccessModeTests
     {
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry("h", "p.md", "project:acme-web", "v", 0));
+        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryEntry("h", "p.md", "project:acme-web", "v", 0));
 
         public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
@@ -140,25 +134,22 @@ public sealed class WatchToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryStats(0, 0, []));
+        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(new MemoryStats(0, 0, []));
 
 
+        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-        bool includeTtlRows, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+            bool includeTtlRows, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
         public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1), true));
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{\"root\":\"\"}");
+        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult("{\"root\":\"\"}");
 
         public Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
@@ -200,8 +191,7 @@ public sealed class WatchToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(null);
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
+        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 
         public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
         {

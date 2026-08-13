@@ -21,8 +21,7 @@ public sealed class AssetDownloaderTests
         var handler = new ScriptedHandler(Empty(), Empty(), Empty());
         using var http = new HttpClient(handler);
 
-        var thrown = await Should.ThrowAsync<EmptyDownloadException>(
-            () => new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken));
+        var thrown = await Should.ThrowAsync<EmptyDownloadException>(() => new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken));
 
         thrown.Message.ShouldContain(Url);
         thrown.Message.ShouldContain("0 bytes");
@@ -33,12 +32,12 @@ public sealed class AssetDownloaderTests
     [Fact]
     public async Task GetAsync_WhenAnEmptyBodyIsFollowedByTheAsset_ReturnsTheAsset()
     {
-        var handler = new ScriptedHandler(Empty(), Body("the model"u8.ToArray()));
+        var handler = new ScriptedHandler(Empty(), Body([.. "the model"u8]));
         using var http = new HttpClient(handler);
 
         var bytes = await new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken);
 
-        bytes.ShouldBe("the model"u8.ToArray());
+        bytes.ShouldBe([.. "the model"u8]);
         handler.Calls.ShouldBe(2);
     }
 
@@ -47,11 +46,10 @@ public sealed class AssetDownloaderTests
     {
         var handler = new ScriptedHandler(
             new HttpResponseMessage(HttpStatusCode.NotFound),
-            Body("never reached"u8.ToArray()));
+            Body([.. "never reached"u8]));
         using var http = new HttpClient(handler);
 
-        var thrown = await Should.ThrowAsync<HttpRequestException>(
-            () => new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken));
+        var thrown = await Should.ThrowAsync<HttpRequestException>(() => new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken));
 
         thrown.Message.ShouldContain("404");
         handler.Calls.ShouldBe(1);
@@ -62,19 +60,18 @@ public sealed class AssetDownloaderTests
     {
         var handler = new ScriptedHandler(
             new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
-            Body("the model"u8.ToArray()));
+            Body([.. "the model"u8]));
         using var http = new HttpClient(handler);
 
         var bytes = await new AssetDownloader(http, retryDelay: TimeSpan.Zero).GetAsync(Url, TestContext.Current.CancellationToken);
 
-        bytes.ShouldBe("the model"u8.ToArray());
+        bytes.ShouldBe([.. "the model"u8]);
         handler.Calls.ShouldBe(2);
     }
 
     private static HttpResponseMessage Empty() => Body([]);
 
-    private static HttpResponseMessage Body(byte[] bytes) =>
-        new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
+    private static HttpResponseMessage Body(byte[] bytes) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
 
     /// <summary>Replays the given responses in order; the last one repeats.</summary>
     private sealed class ScriptedHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

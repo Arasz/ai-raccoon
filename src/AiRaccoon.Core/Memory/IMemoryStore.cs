@@ -86,7 +86,7 @@ public interface IMemoryStore
 
     /// <summary>
     ///     Atomic replace-by-path for the watch digest: in one transaction, skips when the stored
-    ///     fingerprint already equals <paramref name="fileHash"/>, else deletes the path's chunks,
+    ///     fingerprint already equals <paramref name="fileHash" />, else deletes the path's chunks,
     ///     re-ingests the file and stores the fingerprint. False means another writer got there first.
     /// </summary>
     Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
@@ -99,8 +99,10 @@ public interface IMemoryStore
     /// <summary>Deletes one settings row (unset/reset commands); absent keys are a no-op.</summary>
     Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default);
 
-    /// <summary>Sets (or clears, when null) an entry's ttl_days override — a forgetting knob gated to full mode at
-    /// the boundary. False when the project owns no such hash, so the caller cannot mistake a no-op for a write.</summary>
+    /// <summary>
+    ///     Sets (or clears, when null) an entry's ttl_days override — a forgetting knob gated to full mode at
+    ///     the boundary. False when the project owns no such hash, so the caller cannot mistake a no-op for a write.
+    /// </summary>
     Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default);
 }

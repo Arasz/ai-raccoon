@@ -1,3 +1,4 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
@@ -44,7 +45,7 @@ public class ServerConfigTests
     {
         CliArgs.TryParse([], out var parsed).ShouldBeTrue();
 
-        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
+        parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
     }
 
     /// <summary>The escape hatch of ADR-0020: --transport stdio keeps the complete in-process server.</summary>
@@ -53,7 +54,7 @@ public class ServerConfigTests
     {
         CliArgs.TryParse(["--transport", "stdio"], out var parsed).ShouldBeTrue();
 
-        parsed.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
+        parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class ServerConfigTests
         printed.ShouldContain("7721");
     }
 
-    private static CliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
+    private static RootCliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
         int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>
         new()
         {

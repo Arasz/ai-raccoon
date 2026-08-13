@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using AiRaccoon;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
@@ -14,7 +15,7 @@ namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
 ///     A3 (docs/reviews/2026-08-09-otlp-export-review.md): provider disposal is the OTel SDK's
-///     only flush trigger, and <see cref="HostExtensions.RunAsync"/> — the bare-launch path
+///     only flush trigger, and <see cref="AiRaccoon.Setup.Extensions.HostExtensions.RunAsync"/> — the bare-launch path
 ///     Program.cs:53 uses — must dispose the host on shutdown the way ServeRunner.cs:90-93
 ///     already does.
 /// </summary>
@@ -82,8 +83,7 @@ public sealed class OtlpFlushOnExitTests : IDisposable
         return metrics;
     }
 
-    private ServerConfig Config(int port) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+    private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
     private static int FreePort()
     {
@@ -117,9 +117,9 @@ public sealed class OtlpFlushOnExitTests : IDisposable
     /// <summary>Minimal loopback OTLP/HTTP collector stand-in: records every request path it receives.</summary>
     private sealed class CapturingCollector : IDisposable
     {
-        private readonly HttpListener _listener = new();
-        private readonly CancellationTokenSource _cts = new();
         private readonly Task _acceptLoop;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly HttpListener _listener = new();
 
         public CapturingCollector()
         {
@@ -133,6 +133,14 @@ public sealed class OtlpFlushOnExitTests : IDisposable
         public string Endpoint { get; }
 
         public ConcurrentBag<string> RequestedPaths { get; } = [];
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _listener.Stop();
+            _listener.Close();
+            _cts.Dispose();
+        }
 
         public async Task WaitForRequestAsync(string path, TimeSpan timeout)
         {
@@ -164,14 +172,6 @@ public sealed class OtlpFlushOnExitTests : IDisposable
                     return;
                 }
             }
-        }
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-            _listener.Stop();
-            _listener.Close();
-            _cts.Dispose();
         }
     }
 }

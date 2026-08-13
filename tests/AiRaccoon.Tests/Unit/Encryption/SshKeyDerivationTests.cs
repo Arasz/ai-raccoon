@@ -18,7 +18,7 @@ public sealed class SshKeyDerivationTests
 
     // A second, independently-derived synthetic vector — the ASCII bytes of an obviously fake
     // 32-byte string, distinct from Seed00To1F so the two vectors don't coincide.
-    private static readonly byte[] SecondSyntheticSeed = "OBVIOUSLY-FAKE-TEST-SEED-32BYTES"u8.ToArray();
+    private static readonly byte[] SecondSyntheticSeed = [.. "OBVIOUSLY-FAKE-TEST-SEED-32BYTES"u8];
 
     [Fact]
     public void DeriveRawKey_SyntheticSeed00To1F_ReturnsPinnedVector()

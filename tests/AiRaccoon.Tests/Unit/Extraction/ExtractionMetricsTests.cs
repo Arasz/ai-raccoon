@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Promotion;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Observability;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,8 +22,7 @@ public sealed class ExtractionMetricsTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 6, 12, 0, 0, TimeSpan.Zero);
 
-    private static ExtractionCandidateRow Row(string hash, string value = "organic fact about beta") =>
-        new(hash, $"{hash}.md", value, null, 0.5, 0, FixedNow.AddDays(-5), null);
+    private static ExtractionCandidateRow Row(string hash, string value = "organic fact about beta") => new(hash, $"{hash}.md", value, null, 0.5, 0, FixedNow.AddDays(-5), null);
 
     private static (ExtractionHostedService Service, PromotionQueueService Queue) NewStack(
         FakeExtractionStore store, InMemoryPromotionQueueStore queueStore, PromotionQueueMetrics metrics,
@@ -87,6 +87,7 @@ public sealed class ExtractionMetricsTests
     /// round trip without a database.</summary>
     private sealed class InMemoryPromotionQueueStore : IPromotionQueueStore
     {
+        private readonly HashSet<(string ProjectId, string Hash)> _discarded = [];
         private readonly List<PromotionQueueRow> _rows = [];
 
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
@@ -116,7 +117,7 @@ public sealed class ExtractionMetricsTests
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PromotionQueueRow>>(
-                _rows.Where(r => projectId is null || r.ProjectId == projectId).ToList());
+                [.. _rows.Where(r => projectId is null || r.ProjectId == projectId)]);
 
         public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash,
             CancellationToken cancellationToken = default)
@@ -176,6 +177,8 @@ public sealed class ExtractionMetricsTests
             return Task.FromResult(removed);
         }
 
-        private readonly HashSet<(string ProjectId, string Hash)> _discarded = new();
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 }

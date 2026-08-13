@@ -2,7 +2,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -187,18 +186,7 @@ internal sealed class FakeSweepStore : IMemoryStore
     /// <summary>Project ids whose sweep must throw (per-project fault injection).</summary>
     public HashSet<string> FailingProjects { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>Seeds one entry old and rated low enough to be swept: ttlDays=1, rating=0.1, aged 10 years.</summary>
-    public void SeedSweepable(string projectId, string hash, DateTimeOffset now)
-    {
-        var context = ContextNaming.ProjectContext(projectId);
-        var createdAt = now.AddDays(-3650).ToUnixTimeSeconds();
-        Entries.TryAdd(context, []);
-        Entries[context].Add(new MemoryEntry(hash, $"{hash}.md", context, "value", createdAt));
-        MetadataByHash[hash] = new EntryMetadata(0.1, 1);
-    }
-
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<string>>(Projects);
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(Projects);
 
     public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default)
@@ -256,8 +244,7 @@ internal sealed class FakeSweepStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
         CancellationToken cancellationToken = default) =>
@@ -267,8 +254,7 @@ internal sealed class FakeSweepStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
@@ -278,11 +264,9 @@ internal sealed class FakeSweepStore : IMemoryStore
         bool includeTtlRows, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     public Task<int> IngestFileAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default) =>
@@ -311,4 +295,14 @@ internal sealed class FakeSweepStore : IMemoryStore
     public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
+
+    /// <summary>Seeds one entry old and rated low enough to be swept: ttlDays=1, rating=0.1, aged 10 years.</summary>
+    public void SeedSweepable(string projectId, string hash, DateTimeOffset now)
+    {
+        var context = ContextNaming.ProjectContext(projectId);
+        var createdAt = now.AddDays(-3650).ToUnixTimeSeconds();
+        Entries.TryAdd(context, []);
+        Entries[context].Add(new MemoryEntry(hash, $"{hash}.md", context, "value", createdAt));
+        MetadataByHash[hash] = new EntryMetadata(0.1, 1);
+    }
 }

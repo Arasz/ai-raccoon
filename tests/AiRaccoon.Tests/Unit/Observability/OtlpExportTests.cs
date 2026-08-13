@@ -3,11 +3,13 @@ using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter;
@@ -39,14 +41,14 @@ public sealed class OtlpExportTests : IDisposable
     private const int SdkDefaultExportIntervalMilliseconds = 60_000;
     private const int SdkDefaultExportTimeoutMilliseconds = 30_000;
 
+    private static readonly OtlpExportState Disabled = new(false, null, null);
+    private static readonly OtlpExportState Enabled = new(true, "http://127.0.0.1:4317", "grpc");
+
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-export");
 
     private InfrastructureOptions TestOptions => new() { DataRoot = _dataRoot, Scope = InstallScope.User };
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
-
-    private static readonly OtlpExportState Disabled = new(false, null, null);
-    private static readonly OtlpExportState Enabled = new(true, "http://127.0.0.1:4317", "grpc");
 
     [Fact]
     public void NoEndpoint_RegistersNoTracerProviderOrMeterProvider()
@@ -317,23 +319,31 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task CliCommandRunner_NeverWiresTheExporter()
     {
-        // CliCommandRunner hand-composes without a DI container, so this asserts a delta: running
-        // a one-shot verb must not add a NEW listener, robust to listeners other concurrent tests
-        // already attached (Enabled/HasListeners() reflect process-wide state, not per-test).
+        // The one-shot verb path (AppRunner.RunCliCommand) registers only core memory + command
+        // services, never the OTLP exporter, so this asserts a delta: running a one-shot verb must
+        // not add a NEW listener, robust to listeners other concurrent tests already attached
+        // (Enabled/HasListeners() reflect process-wide state, not per-test).
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         using var toolMetrics = new ToolCallMetrics();
         var enabledBefore = toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires").Enabled;
         var hasListenersBefore = toolMetrics.ActivitySource.HasListeners();
-        CliArgs.TryParse(["--data-root", _dataRoot, "access", "default", "show"], out var parsed);
-        var config = parsed.Options.ToServerConfig();
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
 
-        var exit = await CliCommandRunner.RunAsync(parsed, config, stdout, stderr, TextReader.Null,
-            TestContext.Current.CancellationToken);
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        Console.SetOut(new StringWriter());
+        Console.SetError(new StringWriter());
+        try
+        {
+            var exit = await new AppRunner().Run(["--data-root", _dataRoot, "access", "default", "show"]);
+            exit.ShouldBe(0);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
 
-        exit.ShouldBe(0);
         toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires_after").Enabled.ShouldBe(enabledBefore);
         toolMetrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
     }
@@ -684,8 +694,13 @@ public sealed class OtlpExportTests : IDisposable
     }
 
     private sealed class EnvRestore(
-        string? originalEndpoint, string? originalProtocol, string? originalInterval, string? originalTimeout,
-        string? originalServiceName, string? originalResourceAttributes, string? originalPassphrase)
+        string? originalEndpoint,
+        string? originalProtocol,
+        string? originalInterval,
+        string? originalTimeout,
+        string? originalServiceName,
+        string? originalResourceAttributes,
+        string? originalPassphrase)
         : IDisposable
     {
         public void Dispose()

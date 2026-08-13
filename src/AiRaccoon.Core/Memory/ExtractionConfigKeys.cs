@@ -19,11 +19,9 @@ public static class ExtractionConfigKeys
 
     public static bool ParseEnabled(string? value) => value == "true";
 
-    public static ExtractMode ParseMode(string? value) =>
-        value == "promote" ? ExtractMode.Promote : ExtractMode.Propose;
+    public static ExtractMode ParseMode(string? value) => value == "promote" ? ExtractMode.Promote : ExtractMode.Propose;
 
-    public static int ParseIntervalMinutes(string? value) =>
-        int.TryParse(value, out var minutes) && minutes > 0 ? minutes : DefaultIntervalMinutes;
+    public static int ParseIntervalMinutes(string? value) => int.TryParse(value, out var minutes) && minutes > 0 ? minutes : DefaultIntervalMinutes;
 
     /// <summary>Splits the comma-separated exclusion setting; absent/empty means no exclusions.</summary>
     public static IReadOnlyList<string> ParseExcludePrefixes(string? value) =>
@@ -32,6 +30,5 @@ public static class ExtractionConfigKeys
             : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>The propose tier's total cap; anything non-numeric or below 1 falls back to the default.</summary>
-    public static int ParseQueueCapacity(string? value) =>
-        int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultQueueCapacity;
+    public static int ParseQueueCapacity(string? value) => int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultQueueCapacity;
 }

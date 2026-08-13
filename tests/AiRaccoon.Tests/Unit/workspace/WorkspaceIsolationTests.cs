@@ -7,10 +7,10 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.workspace;
 
@@ -33,8 +33,9 @@ public sealed class WorkspaceIsolationTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private SqliteMemoryStore CreateStore() => new(_factory, new FakeTimeProvider(FixedNow), new StubChunker(), new EmbeddingService(),
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory));
+    private SqliteMemoryStore CreateStore() =>
+        TestData.CreateMemoryStore(_factory,
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), new EmbeddingService());
 
     [Fact]
     public async Task XORCheck_InsertWithWorkspaceIdAndCommittedScope_Fails()

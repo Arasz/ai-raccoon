@@ -34,20 +34,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 {
     private const string CloudStoreKey = "CloudStore";
 
-    private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
-    private readonly IMemoryStore _store = scenarioContext.ScenarioContainer.Resolve<IMemoryStore>();
-    private string? _customModelPath;
-    private Exception? _lastError;
-    private IReadOnlyList<MemorySearchResult>? _lastSearch;
-
-    /// <summary>The scenario's last search; throws plainly when no search step has run.</summary>
-    private IReadOnlyList<MemorySearchResult> LastSearch =>
-        _lastSearch ?? throw new InvalidOperationException("no search step has run in this scenario");
-
-    private IReadOnlyList<MemorySearchResult>? _defaultRrfSearch;
-
-    private MemoryEntry? _lastWrite;
-
     private const int ChunkSmallMaxTokens = 50;
 
     // Larger than a single generated line's token count, so BuildOverlay's per-unit budget check
@@ -67,17 +53,31 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     private static readonly string[] SkippedDirectories = ["bin", "obj", ".git", "node_modules", "TestResults", ".ai-badger"];
 
-    private ToolGate? _gate;
+    private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
+    private readonly IMemoryStore _store = scenarioContext.ScenarioContainer.Resolve<IMemoryStore>();
+    private string? _customModelPath;
 
-    private ToolGate Gate => _gate ??= new ToolGate(
-        new MemoryAccessGuard(_store),
-        new PromotionQueueService(
-            new SqlitePromotionQueueStore(_ctx.Factory, _ctx.TimeProvider),
-            _store,
-            new UniformCountEvictionPolicy(),
-            new PromotionQueueMetrics(),
-            NullLogger<PromotionQueueService>.Instance,
-            _ctx.TimeProvider));
+    private IReadOnlyList<MemorySearchResult>? _defaultRrfSearch;
+
+    private ToolGate? _gate;
+    private Exception? _lastError;
+    private IReadOnlyList<MemorySearchResult>? _lastSearch;
+
+    private MemoryEntry? _lastWrite;
+
+    /// <summary>The scenario's last search; throws plainly when no search step has run.</summary>
+    private IReadOnlyList<MemorySearchResult> LastSearch => _lastSearch ?? throw new InvalidOperationException("no search step has run in this scenario");
+
+    private ToolGate Gate =>
+        _gate ??= new ToolGate(
+            new MemoryAccessGuard(_store),
+            new PromotionQueueService(
+                new SqlitePromotionQueueStore(_ctx.Factory, _ctx.TimeProvider),
+                _store,
+                new UniformCountEvictionPolicy(),
+                new PromotionQueueMetrics(),
+                NullLogger<PromotionQueueService>.Instance,
+                _ctx.TimeProvider));
 
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
 
@@ -99,10 +99,11 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
                 .Select(attr => (Class: t, Attr: attr)));
 
     private static List<string> AllToolNames() =>
-        ToolAttributes()
+    [
+        .. ToolAttributes()
             .Select(x => x.Attr.Name ?? throw new InvalidOperationException(
                 $"{x.Class.Name} declares an [McpServerTool] with no explicit Name"))
-            .ToList();
+    ];
 
     private static string FindRepoRoot()
     {
@@ -125,8 +126,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             .Where(f => ScannedExtensions.Contains(Path.GetExtension(f))
                         && !f.Split(Path.DirectorySeparatorChar).Any(SkippedDirectories.Contains));
 
-    private static HashSet<int> ExtractLineNumbers(string chunk) =>
-        Regex.Matches(chunk, @"Line (\d+)").Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
+    private static HashSet<int> ExtractLineNumbers(string chunk) => [.. Regex.Matches(chunk, @"Line (\d+)").Select(m => int.Parse(m.Groups[1].Value))];
 
     /// <summary>A real copy of the bundled ONNX model under a distinct path (engine fingerprint change).</summary>
     private string EnsureCustomModelCopy()
@@ -559,7 +559,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory), _ctx.TimeProvider);
         var keepHashes = keep == "all"
             ? (IReadOnlyList<string>)["all"]
-            : keep.Split(',', StringSplitOptions.TrimEntries).Select(k => (string)scenarioContext[k]).ToList();
+            : [.. keep.Split(',', StringSplitOptions.TrimEntries).Select(k => (string)scenarioContext[k])];
         var result = await ws.ConsolidateAsync(projectId, wsId, keepHashes, CancellationToken.None);
         scenarioContext["ConsolidateResult"] = result;
     }
@@ -934,12 +934,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then("memory-usage-guide is present")]
-    public void ThenMemoryUsageGuidePresent() =>
-        ((List<string?>)scenarioContext["Prompts"]).ShouldContain("memory-usage-guide");
+    public void ThenMemoryUsageGuidePresent() => ((List<string?>)scenarioContext["Prompts"]).ShouldContain("memory-usage-guide");
 
     [Then("workspace-consolidation-guide is present")]
-    public void ThenWorkspaceConsolidationGuidePresent() =>
-        ((List<string?>)scenarioContext["Prompts"]).ShouldContain("workspace-consolidation-guide");
+    public void ThenWorkspaceConsolidationGuidePresent() => ((List<string?>)scenarioContext["Prompts"]).ShouldContain("workspace-consolidation-guide");
 
     // ── FR-MEM-1.8-1.10: Write, search, delete ──
     [When(@"I write ""(.*)"" to project ""([^""]*)""(?! with)")]
@@ -1176,16 +1174,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Given(@"project ""(.*)"" is in mode (.*)")]
-    public async Task GivenProjectMode(string projectId, string mode) =>
-        await _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, CancellationToken.None);
+    public async Task GivenProjectMode(string projectId, string mode) => await _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, CancellationToken.None);
 
     [Given("the global mode is ro")]
-    public async Task GivenGlobalModeRo() =>
-        await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "ro", CancellationToken.None);
+    public async Task GivenGlobalModeRo() => await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "ro", CancellationToken.None);
 
     [Given("the global mode is rw")]
-    public async Task GivenGlobalModeRw() =>
-        await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "rw", CancellationToken.None);
+    public async Task GivenGlobalModeRw() => await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "rw", CancellationToken.None);
 
     [Then("FTS5 comes from the bundled SQLite")]
     public async Task ThenFtsFromBundledSqlite()
