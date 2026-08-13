@@ -38,7 +38,7 @@ internal partial class NodeRunner(
             Restarting = options.Restart,
             TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
         };
-        WarnOnNonHttpTransport(cliInput.ServerConfig, streams);
+        WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
 
         var result = await RestartServer(descriptor, streams, ctx);
         if (!result.IsSuccess)
@@ -147,10 +147,10 @@ internal partial class NodeRunner(
         await streams.RenderUrlForInput(boundUrl, boundPort, descriptor.Source.McpEntry, descriptor.Source.Format);
     }
 
-    private void WarnOnNonHttpTransport(ServerConfig serverConfig, StandardStreams streams)
+    private void WarnOnNonHttpTransport(ServerConfig serverConfig, bool transportExplicit, StandardStreams streams)
     {
         var selected = serverConfig.Transport;
-        if (selected == McpTransport.Http)
+        if (!transportExplicit || selected == McpTransport.Http)
         {
             return;
         }

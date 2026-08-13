@@ -125,8 +125,19 @@ public class CliArgsTests
         parsed!.Options.Transport.ShouldBe(DefaultOptions.Transport);
         parsed!.Options.Port.ShouldBe(DefaultOptions.Port);
         parsed!.Options.IsPortExplicit.ShouldBeFalse();
+        parsed!.Options.IsTransportExplicit.ShouldBeFalse();
         parsed!.Options.DataRoot.ShouldBe(DefaultOptions.DataRoot);
         parsed!.Options.InstallScope.ShouldBe(DefaultOptions.InstallScope);
+    }
+
+    [Fact]
+    public void Parse_TransportExplicit_IsTrueOnlyWhenFlagGiven()
+    {
+        CliArgs.TryParse(["--transport", "http"], out var with);
+        with.ShouldNotBeNull().Options.IsTransportExplicit.ShouldBeTrue();
+
+        CliArgs.TryParse(["serve"], out var without);
+        without.ShouldNotBeNull().Options.IsTransportExplicit.ShouldBeFalse();
     }
 
     [Fact]
