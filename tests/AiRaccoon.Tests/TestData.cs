@@ -15,7 +15,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
-using AiRaccoon.Core.Memory.Promotion;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests;
@@ -69,10 +68,9 @@ public static class TestData
         WatchCommands? watch = null,
         EncryptionCommands? encryptionCommands = null,
         ExtractCommands? extract = null,
-        PromotionCommands? promotion = null,
         MaintenanceCommands? maintenance = null,
         ServeCommands? serve = null) =>
-        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, promotion!, maintenance!, serve!);
+        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, serve!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
@@ -445,16 +443,4 @@ public sealed class FakeExtractionStore : IMemoryStore
     public Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
-}
-
-/// <summary>An <see cref="IPromotionClassifier"/> with the model off — the no-op default for tests that don't exercise semantic promotion gating.</summary>
-public sealed class NoopPromotionClassifier : IPromotionClassifier
-{
-    public string Name => "NoopPromotionClassifier";
-
-    public bool IsModelEnabled => false;
-
-    public ValueTask<PromotionClassResult> ClassifyCandidateAsync(MemoryWriteRequest request,
-        CancellationToken cancellationToken = default) =>
-        new(new PromotionClassResult(false, 0.0f, Name, "noop"));
 }

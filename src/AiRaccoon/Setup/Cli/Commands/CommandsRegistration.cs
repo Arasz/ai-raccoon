@@ -18,7 +18,6 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<WatchCommands>();
             serviceCollection.AddSingleton<EncryptionCommands>();
             serviceCollection.AddSingleton<ExtractCommands>();
-            serviceCollection.AddSingleton<PromotionCommands>();
             serviceCollection.AddSingleton<MaintenanceCommands>();
             serviceCollection.AddSingleton<ServeCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(

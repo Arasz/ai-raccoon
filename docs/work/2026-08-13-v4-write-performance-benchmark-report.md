@@ -1,15 +1,15 @@
 # Write Performance Benchmark Report (baseline -> change -> effect)
 
-Date: 2026-08-13 21:19:17 UTC
+Date: 2026-08-13 22:12:44 UTC
 Iterations: 50
 
 ## Baseline Write Performance (Valid Architectural Notes)
-- Total Time: 818,85 ms
-- Avg Latency per Write: 16,377 ms
-- Write Throughput: 61,06 ops/sec
-- Allocated Memory per Write: -985,70 KB
+- Total Time: 1679,13 ms
+- Avg Latency per Write: 33,583 ms
+- Write Throughput: 29,78 ops/sec
+- Allocated Memory per Write: 218,04 KB
 
 ## Noise Interception Performance (Terminal Completion Logs)
-- Total Time: 254,60 ms
-- Avg Latency per Noise Intercept: 5,092 ms
+- Total Time: 362,30 ms
+- Avg Latency per Noise Intercept: 7,246 ms
 - Rejection Accuracy: 50/50 (100%)

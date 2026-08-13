@@ -147,6 +147,15 @@
     },
     {
       "category": "software-development",
+      "name": "llamasharp-local-inference",
+      "sourceHash": "9bbff40684dd2258d1946b38f0d140aee36c9f0c2d554e55a89f1f9709755442",
+      "sourcePath": "software-development/llamasharp-local-inference",
+      "status": "synced",
+      "syncedAt": "2026-08-13T22:15:30Z",
+      "target": ".ai-badger/skills/learned/software-development/llamasharp-local-inference"
+    },
+    {
+      "category": "software-development",
       "name": "observability-contract-review",
       "sourceHash": "8ee0e0228b5b70248a3c63f6a94d8bdefbe2ca86ea7de28c4beede1bd7cac434",
       "sourcePath": "software-development/observability-contract-review",
@@ -477,6 +486,15 @@
       "status": "synced",
       "syncedAt": "2026-08-06T15:08:24Z",
       "target": ".ai-badger/skills/learned/uncategorized/hermes-plugin-development"
+    },
+    {
+      "category": "uncategorized",
+      "name": "llamasharp-local-inference",
+      "sourceHash": "34b9bdc2dca0e3699c8ca94438d10193a79dea2e19042ccf313597cf77151acb",
+      "sourcePath": "software-development/llamasharp-local-inference",
+      "status": "synced",
+      "syncedAt": "2026-08-13T22:16:43Z",
+      "target": ".ai-badger/skills/learned/uncategorized/llamasharp-local-inference"
     },
     {
       "category": "uncategorized",

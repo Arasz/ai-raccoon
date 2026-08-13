@@ -4,7 +4,6 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
-using AiRaccoon.Core.Memory.Promotion;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
@@ -56,7 +55,6 @@ public static partial class AppRegistrations
             services.RegisterAccessGuardServices();
             services.RegisterObservabilityServices();
             services.RegisterExtractionServices();
-            services.RegisterPromotionClassifier();
             services.RegisterLongLivedBackgroundServices(mcpTransport);
             services.RegisterBankMaintenanceBackgrounbdService();
         }
@@ -67,22 +65,6 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
-        }
-
-        private void RegisterPromotionClassifier()
-        {
-            services.AddSingleton<IPromotionClassifier>(sp =>
-            {
-                var embedder = sp.GetRequiredService<IContentEmbedder>();
-                var store = sp.GetRequiredService<IMemoryStore>();
-                // Lazy accessor: the settings-table read happens at first use (propose time), not at
-                // DI construction — a bank that cannot open yet (e.g. a forward schema version) must
-                // not break host startup. Absent key resolves to false (the safe default).
-                return new CompositePromotionClassifier(embedder,
-                    () => PromotionModelSettings.ParseEnabled(
-                        store.GetSettingAsync(PromotionModelSettings.EnabledKey, CancellationToken.None)
-                            .GetAwaiter().GetResult()));
-            });
         }
 
         private void RegisterSyncServices()

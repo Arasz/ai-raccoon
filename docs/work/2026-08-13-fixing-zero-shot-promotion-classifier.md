@@ -109,13 +109,37 @@ signal; and (b) either implement a real opt-in instruct model (with download-on-
 demonstrably work: retrieval/semantic search and noise rejection of stereotyped text, not portability
 judgement.
 
+## Measured answer — A/B/C on the 55-row promotion fixture (2026-08-13)
+
+The user's follow-up was answered by actually running the model: download
+`Qwen2.5-0.5B-Instruct-q4_k_m.gguf` (469 MB, SHA-256 `74a4da8c…`) and judge each of the 55 rows
+through LLamaSharp (greedy sampling, the rubric's 0-4 scale as a single-digit answer). All 55 rows
+parsed.
+
+| Signal | Spearman vs usefulness | best F1 (signal ≥2) |
+|---|---:|---:|
+| A — mechanical PromotionScorer | **+0.397** | **0.596** |
+| B — Qwen2.5-0.5B judge | +0.132 | 0.457 |
+| C — combined (mean of A, B) | +0.084 | 0.457 |
+
+Qwen is near-chance and actively mis-grades: it rates obvious noise rows (u=0, scorer 0.43–0.50) as
+"4", and rates genuine durable rows (u=3, scorer 3.56) as "0". Fusing it into the scorer *lowers*
+the correlation (+0.397 → +0.084). The model gives nothing — worse than nothing — so the decision is
+to remove the promotion-classifier feature and restore the mechanical scorer as the sole promotion
+signal.
+
+**Evidence:** `dotnet test --filter TempPromotionAbcHarness` (throwaway harness, since deleted) on
+this machine; fixture `/tmp/promotion-fixture.json` (55 rows, the reference-labels joined to the live
+bank); model at `~/.ai-raccoon/models/qwen2.5-0.5b-instruct-q4_k_m.gguf`. The scorer's +0.397 on this
+fixture is below ADR-0018's +0.70 because the fixture is the small, noise-skewed promotion subset and
+the labels are joined to live-bank content that has drifted since labeling — the A/B/C comparison is
+unaffected since all three see the same rows.
+
 ## Still open
 
-- Whether the opt-in ONNX *instruct* path (if ever actually implemented with a downloaded local model)
-  would judge portability — not measured; the model was specified but never built.
+- Whether a *larger* instruct model (not the 0.5B) would judge portability — the 0.5B clearly cannot;
+  a bigger model is out of scope and would reintroduce the local-LLM dependency the project avoids.
 - Whether the zero-shot **noise filter** (`ZeroShotEmbeddingNoisePolicy` + `BundledNoiseVectorProvider`),
   a separate concern for rejecting stereotyped noise (turn-mirrors, transcripts, status dumps), holds
   up to the same labelled-data scrutiny — its 11/12 result was against noise anchors, not promotion
   usefulness, and was not re-measured here.
-- Whether the 55-row promotion fixture is large enough to trust the +0.36 ceiling as a ceiling rather
-  than a small-sample estimate — a larger labelled set would settle it.

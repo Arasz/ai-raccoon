@@ -144,7 +144,7 @@ public sealed class IdleWatchdogTests
         using var watchdog = new IdleWatchdog(lifetime, TestTelemetry.None,
             TimeSpan.FromMinutes(4), time, NullLogger<IdleWatchdog>.Instance);
         using var extraction = new ExtractionHostedService(store,
-            new SharedExtractionRunner(store, new SharedExtractionService(), new FakePromotionQueue(), time, new NoopPromotionClassifier()),
+            new SharedExtractionRunner(store, new SharedExtractionService(), new FakePromotionQueue(), time),
             new FakePromotionQueue(), time, TestTelemetry.None, NullLogger<ExtractionHostedService>.Instance);
 
         using var cts = new CancellationTokenSource();

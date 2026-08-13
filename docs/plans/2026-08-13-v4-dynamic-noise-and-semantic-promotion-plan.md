@@ -4,6 +4,12 @@ Date: 2026-08-13
 Status: Draft (Pending MoE Review - Revised per User Feedback)
 Task: v4-dynamic-noise-and-semantic-promotion
 
+> **Superseded (2026-08-13):** Phase 3 (Approach A/B/C semantic promotion classifier) was measured
+> against the labeled promotion fixture and removed — Qwen2.5-0.5B scores Spearman +0.13 and fusing it
+> degrades the mechanical scorer (+0.40 → +0.08). Promotion quality is `PromotionScorer` alone. See
+> `docs/work/2026-08-13-fixing-zero-shot-promotion-classifier.md`. Phase 2 (dynamic noise vector
+> learning / noise filtering) is unaffected.
+
 ## 1. Executive Summary & Goals
 
 This plan implements V4 Phase 2 (Auto-Improving Dynamic Noise Vector Learning) and V4 Phase 3 (Semantic Promotion Classifier with Comparative Measurement & Opt-In ONNX) for AiRaccoon (.NET 10 MCP Memory Server over sqlite-memory):

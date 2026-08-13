@@ -42,7 +42,7 @@ public sealed class MemoryToolsAccessModeTests
         _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
-                new FakeTimeProvider(FixedNow), new NoopPromotionClassifier()), queue);
+                new FakeTimeProvider(FixedNow)), queue);
         _workspace = new WorkspaceTools(workspaces, gate);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate);
         _promotion = new PromotionTools(queue, gate);
