@@ -27,6 +27,11 @@ public sealed class McpTokenFile
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
+    /// <summary>Serializes ensure and heal across concurrent callers in this process. The exclusive
+    /// create already serializes the mint, but the heal's delete opens a window a create-only race
+    /// has no way to close, so the whole acquire-and-heal runs under this gate.</summary>
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
     private readonly TimeSpan _healAfter;
     private readonly TimeProvider _timeProvider;
 
@@ -50,16 +55,24 @@ public sealed class McpTokenFile
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
 
-        if (await AcquireAsync(cancellationToken) is { } token)
+        await Gate.WaitAsync(cancellationToken);
+        try
         {
-            return token;
-        }
+            if (await AcquireAsync(cancellationToken) is { } token)
+            {
+                return token;
+            }
 
-        // The file held no token for the whole wait, so whoever created it died between the
-        // exclusive create and the write. Remove it and mint through that same exclusive create —
-        // never by writing over the file — so concurrent healers converge as concurrent minters do.
-        TryDeleteDebris();
-        return await AcquireAsync(cancellationToken);
+            // The file held no token for the whole wait, so whoever created it died between the
+            // exclusive create and the write. Remove it and mint through that same exclusive create —
+            // never by writing over the file — so concurrent healers converge as concurrent minters do.
+            TryDeleteDebris();
+            return await AcquireAsync(cancellationToken);
+        }
+        finally
+        {
+            Gate.Release();
+        }
     }
 
     /// <summary>Reads or mints, retrying until the heal wait expires.</summary>

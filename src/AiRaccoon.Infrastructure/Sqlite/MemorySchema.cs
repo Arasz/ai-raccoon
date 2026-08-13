@@ -31,12 +31,12 @@ internal static class MemorySchema
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
-    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 5;
+    internal const int CurrentVersion = 6;
 
     /// <summary>
     ///     The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
@@ -201,6 +201,25 @@ internal static class MemorySchema
                                               detected_by_policy TEXT NOT NULL,
                                               expires_at INTEGER NOT NULL,
                                               created_at INTEGER NOT NULL
+                                          );
+
+                                          CREATE TABLE IF NOT EXISTS noise_clusters (
+                                              id                 INTEGER PRIMARY KEY,
+                                              project_id         TEXT NOT NULL,
+                                              user_id            TEXT NULL,
+                                              cluster_label      TEXT NOT NULL,
+                                              sample_content     TEXT NOT NULL,
+                                              frequency          INTEGER NOT NULL DEFAULT 1,
+                                              status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
+                                              centroid_embedding BLOB NOT NULL,
+                                              created_at         INTEGER NOT NULL,
+                                              last_seen_at       INTEGER NOT NULL,
+                                              UNIQUE(project_id, cluster_label)
+                                          );
+
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
+                                              ctx TEXT partition key,
+                                              embedding float[384] distance_metric=cosine
                                           );
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
@@ -393,10 +412,40 @@ internal static class MemorySchema
             await MigrateToV5Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 6)
+        {
+            await MigrateToV6Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task MigrateToV6Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        const string sql = """
+                           CREATE TABLE IF NOT EXISTS noise_clusters (
+                               id                 INTEGER PRIMARY KEY,
+                               project_id         TEXT NOT NULL,
+                               user_id            TEXT NULL,
+                               cluster_label      TEXT NOT NULL,
+                               sample_content     TEXT NOT NULL,
+                               frequency          INTEGER NOT NULL DEFAULT 1,
+                               status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
+                               centroid_embedding BLOB NOT NULL,
+                               created_at         INTEGER NOT NULL,
+                               last_seen_at       INTEGER NOT NULL,
+                               UNIQUE(project_id, cluster_label)
+                           );
+
+                           CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
+                               ctx TEXT partition key,
+                               embedding float[384] distance_metric=cosine
+                           );
+                           """;
+        await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     /// <summary>
