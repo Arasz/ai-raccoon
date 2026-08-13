@@ -15,7 +15,7 @@ def test_vocab_pins():
 
 def test_gguf_pins():
     assert bundle.GGUF_NAME == "all-MiniLM-L6-v2.Q5_K_M.gguf"
-    assert bundle.GGUF_SHA256 == "972a3e153f25159b7ec0883a3c82d1cff442e25f7f490649366da50a79ea4157"
+    assert bundle.GGUF_SHA256 == "972A3E153F25159B7EC0883A3C82D1CFF442E25F7F490649366DA50A79EA4157"
 
 
 def test_sha256_pins_are_hex():
