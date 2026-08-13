@@ -13,13 +13,16 @@ public sealed class JsonFileTypeChunker : IJsonChunker
 {
     private readonly TokenCount _countTokens;
     private readonly IMarkdownChunker _fallbackChunker;
+    private readonly int _overlayTokens;
 
-    public JsonFileTypeChunker(TokenCount countTokens, IMarkdownChunker fallbackChunker)
+    public JsonFileTypeChunker(TokenCount countTokens, IMarkdownChunker fallbackChunker, int overlayTokens)
     {
         Guard.IsNotNull(countTokens);
         Guard.IsNotNull(fallbackChunker);
+        Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         _countTokens = countTokens;
         _fallbackChunker = fallbackChunker;
+        _overlayTokens = overlayTokens;
     }
 
     public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
@@ -36,21 +39,22 @@ public sealed class JsonFileTypeChunker : IJsonChunker
 
             return root.ValueKind switch
             {
-                JsonValueKind.Object => ChunkObject(root, maxTokens, overlayTokens, text),
-                JsonValueKind.Array => ChunkArray(root, maxTokens, overlayTokens, text),
-                _ => ChunkFallback(text, maxTokens, overlayTokens)
+                JsonValueKind.Object => ChunkObject(root, maxTokens, text),
+                JsonValueKind.Array => ChunkArray(root, maxTokens, text),
+                _ => ChunkFallback(text, maxTokens)
             };
         }
         catch (JsonException)
         {
-            return ChunkFallback(text, maxTokens, overlayTokens);
+            return ChunkFallback(text, maxTokens);
         }
     }
 
-    private IReadOnlyList<string> ChunkObject(JsonElement root, int maxTokens, int overlayTokens, string rawText)
+    private IReadOnlyList<string> ChunkObject(JsonElement root, int maxTokens, string rawText)
     {
-        // Structural chunks are key/item-bounded and deliberately non-overlapping: markdown-style
-        // overlap would duplicate whole properties, so overlayTokens is intentionally unused here.
+        // Structural grouping is deliberately non-overlapping: chunks are key/item-bounded, so
+        // markdown-style overlap would duplicate whole properties. The overlay budget (ctor
+        // config) reaches only the line-based fallback — oversized single properties, empty result.
         var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {
@@ -76,7 +80,7 @@ public sealed class JsonFileTypeChunker : IJsonChunker
             if (propTokens + currentTokens > maxTokens)
             {
                 var propChunk = $"{{\n{propText}\n}}";
-                var subChunks = ChunkFallback(propChunk, maxTokens, overlayTokens);
+                var subChunks = ChunkFallback(propChunk, maxTokens);
                 chunks.AddRange(subChunks);
             }
             else
@@ -91,12 +95,13 @@ public sealed class JsonFileTypeChunker : IJsonChunker
             chunks.Add(BuildObjectChunk(currentProps));
         }
 
-        return chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens, overlayTokens);
+        return chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens);
     }
 
-    private IReadOnlyList<string> ChunkArray(JsonElement root, int maxTokens, int overlayTokens, string rawText)
+    private IReadOnlyList<string> ChunkArray(JsonElement root, int maxTokens, string rawText)
     {
-        // Same non-overlapping contract as ChunkObject (see above).
+        // Same non-overlapping contract as ChunkObject: items are whole, so overlap would
+        // duplicate them; the overlay budget reaches only the fallback (see above).
         var rawTokens = _countTokens(rawText);
         if (rawTokens <= maxTokens)
         {
@@ -121,7 +126,7 @@ public sealed class JsonFileTypeChunker : IJsonChunker
 
             if (itemTokens + currentTokens > maxTokens)
             {
-                var subChunks = ChunkFallback(itemText, maxTokens, overlayTokens);
+                var subChunks = ChunkFallback(itemText, maxTokens);
                 chunks.AddRange(subChunks);
             }
             else
@@ -136,7 +141,7 @@ public sealed class JsonFileTypeChunker : IJsonChunker
             chunks.Add("[\n  " + string.Join(",\n  ", currentItems) + "\n]");
         }
 
-        return chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens, overlayTokens);
+        return chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens);
     }
 
     private static string BuildObjectChunk(List<JsonProperty> props)
@@ -159,5 +164,6 @@ public sealed class JsonFileTypeChunker : IJsonChunker
         return sb.ToString();
     }
 
-    private IReadOnlyList<string> ChunkFallback(string text, int maxTokens, int overlayTokens) => _fallbackChunker.Chunk(text, maxTokens, overlayTokens);
+    private IReadOnlyList<string> ChunkFallback(string text, int maxTokens) =>
+        _fallbackChunker.Chunk(text, maxTokens, Math.Min(_overlayTokens, Math.Max(0, maxTokens - 1)));
 }

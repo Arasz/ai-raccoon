@@ -52,7 +52,8 @@ public static class TestData
     public static IJsonChunker RealJsonChunker(IMarkdownChunker? fallback = null)
     {
         var tokenizer = new O200kTokenizer();
-        return new JsonFileTypeChunker(tokenizer.CountTokens, fallback ?? new MarkdownChunker(tokenizer.CountTokens));
+        return new JsonFileTypeChunker(tokenizer.CountTokens, fallback ?? new MarkdownChunker(tokenizer.CountTokens),
+            ChunkingDefaults.OverlayTokens);
     }
 
     /// <summary>Builds a <see cref="ConfigCommands"/> with only the sub-command(s) a test needs; unused sub-commands

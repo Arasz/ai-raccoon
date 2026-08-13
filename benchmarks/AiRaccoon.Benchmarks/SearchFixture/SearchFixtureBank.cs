@@ -92,7 +92,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([new MarkdownFileTypeHandler(markdownChunker),
-            new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker))]);
+            new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))]);
         var embedder = new EntryEmbedder(embeddingService);
         var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,

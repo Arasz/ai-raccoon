@@ -137,7 +137,10 @@ public static partial class AppRegistrations
             services.AddSingleton<O200kTokenizer>();
             services.AddSingleton<TokenCount>(sp => new TokenCount(sp.GetRequiredService<O200kTokenizer>().CountTokens));
             services.AddRequiredSingleton<IMarkdownChunker, MarkdownChunker>();
-            services.AddRequiredSingleton<IJsonChunker, JsonFileTypeChunker>();
+            services.AddSingleton<IJsonChunker>(sp => new JsonFileTypeChunker(
+                sp.GetRequiredService<TokenCount>(),
+                sp.GetRequiredService<IMarkdownChunker>(),
+                ChunkingDefaults.OverlayTokens));
             services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());

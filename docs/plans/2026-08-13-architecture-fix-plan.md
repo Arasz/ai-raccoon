@@ -69,8 +69,10 @@ only the tokenizer (which needs `Microsoft.ML.Tokenizers`) and the JSON chunker.
 
 `JsonFileTypeChunker` is new code this wave, so F4 is in scope. JSON chunks are key/item-bounded,
 so markdown-style overlap would mean duplicating whole properties — a semantic difference, not a
-silent bug. Add a 1–2 line doc comment on `ChunkObject`/`ChunkArray` stating structural chunks are
-non-overlapping by design (and why), so the difference from `MarkdownChunker.Split` is explicit.
+silent bug. A comment on `ChunkObject`/`ChunkArray` states structural chunks are non-overlapping by
+design (and why), and that `overlayTokens` is forwarded only to the line-based fallback (oversized
+single properties/items, empty result) — so the difference from `MarkdownChunker.Split` is
+explicit. A QA test pins the no-overlap behavior on the structural path.
 
 ### D6 — F9: pre-existing, not a regression — ADR note only
 
