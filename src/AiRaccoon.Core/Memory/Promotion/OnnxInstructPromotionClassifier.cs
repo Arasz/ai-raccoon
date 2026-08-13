@@ -47,7 +47,9 @@ public sealed class OnnxInstructPromotionClassifier(
         }
 
         var similarity = 1.0f - (float)ZeroShotEmbeddingFilter.CosineDistance(vector, centroid);
-        var isEligible = similarity >= 0.70f;
+        // Preliminary threshold from a 3-point measurement (ADRs ~0.28 vs the core reference,
+        // noise ~0.04) — recalibrate against a labeled dataset before relying on this gate.
+        var isEligible = similarity >= 0.15f;
 
         return new PromotionClassResult(isEligible, similarity, Name, $"ONNX Instruct Model score {similarity:F2}");
     }

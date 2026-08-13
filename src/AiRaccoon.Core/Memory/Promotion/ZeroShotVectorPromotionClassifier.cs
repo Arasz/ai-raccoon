@@ -7,7 +7,7 @@ using AiRaccoon.Core.Memory;
 
 public sealed class ZeroShotVectorPromotionClassifier(
     IContentEmbedder embedder,
-    float eligibilityThreshold = 0.65f) : IPromotionClassifier
+    float eligibilityThreshold = 0.15f) : IPromotionClassifier
 {
     public string Name => "ZeroShotVectorPromotionClassifier";
 
