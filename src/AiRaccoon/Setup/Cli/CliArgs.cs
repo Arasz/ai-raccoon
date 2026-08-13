@@ -90,6 +90,7 @@ internal static class CliArgs
             InstallScope = parseResult.ReadOption("--install-scope", DefaultOptions.InstallScope, collectedErrors),
             Port = parseResult.ReadOption("--port", DefaultOptions.Port, collectedErrors),
             IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
+            IsTransportExplicit = parseResult.GetResult("--transport") is OptionResult { Tokens.Count: > 0 },
             Quiet = parseResult.ReadOption("--quiet", false, collectedErrors, false)
         });
 }

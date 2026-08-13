@@ -11,7 +11,8 @@ public sealed record RootCliOptions
         DataRoot = DefaultOptions.DataRoot,
         InstallScope = DefaultOptions.InstallScope,
         Port = DefaultOptions.Port,
-        IsPortExplicit = false
+        IsPortExplicit = false,
+        IsTransportExplicit = false
     };
 
     public required McpTransport Transport { get; init; }
@@ -19,5 +20,6 @@ public sealed record RootCliOptions
     public required InstallScope InstallScope { get; init; }
     public required int Port { get; init; }
     public required bool IsPortExplicit { get; init; }
+    public required bool IsTransportExplicit { get; init; }
     public bool Quiet { get; init; }
 }
