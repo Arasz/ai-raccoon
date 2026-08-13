@@ -33,7 +33,6 @@ Exit 0 = all green on first install attempt, zero manual repair.
 """
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -41,6 +40,7 @@ import sys
 import tempfile
 import time
 import uuid
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 from fresh_install import sha, unwrap
@@ -151,7 +151,7 @@ check("model set local prints confirmation", "local" in (r.stdout + r.stderr).lo
 
 class MCP:
     def __init__(self, tool, dataroot):
-        self.proc = subprocess.Popen([tool, "--data-root", dataroot],
+        self.proc = subprocess.Popen([tool, "--data-root", dataroot, "--transport", "stdio"],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True, bufsize=1)
         self.pending = {}
