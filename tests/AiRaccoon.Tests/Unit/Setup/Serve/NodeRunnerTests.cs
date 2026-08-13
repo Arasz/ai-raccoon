@@ -285,6 +285,24 @@ public sealed class NodeRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task DefaultTransport_DoesNotWarnThatServeIgnoresIt()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        var port = FreePort();
+        // No --transport flag: the default (Proxy, ADR-0020) is not a user choice to ignore.
+        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+
+        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken);
+        url.ShouldBe($"http://127.0.0.1:{port}/mcp");
+        var exit = await StopAsync(run);
+
+        exit.ShouldBe(ExitCode.Success);
+        run.Stderr.ToString().ShouldNotContain("ignoring --transport");
+        run.Stderr.ToString().ShouldNotContain("serve always uses http");
+    }
+
+    [Fact]
     public async Task IdleTimeout_ShutsTheHostDown_AfterTheSpanWithoutActivity()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);

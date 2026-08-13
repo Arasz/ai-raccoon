@@ -144,7 +144,7 @@ public class ServerConfigTests
     }
 
     private static RootCliOptions Cli(string? transport = null, string? dataRoot = null, InstallScope? scope = null,
-        int port = DefaultOptions.Port, bool isPortExplicit = false, bool quiet = false) =>
+        int port = DefaultOptions.Port, bool isPortExplicit = false, bool isTransportExplicit = false, bool quiet = false) =>
         new()
         {
             Transport = transport is null ? DefaultOptions.Transport : Enum.Parse<McpTransport>(transport, true),
@@ -152,6 +152,7 @@ public class ServerConfigTests
             InstallScope = scope ?? DefaultOptions.InstallScope,
             Port = port,
             IsPortExplicit = isPortExplicit,
+            IsTransportExplicit = isTransportExplicit,
             Quiet = quiet
         };
 }
