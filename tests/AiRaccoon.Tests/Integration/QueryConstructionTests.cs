@@ -70,7 +70,7 @@ public sealed class QueryConstructionTests : IDisposable
 
         var results = await _store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
-                Limit: 10, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0),
+                Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
         var rank = results.Select(r => r.Hash).ToList().IndexOf(exactHash) + 1;
@@ -98,7 +98,7 @@ public sealed class QueryConstructionTests : IDisposable
         await EnsureModelAsync();
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, "How does the project handle data erasure?", SearchScope.Project,
-            Limit: 30, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken);
+            Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken);
         var rank = FirstFileRank(results.Select(r => r.Hash).ToList(),
             FileLevel("docs:adr:0067-registry-driven-erasure-with-runtime-verification.md"));
         rank.ShouldNotBeNull("A6's AND primary matches only ADR-0068 rows; the OR fallback must restore ADR-0067");
@@ -161,7 +161,7 @@ public sealed class QueryConstructionTests : IDisposable
         {
             var results = await _store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
-                Limit: query.SearchLimit, MinScore: 0.0), TestContext.Current.CancellationToken);
+                Limit: query.SearchLimit, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
             if (results.Count == 0)
             {
                 zeroMatches.Add(query.Id);
@@ -317,7 +317,7 @@ public sealed class QueryConstructionTests : IDisposable
     {
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: 0.0, RrfK: 60,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
             FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken);
         return [.. results.Take(RankCutoff).Select(result => result.Hash)];
     }

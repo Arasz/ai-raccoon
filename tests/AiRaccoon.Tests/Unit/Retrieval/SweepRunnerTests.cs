@@ -32,7 +32,7 @@ public sealed class SweepMatrixTests
         points.Distinct().Count().ShouldBe(96, "every k x weight x minScore x window combination must appear once");
         points[0].ShouldBe(new SweepPoint(10, 1, 1));
         points[^1].ShouldBe(new SweepPoint(120, 2, 1, 0.7, CandidateWindowMode.Max5X50));
-        points.Select(p => (p.K, p.FtsWeight, p.VectorWeight, p.MinScore, p.Window)).ShouldBeInOrder();
+        points.Select(p => (p.K, p.FtsWeight, p.VectorWeight, p.MinRelativeScore, p.Window)).ShouldBeInOrder();
     }
 }
 

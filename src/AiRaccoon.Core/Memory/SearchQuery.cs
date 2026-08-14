@@ -8,7 +8,7 @@ public sealed record SearchQuery(
     SearchScope Scope = SearchScope.All,
     string? WorkspaceId = null,
     int Limit = 20,
-    double MinScore = 0.7,
+    double MinRelativeScore = 0.0,
     int RrfK = SearchQuery.DefaultRrfK,
     int FtsWeight = 1,
     int VectorWeight = 1,
@@ -19,6 +19,12 @@ public sealed record SearchQuery(
     CandidateWindowMode CandidateWindow = CandidateWindowMode.Max3X100)
 {
     public const int DefaultRrfK = 60;
+
+    /// <summary>
+    ///     Floor on the max-normalized ranking, i.e. a fraction of this response's top hit — relative,
+    ///     never an absolute quality bar. 0 disables it (see docs/adr/0047-relative-score-floor.md).
+    /// </summary>
+    public double MinRelativeScore { get; } = MinRelativeScore;
 
     /// <summary>RRF cutoff; a result's score contribution from a ranked list is weight / (k + rank).</summary>
     public int RrfK { get; } = RrfK;
@@ -51,7 +57,7 @@ public sealed record SearchQuery(
             RuleFor(x => x.ProjectId).NotNull().NotEmpty();
             RuleFor(x => x.Query).NotNull().NotEmpty();
             RuleFor(x => x.Limit).GreaterThan(0);
-            RuleFor(x => x.MinScore).InclusiveBetween(0.0, 1.0);
+            RuleFor(x => x.MinRelativeScore).InclusiveBetween(0.0, 1.0);
             RuleFor(x => x.RrfK).GreaterThan(0);
             RuleFor(x => x.FtsWeight).GreaterThanOrEqualTo(0);
             RuleFor(x => x.VectorWeight).GreaterThanOrEqualTo(0);

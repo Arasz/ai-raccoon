@@ -99,8 +99,11 @@ public sealed partial class MemoryTools(
         [Description("Maximum results (default 20).")]
         int limit = 20,
         [Description(
-            "Floor on the normalized 0..1 ranking (default 0.7). Scores are normalized so the top result is always 1.0, so at default limit this rarely filters anything — see ADR-0006.")]
-        double minScore = 0.7,
+            "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0, off). " +
+            "Ranking is normalized per response, so rank 1 always scores 1.0 even when nothing in the bank answers the " +
+            "query — a high score is not evidence of a good match, and this is not an absolute quality bar. Use it to " +
+            "keep only hits in the same league as the best one; see ADR-0047.")]
+        double minRelativeScore = 0.0,
         [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
         int rrfK = SearchQuery.DefaultRrfK,
         [Description("Weight of the keyword (FTS5) list in the RRF fusion (default 1).")]
@@ -122,7 +125,7 @@ public sealed partial class MemoryTools(
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
+        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minRelativeScore,
             rrfK, ftsWeight, vectorWeight, contextLabel);
 
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);

@@ -275,7 +275,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         CancellationToken cancellationToken) =>
         await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
             SourceLambda: point.Lambda, ConsolidationThreshold: point.Threshold,
             DocScoreFormula: point.Formula), cancellationToken);
 

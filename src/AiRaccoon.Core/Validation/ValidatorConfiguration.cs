@@ -5,7 +5,7 @@ namespace AiRaccoon.Core.Validation;
 
 /// <summary>
 ///     Configures FluentValidation once per process: validation error property paths use camelCase
-///     (projectId, minScore) so they match the JSON tool-argument names (csharp.instructions.md).
+///     (projectId, minRelativeScore) so they match the JSON tool-argument names (csharp.instructions.md).
 /// </summary>
 internal static class ValidatorConfiguration
 {

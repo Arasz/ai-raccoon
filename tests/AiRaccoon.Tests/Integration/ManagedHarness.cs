@@ -93,7 +93,7 @@ public sealed class ManagedHarness
                 query.Text,
                 SearchScope.Project,
                 Limit: MaxRankedK,
-                MinScore: 0.0,
+                MinRelativeScore: 0.0,
                 RrfK: point.K,
                 FtsWeight: point.FtsWeight,
                 VectorWeight: point.VectorWeight), cancellationToken).ConfigureAwait(false);

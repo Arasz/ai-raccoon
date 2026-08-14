@@ -108,7 +108,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // FtsWeight: 0 forces a genuinely vector-only path — the fallback snippet is the only
         // snippet source, regardless of whether the term would also FTS-match.
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "giraffemigrationprotocol", SearchScope.Project, Limit: 5, MinScore: 0.0,
+            new SearchQuery("acme", "giraffemigrationprotocol", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -138,7 +138,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         }
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "fast canine", SearchScope.Project, Limit: 3, MinScore: 0.0,
+            new SearchQuery("acme", "fast canine", SearchScope.Project, Limit: 3, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -166,7 +166,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         }
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 3, MinScore: 0.0,
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 3, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
@@ -192,7 +192,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // A single embedded doc is always vector-rank-1 for any query; "zebra" also gives it an
         // FTS match, so it is retrieved by both modalities.
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 5, MinScore: 0.0,
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -219,7 +219,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "semantic memory retrieval system", SearchScope.Project,
-                Limit: 10, MinScore: 0.0, RrfK: 60, FtsWeight: 0, VectorWeight: 1),
+                Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         // distance 0 (identical text) must rank first; the distance value never becomes a score.
@@ -249,7 +249,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "the quick brown fox jumps over the lazy dog", SearchScope.Project,
-                Limit: 1, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1),
+                Limit: 1, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         // x is rank 2 in both lists: with K = max(1*3, 100) = 100 both lists carry it and
@@ -279,7 +279,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         // weights (2,1): the keyword list's rank-1 result scores 2/(k+1) > 1/(k+1).
         var keywordFirst = await _store.SearchAsync(
-            new SearchQuery("acme", "api contract design", Limit: 10, MinScore: 0.0,
+            new SearchQuery("acme", "api contract design", Limit: 10, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 2, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -287,7 +287,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         // weights (1,2): the vector list's rank-1 result scores 2/(k+1) > 1/(k+1).
         var vectorFirst = await _store.SearchAsync(
-            new SearchQuery("acme", "api contract design", Limit: 10, MinScore: 0.0,
+            new SearchQuery("acme", "api contract design", Limit: 10, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 2),
             TestContext.Current.CancellationToken);
 

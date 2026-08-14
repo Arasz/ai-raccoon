@@ -109,7 +109,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         var chosen = rows.Single(row => row.Point.K == ChosenK
                                         && row.Point.FtsWeight == ChosenFtsWeight
                                         && row.Point.VectorWeight == ChosenVectorWeight
-                                        && row.Point.MinScore == ChosenMinScore
+                                        && row.Point.MinRelativeScore == ChosenMinScore
                                         && row.Point.Window == ChosenWindow);
         var current = rows.Single(row => row.Point == CurrentDefaults);
         var fusion = await MeasureFusionAsync(queries, TestContext.Current.CancellationToken);
@@ -209,7 +209,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         foreach (var row in top)
         {
             _output.WriteLine(
-                $"  top: k{row.Point.K} w{row.Point.FtsWeight}{row.Point.VectorWeight} m{row.Point.MinScore:0.0} {row.Point.Window} -> nDCG@5 {row.AdrNdcg5:F3} MRR {row.AdrMrr:F3} C2 {row.C2ExactRank?.ToString() ?? "-"} exact@3 {row.ExactAt3Count}/11");
+                $"  top: k{row.Point.K} w{row.Point.FtsWeight}{row.Point.VectorWeight} m{row.Point.MinRelativeScore:0.0} {row.Point.Window} -> nDCG@5 {row.AdrNdcg5:F3} MRR {row.AdrMrr:F3} C2 {row.C2ExactRank?.ToString() ?? "-"} exact@3 {row.ExactAt3Count}/11");
         }
     }
 
@@ -326,7 +326,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         string text, SweepPoint point, CancellationToken cancellationToken) =>
         await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: point.MinScore, RrfK: point.K,
+            Limit: SearchLimit, MinRelativeScore: point.MinRelativeScore, RrfK: point.K,
             FtsWeight: point.FtsWeight, VectorWeight: point.VectorWeight,
             SourceLambda: FixedSourceLambda, ConsolidationThreshold: FixedConsolidationThreshold,
             DocScoreFormula: DocScoreFormula.Max, CandidateWindow: point.Window), cancellationToken);
@@ -459,7 +459,7 @@ public sealed class RrfParameterSweepTests : IDisposable
             var isChosen = row.Point == chosen.Point;
             var ndcg = isChosen ? $"**{row.AdrNdcg5.ToString("0.000", invariant)}**" : row.AdrNdcg5.ToString("0.000", invariant);
             builder.AppendLine(
-                $"{$"| {row.Point.K} | {row.Point.FtsWeight}:{row.Point.VectorWeight} | {row.Point.MinScore.ToString("0.0", invariant)} | {row.Point.Window} | {row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | {row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | {row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | {row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | {row.A7ExactRank?.ToString(invariant) ?? "-"} | {row.ExactAt3Count}/11 | {ndcg} | {row.AdrMrr.ToString("0.000", invariant)} | "}{row.AdrRecall5.ToString("0.000", invariant)} |");
+                $"{$"| {row.Point.K} | {row.Point.FtsWeight}:{row.Point.VectorWeight} | {row.Point.MinRelativeScore.ToString("0.0", invariant)} | {row.Point.Window} | {row.S2ExactRank?.ToString(invariant) ?? "-"} | {row.A6FileRank?.ToString(invariant) ?? "-"} | {row.A6ExactRank?.ToString(invariant) ?? "-"} | {row.A1FileRank?.ToString(invariant) ?? "-"} | {row.A4FileRank?.ToString(invariant) ?? "-"} | {row.C1ExactRank?.ToString(invariant) ?? "-"} | {row.C2ExactRank?.ToString(invariant) ?? "-"} | {row.C5ExactRank?.ToString(invariant) ?? "-"} | {row.A7ExactRank?.ToString(invariant) ?? "-"} | {row.ExactAt3Count}/11 | {ndcg} | {row.AdrMrr.ToString("0.000", invariant)} | "}{row.AdrRecall5.ToString("0.000", invariant)} |");
         }
 
         builder.AppendLine();

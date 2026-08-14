@@ -176,7 +176,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             TestContext.Current.CancellationToken);
 
         indexed.ShouldBe(0);
-        var results = await _store.SearchAsync(new SearchQuery("acme", "confidential badger stash", MinScore: 0),
+        var results = await _store.SearchAsync(new SearchQuery("acme", "confidential badger stash", MinRelativeScore: 0),
             TestContext.Current.CancellationToken);
         results.ShouldBeEmpty();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);

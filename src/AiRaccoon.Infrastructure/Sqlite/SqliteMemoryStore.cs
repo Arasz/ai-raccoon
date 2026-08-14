@@ -269,7 +269,7 @@ public sealed partial class SqliteMemoryStore(
                 (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
             ],
             query.RrfK, 0, int.MaxValue);
-        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
+        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinRelativeScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             query.Query, cancellationToken).ConfigureAwait(false);

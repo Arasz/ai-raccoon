@@ -108,7 +108,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             SourceFile: "docs/adr/0001-legacy-migrated.md"), TestContext.Current.CancellationToken);
 
         var results = await store.SearchAsync(new SearchQuery("acme", "wave two",
-            SearchScope.Project, Limit: 5, MinScore: 0.0), TestContext.Current.CancellationToken);
+            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
         var hit = results.ShouldHaveSingleItem();
         hit.SourceFile.ShouldBe("docs/adr/0001-legacy-migrated.md");
         hit.TotalChunks.ShouldBe(1);

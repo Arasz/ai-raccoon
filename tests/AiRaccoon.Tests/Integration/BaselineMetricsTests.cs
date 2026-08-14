@@ -274,7 +274,7 @@ public sealed class BaselineMetricsTests : IDisposable
     {
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: 0.0, RrfK: 60,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
             FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken);
         return [.. results.Take(RankCutoff).Select(result => result.Hash)];
     }

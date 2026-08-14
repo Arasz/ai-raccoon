@@ -160,7 +160,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             $"({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
-                new SearchQuery(ProjectId, Queries[0], Limit: 10, MinScore: 0.0),
+                new SearchQuery(ProjectId, Queries[0], Limit: 10, MinRelativeScore: 0.0),
                 cancellationToken)
             .ConfigureAwait(false);
         if (probe.Count == 0)

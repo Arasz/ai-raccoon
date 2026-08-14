@@ -184,7 +184,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "ziggurat", MinScore: 0.7),
+            new SearchQuery("acme", "ziggurat", MinRelativeScore: 0.7),
             TestContext.Current.CancellationToken);
 
         var hit = results.ShouldHaveSingleItem();
@@ -290,7 +290,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         shared.Entry.Hash.ShouldNotBe(entry.Hash, "the shared copy must carry a different row hash for this to be a real dedup test");
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "container registries image scanning", MinScore: 0.0),
+            new SearchQuery("acme", "container registries image scanning", MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results.Count.ShouldBe(1,
@@ -387,7 +387,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         deleted.ShouldBeTrue();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
         (await _store.SearchAsync(
-                new SearchQuery("acme", "deleted", MinScore: 0),
+                new SearchQuery("acme", "deleted", MinRelativeScore: 0),
                 TestContext.Current.CancellationToken))
             .ShouldBeEmpty();
     }
@@ -715,7 +715,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "documentation placement", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            new SearchQuery("acme", "documentation placement", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         var hit = results.ShouldHaveSingleItem();
@@ -734,7 +734,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "docs/adr/0099-widget-renderer.md#decision",
-                SearchScope.Project, Limit: 5, MinScore: 0.0),
+                SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results.ShouldHaveSingleItem();
@@ -748,7 +748,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results.ShouldHaveSingleItem();
@@ -764,7 +764,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "fact", SearchScope.Project, Limit: 5, MinScore: 0.0,
+            new SearchQuery("acme", "fact", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
                 ContextLabel: "docs:adr"),
             TestContext.Current.CancellationToken);
 
@@ -822,7 +822,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", query, Limit: 25, MinScore: 0.0),
+            new SearchQuery("acme", query, Limit: 25, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results[0].Path.ShouldBe(bestMatch.Entry.Path,

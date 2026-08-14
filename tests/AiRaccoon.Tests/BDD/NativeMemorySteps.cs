@@ -1236,7 +1236,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         _lastSearch.ShouldNotBeNull();
         LastSearch.Count.ShouldBeGreaterThan(0);
-        // 0.7 is SearchQuery.MinScore's default, used by WhenISearchExactPhrase below.
+        // 0.7 is SearchQuery.MinRelativeScore's default, used by WhenISearchExactPhrase below.
         _lastSearch.ShouldAllBe(r => r.Ranking >= 0.7);
     }
 

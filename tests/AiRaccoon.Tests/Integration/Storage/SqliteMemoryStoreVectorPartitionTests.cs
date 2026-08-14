@@ -81,7 +81,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "narwhals", WorkspaceId: "ws-1", Limit: 10,
-                MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
+                MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         results.Select(r => r.Hash).ShouldBe([workspace.Entry.Hash]);
@@ -96,7 +96,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "axolotls", SearchScope.Project, ContextLabel: "my-label",
-                Limit: 10, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
+                Limit: 10, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         results.Select(r => r.Hash).ShouldBe([labelled.Entry.Hash]);
@@ -140,7 +140,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
     private async Task<IReadOnlyList<MemorySearchResult>> VectorOnlySearchAsync(string query, SearchScope scope,
         int limit = 10) =>
         await _store.SearchAsync(
-            new SearchQuery("acme", query, scope, Limit: limit, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1),
+            new SearchQuery("acme", query, scope, Limit: limit, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
 }

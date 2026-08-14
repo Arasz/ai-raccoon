@@ -4,15 +4,15 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Fuses per-context batches with RRF, then applies source-affinity ranking (see
-///     docs/adr/0005-source-affinity-ranking.md) before minScore and limit — minScore filters against the boosted-max
-///     normalization.
+///     docs/adr/0005-source-affinity-ranking.md) before minRelativeScore and limit. The floor is
+///     relative to the boosted-max normalization, never absolute (docs/adr/0047-relative-score-floor.md).
 /// </summary>
 internal static class SearchResultMerger
 {
     public static IReadOnlyList<MemorySearchResult> Merge(
         IEnumerable<IReadOnlyList<MemorySearchResult>> batches,
         int limit,
-        double minScore = 0.0,
+        double minRelativeScore = 0.0,
         int rrfK = SearchQuery.DefaultRrfK,
         double sourceLambda = 0.0,
         double consolidationThreshold = double.PositiveInfinity,
@@ -28,7 +28,7 @@ internal static class SearchResultMerger
         return
         [
             .. ranked
-                .Where(result => result.Ranking >= minScore)
+                .Where(result => result.Ranking >= minRelativeScore)
                 .Take(limit)
         ];
     }

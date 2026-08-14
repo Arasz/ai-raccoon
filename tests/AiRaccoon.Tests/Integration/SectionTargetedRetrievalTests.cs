@@ -82,7 +82,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var expectedHash = _hashMap["docs:adr:0011-frontend-chassis-stack.md#consequences"];
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, "Consequences of ADR-0011?", SearchScope.Project,
-            Limit: 10, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken);
+            Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken);
         var rank = results.ToList().FindIndex(r => r.Hash == expectedHash) + 1;
 
         _output.WriteLine($"S4 section rank: {rank}");
@@ -293,7 +293,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     {
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: 0.0, RrfK: 60,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
             FtsWeight: 1, VectorWeight: 1), cancellationToken);
         return [.. results];
     }
