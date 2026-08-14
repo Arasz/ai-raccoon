@@ -67,8 +67,8 @@ caller's `projectId`; its `shared` branch returns `scope = 'shared'` with no pro
 empty parameter dictionary. The `workspace:` and `label:` branches **both** bind the caller's
 `projectId` — that asymmetry is the evidence this is a bug rather than a design.
 
-**Change:** extract the confinement check that `EntryBucket.For` already has into one function, and
-call it from both. `FilterFor`'s `project:` branch binds the caller's `projectId` and throws
+**Change (as landed):** extracted the confinement check into `ContextScope.RequireWithinProject`, and
+call it from both `EntryBucket.For` and `DeleteContextAsync`. `FilterFor`'s `project:` branch binds the caller's `projectId` and throws
 `ContextOutsideProjectException` when the context names a different one. Refuse `shared` on the delete
 path.
 
@@ -90,7 +90,7 @@ method by reflection and asserting each one's guard requirement, mirroring the e
 red.
 
 ### WP2 · Refuse a direct write to the shared tier — **H6**
-**Effort:** QUICK · **Surface:** `EntryBucket.For` · **Ships with WP1, not after it**
+**Effort:** QUICK · **Surface:** `EntryBucket.For` · **One branch added to WP1's helper** (see sequencing rule 3, corrected in rev 2)
 
 `EntryBucket.cs:11-14` maps `context == "shared"` to `scope='shared'` and is not covered by the
 project check added at `:19-22`/`:41-44`. At the default `rw` mode, one `memory_write` puts arbitrary
