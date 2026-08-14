@@ -10,7 +10,7 @@ AiRaccoon is an MCP memory server that gives AI agents persistent, project-scope
 flowchart LR
     subgraph Client ["MCP Client (Claude Code / Hermes / IDE)"]
         C[Agent Tool Calls]
-    }
+    end
     
     subgraph AiRaccoon ["AiRaccoon Stack"]
         P["ai-raccoon (Proxy)"]
@@ -96,6 +96,17 @@ Add AiRaccoon to your project or global `.mcp.json`:
 ```
 
 When your agent starts up, it connects through the proxy to the backend memory store automatically.
+
+---
+
+## Step 4: Verify the round trip
+
+Confirm the install actually works by asking your agent to write and then find a memory:
+
+1. Ask it to call `memory_write` with `projectId="get-started"` and `content="AiRaccoon install verification note"`.
+2. Ask it to call `memory_search` with `projectId="get-started"` and `query="install verification"`.
+
+A successful search returns the note you just wrote in its `results`. If it comes back empty, re-check Step 3's `.mcp.json` entry and confirm your agent actually connected to the `ai-raccoon` server.
 
 ---
 

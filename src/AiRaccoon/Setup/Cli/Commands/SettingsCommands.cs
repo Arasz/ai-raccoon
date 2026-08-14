@@ -18,7 +18,7 @@ public sealed class SettingsCommands
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(parsed), cancellationToken);
@@ -42,7 +42,7 @@ public sealed class SettingsCommands
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         // The global row IS the wildcard for access (findings): `access set *` is spelled
@@ -170,7 +170,7 @@ public sealed class SettingsCommands
             alpha is < 0.0 or > 1.0)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid alpha '{raw}' (expected a number in 0..1)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(StructureFusion.AlphaSettingKey,
@@ -198,7 +198,7 @@ public sealed class SettingsCommands
             !SweepThreshold.IsValid(threshold))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(SweepThreshold.SettingKey, SweepThreshold.Format(threshold), cancellationToken);
@@ -224,7 +224,7 @@ public sealed class SettingsCommands
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid interval '{raw}' (expected a whole number of hours in {SweepConfigKeys.MinIntervalHours}..{SweepConfigKeys.MaxIntervalHours})");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(SweepConfigKeys.IntervalHoursGlobal,

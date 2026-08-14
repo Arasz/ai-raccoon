@@ -130,6 +130,24 @@ public class ToolInventoryTests
         int.Parse(match.Groups[1].Value).ShouldBe(ToolMethods().Count());
     }
 
+    /// <summary>The doc's tools table must list exactly the registered tools — not just the right count.</summary>
+    [Fact]
+    public void PackagedReadme_ToolsTable_ListsExactlyTheRegisteredTools()
+    {
+        var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
+        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+)`", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var registeredTools = ToolMethods()
+            .Select(x => x.Attr.Name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        documentedTools.ShouldBe(registeredTools);
+    }
+
     private static string RepoFile(string relative)
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

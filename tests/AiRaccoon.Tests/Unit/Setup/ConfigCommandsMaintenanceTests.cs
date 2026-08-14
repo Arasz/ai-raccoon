@@ -101,7 +101,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["maintenance", "interval", "0"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of minutes");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
@@ -113,7 +113,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["maintenance", "interval", "often"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of minutes");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
@@ -137,7 +137,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["maintenance", "vacuum-interval", "-1"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of days");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }
@@ -149,7 +149,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["maintenance", "vacuum-interval", "20000000"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("days");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }

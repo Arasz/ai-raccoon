@@ -84,7 +84,7 @@ public class SettingsCommandsTests
     {
         var (exit, _, err) = await Run(["retrieval", "alpha", "set", "bogus"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid alpha");
     }
 

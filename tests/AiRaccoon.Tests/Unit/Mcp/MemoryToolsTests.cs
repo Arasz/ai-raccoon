@@ -577,7 +577,7 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
 
-        public Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+        public override Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult(GetEntry);
 
         public override Task<int> DeleteContextAsync(string projectId, string context,

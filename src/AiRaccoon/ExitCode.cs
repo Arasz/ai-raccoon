@@ -19,5 +19,8 @@ public static class ExitCode
 
     public const int FailedToParseCliArgs = 9;
 
+    /// <summary>A CLI verb's own argument failed validation (bad enum value, out-of-range number, missing prompt input, etc.) — distinct from the specific failure codes above so a script can tell "you mistyped" from "the bank/server is broken".</summary>
+    public const int InvalidArgument = 10;
+
     public const int Success = 0;
 }
