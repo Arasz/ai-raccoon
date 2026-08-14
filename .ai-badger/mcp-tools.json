@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-    "generated_at": "2026-08-12T09:55:35Z",
+  "generated_at": "2026-08-14T16:04:08Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -27,7 +27,7 @@
             "diagnostic",
             "dotnet"
           ],
-          "intent": "Get or reset in-memory telemetry metrics for MCP tool invocations. Returns per-tool counts, average durations, and success/failure rates. Metrics are collected automatically via a message filter — no ",
+          "intent": "Get or reset in-memory telemetry metrics for MCP tool invocations. Returns per-tool counts, average durations, and success/failure rates. Metrics are collected automatically via a message filter \u2014 no ",
           "origin": "manual"
         },
         "dotnet_dev_certs": {
@@ -43,7 +43,7 @@
             "dotnet",
             "read"
           ],
-            "intent": "Get detailed human-readable info about .NET MCP Server capabilities, supported features, concurrency safety, and available resources.",
+          "intent": "Get detailed human-readable info about .NET MCP Server capabilities, supported features, concurrency safety, and available resources.",
           "origin": "manual"
         },
         "dotnet_workload": {
@@ -973,7 +973,7 @@
             "navigation",
             "search"
           ],
-          "intent": "Trace a known symbol's callers, callees, imports and what covers it — the structural answer a text search cannot give.",
+          "intent": "Trace a known symbol's callers, callees, imports and what covers it \u2014 the structural answer a text search cannot give.",
           "origin": "catalog"
         },
         "get_review_context_tool": {
@@ -1068,7 +1068,7 @@
             "navigation",
             "read"
           ],
-          "intent": "Orientation in an unfamiliar repository — its structure and major components — before reading any single file.",
+          "intent": "Orientation in an unfamiliar repository \u2014 its structure and major components \u2014 before reading any single file.",
           "origin": "catalog"
         },
         "detect_changes_tool": {
@@ -1343,7 +1343,7 @@
     },
     {
       "name": "plugin:github:github",
-        "status": "unknown",
+      "status": "unreachable",
       "url": "https://api.githubcopilot.com/mcp/",
       "tools": {}
     },
@@ -1380,13 +1380,13 @@
     },
     {
       "name": "ai-raccoon",
-      "status": "ok",
+      "status": "unknown",
       "tools": {
         "memory_write": {
           "tags": [
             "write"
           ],
-          "intent": "Persist a durable, project-scoped fact with its source path — one fact per entry, never raw chatter.",
+          "intent": "Persist a durable, project-scoped fact with its source path \u2014 one fact per entry, never raw chatter.",
           "origin": "catalog"
         },
         "memory_search": {
@@ -1415,7 +1415,7 @@
           "tags": [
             "write"
           ],
-          "intent": "Promote a durable, cross-project entry to the shared tier — curated and never swept.",
+          "intent": "Promote a durable, cross-project entry to the shared tier \u2014 curated and never swept.",
           "origin": "catalog"
         },
         "memory_delete": {
@@ -1547,7 +1547,7 @@
           "tags": [
             "read"
           ],
-          "intent": "Lists the propose tier — candidates waiting for promotion review, ranked by score",
+          "intent": "Lists the propose tier \u2014 candidates waiting for promotion review, ranked by score",
           "origin": "manual"
         },
         "memory_promotion_discard": {
@@ -1557,44 +1557,46 @@
           "intent": "Removes a candidate from the propose tier without promoting it (the agent's 'no')",
           "origin": "manual"
         },
-          "get_prompt": {
-              "tags": [
-                  "read"
-              ],
-              "intent": "Get a prompt by name from MCP server ai-raccoon.",
-              "origin": "manual"
-          },
-          "list_prompts": {
-              "tags": [
-                  "read"
-              ],
-              "intent": "List available prompts from MCP server ai-raccoon.",
-              "origin": "manual"
-          },
-          "memory_record_followthrough": {
-              "tags": [
-                  "read"
-              ],
-              "intent": "Record that the agent read a file that appeared in a prior retrieval.",
-              "origin": "manual"
-          },
-          "memory_record_grade": {
-              "tags": [
-                  "write"
-              ],
-              "intent": "Record a human usefulness grade (1-5) for a prior retrieval result.",
-              "origin": "manual"
+        "get_prompt": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Get a prompt by name from MCP server ai-raccoon.",
+          "origin": "manual",
+          "status": "removed"
+        },
+        "list_prompts": {
+          "tags": [
+            "read"
+          ],
+          "intent": "List available prompts from MCP server ai-raccoon.",
+          "origin": "manual",
+          "status": "removed"
+        },
+        "memory_record_followthrough": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Record that the agent read a file that appeared in a prior retrieval.",
+          "origin": "manual"
+        },
+        "memory_record_grade": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Record a human usefulness grade (1-5) for a prior retrieval result.",
+          "origin": "manual"
         }
       }
     },
     {
       "name": "llmstudio",
-        "status": "unknown",
+      "status": "unknown",
       "tools": {}
     },
     {
       "name": "superpowers",
-        "status": "unknown",
+      "status": "unknown",
       "tools": {}
     },
     {
@@ -1605,7 +1607,7 @@
     },
     {
       "name": "claude.ai Microsoft 365",
-        "status": "unknown",
+      "status": "unauthenticated",
       "url": "https://microsoft365.mcp.claude.com/mcp",
       "tools": {}
     },
@@ -1617,13 +1619,13 @@
     },
     {
       "name": "claude.ai Calendly",
-        "status": "unknown",
+      "status": "unauthenticated",
       "url": "https://mcp.calendly.com",
       "tools": {}
     },
     {
       "name": "claude.ai Indeed",
-        "status": "unknown",
+      "status": "unauthenticated",
       "url": "https://mcp.indeed.com/claude/mcp",
       "tools": {}
     },
@@ -1638,6 +1640,95 @@
       "status": "unknown",
       "url": "https://gmailmcp.googleapis.com/mcp/v1",
       "tools": {}
+    },
+    {
+      "name": "semantica",
+      "status": "unknown",
+      "tools": {
+        "get_graph_summary": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Orientation entry point: graph statistics, entity/relation counts, domain overview \u2014 before any specific query.",
+          "origin": "catalog"
+        },
+        "extract_entities": {
+          "tags": [
+            "write",
+            "search"
+          ],
+          "intent": "Named entity extraction from arbitrary text \u2014 feed in a document, conversation excerpt, or design spec and get structured entities back.",
+          "origin": "catalog"
+        },
+        "extract_relations": {
+          "tags": [
+            "write",
+            "search"
+          ],
+          "intent": "Extract triplet relations (subject-predicate-object) from text \u2014 builds the graph's edge structure from unstructured content.",
+          "origin": "catalog"
+        },
+        "add_entity": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Manually add a knowledge graph node with properties \u2014 for facts the agent knows but that aren't in text to extract.",
+          "origin": "catalog"
+        },
+        "add_relationship": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Manually add an edge between two existing entities \u2014 link concepts the agent connected through reasoning.",
+          "origin": "catalog"
+        },
+        "record_decision": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Persist an architectural decision as a provenance-tracked node with context, rationale, alternatives, and constraints.",
+          "origin": "catalog"
+        },
+        "query_decisions": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search the decision history by keyword, date range, or domain \u2014 'what did we decide about authentication?'",
+          "origin": "catalog"
+        },
+        "find_precedents": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Semantic precedent lookup \u2014 'has a decision like this been made before?' Returns similar past decisions ranked by relevance.",
+          "origin": "catalog"
+        },
+        "get_causal_chain": {
+          "tags": [
+            "navigation",
+            "diagnostic"
+          ],
+          "intent": "Full causal ancestry of a decision or entity \u2014 trace every 'because' back to root assumptions.",
+          "origin": "catalog"
+        },
+        "run_reasoning": {
+          "tags": [
+            "run",
+            "batch"
+          ],
+          "intent": "Forward-chaining IF/THEN rules over the graph \u2014 derive new facts, check consistency, or flag conflicts.",
+          "origin": "catalog"
+        },
+        "export_graph": {
+          "tags": [
+            "write",
+            "files"
+          ],
+          "intent": "Export the current graph in RDF, JSON, or Parquet format for archival snapshots or audit trails.",
+          "origin": "catalog"
+        }
+      }
     }
   ]
 }
