@@ -16,9 +16,12 @@ public sealed record BwsResult(int ExitCode, string Stdout, string Stderr)
 public interface ICliSecretManager
 {
     /// <summary>
-    ///     Runs <c>bws [args]</c>. A given token is set as the child's BWS_ACCESS_TOKEN — never
-    ///     as an argument, which any same-user process could read off argv — overriding whatever
-    ///     the child would otherwise inherit from the environment.
+    ///     Runs <c>bws [args]</c> without blocking a thread on the child's exit or output — every
+    ///     await is a real async wait (Process.WaitForExitAsync, awaited stream reads), because this
+    ///     runs on the bank-open path (.NET-F2). A given token is set as the child's BWS_ACCESS_TOKEN
+    ///     — never as an argument, which any same-user process could read off argv — overriding
+    ///     whatever the child would otherwise inherit from the environment.
     /// </summary>
-    BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout);
+    Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        CancellationToken cancellationToken = default);
 }

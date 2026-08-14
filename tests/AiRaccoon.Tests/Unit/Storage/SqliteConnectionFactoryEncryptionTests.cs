@@ -302,6 +302,26 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         });
     }
 
+    /// <summary>.NET-F2: a Bitwarden-sourced key is cached across bank opens — N opens shell out to bws once, not N times.</summary>
+    [Fact]
+    public async Task OpenBankAsync_CalledManyTimesWithBitwardenSource_InvokesBwsExactlyOnce()
+    {
+        var options = Options();
+        await File.WriteAllTextAsync($"{SqliteConnectionFactory.BankPathFor(options)}.source",
+            """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""", TestContext.Current.CancellationToken);
+        var runner = new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), ""));
+        var resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+            [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(runner)]);
+        var factory = new SqliteConnectionFactory(options, resolver);
+
+        for (var i = 0; i < 5; i++)
+        {
+            await using var conn = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        }
+
+        runner.CallCount.ShouldBe(1);
+    }
+
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
     /// <summary>Valid unencrypted ed25519 openssh-key-v1 PEM built from synthetic bytes (seed 00..1f).</summary>
@@ -348,7 +368,14 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     private sealed class FakeBwsRunner(BwsResult result) : ICliSecretManager
     {
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => result;
+        public int CallCount { get; private set; }
+
+        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class StubEncryptionKeyProvider(string? passphrase) : IEncryptionKeyProvider
@@ -357,6 +384,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 }

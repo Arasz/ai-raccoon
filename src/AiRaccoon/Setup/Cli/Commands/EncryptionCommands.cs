@@ -71,7 +71,7 @@ public sealed partial class EncryptionCommands
     {
         try
         {
-            _bws.Run(["--version"], null, PresenceTimeout);
+            await _bws.RunAsync(["--version"], null, PresenceTimeout, ctx);
         }
         catch (BwsInvocationException ex)
         {
@@ -87,7 +87,7 @@ public sealed partial class EncryptionCommands
         BwsResult fetched;
         try
         {
-            fetched = _bws.Run(["secret", "get", secretId], token, FetchTimeout);
+            fetched = await _bws.RunAsync(["secret", "get", secretId], token, FetchTimeout, ctx);
         }
         catch (BwsInvocationException ex)
         {
@@ -146,7 +146,7 @@ public sealed partial class EncryptionCommands
             }
             else
             {
-                var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+                var envPassphrase = (await _env.GetPassphraseAsync(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource), ctx)).Value;
                 if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await IsCorrectKey(envPassphrase, ctx))
                 {
@@ -243,7 +243,7 @@ public sealed partial class EncryptionCommands
             {
             }
 
-            var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+            var envPassphrase = (await _env.GetPassphraseAsync(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource), cancellationToken)).Value;
             if (!string.IsNullOrEmpty(envPassphrase))
             {
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);

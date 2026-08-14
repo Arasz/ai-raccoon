@@ -382,12 +382,12 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void FakeBwsMissing_ResolverThrowsInstallGuidance()
+    public async Task FakeBwsMissing_ResolverThrowsInstallGuidance()
     {
         // No InstallFakeBws: the runner points at an absolute path that does not exist.
         WriteSidecar();
 
-        var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
 
         ex.Message.ShouldBe(
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)");
@@ -401,10 +401,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar(UnknownSecretId);
 
-            var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
+            var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
 
             ex.Message.ShouldBe($"bws failed (exit 1): bws: secret not found: {UnknownSecretId}");
-            await Task.CompletedTask;
         });
     }
 
@@ -414,10 +413,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
         {
-            var ex = Should.Throw<BwsInvocationException>(() => new BitwardenCliSecretManager(_fakeBws).Run(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
+            var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenCliSecretManager(_fakeBws).RunAsync(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
 
             ex.Message.ShouldBe("bws timed out after 2s");
-            await Task.CompletedTask;
         });
     }
 
@@ -438,12 +436,12 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void TokenViaDashTArgv_FakeServesTheSecretKey()
+    public async Task TokenViaDashTArgv_FakeServesTheSecretKey()
     {
         InstallFakeBws();
 
-        var result = new BitwardenCliSecretManager(_fakeBws)
-            .Run(["secret", "get", SecretId], KnownToken, TimeSpan.FromSeconds(15));
+        var result = await new BitwardenCliSecretManager(_fakeBws)
+            .RunAsync(["secret", "get", SecretId], KnownToken, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.ExitCode.ShouldBe(0);
         result.Stdout.ShouldBe(BuildPem(
@@ -459,10 +457,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar();
 
-            var ex = Should.Throw<BwsInvocationException>(() => Resolver().Resolve().Passphrase);
+            var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
 
             ex.Message.ShouldBe("bws failed (exit 1): bws: invalid access token");
-            await Task.CompletedTask;
         });
     }
 
@@ -656,7 +653,8 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
     /// <summary>Never sees a sidecar — the resolver behaves like the pre-sidecar env stub.</summary>

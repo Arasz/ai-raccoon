@@ -87,7 +87,7 @@ internal partial class NodeRunner(
         var serverHost = McpServerSetup.CreateWebHost(descriptor.ToServerConfig());
         try
         {
-            var probeResolvingEncryptionKey = encryptionKeyResolver.ProbeResolvingEncryptionKey();
+            var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
             if (!probeResolvingEncryptionKey.IsSuccess)
             {
                 return ExitCode.FailedToOpenEncryptedBank;

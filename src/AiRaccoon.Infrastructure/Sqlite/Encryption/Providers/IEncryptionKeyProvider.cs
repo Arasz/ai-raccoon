@@ -12,7 +12,7 @@ public interface IEncryptionKeyProvider
     bool IsForSource(string source);
 
     /// <summary>Returns the encryption passphrase, or null to open without encryption.</summary>
-    Passphrase GetPassphrase(EncryptionData encryptionData);
+    Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default);
 }
 
 public sealed record Passphrase(string Source)

@@ -714,7 +714,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
     private sealed class FakeBwsRunner : ICliSecretManager
@@ -734,7 +735,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         public List<(IReadOnlyList<string> Args, string? Token)> Calls { get; } = [];
 
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
+        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+            CancellationToken cancellationToken = default)
         {
             Calls.Add(([.. args], token));
             if (_exception is not null)
@@ -742,7 +744,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 throw _exception;
             }
 
-            return _result!;
+            return Task.FromResult(_result!);
         }
     }
 }

@@ -2,5 +2,5 @@ namespace AiRaccoon.Infrastructure.Sqlite.Encryption;
 
 public interface IEncryptionKeyResolver
 {
-    ResolvedKey Resolve();
+    Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default);
 }
