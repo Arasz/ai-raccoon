@@ -6,7 +6,6 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
@@ -17,7 +16,7 @@ public sealed partial class S3CloudStore : ICloudStore
     private readonly ILogger<S3CloudStore> _logger;
     private readonly IAmazonS3 _s3;
 
-    public S3CloudStore(SyncOptions options, ILogger<S3CloudStore>? logger = null)
+    public S3CloudStore(SyncOptions options, ILogger<S3CloudStore> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Bucket);
@@ -28,19 +27,19 @@ public sealed partial class S3CloudStore : ICloudStore
         }
 
         _bucket = options.Bucket;
-        _logger = logger ?? NullLogger<S3CloudStore>.Instance;
+        _logger = logger;
         _s3 = CreateClient(options);
     }
 
     /// <summary>Test seam: build the store around an already-constructed client (stubbed transport).</summary>
-    internal S3CloudStore(IAmazonS3 s3, string bucket, ILogger<S3CloudStore>? logger = null)
+    internal S3CloudStore(IAmazonS3 s3, string bucket, ILogger<S3CloudStore> logger)
     {
         ArgumentNullException.ThrowIfNull(s3);
         ArgumentException.ThrowIfNullOrWhiteSpace(bucket);
 
         _s3 = s3;
         _bucket = bucket;
-        _logger = logger ?? NullLogger<S3CloudStore>.Instance;
+        _logger = logger;
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)

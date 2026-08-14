@@ -47,7 +47,7 @@ public class S3CloudStoreTests
             S3Chain = true
         };
 
-        var store = new S3CloudStore(options);
+        var store = new S3CloudStore(options, NullLogger<S3CloudStore>.Instance);
 
         store.ShouldNotBeNull();
     }
@@ -57,7 +57,7 @@ public class S3CloudStoreTests
     {
         var options = new SyncOptions { Endpoint = "http://s3.example.com", Bucket = "memories" };
 
-        Should.Throw<ArgumentException>(() => new S3CloudStore(options));
+        Should.Throw<ArgumentException>(() => new S3CloudStore(options, NullLogger<S3CloudStore>.Instance));
     }
 
     [Fact]
