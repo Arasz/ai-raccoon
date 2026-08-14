@@ -69,13 +69,6 @@ internal static class MemorySql
                                                  LIMIT 1
                                                  """;
 
-    public const string EntryExistsByPathInBucket = """
-                                                    SELECT 1 FROM entries
-                                                    WHERE path = @path AND scope IS @scope AND project_id = @projectId
-                                                      AND context_label IS @contextLabel AND workspace_id IS @workspaceId
-                                                    LIMIT 1
-                                                    """;
-
     // The shared tier is cross-project (uq_entries_shared_bucket is global): the loser of a
     // concurrent cross-project promote must find the winner's row without a project filter.
     public const string SelectSharedEntryByPathAndHash = """

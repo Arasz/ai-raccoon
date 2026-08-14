@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -322,6 +323,40 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         deleted.ShouldBeFalse();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Delete_WhenTombstoneInsertFails_RollsBackTheEntryDeleteToo()
+    {
+        // WP5a (ADR-0035): DeleteCoreAsync must not leave the entry gone with no tombstone — a
+        // crash between the two statements resurrects "deleted" content on the next sync. A
+        // persisted trigger simulates that mid-delete failure deterministically.
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "protected by the delete transaction"),
+            TestContext.Current.CancellationToken);
+
+        await using (var ddl = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await ddl.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TRIGGER block_tombstone_insert BEFORE INSERT ON sync_tombstones
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced failure for test');
+                END
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await Should.ThrowAsync<SqliteException>(() =>
+            _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken));
+
+        (await ReadRowAsync(entry.Hash)).ShouldNotBeNull(
+            "a mid-delete failure must not leave the entry gone with no tombstone");
+
+        await using var check = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var tombstones = await check.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM sync_tombstones WHERE hash = @hash",
+            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+        tombstones.ShouldBe(0);
     }
 
     [Fact]

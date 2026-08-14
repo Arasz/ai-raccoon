@@ -714,39 +714,61 @@ public sealed partial class SqliteMemoryStore(
         return affected > 0;
     }
 
+    /// <summary>
+    ///     Entry-delete and sync tombstone in one transaction (ADR-0035/WP5a): a crash between the
+    ///     two used to leave the content deleted locally with no tombstone, resurrecting it on the
+    ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
+    ///     and <see cref="ReplaceFileAsync" />; both callers are top-level, so there is no nested-transaction hazard.
+    /// </summary>
     private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
         string? scope, CancellationToken cancellationToken)
     {
-        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
-                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        try
+        {
+            var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
+                    Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                    Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var deleted = await connection.ExecuteAsync(
-                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        if (deleted > 0 && rowScope is not null)
+            if (deleted > 0 && rowScope is not null)
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.UpsertTombstone,
+                            new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            if (deleted > 0 && recomputeContext?.SourceFile is not null)
+            {
+                var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                    recomputeContext.WorkspaceId, projectId);
+                await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted > 0;
+        }
+        catch
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertTombstone,
-                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                        cancellationToken))
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            throw;
         }
-
-        if (deleted > 0 && recomputeContext?.SourceFile is not null)
-        {
-            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
-                recomputeContext.WorkspaceId, projectId);
-            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return deleted > 0;
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
