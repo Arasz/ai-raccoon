@@ -90,4 +90,61 @@ public class WorkspaceTests
     [InlineData("   ")]
     [InlineData(null)]
     public void Constructor_WithBlankProjectId_Throws(string? projectId) => Should.Throw<ArgumentException>(() => new Workspace("ws-1", projectId!));
+
+    // ── WP5b/A-F7: real state transitions, so CloseAsync(Active) stops being expressible ──
+
+    [Fact]
+    public void Consolidate_OnAnActiveWorkspace_ReturnsAClosedRecord()
+    {
+        var workspace = new Workspace("ws-1", "acme", agentId: "agent-a", name: "refactor the parser");
+
+        var closed = workspace.Consolidate();
+
+        closed.Status.ShouldBe(WorkspaceStatus.Closed);
+        closed.Id.ShouldBe("ws-1");
+        closed.ProjectId.ShouldBe("acme");
+        closed.AgentId.ShouldBe("agent-a");
+        closed.Name.ShouldBe("refactor the parser");
+    }
+
+    [Fact]
+    public void Discard_OnAnActiveWorkspace_ReturnsADiscardedRecord()
+    {
+        var workspace = new Workspace("ws-1", "acme");
+
+        var discarded = workspace.Discard();
+
+        discarded.Status.ShouldBe(WorkspaceStatus.Discarded);
+    }
+
+    [Theory]
+    [InlineData(WorkspaceStatus.Closed)]
+    [InlineData(WorkspaceStatus.Discarded)]
+    public void Consolidate_OnANonActiveWorkspace_Throws(WorkspaceStatus status)
+    {
+        var workspace = new Workspace("ws-1", "acme", status);
+
+        Should.Throw<InvalidOperationException>(() => workspace.Consolidate());
+    }
+
+    [Theory]
+    [InlineData(WorkspaceStatus.Closed)]
+    [InlineData(WorkspaceStatus.Discarded)]
+    public void Discard_OnANonActiveWorkspace_Throws(WorkspaceStatus status)
+    {
+        var workspace = new Workspace("ws-1", "acme", status);
+
+        Should.Throw<InvalidOperationException>(() => workspace.Discard());
+    }
+
+    /// <summary>The transition is one-way: consolidating an already-consolidated (or discarded)
+    /// record is not expressible as a no-op — it is a bug the caller must hear about.</summary>
+    [Fact]
+    public void Consolidate_TwiceInARow_TheSecondCallThrows()
+    {
+        var workspace = new Workspace("ws-1", "acme");
+        var closed = workspace.Consolidate();
+
+        Should.Throw<InvalidOperationException>(() => closed.Consolidate());
+    }
 }

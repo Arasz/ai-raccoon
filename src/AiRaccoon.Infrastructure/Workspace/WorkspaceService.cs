@@ -42,7 +42,8 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
-        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
+
+        await ClaimAsync(projectId, workspaceId, consolidating: true, cancellationToken).ConfigureAwait(false);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
         var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
@@ -69,8 +70,6 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         // Consolidating always clears the whole outbox, kept or not — deletedCount is that row
         // count, not a "dropped" count. Discarded is entries that were NOT kept.
         await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
-        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Closed, timeProvider.GetUtcNow(),
-            cancellationToken).ConfigureAwait(false);
         return new ConsolidationResult(promoted, entries.Count - promoted);
     }
 
@@ -79,12 +78,32 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
-        await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken).ConfigureAwait(false);
+
+        await ClaimAsync(projectId, workspaceId, consolidating: false, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        var discarded = await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
-        await workspaceStore.CloseAsync(projectId, workspaceId, WorkspaceStatus.Discarded, timeProvider.GetUtcNow(),
-            cancellationToken).ConfigureAwait(false);
-        return discarded;
+        return await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Claims the workspace's terminal transition before either caller touches its outbox
+    ///     (WP5b/A-F7): RequireActiveAsync is the fast, common-case existence/status check, but the
+    ///     real enforcement is TryCloseAsync's atomic compare-and-swap — a caller that loses that
+    ///     race throws here, before ListContextAsync/AddContentAsync/DeleteContextAsync ever run, so
+    ///     the outbox is consumed by exactly one winner.
+    /// </summary>
+    private async Task ClaimAsync(string projectId, string workspaceId, bool consolidating,
+        CancellationToken cancellationToken)
+    {
+        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken)
+            .ConfigureAwait(false);
+        var transitioned = consolidating ? workspace.Consolidate() : workspace.Discard();
+
+        var claimed = await workspaceStore.TryCloseAsync(projectId, workspaceId, transitioned.Status,
+            timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        if (!claimed)
+        {
+            throw new UnknownWorkspaceException(workspaceId, projectId);
+        }
     }
 }

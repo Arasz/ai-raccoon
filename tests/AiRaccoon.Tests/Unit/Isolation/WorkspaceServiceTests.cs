@@ -261,6 +261,64 @@ public class WorkspaceServiceTests
             service.DiscardAsync("acme", "ghost", TestContext.Current.CancellationToken));
     }
 
+    // ── WP5b/A-F7: claim before touching the outbox, so a lost race never double-consumes it ──
+
+    [Fact]
+    public async Task ConsolidateAsync_WhenTheAtomicCloseIsLost_ThrowsUnknownWorkspaceException_WithoutTouchingTheOutbox()
+    {
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)]
+            }
+        };
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.CloseShouldFail = true;
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken));
+
+        store.PromotedContent.ShouldBeEmpty("a lost race must not touch the outbox at all — the winner owns it");
+        store.DeletedContexts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task DiscardAsync_WhenTheAtomicCloseIsLost_ThrowsUnknownWorkspaceException_WithoutTouchingTheOutbox()
+    {
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h9", "scratch.md", "workspace:ws-1", "draft", 1)]
+            }
+        };
+        var service = Service(store, out var workspaceStore);
+        workspaceStore.CloseShouldFail = true;
+
+        await Should.ThrowAsync<UnknownWorkspaceException>(() =>
+            service.DiscardAsync("acme", "ws-1", TestContext.Current.CancellationToken));
+
+        store.DeletedContexts.ShouldBeEmpty("a lost race must not touch the outbox at all — the winner owns it");
+    }
+
+    [Fact]
+    public async Task ConsolidateAsync_ClaimsBeforeReadingTheOutbox()
+    {
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] = [new MemoryEntry("h1", "note.md", "workspace:ws-1", "durable fact", 1)]
+            }
+        };
+        var service = Service(store, out var workspaceStore);
+
+        await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
+
+        workspaceStore.Closed.ShouldHaveSingleItem().Status.ShouldBe(WorkspaceStatus.Closed);
+    }
+
     /// <summary>Rescued from the deleted extension-host test suite (ADR-0016): ConsolidateAsync
     /// deletes the workspace context through IMemoryStore, not around it.</summary>
     [Fact]
@@ -390,6 +448,9 @@ public class WorkspaceServiceTests
         /// <summary>What RequireActiveAsync hands back; defaults to a bare Active record.</summary>
         public Workspace? Active { get; set; }
 
+        /// <summary>When true, TryCloseAsync reports a lost race (WP5b/A-F7) without recording a close.</summary>
+        public bool CloseShouldFail { get; set; }
+
         public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
             CancellationToken cancellationToken = default)
         {
@@ -402,6 +463,18 @@ public class WorkspaceServiceTests
         {
             Closed.Add((projectId, workspaceId, status, closedAt));
             return Task.CompletedTask;
+        }
+
+        public Task<bool> TryCloseAsync(string projectId, string workspaceId, WorkspaceStatus status,
+            DateTimeOffset closedAt, CancellationToken cancellationToken = default)
+        {
+            if (CloseShouldFail)
+            {
+                return Task.FromResult(false);
+            }
+
+            Closed.Add((projectId, workspaceId, status, closedAt));
+            return Task.FromResult(true);
         }
 
         public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
