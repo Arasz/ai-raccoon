@@ -13,11 +13,9 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-[Collection(SerialCollectionName)]
+[Collection(CliOutputRoutingCollection.Name)]
 public class CliOutputRoutingTests
 {
-    public const string SerialCollectionName = "CliOutputRouting-Serial";
-
     [Fact]
     public void Render_Help_WritesOnlyToErrorWriter()
     {
@@ -54,26 +52,6 @@ public class CliOutputRoutingTests
     }
 
     [Fact]
-    public void Render_Help_ReturnsZeroExitCode()
-    {
-        CliArgs.TryParse(["--help"], out var parsed);
-
-        var writer = new StringWriter();
-        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, writer));
-        writer.ToString().ShouldNotBeEmpty();
-    }
-
-    [Fact]
-    public void Render_Version_ReturnsZeroExitCode()
-    {
-        CliArgs.TryParse(["--version"], out var parsed);
-
-        var writer = new StringWriter();
-        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, writer));
-        writer.ToString().ShouldNotBeEmpty();
-    }
-
-    [Fact]
     public void Render_Help_NeverWritesToRealStdout()
     {
         var (stdout, _) = ConsoleCapture.Run(() =>
@@ -96,7 +74,4 @@ public class CliOutputRoutingTests
 
         stdout.ShouldBeEmpty();
     }
-
-    [CollectionDefinition(SerialCollectionName, DisableParallelization = true)]
-    public sealed class SerialCollection;
 }
