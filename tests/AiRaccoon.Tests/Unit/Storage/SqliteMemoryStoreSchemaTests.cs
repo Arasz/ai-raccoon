@@ -319,7 +319,8 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await connection.ExecuteAsync(
-                "DROP INDEX IF EXISTS uq_entries_shared_bucket; DROP INDEX IF EXISTS uq_entries_committed_bucket;",
+                "DROP INDEX IF EXISTS uq_entries_shared_bucket; DROP INDEX IF EXISTS uq_entries_committed_bucket; "
+                + "DROP INDEX IF EXISTS uq_entries_workspace_bucket;",
                 TestContext.Current.CancellationToken);
             foreach (var (hash, path, scope, projectId, workspaceId) in rows)
             {

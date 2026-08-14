@@ -20,8 +20,12 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // Measured on work/wave2c-gates at commit 4cedd158 (2026-08-14): wc -l SqliteMemoryStore.cs
     // and grep -cE "^\s+Task" IMemoryStore.cs. WP8 is the fix; raise these only alongside a
     // conscious decision to accept more growth, never to make a failing build pass.
-    private const int MaxLines = 1245;
-    private const int MaxMembers = 25;
+    // Re-pinned 2026-08-14 from 1245/25 to 1276/26 for memory_get (ADR-0035), which closed
+    // blocker B2 -- an agent could find a memory and had no call returning its content. The
+    // ratchet did its job here: it forced this to be a decision rather than drift. Raise these
+    // only for a reviewed addition, and record it on this line; the alternative is WP8.
+    private const int MaxLines = 1276;
+    private const int MaxMembers = 26;
 
     [Fact]
     public void SqliteMemoryStore_DoesNotExceedItsMeasuredLineCap()
