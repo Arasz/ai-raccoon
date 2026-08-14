@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -6,7 +7,6 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
-using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;

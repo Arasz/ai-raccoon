@@ -7,7 +7,6 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup.Cli;
-using AiRaccoon.Tests.Unit.Setup.Serve;
 using Shouldly;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;
