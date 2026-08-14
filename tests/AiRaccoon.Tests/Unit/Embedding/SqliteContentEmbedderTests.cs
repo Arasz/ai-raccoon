@@ -26,7 +26,7 @@ public sealed class SqliteContentEmbedderTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task EmbedContentAsync_NoEngineConfigured_DegradesToNull()

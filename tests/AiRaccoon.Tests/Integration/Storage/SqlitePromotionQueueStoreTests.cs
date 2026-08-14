@@ -37,7 +37,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         _store = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static QueueCandidate Candidate(string hash, string value, double score,
         string? sourceFile = null, params string[] reasons) =>

@@ -16,7 +16,7 @@ public sealed class AppRunnerShutdownCancellationTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-shutdown-cancellation");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     Invokes the signal handler directly instead of sending a real OS signal: a real SIGINT/SIGTERM

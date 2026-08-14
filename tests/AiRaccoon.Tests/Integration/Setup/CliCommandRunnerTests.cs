@@ -18,7 +18,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-config-verb-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private async Task<(int Exit, string Out, string Err, ServerConfig Config)> Run(string[] args, bool expectParseErrors = false)
     {

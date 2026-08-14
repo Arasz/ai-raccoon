@@ -75,7 +75,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 }

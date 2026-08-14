@@ -36,7 +36,7 @@ public sealed class LikePatternCascadeDeleteTests : IDisposable
             TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task DeleteSourcePath_OnADirectory_DoesNotCascadeIntoASiblingDirectory_WhoseNameDiffersOnlyByAWildcardCharacter()

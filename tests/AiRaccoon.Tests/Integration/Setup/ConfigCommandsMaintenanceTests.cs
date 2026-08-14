@@ -28,7 +28,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
         CliRun.RunAsync(args, TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory)));

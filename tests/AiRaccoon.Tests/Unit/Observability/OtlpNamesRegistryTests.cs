@@ -23,7 +23,7 @@ public sealed class OtlpNamesRegistryTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-names");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public void EveryCreatedMeterAndActivitySource_IsInTheRegistry()

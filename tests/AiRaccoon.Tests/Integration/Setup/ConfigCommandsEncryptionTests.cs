@@ -50,7 +50,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private FakeLogger<EncryptionCommands>? _lastLogger;
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
 

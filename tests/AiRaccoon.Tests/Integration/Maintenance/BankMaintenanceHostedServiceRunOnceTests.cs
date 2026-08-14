@@ -43,7 +43,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
     public void Dispose()
     {
         _probe.Dispose();
-        Directory.Delete(_dataRoot, true);
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
@@ -319,6 +319,6 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         var duration = probe.Durations.ShouldHaveSingleItem();
         duration.Tags["result"].ShouldBe("error");
         duration.Tags["error.type"].ShouldBe(thrown.GetType().Name);
-        Directory.Delete(brokenRoot, true);
+        TestData.DeleteTempRoot(brokenRoot);
     }
 }

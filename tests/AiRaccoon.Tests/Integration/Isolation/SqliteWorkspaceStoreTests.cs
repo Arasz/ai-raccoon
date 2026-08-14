@@ -24,7 +24,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         _store = new SqliteWorkspaceStore(_factory);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task BeginAsync_InsertsActiveRow_WithCreatedAt()

@@ -86,7 +86,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(custom)!, true);
+            TestData.DeleteTempRoot(Path.GetDirectoryName(custom)!);
         }
     }
 

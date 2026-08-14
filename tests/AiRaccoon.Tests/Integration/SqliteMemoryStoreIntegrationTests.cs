@@ -40,7 +40,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         _queue = new SqlitePromotionQueueStore(_factory, new FakeTimeProvider(FixedNow));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task Write_StoresEntryInProjectContext()

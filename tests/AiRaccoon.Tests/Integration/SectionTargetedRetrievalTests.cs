@@ -70,7 +70,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         (_hashMap, _fileHashes) = LoadDerivedHashMap();
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     KNOWN REGRESSION (WP3b), not a passing guarantee. Before the 2026-08-14 corpus

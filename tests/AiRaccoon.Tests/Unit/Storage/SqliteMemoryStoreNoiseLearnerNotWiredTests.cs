@@ -35,7 +35,7 @@ public sealed class SqliteMemoryStoreNoiseLearnerNotWiredTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private const string RejectedContent = "[IMPORTANT: Background process proc_x9f completed normally (exit code 0).\n" +
                                             "Command: dotnet build\nOutput: ]";

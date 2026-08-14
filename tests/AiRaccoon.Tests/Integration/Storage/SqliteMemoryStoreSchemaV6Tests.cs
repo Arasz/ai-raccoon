@@ -20,7 +20,7 @@ public sealed class SqliteMemoryStoreSchemaV6Tests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     ADR-0039 restores noise_clusters/vec_noise to the fresh-bank DDL: the self-learning noise

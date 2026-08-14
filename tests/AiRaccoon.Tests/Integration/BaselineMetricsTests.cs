@@ -64,7 +64,7 @@ public sealed class BaselineMetricsTests : IDisposable
             TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     Provisions the bundled embedding model before any search that can embed; fails loudly

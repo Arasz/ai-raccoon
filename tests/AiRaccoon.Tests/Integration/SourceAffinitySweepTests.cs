@@ -75,7 +75,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
             dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     The Wave 3 gate (docs/plans/retrieval-improvement-c.md §3 Wave 3): the chosen configuration

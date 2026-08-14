@@ -42,7 +42,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
             }
 
             _old?.Dispose();
-            Directory.Delete(_dataRoot, true);
+            TestData.DeleteTempRoot(_dataRoot);
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or NotSupportedException)
         {

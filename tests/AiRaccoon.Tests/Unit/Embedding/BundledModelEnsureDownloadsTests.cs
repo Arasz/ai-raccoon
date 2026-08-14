@@ -18,14 +18,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_root, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(_root);
     }
 
     [Fact]

@@ -40,7 +40,7 @@ public sealed class SetTtlToolTests : IDisposable
             new ToolGate(guard, new FakePromotionQueue()));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task SetTtl_UnknownHash_Throws()

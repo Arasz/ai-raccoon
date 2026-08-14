@@ -129,7 +129,7 @@ public sealed class ToolRefusalsTests : IDisposable
             }
         };
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog() =>
@@ -188,7 +188,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 
@@ -211,7 +211,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 
@@ -355,7 +355,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 

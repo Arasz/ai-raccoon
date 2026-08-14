@@ -105,13 +105,7 @@ public sealed class WatchDigestConcurrencyTests
 
         public void Dispose()
         {
-            try
-            {
-                Directory.Delete(DataRoot, true);
-            }
-            catch (IOException)
-            {
-            }
+            TestData.DeleteTempRoot(DataRoot);
         }
 
         public Process TestProcess()

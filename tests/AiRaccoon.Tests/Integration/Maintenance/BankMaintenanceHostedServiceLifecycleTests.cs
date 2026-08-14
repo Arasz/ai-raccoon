@@ -34,7 +34,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None, _logger, new FakeWatchMemoryStore());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 
