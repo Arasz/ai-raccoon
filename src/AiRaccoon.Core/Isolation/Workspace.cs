@@ -35,6 +35,25 @@ public sealed record Workspace
 
     public string Context => ContextNaming.WorkspaceContext(Id);
 
+    /// <summary>The one legal transition into Closed (WP5b/A-F7): throws from any non-Active
+    /// source, so a workspace can never be closed-into twice or reopened through this path.</summary>
+    public Workspace Consolidate() => TransitionTo(WorkspaceStatus.Closed);
+
+    /// <summary>The one legal transition into Discarded (WP5b/A-F7): throws from any non-Active
+    /// source, mirroring <see cref="Consolidate" />.</summary>
+    public Workspace Discard() => TransitionTo(WorkspaceStatus.Discarded);
+
+    private Workspace TransitionTo(WorkspaceStatus terminal)
+    {
+        if (Status != WorkspaceStatus.Active)
+        {
+            throw new InvalidOperationException(
+                $"Workspace '{Id}' cannot transition to '{terminal}' from status '{Status}'; only an Active workspace can.");
+        }
+
+        return new Workspace(Id, ProjectId, terminal, AgentId, Name);
+    }
+
     /// <summary>Free text from any caller lands in a TEXT column: bounded length, no control characters.</summary>
     private static void GuardLabel(string? value, string name)
     {

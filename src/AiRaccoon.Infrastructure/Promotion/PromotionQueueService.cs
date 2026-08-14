@@ -19,6 +19,10 @@ public sealed partial class PromotionQueueService(
 {
     private const string EvictionReason = "capacity";
 
+    /// <summary>A-F11: how long a claim survives before ReclaimStaleClaimsAsync treats its owner
+    /// as dead and returns the row to the queue.</summary>
+    private static readonly TimeSpan StaleClaimAge = TimeSpan.FromMinutes(5);
+
     public async Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default)
     {
@@ -70,6 +74,14 @@ public sealed partial class PromotionQueueService(
         ArgumentOutOfRangeException.ThrowIfZero(projectIds.Count);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
+        // A-F11: a claim left behind by a caller that died or hung mid-ShareAsync would otherwise
+        // sit claimed forever — release it back to the queue before this pass drains it.
+        var reclaimed = await queue.ReclaimStaleClaimsAsync(StaleClaimAge, cancellationToken).ConfigureAwait(false);
+        if (reclaimed > 0)
+        {
+            Log.StaleClaimsReclaimed(logger, reclaimed);
+        }
+
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         // Mutable in-batch copies of the shared index in EXACTLY the formats the classifier uses
         // (whitespace-stripped values, full "shared/<sha256(value)>.md" strings), refreshed after
@@ -99,11 +111,15 @@ public sealed partial class PromotionQueueService(
             {
                 try
                 {
-                    // Claim before sharing: a concurrent discard may have removed this row since the
-                    // ListAsync snapshot above. An empty result means this call lost the race.
-                    var claimed = await queue.DiscardAsync(projectId, row.Hash, cancellationToken)
+                    // Claim before sharing (A-F11): an UPDATE, not a DELETE — a concurrent discard
+                    // may have removed this row since the ListAsync snapshot above, and a null
+                    // claim means this call lost that race. Unlike the old delete-based claim, a
+                    // ShareAsync failure below no longer destroys the row: it stays claimed until
+                    // either this call finalizes it (success/absorbed/skipped, or a genuinely dead
+                    // hash) or ReclaimStaleClaimsAsync releases it back to the queue.
+                    var claimed = await queue.ClaimAsync(projectId, row.Hash, cancellationToken)
                         .ConfigureAwait(false);
-                    if (claimed.Count == 0)
+                    if (claimed is null)
                     {
                         continue;
                     }
@@ -141,12 +157,23 @@ public sealed partial class PromotionQueueService(
                             absorbed++;
                         }
                     }
+
+                    // Resolved one way or another (promoted, absorbed, or a duplicate skip) — the
+                    // queue no longer needs this row.
+                    await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // The row is already claimed off the queue by this point; re-queuing it would
-                    // reopen the discard-before-share race and reset CreatedAt. Drop it and report
-                    // why instead — the rest of this batch, and the trailing snapshot, still run.
+                    if (ex is UnknownHashException)
+                    {
+                        // The backing entry is genuinely gone; retrying can never succeed, so this
+                        // claim is released permanently rather than left for the stale-claim sweep.
+                        await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    // Any other failure (locked database, disk full mid-ShareAsync, ...) leaves the
+                    // row claimed — ReclaimStaleClaimsAsync returns it to the queue for a later
+                    // PromoteAsync pass instead of destroying the candidate (WP5b/A-F11).
                     // Per-row failure detail is not logged (per-element log noise rule): the count
                     // is metered and the batch summary is logged by the caller.
                     failures.Add(new PromoteFailure(projectId, row.Hash,
@@ -282,5 +309,9 @@ public sealed partial class PromotionQueueService(
         [LoggerMessage(EventId = 708, Level = LogLevel.Debug,
             Message = "Pruned {Count} rejected queue row(s) for {ProjectId} (already shared or discarded)")]
         public static partial void Pruned(ILogger logger, string projectId, int count);
+
+        [LoggerMessage(EventId = 709, Level = LogLevel.Warning,
+            Message = "Reclaimed {Count} stale promotion claim(s) left behind by a prior failed PromoteAsync pass")]
+        public static partial void StaleClaimsReclaimed(ILogger logger, int count);
     }
 }

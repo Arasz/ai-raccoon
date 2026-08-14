@@ -1,3 +1,4 @@
+using System.Linq;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -125,6 +126,86 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         var row = await ReadRowAsync("ws-1");
         row.ShouldNotBeNull();
         row.Status.ShouldBe(WorkspaceStatus.Active.ToString());
+    }
+
+    // ── WP5b/A-F7: the TOCTOU close, guarded by an atomic conditional UPDATE ──
+
+    [Fact]
+    public async Task CloseAsync_WithActiveStatus_Throws()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        await _store.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
+            _store.CloseAsync("acme", "ws-1", WorkspaceStatus.Active, startedAt, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TryCloseAsync_WithActiveStatus_Throws()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        await _store.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
+            _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Active, startedAt, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TryCloseAsync_OnAnActiveWorkspace_ClosesIt_AndReturnsTrue()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        await _store.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
+
+        var claimed = await _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Closed, startedAt.AddHours(1),
+            TestContext.Current.CancellationToken);
+
+        claimed.ShouldBeTrue();
+        var row = await ReadRowAsync("ws-1");
+        row.ShouldNotBeNull();
+        row.Status.ShouldBe("Closed");
+        row.ClosedAt.ShouldBe(startedAt.AddHours(1).ToUnixTimeSeconds());
+    }
+
+    [Fact]
+    public async Task TryCloseAsync_OnAnAlreadyTerminalWorkspace_ReturnsFalse_AndDoesNotOverwriteTheRow()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        await _store.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
+        await _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Discarded, startedAt.AddHours(1),
+            TestContext.Current.CancellationToken);
+
+        var secondClaim = await _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Closed, startedAt.AddHours(2),
+            TestContext.Current.CancellationToken);
+
+        secondClaim.ShouldBeFalse();
+        var row = await ReadRowAsync("ws-1");
+        row.ShouldNotBeNull();
+        row.Status.ShouldBe("Discarded", "the second, losing caller must not overwrite the first terminal status");
+        row.ClosedAt.ShouldBe(startedAt.AddHours(1).ToUnixTimeSeconds(), "nor its closed_at");
+    }
+
+    [Fact]
+    public async Task TryCloseAsync_OnANonExistentWorkspace_ReturnsFalse()
+    {
+        var claimed = await _store.TryCloseAsync("acme", "ghost", WorkspaceStatus.Closed,
+            new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero), TestContext.Current.CancellationToken);
+
+        claimed.ShouldBeFalse();
+    }
+
+    /// <summary>The RED case named by the acceptance criteria: two callers racing to close the same
+    /// workspace concurrently, not just sequentially — exactly one must win.</summary>
+    [Fact]
+    public async Task TryCloseAsync_ConcurrentClaims_OnlyOneSucceeds()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        await _store.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);
+
+        var results = await Task.WhenAll(
+            _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Closed, startedAt, TestContext.Current.CancellationToken),
+            _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Discarded, startedAt, TestContext.Current.CancellationToken));
+
+        results.Count(r => r).ShouldBe(1, "exactly one concurrent close must win");
     }
 
     private async Task<WorkspaceRow?> ReadRowAsync(string workspaceId)

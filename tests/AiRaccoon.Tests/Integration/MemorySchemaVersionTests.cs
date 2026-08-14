@@ -511,6 +511,175 @@ public sealed class MemorySchemaVersionTests
         scorerVersion.ShouldBe(7, "a bank already at the current version must not be re-migrated");
     }
 
+    // ── WP5b: workspace bucket uniqueness (v6→v7) + promotion_queue.claimed_at (v7→v8) ──
+
+    /// <summary>
+    ///     DA-F1 (HIGH): the only case that matters for this ladder step — a real bank that already
+    ///     carries workspace-scope duplicates from the gap (the two committed-tier indexes never
+    ///     matched a workspace row's <c>scope IS NULL</c>). The step must dedupe first, or index
+    ///     creation fails on exactly this bank.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV6Bank_WithExistingWorkspaceDuplicates_DedupesThenCreatesTheIndex()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // Force the bank back to its pre-fix shape: no workspace index, and duplicate workspace
+        // rows already on disk — exactly what a real bank hit by DA-F1 looks like.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP INDEX uq_entries_workspace_bucket",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, workspace_id, created_at, updated_at, embed_state)
+            VALUES ('h1', 'note.md', 'workspace content', 'ws-1', 1, 1, 'pending'),
+                   ('h1', 'note.md', 'workspace content', 'ws-1', 2, 2, 'pending'),
+                   ('h1', 'note.md', 'workspace content', 'ws-1', 3, 3, 'pending');
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 6", cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE hash = 'h1' AND workspace_id = 'ws-1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        count.ShouldBe(1L, "the duplicates must be deduped before the index is created");
+        var survivorCreatedAt = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT created_at FROM entries WHERE hash = 'h1' AND workspace_id = 'ws-1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        survivorCreatedAt.ShouldBe(1L, "the survivor must be the earliest row, same convention as the v1 bucket dedupe");
+        (await IndexExistsAsync(connection, "uq_entries_workspace_bucket")).ShouldBeTrue();
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+
+        // The index must now actually reject a duplicate insert.
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, workspace_id, created_at, updated_at, embed_state) " +
+            "VALUES ('h1', 'note.md', 'workspace content', 'ws-1', 4, 4, 'pending')",
+            cancellationToken: TestContext.Current.CancellationToken)));
+        ex.Message.ShouldContain("UNIQUE");
+    }
+
+    /// <summary>Different workspaces (or NULL workspace rows) sharing a (path, hash) are not
+    /// duplicates and must survive the dedupe untouched.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV6Bank_DedupeOnlyTouchesTrueWorkspaceDuplicates()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP INDEX uq_entries_workspace_bucket",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO workspaces (id, project_id, status, created_at) VALUES
+                ('ws-1', 'acme', 'Active', 1), ('ws-2', 'acme', 'Active', 1);
+            INSERT INTO entries (hash, path, value, workspace_id, created_at, updated_at, embed_state)
+            VALUES ('h1', 'note.md', 'v', 'ws-1', 1, 1, 'pending'),
+                   ('h1', 'note.md', 'v', 'ws-2', 1, 1, 'pending'),
+                   ('h2', 'other.md', 'v', 'ws-1', 1, 1, 'pending');
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 6", cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE workspace_id IS NOT NULL",
+            cancellationToken: TestContext.Current.CancellationToken));
+        count.ShouldBe(3L, "different workspaces (or different hashes) sharing a path are not duplicates");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_FreshBank_HasTheWorkspaceBucketIndex()
+    {
+        await using var connection = await OpenAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await IndexExistsAsync(connection, "uq_entries_workspace_bucket")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task EnsureAsync_OnAStampedV7Bank_SkipsTheDedupeStep()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP INDEX uq_entries_workspace_bucket",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await IndexExistsAsync(connection, "uq_entries_workspace_bucket")).ShouldBeFalse(
+            "a bank already at the current version must not re-run the v7 step");
+    }
+
+    /// <summary>A-F11: promotion_queue.claimed_at backs the claim-by-update pattern; existing rows
+    /// must backfill to NULL (unclaimed), never to some non-NULL default that would leave a
+    /// perfectly good candidate permanently unclaimable.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV7Bank_AddsClaimedAtColumn_AndExistingRowsDefaultToNull()
+    {
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            CREATE TABLE promotion_queue (
+                id          INTEGER PRIMARY KEY,
+                project_id  TEXT NOT NULL,
+                hash        TEXT NOT NULL,
+                path        TEXT NULL,
+                value       TEXT NOT NULL,
+                source_file TEXT NULL,
+                score       REAL NOT NULL,
+                reasons     TEXT NOT NULL DEFAULT '[]',
+                scorer_version INTEGER NOT NULL DEFAULT 0,
+                created_at  INTEGER NOT NULL,
+                updated_at  INTEGER NOT NULL,
+                UNIQUE (project_id, hash)
+            );
+            INSERT INTO promotion_queue (project_id, hash, path, value, score, created_at, updated_at)
+            VALUES ('acme', 'h1', 'h1.md', 'waiting fact', 2.5, 1, 1);
+            PRAGMA user_version = 7;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await ColumnsAsync(connection, "promotion_queue");
+        columns.ShouldContain("claimed_at");
+        var claimedAt = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT claimed_at FROM promotion_queue WHERE hash = 'h1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        claimedAt.ShouldBeNull("a pre-migration row was never claimed, so it must read as immediately claimable");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_OnAnAlreadyMigratedBank_DoesNotReMigrate_ClaimedAt()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO promotion_queue (project_id, hash, path, value, score, claimed_at, created_at, updated_at)
+            VALUES ('acme', 'h1', 'h1.md', 'v', 1.0, 42, 1, 1)
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var claimedAt = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT claimed_at FROM promotion_queue WHERE hash = 'h1'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        claimedAt.ShouldBe(42L, "a bank already at the current version must not be re-migrated");
+    }
+
     /// <summary>
     ///     H4 migration trap, amended: `CREATE TRIGGER IF NOT EXISTS` never replaces a trigger body
     ///     already on disk, so a body *replacement* cannot ride the same additive mechanism the

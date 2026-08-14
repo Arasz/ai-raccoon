@@ -1,3 +1,4 @@
+using System.Linq;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
@@ -52,4 +53,24 @@ public interface IPromotionQueueStore
 
     Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Claims one row for promotion by marking it claimed rather than deleting it (WP5b/A-F11):
+    ///     a ShareAsync failure after this leaves the row reclaimable instead of destroyed. Null
+    ///     when the row is already claimed, discarded, or never existed. Default implementation
+    ///     forwards to the delete-based <see cref="DiscardAsync" /> for stores with no claimed_at
+    ///     column of their own — <c>SqlitePromotionQueueStore</c> overrides with the real claim.
+    /// </summary>
+    async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default) =>
+        (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
+
+    /// <summary>
+    ///     Releases claims older than <paramref name="staleAfter" /> back to the queue (WP5b/A-F11):
+    ///     the caller that claimed a row and then died or hung mid-ShareAsync never gets to unclaim
+    ///     it itself. Returns the count released. Default is a no-op (0) for stores with no claim
+    ///     concept of their own.
+    /// </summary>
+    Task<int> ReclaimStaleClaimsAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default) =>
+        Task.FromResult(0);
 }
