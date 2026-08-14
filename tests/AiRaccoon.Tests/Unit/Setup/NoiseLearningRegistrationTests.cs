@@ -12,10 +12,11 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     DI wiring for the self-learning noise substrate (ADR-0039): every piece is registered and
-///     resolvable, and SqliteMemoryStore's constructor selection actually picks the 8-arg overload
-///     (real INoiseShadowObserver) rather than silently falling back to the NoOp default that exists
-///     only for TestData.CreateMemoryStore's 7-arg call.
+///     DI wiring for the noise substrate (ADR-0029/ADR-0039, amended): the training-data store, the
+///     detector seam, and shadow-mode plumbing are all registered and resolvable, and
+///     SqliteMemoryStore's constructor selection actually picks the 9-arg overload (real
+///     INoiseShadowObserver + INoiseEntryStore) rather than silently falling back to the NoOp
+///     defaults that exist only for TestData.CreateMemoryStore's 7-arg call.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -38,9 +39,7 @@ public sealed class NoiseLearningRegistrationTests : IDisposable
     {
         using var provider = BuildProvider();
 
-        provider.GetRequiredService<INoiseClusterStore>().ShouldBeOfType<SqliteNoiseClusterStore>();
-        provider.GetRequiredService<IContentEmbedder>().ShouldBeOfType<SqliteContentEmbedder>();
-        provider.GetRequiredService<NoiseFeedbackCollector>().ShouldNotBeNull();
+        provider.GetRequiredService<INoiseEntryStore>().ShouldBeOfType<SqliteNoiseEntryStore>();
         provider.GetRequiredService<INoiseShadowObserver>().ShouldBeOfType<NoiseShadowObserver>();
     }
 
@@ -54,18 +53,21 @@ public sealed class NoiseLearningRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void RegisterCoreMemoryServices_IMemoryStore_UsesTheRealShadowObserver_NotTheNoOpDefault()
+    public void RegisterCoreMemoryServices_IMemoryStore_UsesTheRealObservers_NotTheNoOpDefaults()
     {
         using var provider = BuildProvider();
 
         var store = provider.GetRequiredService<IMemoryStore>();
         store.ShouldBeOfType<SqliteMemoryStore>();
 
-        var field = typeof(SqliteMemoryStore).GetField("_noiseShadowObserver", BindingFlags.NonPublic | BindingFlags.Instance);
-        field.ShouldNotBeNull("SqliteMemoryStore must keep a _noiseShadowObserver field for this DI-wiring check to hold");
-        var actualObserver = field!.GetValue(store);
+        var shadowField = typeof(SqliteMemoryStore).GetField("_noiseShadowObserver", BindingFlags.NonPublic | BindingFlags.Instance);
+        shadowField.ShouldNotBeNull("SqliteMemoryStore must keep a _noiseShadowObserver field for this DI-wiring check to hold");
+        shadowField!.GetValue(store).ShouldBeOfType<NoiseShadowObserver>(
+            "production DI must select SqliteMemoryStore's 9-arg constructor, not silently fall back to NoOpNoiseShadowObserver");
 
-        actualObserver.ShouldBeOfType<NoiseShadowObserver>(
-            "production DI must select SqliteMemoryStore's 8-arg constructor, not silently fall back to NoOpNoiseShadowObserver");
+        var entryStoreField = typeof(SqliteMemoryStore).GetField("_noiseEntryStore", BindingFlags.NonPublic | BindingFlags.Instance);
+        entryStoreField.ShouldNotBeNull("SqliteMemoryStore must keep a _noiseEntryStore field for this DI-wiring check to hold");
+        entryStoreField!.GetValue(store).ShouldBeOfType<SqliteNoiseEntryStore>(
+            "production DI must select SqliteMemoryStore's 9-arg constructor, not silently fall back to NoOpNoiseEntryStore");
     }
 }

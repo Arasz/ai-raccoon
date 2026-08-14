@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Observability;
@@ -37,7 +38,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
-        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, _memory);
+        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, _memory, NoOpNoiseEntryStore.Instance);
     }
 
     public void Dispose()
@@ -310,7 +311,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         using var probe = new BackgroundTelemetryProbe(BankMaintenanceHostedService.OperationName);
         var service = new BankMaintenanceHostedService(
             new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), _time, probe.Telemetry,
-            _logger, _memory);
+            _logger, _memory, NoOpNoiseEntryStore.Instance);
 
         var thrown = await Should.ThrowAsync<Exception>(
             () => service.RunOnceAsync(TestContext.Current.CancellationToken));
