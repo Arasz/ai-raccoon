@@ -1,8 +1,23 @@
 {
-  "lastUpdated": "2026-08-14T12:13:17.000000+00:00",
+  "lastUpdated": "2026-08-14T20:10:25.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "code-quality-review-0814",
+      "title": "MoE whole-codebase review, improvement plan, and its implementation",
+      "finished": "2026-08-14T20:10:25.000000+00:00",
+      "pr": "278",
+      "summary": "MERGED as c5f3fa26 (squash, so branch commits are not ancestors of main). 139 commits, +22503/-4582 across 380 files, ADRs 0032-0050 plus an ADR-0006 amendment. Both review blockers closed: memory_write no longer reports a fabricated success for discarded content (ADR-0032), and memory_get retrieves an entry by hash (ADR-0035). Four defects that only measurement found: a context-labelled write was unreachable by memory_search at every scope while memory_get returned it (ADR-0045/0046); minScore=0.7 silently truncated -- 996 results returned against 2200 requested at limit=50 (ADR-0047); 70 of 4126 chunks of this repo's own docs ended in a different fence state than they began, because ADR-0036's de-fencing inverted fence parity for the rest of a document (ADR-0048); and embeddings differ by host CPU instruction set -- arm64 0.5261, non-VNNI x64 0.5588, VNNI x64 0.4886 on the same corpus (ADR-0049, accepted and documented, not fixed). Also: 37.5% of chunks silently truncated at the embedding window, now 0 of 4121 (ADR-0036); section never written at ingest so file#section could not resolve, rank 86 -> 1, and its FTS weight measured down 16 -> 4 (ADR-0044); serve --restart reported a second server taking a port it never held (ADR-0043); an unknown sync.provider silently selected S3. Derived gates added where a hand-maintained list had drifted: the ADR index (16 of 43 missing), the LoggerMessage event-id registry, and the project-membership predicate (11 hand-copies). The SqliteMemoryStore size ratchet was lowered, not raised: ISettingsStore extracted. MCP surface exercised live against a scratch bank: 26 of 26 tools served and behaving.",
+      "openItems": [
+        "ADR-0049 accepted: revisit fp32 if cross-machine memory_sync moves from available to used",
+        "The sweeps' AdrNdcg5 pin is one-sided -- an upward RRF mutation stays green (ADR-0050)",
+        "WP3b: four ranking regressions still pinned as characterization tests on the denser corpus",
+        "SqliteMemoryStore's five remaining seams (write, search, delete, ingest, embedding)",
+        "scripts/prometheus_grade.py duplicates memory_record_grade's UPDATE, bypassing the write gate",
+        "docs/how-to/deploy-the-application.md has an odd fence count; 8 headings lost by ADR-0048"
+      ]
+    },
     {
       "id": "test-suite-refactor-0814",
       "title": "Test suite review and refactor: polling, port leases, process lifetime, vacuous checks",
@@ -95,7 +110,7 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "IN FLIGHT: test-helper-consolidation-0814 (branch task/test-helper-consolidation) -- extract ServeHarness/LockingWriter, ConsoleCapture and CliRun, adopt EnvScope at the 8 remaining untokened EnvVarGate acquires (2 of them synchronous Wait()), then the Unit/Integration mislabelling sweep LAST and alone: measured 74 of 209 Unit files touch real infrastructure, 34 of which already carry Category=Integration so only the folder is wrong. THEN: Proxy follow-ups: (1) superseded backend sessions are never disposed while the process runs - BackendSessions.OpenAsync appends and nothing removes; (2) the revision guard records the requested rather than the negotiated revision (PLAUSIBLE, unconfirmed); (3) ProxyForwarder and BackendLauncher never meet in a test; (4) guard clauses on the new entry points plus a launch-race test. Then the pre-existing C2/C1/D4/C3 queue, and the upstream issue against ModelContextProtocol.",
+  "next": "No task in flight. Candidates, highest value first: give SqliteMemoryStore its next seam (WP8, five left); make the sweep nDCG pin two-sided once a Linux run can settle sqlite-vec/bm25 bit-stability (ADR-0050); WP3b's four pinned ranking regressions.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
