@@ -2,7 +2,6 @@ using System.ClientModel;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI;
 using OpenAI.Embeddings;
 
@@ -13,7 +12,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
 ///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
-public sealed class EmbeddingService(ILogger<EmbeddingService>? logger = null) : IEmbeddingService
+public sealed class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -26,7 +25,7 @@ public sealed class EmbeddingService(ILogger<EmbeddingService>? logger = null) :
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
     public const int OpenAiEmbeddingContextTokens = 8191;
 
-    private readonly ILogger<EmbeddingService> _logger = logger ?? NullLogger<EmbeddingService>.Instance;
+    private readonly ILogger<EmbeddingService> _logger = logger;
 
     // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
     // are expensive to build, so engines are cached per fingerprint and never disposed by callers.

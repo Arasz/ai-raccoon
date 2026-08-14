@@ -35,7 +35,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
 
     private SqliteMemoryStore CreateStore() =>
         TestData.CreateMemoryStore(_factory,
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), new EmbeddingService());
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     [Fact]
     public async Task XORCheck_InsertWithWorkspaceIdAndCommittedScope_Fails()

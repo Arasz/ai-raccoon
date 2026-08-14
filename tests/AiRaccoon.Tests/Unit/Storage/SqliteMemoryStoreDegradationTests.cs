@@ -33,7 +33,7 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
             DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = TestData.CreateMemoryStore(_factory, _logger, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), new EmbeddingService());
+        _store = TestData.CreateMemoryStore(_factory, _logger, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
     }
 
     public void Dispose()

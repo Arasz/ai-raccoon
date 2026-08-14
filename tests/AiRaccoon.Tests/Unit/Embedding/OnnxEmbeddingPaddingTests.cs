@@ -21,7 +21,7 @@ public sealed class OnnxEmbeddingPaddingTests : IAsyncLifetime
     [Fact]
     public async Task SameBatchTwice_ProducesIdenticalEmbeddings_EvenAfterPoolReuse()
     {
-        using var generator = new EmbeddingService().CreateGenerator(
+        using var generator = TestData.CreateEmbeddingService().CreateGenerator(
             new EmbeddingSettings("local", null, null, null));
 
         var longText = string.Join(' ', Enumerable.Repeat("memory retrieval ranking evidence", 40));

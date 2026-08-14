@@ -33,7 +33,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -1071,7 +1071,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
             TestContext.Current.CancellationToken);
@@ -1092,7 +1092,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
         await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, "false", TestContext.Current.CancellationToken);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),

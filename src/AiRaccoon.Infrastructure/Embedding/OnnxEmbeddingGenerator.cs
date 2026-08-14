@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Embedding;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.Tokenizers;
@@ -14,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     BERT WordPiece tokenization, one batched session run, mean-pool + L2-normalize
 ///     matching sentence-transformers semantics.
 /// </summary>
-internal sealed partial class OnnxEmbeddingGenerator(string modelPath, string vocabPath, ILogger? logger = null)
+internal sealed partial class OnnxEmbeddingGenerator(string modelPath, string vocabPath, ILogger logger)
     : IEmbeddingGenerator<string, Embedding<float>>
 {
     private const int MaxSequenceLength = 256;
@@ -27,7 +26,7 @@ internal sealed partial class OnnxEmbeddingGenerator(string modelPath, string vo
     /// </summary>
     public const int MaxContentTokens = MaxSequenceLength - 2;
 
-    private readonly ILogger _logger = logger ?? NullLogger.Instance;
+    private readonly ILogger _logger = logger;
     private readonly InferenceSession _session = new(modelPath);
 
     private readonly BertTokenizer _tokenizer = CreateTokenizer(vocabPath);
