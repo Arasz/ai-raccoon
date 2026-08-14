@@ -181,13 +181,48 @@ means it keeps growing. This is a gate that can be watched go red.
 ### WP7 · Fix chunking so content reaches the embedding
 **Effort:** QUICK–SMALL · **Must precede WP4**
 
-- Count tokens with the tokenizer that will embed (**37.5% of chunks silently truncated**);
-  or set the local budget to 200 as a stopgap. Log a counter on truncation.
-- Cap fence atomicity — one unbalanced fence currently leaves **95% of a document unembedded**.
-- JSON key-path flattening → deferred to Wave 5 unless JSON ingestion is in active use.
+**The requirement is a guarantee, not an improvement** *(owner directive, 2026-08-14)*. The
+ratio-based stopgap this plan originally allowed — "set the local budget to 200, which the
+measured p95 ratio of 1.217 covers" — is **withdrawn**. A ratio only moves the tail. The
+WordPiece/BPE ratio is content-dependent and unbounded: 1.217 was measured on this repo's English
+prose, and it blows out on exactly what this project stores — hex hashes and base64, long code
+identifiers, URLs and paths, and any non-Latin script — because WordPiece shatters unknown
+tokens into many subwords.
 
-**Gate:** a fixture with an unbalanced fence produces a chunk over `maxTokens` today (RED) and
-does not after; the truncation counter is non-zero today and zero after.
+**How chunk size is calculated:**
+
+1. **Budget = the engine's window minus its special tokens.** For the bundled model that is
+   `MaxSequenceLength - 2 = 254`, **not 256**. `OnnxEmbeddingGenerator.Encode` calls
+   `EncodeToIds(text, true, true, true)` — adding `[CLS]` and `[SEP]` — then truncates with
+   `ids.Take(256)`, so an over-length input silently loses its `[SEP]`. Derive the window from
+   the engine (`EmbeddingService.ContextTokensFor` already knows it per provider); OpenAI has a
+   different window *and* a different tokenizer.
+2. **Count with the tokenizer that will embed.** The `TokenCount` delegate the chunkers consume
+   comes from the resolved engine, so budget and model cannot disagree. Today the budget is
+   `o200k_base` and the model is BERT WordPiece.
+3. **Tokenize once; split on offsets.** Encode the document once, take token→character offsets
+   (`EncodeToTokens` → `EncodedToken.Offset`), and choose split points at semantic boundaries
+   that land on token indices. Every span is then within budget **by construction**, it is O(n)
+   rather than O(n²), and it avoids the trap that WordPiece is not composable across a join —
+   `tokens("foo") + tokens("bar") ≠ tokens("foobar")` — which makes incremental re-counting
+   subtly wrong.
+4. **Nothing is atomic above the budget.** The fence bug is one instance of a general rule: a
+   split-point ladder — heading → paragraph → sentence → line → token — falling through until
+   one succeeds. The token level always succeeds, so termination is guaranteed and no unit can be
+   emitted over budget. Tables, minified JSON, one long line and one very long word fail the same
+   way today; fix the rule, not the case.
+5. **Overlap counts against the same budget in the same tokens**, or it silently pushes a
+   compliant chunk over.
+6. **Defense in depth:** an EventId'd `[LoggerMessage]` counter in `Encode` so truncation is
+   detectable rather than silent. After this change it should be provably zero.
+
+JSON key-path flattening → deferred to Wave 5.
+
+**Gate:** a corpus combining this repo's `docs/**/*.md` with four hostile cases — a hex/base64
+blob, a minified JSON line, a CJK paragraph, an unbalanced fence — produces **zero** chunks whose
+BERT WordPiece length exceeds 254, asserted as a hard invariant rather than a percentage
+improvement. RED today (~1331/3552 over the window; the fence case yields a 5621-token chunk).
+The truncation counter is non-zero today and zero after.
 
 ### WP4 · Regenerate the retrieval gate corpus
 **Effort:** MEDIUM · **Must follow WP7, precede WP3b**
