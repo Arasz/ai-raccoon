@@ -209,8 +209,13 @@ internal partial class NodeRunner(
 
     private async Task<int> ReportAttachedAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
     {
-        Log.AttachedToExistingServer(logger, descriptor.Url);
-        await streams.WriteErrorLineAsync($"ai-raccoon: attached to the server already listening on {descriptor.Url}");
+        // UX-F10: this process never opens the owning server's bank, so it cannot confirm the
+        // two match -- naming the bank *this* invocation asked for at least makes a
+        // --data-root mismatch visible instead of a silent takeover.
+        var requestedBankPath = SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options);
+        Log.AttachedToExistingServer(logger, descriptor.Url, requestedBankPath);
+        await streams.WriteErrorLineAsync(
+            $"ai-raccoon: attached to the server already listening on {descriptor.Url} — it may not be serving {requestedBankPath}; this process never opened that bank to check. To serve it here, stop the other server first or free the port (--port 0)");
         await streams.RenderUrlForInput(descriptor.Url, descriptor.Port, descriptor.Source.McpEntry, descriptor.Source.Format);
         return ExitCode.Success;
     }
@@ -252,8 +257,8 @@ internal partial class NodeRunner(
         [LoggerMessage(EventId = 603, Level = LogLevel.Error, Message = "ai-raccoon: port {Port} is in use — pass --port 0 for a random port, or free the port")]
         public static partial void PortInUse(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url}")]
-        public static partial void AttachedToExistingServer(ILogger logger, string url);
+        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url} — this process asked for {RequestedBankPath}")]
+        public static partial void AttachedToExistingServer(ILogger logger, string url, string requestedBankPath);
 
         [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
         public static partial void McpTokenReady(ILogger logger, string tokenPath);

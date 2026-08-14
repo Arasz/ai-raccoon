@@ -338,15 +338,39 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task UnhandledCommandPath_FallsThroughToError()
     {
+        // A CommandPath the switch doesn't recognize but with no parse errors: only reachable
+        // today via a CliCommandTree entry missing its ConfigCommands switch arm, not via real
+        // user input (System.CommandLine would report a parse error first, and ConfigCommands
+        // trusts that CliRendering already rendered it -- see ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting).
         var store = new FakeConfigStore();
-        CliArgs.TryParse(["access"], out var parsed);
+        CliArgs.TryParse(["access", "default", "show"], out var validParse);
+        var parsed = validParse! with { CommandPath = ["totally", "bogus"], Errors = [] };
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await TestData.CreateConfigCommands(store)
-            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ToString().ShouldContain("unhandled command");
+    }
+
+    /// <summary>UX-F4: ConfigCommands must not re-print a parse-level error -- CliRendering
+    /// already rendered cliInput.Errors before dispatch (AppRunner.GetCliInput); dispatching
+    /// anyway would throw reading an argument System.CommandLine never bound.</summary>
+    [Fact]
+    public async Task ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting()
+    {
+        var store = new FakeConfigStore();
+        CliArgs.TryParse(["access"], out var parsed); // "access" alone: SCL reports "Required command was not provided."
+        parsed!.Errors.ShouldNotBeEmpty();
+
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = await TestData.CreateConfigCommands(store)
+            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        stderr.ToString().ShouldBeEmpty();
     }
 }

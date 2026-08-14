@@ -110,7 +110,7 @@ internal sealed class ConfigCommands(
         }
         catch (Exception ex)
         {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
+            await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));
             return ExitCode.InvalidArgument;
         }
     }

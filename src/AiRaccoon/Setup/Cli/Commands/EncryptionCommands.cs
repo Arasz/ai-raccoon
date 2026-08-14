@@ -304,13 +304,18 @@ public sealed partial class EncryptionCommands
         [LoggerMessage(EventId = 801, Level = LogLevel.Information, Message = "Bank rekeyed to the {Source} encryption key")]
         public static partial void BankRekeyed(ILogger logger, string source);
 
-        [LoggerMessage(EventId = 802, Level = LogLevel.Error, Message = "bws invocation failed")]
+        // 802/803/804/807 log at Debug, not Error/Warning: each one fires alongside a manual
+        // WriteErrorLineAsync carrying the same message on the CLI's own stream (UX-F8) -- at
+        // Error/Warning, the default (non-quiet) console's AddConsole also prints them, so the
+        // failure appears twice: once as the clean CLI line, once as "fail: ...EncryptionCommands[NNN] ...".
+        // --quiet mode is unaffected (QuietLogging sets its minimum level to Trace).
+        [LoggerMessage(EventId = 802, Level = LogLevel.Debug, Message = "bws invocation failed")]
         public static partial void BwsInvocationFailed(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 803, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
+        [LoggerMessage(EventId = 803, Level = LogLevel.Debug, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
         public static partial void UnsetSkippedRekey(ILogger logger);
 
-        [LoggerMessage(EventId = 804, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
+        [LoggerMessage(EventId = 804, Level = LogLevel.Debug, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
 
         // The migration records nothing in the bank or the sidecar
@@ -321,7 +326,7 @@ public sealed partial class EncryptionCommands
         [LoggerMessage(EventId = 806, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
         public static partial void BankMigrated(ILogger logger, string bankPath);
 
-        [LoggerMessage(EventId = 807, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
+        [LoggerMessage(EventId = 807, Level = LogLevel.Debug, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
         public static partial void MigrationRefused(ILogger logger, string bankPath, Exception exception);
     }
 }

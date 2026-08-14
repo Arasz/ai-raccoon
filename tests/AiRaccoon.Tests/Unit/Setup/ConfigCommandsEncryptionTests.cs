@@ -253,6 +253,10 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         err.ShouldNotContain("PRAGMA rekey");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
+        // UX-F8: the default (non-quiet) console logs Information and above, so an Error/Warning
+        // log here would double-print the same failure as "fail: ...EncryptionCommands[804] ..."
+        // right after the clean "err" line above -- this event must sit below that threshold.
+        _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 804 && r.Level == LogLevel.Debug);
     }
 
     [Fact]
@@ -523,7 +527,10 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var logRecord = _lastLogger!.Collector.LatestRecord;
         logRecord.ShouldNotBeNull();
         logRecord.Id.Id.ShouldBe(803);
-        logRecord.Level.ShouldBe(LogLevel.Warning);
+        // UX-F8: below the default console's Information threshold -- "err" above already
+        // carries this message; a Warning/Error here would print it a second time as
+        // "warn: ...EncryptionCommands[803] ...".
+        logRecord.Level.ShouldBe(LogLevel.Debug);
         // The sidecar + rows stay (source remains bitwarden) so the documented retry works.
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
         File.Exists(SidecarPath()).ShouldBeTrue();
