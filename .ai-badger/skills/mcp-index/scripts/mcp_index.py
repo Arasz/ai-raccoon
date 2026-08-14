@@ -202,6 +202,14 @@ def _report_quiet_sources(index: dict[str, Any]) -> None:
 
 # ── MCP tool discovery ──────────────────────────────────────────────────────
 
+def _discover_tools(servers: list[dict[str, Any]]) -> None:
+    """Enrich a names-only listing with `hermes mcp test`, one subprocess per server."""
+    print(f"Asking `hermes mcp test` for the tools of {len(servers)} server(s) — "
+          "one connection each.", file=sys.stderr)
+    for note in hl.enrich_with_hermes_test(servers):
+        print(f"  ({note})", file=sys.stderr)
+
+
 def _fetch_mcp_tools(from_json: Optional[str] = None,
                      host: Optional[str] = None) -> list[dict[str, Any]]:
     """The servers a host CLI reports, or a refusal naming every source that was asked.
@@ -393,7 +401,29 @@ def _index_source(server: dict[str, Any],
         tool["name"]: describe_tool(name, tool["name"], tool.get("description", ""), catalog)
         for tool in server.get("tools", [])
     }
+    _seed_from_catalog(entry, server, catalog)
     return entry
+
+
+def _seed_from_catalog(source: dict[str, Any], server: Optional[dict[str, Any]],
+                       catalog: dict[str, dict[str, dict[str, Any]]]) -> list[str]:
+    """Fill a server the host declined to enumerate from the catalog; return the seeded names.
+
+    Only when `tools_known` is False. A listing that carries tool detail is authoritative —
+    including when it reports none — so the catalog never contradicts one, only stands in for
+    a listing that has nothing to say (issue #188).
+    """
+    if server is None or server.get("tools_known", True):
+        return []
+    name = source["name"]
+    tools = source.setdefault("tools", {})
+    seeded = []
+    for tool, curated in td.catalog_tools(catalog, name).items():
+        if tool in tools:  # an existing entry — manual, catalog or removed — outranks the seed
+            continue
+        tools[tool] = describe_tool(name, tool, curated.get("intent", ""), catalog)
+        seeded.append(f"{name}:{tool}")
+    return seeded
 
 
 def _note_missing_catalog(catalog: dict[str, dict[str, dict[str, Any]]]) -> None:
@@ -404,9 +434,11 @@ def _note_missing_catalog(catalog: dict[str, dict[str, dict[str, Any]]]) -> None
 
 
 def cmd_init(target: str, from_json: Optional[str] = None,
-             host: Optional[str] = None) -> int:
+             host: Optional[str] = None, discover: bool = False) -> int:
     """Create a new index from the current MCP tool list."""
     servers = _fetch_mcp_tools(from_json, host)
+    if discover:
+        _discover_tools(servers)
     catalog = load_catalog(FRAMEWORK_ROOT)
     _note_missing_catalog(catalog)
 
@@ -554,13 +586,14 @@ def _update_source(source: dict[str, Any], server: Optional[dict[str, Any]],
     was = source.get("status")
     source["status"] = ABSENT if server is None else td.server_status(server)
     changes = _sync_tools(source, server, catalog) + (1 if source["status"] != was else 0)
+    changes += len(_seed_from_catalog(source, server, catalog))
     redescribed = _redescribe_from_catalog(source, catalog)
     _reorder_source(source)
     return changes + len(redescribed), redescribed
 
 
 def cmd_update(target: str, from_json: Optional[str] = None,
-               host: Optional[str] = None) -> int:
+               host: Optional[str] = None, discover: bool = False) -> int:
     """Update index: add new tools, mark removed ones, restate status, preserve manual tags."""
     index, err = _read_index_safe(target)
     if err:
@@ -568,9 +601,11 @@ def cmd_update(target: str, from_json: Optional[str] = None,
         return 1
     if index is None:
         print("No existing index. Running init instead.", file=sys.stderr)
-        return cmd_init(target, from_json, host)
+        return cmd_init(target, from_json, host, discover)
 
     servers = _fetch_mcp_tools(from_json, host)
+    if discover:
+        _discover_tools(servers)
     catalog = load_catalog(FRAMEWORK_ROOT)
     _note_missing_catalog(catalog)
     listed = {s.get("name", ""): s for s in servers}
@@ -616,6 +651,18 @@ def cmd_update(target: str, from_json: Optional[str] = None,
     return 0
 
 
+def _split_tool_ref(tool_ref: str) -> tuple[str, str]:
+    """Split `server:tool` on the LAST colon, so a decorated server name survives.
+
+    `claude mcp list` decorates a plugin-provided server as `plugin:<plugin>:<server>`, and
+    splitting on the first colon resolved that to a server literally named `plugin` — every
+    tag/intent call against a plugin server failed with "server 'plugin' not found". A tool
+    name never contains a colon, so the last one is always the separator.
+    """
+    server_name, _, tool_name = tool_ref.rpartition(":")
+    return server_name, tool_name
+
+
 def cmd_tag(target: str, tool_ref: str, tags: list[str]) -> int:
     """Set tags for a specific tool."""
     if not tags:
@@ -647,7 +694,7 @@ def cmd_tag(target: str, tool_ref: str, tags: list[str]) -> int:
         )
         return 2
 
-    server_name, tool_name = tool_ref.split(":", 1)
+    server_name, tool_name = _split_tool_ref(tool_ref)
     for source in index.get("sources", []):
         if source["name"] == server_name:
             if tool_name in source["tools"]:
@@ -696,7 +743,7 @@ def cmd_intent(target: str, tool_ref: str, intent: str) -> int:
         )
         return 2
 
-    server_name, tool_name = tool_ref.split(":", 1)
+    server_name, tool_name = _split_tool_ref(tool_ref)
     for source in index.get("sources", []):
         if source["name"] == server_name:
             if tool_name in source["tools"]:
@@ -883,7 +930,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         from_json = _flag_value(remaining, "--from-json")
         run = cmd_init if cmd == "init" else cmd_update
-        return run(target, from_json, host)
+        return run(target, from_json, host, "--discover" in remaining)
 
     if cmd == "validate":
         return cmd_validate(target)
