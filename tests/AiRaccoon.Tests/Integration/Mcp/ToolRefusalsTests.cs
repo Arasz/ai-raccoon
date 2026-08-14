@@ -150,12 +150,13 @@ public sealed class ToolRefusalsTests : IDisposable
         {
             await SeedForwardSchemaVersionAsync(dataRoot, TestContext.Current.CancellationToken);
 
-            using var lease = LoopbackPort.Reserve();
-            var port = lease.Port;
-            var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-            lease.ReleaseForBind();
-            await host.StartAsync(TestContext.Current.CancellationToken);
+            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
+            {
+                var started = McpServerSetup.CreateServerHost(
+                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+                await started.StartAsync(TestContext.Current.CancellationToken);
+                return (candidate, started);
+            });
             try
             {
                 using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
@@ -217,15 +218,15 @@ public sealed class ToolRefusalsTests : IDisposable
     private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,
         Dictionary<string, object?> arguments, string expectedPrefix)
     {
-        using var lease = LoopbackPort.Reserve();
-        var port = lease.Port;
-        var host = McpServerSetup.CreateServerHost(
-            new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
         var fakeLogs = new FakeLoggerProvider();
-        host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-
-        lease.ReleaseForBind();
-        await host.StartAsync(TestContext.Current.CancellationToken);
+        var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
+        {
+            var started = McpServerSetup.CreateServerHost(
+                new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+            started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
+            await started.StartAsync(TestContext.Current.CancellationToken);
+            return (candidate, started);
+        });
         try
         {
             using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
@@ -307,15 +308,15 @@ public sealed class ToolRefusalsTests : IDisposable
         var dataRoot = TestData.CreateTempRoot("tool-refusals-warning");
         try
         {
-            using var lease = LoopbackPort.Reserve();
-            var port = lease.Port;
-            var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
             var fakeLogs = new FakeLoggerProvider();
-            host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-
-            lease.ReleaseForBind();
-            await host.StartAsync(TestContext.Current.CancellationToken);
+            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
+            {
+                var started = McpServerSetup.CreateServerHost(
+                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+                started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
+                await started.StartAsync(TestContext.Current.CancellationToken);
+                return (candidate, started);
+            });
             try
             {
                 using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };

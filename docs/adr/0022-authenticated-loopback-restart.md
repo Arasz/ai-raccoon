@@ -63,9 +63,17 @@ for the port to free, and then serves in its place. When nothing is listening it
   stop — every hosted service's `StopAsync` shares it with the in-flight requests — after which
   Kestrel aborts what is left. The port is then given `2 × DrainWindow` to free, so a full drain
   is never mistaken for a hang. See the Consequences for what the reduction costs.
-- **Every failure is loud and non-zero (`ExitCode.RestartFailed = 8`), and `--restart` never
-  attaches.** Falling through to "attached to the existing server" would report success for exactly
-  the process the operator asked to replace.
+- **Every failure is loud and non-zero, and `--restart` never attaches.** Falling through to
+  "attached to the existing server" would report success for exactly the process the operator asked
+  to replace.
+
+> **Amended 2026-08-14: one exit code per reason.** This decision originally gave every restart
+> failure the single `ExitCode.RestartFailed = 8`. Five distinct outcomes shared it, so a caller
+> could not tell "another server beat me to the port, retry" from "the server refused my token, fix
+> your config" — and a test could not retry the one without masking the other four. They now have
+> their own codes (below). **8 is retired rather than narrowed**, so a script that tested for it
+> fails to match instead of matching the wrong case. `ExitCodeTests` asserts the values stay
+> distinct and that 8 is not reused.
 
 ### What each outcome does
 
@@ -74,10 +82,11 @@ for the port to free, and then serves in its place. When nothing is listening it
 | `Nothing` | probe finds no server | plain `serve` — bind and serve |
 | `Stopped` | 202, then the port freed | bind and serve |
 | `Foreign` | listening, but `/observability` does not identify an ai-raccoon | `PortInUse` (3), refused before any bind is attempted and named as an unidentified listener. Nothing unidentified is ever sent a shutdown |
-| `NoToken` | our data root holds no token | `RestartFailed`; **no shutdown is attempted** |
-| `Refused` | `/shutdown` answered 401 | `RestartFailed` — it serves another data root |
-| `Unsupported` | `/shutdown` answered 404/405 | `RestartFailed` — an ai-raccoon too old to be asked to stop |
-| `TimedOut` | 202 accepted, port still held at the bound | `RestartFailed` naming the PID and the bound |
+| `NoToken` | our data root holds no token | `RestartNoToken` (11); **no shutdown is attempted** |
+| `Refused` | `/shutdown` answered 401 | `RestartTokenRefused` (12) — it serves another data root |
+| `Unsupported` | `/shutdown` answered 404/405 | `RestartUnsupportedServer` (13) — an ai-raccoon too old to be asked to stop |
+| `TimedOut` | 202 accepted, port still held at the bound | `RestartTimedOut` (14) naming the PID and the bound |
+| *(lost the port)* | the probe answers mid-start: another server took the port while this one was starting | `RestartLostThePort` (10) — the only retryable restart failure |
 
 A transport failure on the `POST` counts as accepted: the server may have gone before it could
 flush. The port poll, not the status code, is the verdict.

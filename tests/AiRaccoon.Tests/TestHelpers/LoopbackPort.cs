@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Tests.TestHelpers;
 
@@ -55,6 +56,71 @@ public sealed class LoopbackPort : IDisposable
         lease.AcceptUntilReleased();
         return lease;
     }
+
+    /// <summary>
+    ///     Reserves a port, releases it and runs <paramref name="bind" /> on it, retrying on a fresh
+    ///     port when the number was taken in between. The window cannot be closed — another process
+    ///     may take it the instant the lease lets go — so a lost race costs a retry, not a failure.
+    /// </summary>
+    public static T BindWithRetry<T>(Func<int, T> bind, int attempts = 4)
+    {
+        Guard.IsNotNull(bind);
+        Guard.IsGreaterThan(attempts, 0);
+
+        for (var attempt = 1; ; attempt++)
+        {
+            var lease = Reserve();
+            var port = lease.Port;
+            lease.ReleaseForBind();
+            try
+            {
+                return bind(port);
+            }
+            catch (Exception ex) when (attempt < attempts && LostThePort(ex))
+            {
+                // Next pass draws a different number, so retrying cannot lose to the same thief.
+            }
+            catch (Exception ex) when (attempt >= attempts && LostThePort(ex))
+            {
+                throw new InvalidOperationException(
+                    $"a loopback port was taken between reservation and bind on all {attempts} attempts", ex);
+            }
+        }
+    }
+
+    /// <summary>Async twin of <see cref="BindWithRetry{T}" />; the bind is rebuilt on the fresh port.</summary>
+    public static async Task<T> BindWithRetryAsync<T>(Func<int, Task<T>> bind, int attempts = 4)
+    {
+        Guard.IsNotNull(bind);
+        Guard.IsGreaterThan(attempts, 0);
+
+        for (var attempt = 1; ; attempt++)
+        {
+            var lease = Reserve();
+            var port = lease.Port;
+            lease.ReleaseForBind();
+            try
+            {
+                return await bind(port).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (attempt < attempts && LostThePort(ex))
+            {
+                // Next pass draws a different number, so retrying cannot lose to the same thief.
+            }
+            catch (Exception ex) when (attempt >= attempts && LostThePort(ex))
+            {
+                throw new InvalidOperationException(
+                    $"a loopback port was taken between reservation and bind on all {attempts} attempts", ex);
+            }
+        }
+    }
+
+    /// <summary>True when the failure is another process owning the port, not the caller's own bug.</summary>
+    private static bool LostThePort(Exception exception) => exception switch
+    {
+        SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse } => true,
+        _ => exception.InnerException is not null && LostThePort(exception.InnerException)
+    };
 
     /// <summary>Releases the socket immediately before a server binds it. Idempotent.</summary>
     public void ReleaseForBind()

@@ -99,7 +99,7 @@ public sealed class ServeHarness : IAsyncDisposable
                 return found;
             }
 
-            throw new InvalidOperationException(
+            throw new ServeExitedException(await Exit,
                 $"serve exited {await Exit} before printing {description}; stdout: {Stdout}; stderr: {Stderr}");
         }
 
