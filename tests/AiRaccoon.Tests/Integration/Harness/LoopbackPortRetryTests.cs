@@ -4,14 +4,14 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.TestHelpers;
+namespace AiRaccoon.Tests.Integration.Harness;
 
 /// <summary>
 ///     Pins the retry that survives a port stolen between release and bind. The window cannot be
 ///     closed — another process may take the number the instant the lease lets go — so the contract
 ///     is that a stolen port costs a retry, not a failed test.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortRetryTests
 {
