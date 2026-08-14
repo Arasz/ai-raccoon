@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Resilience;
 using CommunityToolkit.Diagnostics;
@@ -62,17 +63,36 @@ public sealed class ServerProbe : IServerProbe
                 }
 
                 var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
-                return body.Contains("jsonrpc", StringComparison.Ordinal) ? ProbeVerdict.Answered : ProbeVerdict.NotListening;
+                // A reply that is not ai-raccoon's still proves a listener, so it is never NotListening.
+                return body.Contains("jsonrpc", StringComparison.Ordinal) ? ProbeVerdict.Answered : ProbeVerdict.Unanswered;
             }, ctx);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return ProbeVerdict.NotListening;
+            return WasRefused(ex) ? ProbeVerdict.NotListening : ProbeVerdict.Unanswered;
         }
         catch (OperationCanceledException) when (!ctx.IsCancellationRequested)
         {
-            return ProbeVerdict.NotListening;
+            // The attempt bound expired: the port took the connection and said nothing.
+            return ProbeVerdict.Unanswered;
         }
+    }
+
+    /// <summary>
+    ///     True when the connection was refused — the one failure that proves nothing holds the
+    ///     port. A reset, a hang-up or a timeout all leave a listener possible.
+    /// </summary>
+    private static bool WasRefused(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SocketException { SocketErrorCode: SocketError.ConnectionRefused })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static Uri EndpointFor(int port) => new($"http://127.0.0.1:{port}/mcp");

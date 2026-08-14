@@ -15,23 +15,31 @@ internal static class RestartTransition
     public static RestartOutcome? FromProbe(ProbeVerdict verdict) => verdict switch
     {
         ProbeVerdict.Answered => null,
-        _ => RestartOutcome.Nothing
+        ProbeVerdict.NotListening => RestartOutcome.Nothing,
+        _ => RestartOutcome.Unknown
     };
 
-    /// <summary>True when `serve` may go on to bind rather than refusing with an operator line.</summary>
-    public static bool MayBind(RestartOutcome outcome) => outcome is RestartOutcome.Nothing or RestartOutcome.Stopped;
+    /// <summary>
+    ///     True when `serve` may go on to bind rather than refusing with an operator line. Knowing
+    ///     nothing is not a refusal — the bind is the only thing that can settle it.
+    /// </summary>
+    public static bool MayBind(RestartOutcome outcome) =>
+        outcome is RestartOutcome.Nothing or RestartOutcome.Stopped or RestartOutcome.Unknown;
 
     /// <summary>
     ///     What an address-in-use bind proves, given what the pre-check believed and what the port
     ///     says now. The bind failure is proof the port is held: it refutes any belief that it was free.
     /// </summary>
     public static BindRefusal AfterBindRefused(RestartOutcome believed, ProbeVerdict afterBind, bool restarting) =>
-        (restarting, afterBind) switch
+        (restarting, believed, afterBind) switch
         {
-            (false, ProbeVerdict.Answered) => BindRefusal.Attach,
-            (false, _) => BindRefusal.PortInUse,
-            (true, ProbeVerdict.Answered) => BindRefusal.LostThePort,
-            (true, _) => BindRefusal.PortInUse
+            (false, _, ProbeVerdict.Answered) => BindRefusal.Attach,
+            (false, _, _) => BindRefusal.PortInUse,
+            // The pre-check established nothing, so nobody took the port from this run: it never
+            // held it and never proved it free. Reporting a lost port here would invent the loss.
+            (true, RestartOutcome.Unknown, _) => BindRefusal.HeldUnidentified,
+            (true, _, ProbeVerdict.Answered) => BindRefusal.LostThePort,
+            (true, _, _) => BindRefusal.PortInUse
         };
 }
 

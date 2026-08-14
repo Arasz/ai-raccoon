@@ -39,7 +39,7 @@ public static class ExitCode
     ///     `serve --restart`: the port gave the probe no answer, so nothing was asked to stop, and the
     ///     bind then proved the port is held — retryable, unlike <see cref="PortInUse" /> (ADR-0043).
     /// </summary>
-    public const int RestartProbeUnanswered = 15;
+    public const int RestartProbeUnanswered = 16;
 
     /// <summary>A CLI verb's own argument failed validation (bad enum value, out-of-range number, missing prompt input, etc.) — distinct from the specific failure codes above so a script can tell "you mistyped" from "the bank/server is broken". Was 10 until #286 claimed 10-14 for restart reasons.</summary>
     public const int InvalidArgument = 15;

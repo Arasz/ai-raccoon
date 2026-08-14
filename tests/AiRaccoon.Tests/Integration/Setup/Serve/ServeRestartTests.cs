@@ -224,8 +224,14 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldNotContain("   at ");
     }
 
+    /// <summary>
+    ///     A raw listener that accepts the connection and hangs up answers no probe, so `serve`
+    ///     cannot say what holds the port — only that the bind proved something does. Before
+    ///     ADR-0043 that was the plain in-use line and <see cref="ExitCode.PortInUse" />, which
+    ///     hid that the restart never happened; now the code says so and stays retryable.
+    /// </summary>
     [Fact]
-    public async Task AForeignListener_StillReportsPortInUse()
+    public async Task AForeignListener_ReportsAPortInUseThatNothingWasAskedToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -234,9 +240,9 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        // Not an ai-raccoon, so it is never asked to stop; the unchanged in-use line is the answer.
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ExitCode.RestartProbeUnanswered);
         run.Stderr.ShouldContain("in use");
+        run.Stderr.ShouldContain("nothing was asked to stop");
     }
 
     [Fact]
