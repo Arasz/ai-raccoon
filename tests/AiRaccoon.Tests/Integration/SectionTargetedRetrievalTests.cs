@@ -42,6 +42,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private readonly string _dataRoot;
     private readonly SqliteConnectionFactory _factory;
     private readonly Dictionary<string, string> _hashMap;
+    private readonly Dictionary<string, HashSet<string>> _fileHashes;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
 
@@ -66,7 +67,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService());
-        _hashMap = LoadChunkHashMap();
+        (_hashMap, _fileHashes) = LoadDerivedHashMap();
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -150,11 +151,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     {
         var query = "What does ADR-0011 decide?";
         var decisionSource = "docs:adr:0011-frontend-chassis-stack.md#decision";
-        var filePart = decisionSource.Split('#')[0];
-        var fileHashes = _hashMap
-            .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-            .Select(pair => pair.Value)
-            .ToHashSet(StringComparer.Ordinal);
+        var fileHashes = _fileHashes[CorpusHashMap.FileKey(decisionSource)];
 
         var results = await TopResultsAsync(query, TestContext.Current.CancellationToken);
         var fileRank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
@@ -277,11 +274,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var ranks = new Dictionary<string, int?>(StringComparer.Ordinal);
         foreach (var query in queries)
         {
-            var filePart = query.ExpectedSource!.Split('#')[0];
-            var fileHashes = _hashMap
-                .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-                .Select(pair => pair.Value)
-                .ToHashSet(StringComparer.Ordinal);
+            var fileHashes = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
             var results = await TopResultsAsync(query.Query, cancellationToken);
             var rank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
             ranks[query.Id] = rank == 0 ? null : rank;
@@ -327,13 +320,15 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         return columns;
     }
 
-    private Dictionary<string, string> LoadChunkHashMap()
-    {
-        var projectRoot = FindProjectRoot();
-        var mapPath = Path.Combine(projectRoot, "scripts", "chunk-hash-map.json");
-        var json = File.ReadAllText(mapPath);
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions) ?? [];
-    }
+    /// <summary>
+    ///     Derives the expected-source hash map and per-file hash sets directly from the regenerated
+    ///     corpus (WP4b, docs/plans/2026-08-14-code-quality-improvement-plan.md), instead of the
+    ///     retired scripts/chunk-hash-map.json. See <see cref="CorpusHashMap" />.
+    /// </summary>
+    private (Dictionary<string, string> HashMap, Dictionary<string, HashSet<string>> FileHashes) LoadDerivedHashMap() =>
+        CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
 
     private BaselineQuery[] LoadQueries()
     {

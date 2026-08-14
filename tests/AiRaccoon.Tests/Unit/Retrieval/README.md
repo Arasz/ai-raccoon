@@ -19,7 +19,12 @@ can remove the runtime extension without losing the oracle.
   `memory_add_content` / `memory_set_model` / `memory_embed_pending` / `memory_search` surface (deferral default on,
   explicit embed, `ORDER BY ranking DESC, seq ASC` for determinism). It does **not** depend on
   `src/AiRaccoon.Infrastructure/Sqlite`, which P1 rewrites.
-  `assets/reference-topk.json` is the committed golden output.
+  `assets/reference-topk.json` is the committed golden output. **The freshness gate
+  (`GoldenFile_MatchesFreshReferenceRun`) was deleted 2026-08-14**
+  (docs/reviews/2026-08-14-moe-codebase-review.md RAG-F9): the reference run is a fixed engine over a fixed
+  corpus, independent of `src/AiRaccoon.Infrastructure/Sqlite`, so it could not fail on any AiRaccoon retrieval
+  change — it held a `Speed=Slow` CI slot on every PR for that. `CommittedGoldenFile_EveryHitCarriesHashRankingPathAndSnippet`
+  (shape-only) is kept.
 - `Managed/` — the new side of the gate (P6): `ManagedHarness` loads the shared corpus into the managed store (FTS5 +
   vec0, bundled int8 ONNX engine, RRF fusion) and plugs into the sweep runner's `RankSource`. `ParityGateTests` is
   FR-NM-5: no nDCG@10 regression beyond Δ ≤ 0.02 vs the vendored golden at any sweep point (the gate is one-sided —
@@ -36,16 +41,6 @@ dotnet test --filter "FullyQualifiedName~Retrieval"
 ```
 
 First run bootstraps the assets (needs network or a provisioned `~/.ai-raccoon`).
-
-## Regenerate the golden file
-
-```bash
-scripts/regenerate-retrieval-golden.py   # sets AIRACCOON_HARNESS_REGENERATE_GOLDEN=1
-```
-
-Run after the corpus or the pinned oracle changes; commit the updated `reference-topk.json`. The committed file is
-compared exactly (hash order, rankings within 1e-6) by
-`GoldenFile_MatchesFreshReferenceRun`.
 
 ## Corpus
 

@@ -35,6 +35,7 @@ public sealed class SourceIdentityTests : IDisposable
     private readonly string _dataRoot;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
+    private readonly Dictionary<string, string> _hashMap;
 
     public SourceIdentityTests(ITestOutputHelper output)
     {
@@ -50,13 +51,22 @@ public sealed class SourceIdentityTests : IDisposable
         }
 
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-identity");
-        File.Copy(ResolveBundledDbPath(), Path.Combine(_dataRoot, "memory.db"));
+        var dbPath = Path.Combine(_dataRoot, "memory.db");
+        File.Copy(ResolveBundledDbPath(), dbPath);
 
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService());
+
+        // Derives structured-path -> hash directly from the regenerated corpus (WP4b,
+        // docs/plans/2026-08-14-code-quality-improvement-plan.md) instead of the retired
+        // scripts/chunk-hash-map.json. See CorpusHashMap.
+        (_hashMap, _) = CorpusHashMap.Build(dbPath,
+        [
+            Adr0011Decision, Adr0070Decision, InvariantTdd, InvariantScreaming, InvariantSecrets
+        ]);
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -64,8 +74,7 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task SearchResults_CarrySourceIdentity_ForIngestedChunks()
     {
-        var hashMap = LoadChunkHashMap();
-        var expectedHash = hashMap[Adr0011Decision];
+        var expectedHash = _hashMap[Adr0011Decision];
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId,
             "Why was shadcn/ui chosen over gluestack.io?",
@@ -89,7 +98,7 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task S2_WhatDoesAdr0011Decide_FindsAdr0011WithinTop3_AndLogsDecisionChunkRank()
     {
-        var hashMap = LoadChunkHashMap();
+        var hashMap = _hashMap;
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0011 decide?",
             SearchScope.Project, Limit: 20, MinScore: 0.0), TestContext.Current.CancellationToken);
@@ -106,7 +115,7 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task Q2_IdentifierOnly_Adr0070_FtsOnlyFileRankWithinTop3()
     {
-        var hashMap = LoadChunkHashMap();
+        var hashMap = _hashMap;
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId, "ADR-0070",
                 SearchScope.Project, Limit: 10, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0),
@@ -123,7 +132,7 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task SourcePathQuery_ReturnsTheExactChunk()
     {
-        var hashMap = LoadChunkHashMap();
+        var hashMap = _hashMap;
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId,
             "docs/adr/0011-frontend-chassis-stack.md#decision",
@@ -145,7 +154,7 @@ public sealed class SourceIdentityTests : IDisposable
     public async Task InvariantQueries_C1C5_HoldMeasuredHybridRanks(string query, string expectedSource,
         int expectedRank)
     {
-        var hashMap = LoadChunkHashMap();
+        var hashMap = _hashMap;
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId, query,
             SearchScope.Project, Limit: 5, MinScore: 0.0), TestContext.Current.CancellationToken);
@@ -164,7 +173,7 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task InvariantC2_ScreamingArchitecture_FtsOnlyRank1()
     {
-        var hashMap = LoadChunkHashMap();
+        var hashMap = _hashMap;
 
         var results = await _store.SearchAsync(new SearchQuery(ProjectId,
                 "What is the screaming architecture rule?",
@@ -190,13 +199,6 @@ public sealed class SourceIdentityTests : IDisposable
         return (null, 0);
     }
 
-    private static Dictionary<string, string> LoadChunkHashMap()
-    {
-        var projectRoot = FindProjectRoot();
-        var json = File.ReadAllText(Path.Combine(projectRoot, "scripts", "chunk-hash-map.json"));
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-    }
 
     private static string ResolveBundledDbPath()
     {

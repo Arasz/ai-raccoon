@@ -86,7 +86,7 @@ public sealed class BaselineMetricsTests : IDisposable
     {
         await EnsureModelAsync();
         var queries = LoadQueries();
-        var relevance = BuildRelevanceSets();
+        var relevance = BuildRelevanceSets(queries);
         var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
         var provider = await ProbeProviderAsync(TestContext.Current.CancellationToken);
 
@@ -100,7 +100,7 @@ public sealed class BaselineMetricsTests : IDisposable
         var evaluated = metrics.Where(m => relevance.FileLevel(
             queries.First(q => q.Id == m.Id).ExpectedSource).Count > 0).ToList();
         evaluated.Count.ShouldBe(19,
-            "all 19 expected-source queries (A1-A10, S1-S6, C1/C2/C5) should be gradeable via chunk-hash-map.json");
+            "all 19 expected-source queries (A1-A10, S1-S6, C1/C2/C5) should be gradeable via the corpus-derived hash map (CorpusHashMap)");
 
         foreach (var metric in metrics)
         {
@@ -383,20 +383,12 @@ public sealed class BaselineMetricsTests : IDisposable
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))).ToLowerInvariant();
     }
 
-    private static RelevanceSets BuildRelevanceSets()
+    private RelevanceSets BuildRelevanceSets(IReadOnlyList<BaselineQuery> queries)
     {
-        var projectRoot = FindProjectRoot();
-        var mapPath = Path.Combine(projectRoot, "scripts", "chunk-hash-map.json");
-        if (!File.Exists(mapPath))
-        {
-            throw new InvalidOperationException(
-                $"Missing {mapPath} — Wave 0 step 1 (Agent A) must commit the regenerated chunk-hash-map.json.");
-        }
-
-        var map = JsonSerializer.Deserialize<Dictionary<string, string>>(
-                      File.ReadAllText(mapPath), JsonOptions)
-                  ?? throw new InvalidOperationException($"Unreadable {mapPath}");
-        return new RelevanceSets(map);
+        var (_, fileHashes) = CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            queries.Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
+        return new RelevanceSets(fileHashes);
     }
 
     private async Task<string?> ProbeProviderAsync(CancellationToken cancellationToken)
@@ -456,38 +448,19 @@ public sealed class BaselineMetricsTests : IDisposable
     private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-baseline-metrics");
 
     /// <summary>
-    ///     Inverts chunk-hash-map.json (structured path -&gt; hash becomes hash -&gt; path) and derives
-    ///     per-query relevance sets from expectedSource: file-level = every hash whose path starts
-    ///     with the file part before '#'.
+    ///     Derives per-query file-level relevance sets directly from the regenerated corpus (WP4b,
+    ///     docs/plans/2026-08-14-code-quality-improvement-plan.md) via <see cref="CorpusHashMap" />,
+    ///     instead of the retired scripts/chunk-hash-map.json: file-level = every hash the corpus
+    ///     carries for the expectedSource's file.
     /// </summary>
-    private sealed class RelevanceSets(Dictionary<string, string> hashByPath)
+    private sealed class RelevanceSets(Dictionary<string, HashSet<string>> fileHashes)
     {
-        private readonly Dictionary<string, IReadOnlySet<string>> _cache = new(StringComparer.Ordinal);
-
         public static IReadOnlySet<string> Empty { get; } = new HashSet<string>(StringComparer.Ordinal);
 
-        public IReadOnlySet<string> FileLevel(string? expectedSource)
-        {
-            if (expectedSource is null)
-            {
-                return Empty;
-            }
-
-            if (_cache.TryGetValue(expectedSource, out var cached))
-            {
-                return cached;
-            }
-
-            var filePart = expectedSource.Contains('#')
-                ? expectedSource[..expectedSource.IndexOf('#')]
-                : expectedSource;
-            var hashes = hashByPath
-                .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-                .Select(pair => pair.Value)
-                .ToHashSet(StringComparer.Ordinal);
-            _cache[expectedSource] = hashes;
-            return hashes;
-        }
+        public IReadOnlySet<string> FileLevel(string? expectedSource) =>
+            expectedSource is not null && fileHashes.TryGetValue(CorpusHashMap.FileKey(expectedSource), out var hashes)
+                ? hashes
+                : Empty;
     }
 
 

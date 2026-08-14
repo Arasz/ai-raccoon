@@ -33,6 +33,8 @@ public sealed class QueryConstructionTests : IDisposable
     private readonly List<string> _extraRoots = [];
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
+    private readonly Dictionary<string, string> _hashMap;
+    private readonly Dictionary<string, HashSet<string>> _fileHashes;
 
     public QueryConstructionTests(ITestOutputHelper output)
     {
@@ -48,6 +50,12 @@ public sealed class QueryConstructionTests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService());
+
+        // Derives structured-path -> hash directly from the regenerated corpus (WP4b,
+        // docs/plans/2026-08-14-code-quality-improvement-plan.md) instead of the retired
+        // scripts/chunk-hash-map.json. See CorpusHashMap.
+        (_hashMap, _fileHashes) = CorpusHashMap.Build(
+            dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -58,7 +66,7 @@ public sealed class QueryConstructionTests : IDisposable
     {
         await EnsureModelAsync();
         var query = LoadQueries().First(q => q.Id == "A4");
-        var exactHash = LoadHashMap()[query.ExpectedSource!];
+        var exactHash = _hashMap[query.ExpectedSource!];
 
         var results = await _store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
@@ -158,7 +166,7 @@ public sealed class QueryConstructionTests : IDisposable
     {
         await EnsureModelAsync();
         var queries = LoadQueries();
-        var hashMap = LoadHashMap();
+        var hashMap = _hashMap;
 
         var expectedSource = queries.Where(q => !string.IsNullOrWhiteSpace(q.ExpectedSource)).ToArray();
         var adrQueries = expectedSource.Where(q => q.Id.StartsWith("A", StringComparison.Ordinal)).ToArray();
@@ -168,7 +176,7 @@ public sealed class QueryConstructionTests : IDisposable
         foreach (var query in expectedSource)
         {
             var top5 = await TopHashesAsync(query.Query, 1, 0, TestContext.Current.CancellationToken);
-            var rank = FirstFileRank(top5, FileLevel(hashMap, query.ExpectedSource!));
+            var rank = FirstFileRank(top5, FileLevel(query.ExpectedSource!));
             if (rank is not null)
             {
                 reciprocalRanks.Add(1.0 / rank.Value);
@@ -196,7 +204,7 @@ public sealed class QueryConstructionTests : IDisposable
     {
         await EnsureModelAsync();
         var queries = LoadQueries();
-        var hashMap = LoadHashMap();
+        var hashMap = _hashMap;
 
         // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
         // docs/work/archive/2026-08-06-baseline-repin-new-corpus.md): A6 and C2 are dropped
@@ -211,7 +219,7 @@ public sealed class QueryConstructionTests : IDisposable
         {
             var query = queries.First(q => q.Id == id);
             var top5 = await TopHashesAsync(query.Query, 1, 1, TestContext.Current.CancellationToken);
-            var rank = FirstFileRank(top5, FileLevel(hashMap, query.ExpectedSource!));
+            var rank = FirstFileRank(top5, FileLevel(query.ExpectedSource!));
             _output.WriteLine($"{id} hybrid top-5: {string.Join(", ", top5.Select(h => hashMap.FirstOrDefault(p => p.Value == h).Key ?? h))}");
             rank.ShouldNotBeNull($"{id} must still find its expected file (Wave 0 rank {wave0Rank})");
             rank.Value.ShouldBeLessThanOrEqualTo(wave0Rank,
@@ -225,7 +233,7 @@ public sealed class QueryConstructionTests : IDisposable
         // below is its gate (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md).
         var c2 = queries.First(q => q.Id == "C2");
         var c2FtsOnly = await TopHashesAsync(c2.Query, 1, 0, TestContext.Current.CancellationToken);
-        var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(hashMap, c2.ExpectedSource!));
+        var c2FtsRank = FirstFileRank(c2FtsOnly, FileLevel(c2.ExpectedSource!));
         c2FtsRank.ShouldBe(1, "C2 must hold at FTS-only rank 1 after the provenance cleanup");
     }
 
@@ -260,29 +268,7 @@ public sealed class QueryConstructionTests : IDisposable
         return null;
     }
 
-    private IReadOnlySet<string> FileLevel(string expectedSource)
-    {
-        var hashMap = LoadHashMap();
-        return FileLevel(hashMap, expectedSource);
-    }
-
-    private static IReadOnlySet<string> FileLevel(Dictionary<string, string> hashMap, string expectedSource)
-    {
-        var filePart = expectedSource.Contains('#')
-            ? expectedSource[..expectedSource.IndexOf('#')]
-            : expectedSource;
-        return hashMap
-            .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-            .Select(pair => pair.Value)
-            .ToHashSet(StringComparer.Ordinal);
-    }
-
-    private static Dictionary<string, string> LoadHashMap()
-    {
-        var mapPath = Path.Combine(FindProjectRoot(), "scripts", "chunk-hash-map.json");
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(
-            File.ReadAllText(mapPath), JsonOptions) ?? [];
-    }
+    private IReadOnlySet<string> FileLevel(string expectedSource) => _fileHashes[CorpusHashMap.FileKey(expectedSource)];
 
     private static BaselineQuery[] LoadQueries()
     {
