@@ -18,8 +18,8 @@ public sealed class EntryBucketTests
     [Theory]
     // shared: the caller's project id is kept, but scope is what selects the row.
     [InlineData("shared", "shared", Caller, null, null)]
-    // project: the id comes out of the context, not the caller.
-    [InlineData("project:acme", "project", "acme", null, null)]
+    // project: the id comes out of the context, not the caller — so it must differ from Caller here.
+    [InlineData("project:beta", "project", "beta", null, null)]
     // workspace: no scope at all — workspace rows are selected by workspace_id.
     [InlineData("workspace:ws-1", null, Caller, null, "ws-1")]
     // anything else is a custom label under the caller's project.
