@@ -2,7 +2,7 @@
 
 Date: 2026-08-07
 
-Status: Accepted
+Status: **Superseded** — 2026-08-08 by ADR-0016, which removed the extension host entirely.
 
 ## Context
 

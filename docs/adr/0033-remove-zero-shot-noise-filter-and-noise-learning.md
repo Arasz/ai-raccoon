@@ -3,7 +3,7 @@
 Date: 2026-08-14
 
 ## Status
-Accepted
+**Superseded** — 2026-08-14 by ADR-0039, which restores the noise-learning substrate without a scoring model.
 
 ## Context
 A 2026-08-14 MoE codebase review, independently reproduced and adversarially re-verified
