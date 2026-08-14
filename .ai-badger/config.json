@@ -49,19 +49,15 @@
     "skills": [
       "debug-issue",
       "evidence-first-research",
+      "complete-project-scope-code-review",
       "explore-codebase",
       "migrate-documentation",
-      "refactor-safely",
-      "review-changes",
       "scaffold-documentation",
       "update-documentation",
-      "design-gate-audit",
       "documentation-drift-audit",
-      "multi-lane-report-assembly",
-      "spec-driven-refactoring",
+      "worktree-agent-isolation",
       "sqlite-bank-space-diagnosis",
-      "sqlite-schema-review",
-      "worktree-agent-isolation"
+      "sqlite-schema-review"
     ]
   },
   "docs": {},
