@@ -10,6 +10,21 @@ public class MarkdownChunkerTests
 {
     private static int CharCount(string text) => text.Length;
 
+    /// <summary>
+    ///     Everything that is not a fence delimiter and not a line break — the payload the chunker
+    ///     must preserve exactly even though it may re-emit delimiters and break a long line
+    ///     (docs/adr/0048).
+    /// </summary>
+    private static string FencedPayload(string text) =>
+        string.Concat(text.Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("```", StringComparison.Ordinal)
+                           && !line.TrimStart().StartsWith("~~~", StringComparison.Ordinal)));
+
+    private static int FenceDelimiterCount(string text) =>
+        text.Split('\n').Count(line =>
+            line.TrimStart().StartsWith("```", StringComparison.Ordinal)
+            || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
+
     [Fact]
     public void Split_NoteLongerThanMaxTokens_SplitsAtLineBoundariesWithinBudget()
     {
@@ -47,16 +62,17 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
-    public void Split_FenceLargerThanMaxTokens_FallsBackToLineGranularSplitting()
+    public void Split_FenceLargerThanMaxTokens_SplitsIntoBoundedWellFormedFences()
     {
         var fence = "```\nvar x = 1;\nvar y = 2;\n```\n";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(fence, 15);
 
-        // An over-budget fence is already a broken chunk (docs/adr/0036) — no chunk exceeds maxTokens,
-        // and the fence content is preserved (just no longer atomic).
+        // An over-budget fence is no longer atomic (docs/adr/0036) but is still a fence: each piece
+        // repeats the delimiters, so no chunk begins inside the block (docs/adr/0048).
         chunks.ShouldAllBe(chunk => CharCount(chunk) <= 15);
-        string.Concat(chunks).ShouldBe(fence);
+        chunks.ShouldAllBe(chunk => FenceDelimiterCount(chunk) % 2 == 0);
+        FencedPayload(string.Concat(chunks)).ShouldBe(FencedPayload(fence));
     }
 
     [Fact]
@@ -77,14 +93,23 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
-    public void Split_UnclosedFence_FallsBackToLineGranularSplitting()
+    public void Split_UnclosedFence_IsClosedAndStillFallsBackWhenTheDelimitersDoNotFitTheBudget()
     {
+        // A never-closed fence is closed rather than abandoned (docs/adr/0048); it still must not
+        // glue the rest of the note into one unbounded chunk (docs/adr/0036). At a budget too small
+        // to hold the delimiters at all, the budget wins and the region degrades to bare lines.
         var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 5);
 
-        // A never-closed fence is not well-formed — it must not glue the rest of the note into one
-        // unbounded chunk (docs/adr/0036).
         chunks.ShouldAllBe(chunk => CharCount(chunk) <= 5);
-        string.Concat(chunks).ShouldBe("```\ncode\nmore\n");
+        string.Concat(chunks).ShouldBe("```\ncode\nmore\n```\n");
+    }
+
+    [Fact]
+    public void Split_UnclosedFenceWithinBudget_IsClosedAndKeptAtomic()
+    {
+        var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 40);
+
+        chunks.ShouldBe(["```\ncode\nmore\n```\n"]);
     }
 
     [Fact]
@@ -105,14 +130,16 @@ public class MarkdownChunkerTests
     {
         // Mirrors the review's measured shape: a stray, never-closed fence followed by a long
         // document body. Before the fix, this glues everything past the fence into one unbounded
-        // chunk (RED); after, no chunk exceeds maxTokens (docs/adr/0036).
+        // chunk (RED); after, no chunk exceeds maxTokens (docs/adr/0036) and the region is closed
+        // and re-fenced rather than de-fenced (docs/adr/0048).
         var body = string.Join("\n", Enumerable.Range(1, 30).Select(i => $"Paragraph {i} with several words of prose."));
         var text = $"# Notes\n\nSee the fence marker below.\n\n```\n{body}\n";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(text, 60);
 
         chunks.ShouldAllBe(chunk => CharCount(chunk) <= 60);
-        string.Concat(chunks).ShouldBe(text);
+        chunks.ShouldAllBe(chunk => FenceDelimiterCount(chunk) % 2 == 0);
+        FencedPayload(string.Concat(chunks)).ShouldBe(FencedPayload(text));
     }
 
     [Fact]

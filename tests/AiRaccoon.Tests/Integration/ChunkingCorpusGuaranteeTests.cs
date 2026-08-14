@@ -52,6 +52,47 @@ public sealed class ChunkingCorpusGuaranteeTests
             $"worst: {(overBudget.Count > 0 ? overBudget.MaxBy(x => x.Tokens) : default)}");
     }
 
+    /// <summary>
+    ///     RAG-CHUNK-F1 hard invariant (docs/adr/0048): every chunk this repo's own docs corpus
+    ///     produces is a well-formed markdown fragment — its fence state opens and closes inside the
+    ///     chunk. A chunk that begins inside a code block has no opening marker in view, so
+    ///     <see cref="HeadingPathParser" /> reads the block's '#' comments as level-1 headings and
+    ///     that prose reaches the FTS-weighted section column. Measured RED at 72/4140 chunks.
+    /// </summary>
+    [Fact]
+    public void ChunkingDocsCorpus_EveryChunkIsFenceBalanced()
+    {
+        var (chunker, _) = BuildRealLocalChunker();
+        var repoRoot = FindRepoRoot();
+        var files = Directory.EnumerateFiles(Path.Combine(repoRoot, "docs"), "*.md", SearchOption.AllDirectories)
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+        files.ShouldNotBeEmpty();
+
+        var totalChunks = 0;
+        var unbalanced = new List<(string File, string Heading)>();
+        foreach (var file in files)
+        {
+            foreach (var chunk in chunker.Chunk(File.ReadAllText(file), MaxTokens, 48))
+            {
+                totalChunks++;
+                if (FenceDelimiterCount(chunk) % 2 != 0)
+                {
+                    unbalanced.Add((Path.GetFileName(file), HeadingPathParser.Parse(chunk)));
+                }
+            }
+        }
+
+        unbalanced.ShouldBeEmpty(
+            $"{unbalanced.Count}/{totalChunks} chunks end in a different fence state than they began, so a " +
+            $"boundary fell inside a code block; first: {(unbalanced.Count > 0 ? unbalanced[0] : default)}");
+    }
+
+    private static int FenceDelimiterCount(string chunk) =>
+        chunk.Split('\n').Count(line =>
+            line.TrimStart().StartsWith("```", StringComparison.Ordinal)
+            || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
+
     [Fact]
     public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget()
     {
