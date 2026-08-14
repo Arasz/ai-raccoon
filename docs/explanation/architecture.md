@@ -301,7 +301,7 @@ overlap candidates ranked beyond the caller's limit (e.g. rank 30 when
 Each context's two lists are fused with **Reciprocal Rank Fusion (RRF)**:
 `score = Σ weight / (k + rank)`, then normalized to the max so the top result
 is 1.0. The per-context batches are then merged with a second RRF pass at
-uniform weight, and `minScore` + `limit` are applied.
+uniform weight, and `minRelativeScore` + `limit` are applied.
 
 ### Search result identity
 
@@ -508,10 +508,11 @@ stable — identical content written twice maps to the same logical path.
 
 Each modality list contributes `weight / (k + rank)` to a result's fused score.
 Default `k = 60`, default weights = 1:1. The fused scores are normalised to
-their maximum so the top result is always 1.0, and results below `minScore`
-(default 0.7) are filtered out — but at the default `limit=20` the threshold
-cannot bite until past rank ~28, so `minScore` is measured inert at the shipped
-defaults rather than an active relevance control (see [ADR-0006](../adr/0006-rrf-parameter-optimization.md)).
+their maximum so the top result is always 1.0, and results below
+`minRelativeScore` are filtered out. That floor is therefore a fraction of *this
+response's* top hit, not an absolute quality bar — an off-corpus query still
+scores 1.0 at rank 1 — so it defaults to 0 (off); see
+[ADR-0047](../adr/0047-relative-score-floor.md).
 
 The first modality list that carries a result supplies the payload (so FTS5's
 `snippet()` wins when both modalities retrieve the same hash). An empty list

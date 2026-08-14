@@ -2,7 +2,9 @@
 
 Date: 2026-08-04
 
-Status: Accepted. Amended 2026-08-09 — the parameters below stand unchanged; the second,
+Status: Accepted. The "minScore semantics" section is superseded by
+[ADR-0047](0047-relative-score-floor.md); the chosen fusion parameters are unaffected.
+Amended 2026-08-09 — the parameters below stand unchanged; the second,
 cross-context RRF pass they were measured through is removed (see the amendment at the end).
 Amended 2026-08-14 — the gate corpus was regenerated (WP4); the chosen parameters are
 unchanged, but every measured number moved and the 0.722 baseline is permanently retired
@@ -153,7 +155,16 @@ still re-scores its single batch by position, so `SourceAffinityRanker` continue
 the two RRF passes into one would have changed that scale and moved the baselines; it was
 deliberately not done.
 
-### minScore semantics — unchanged
+### minScore semantics — superseded by ADR-0047
+
+> **Superseded 2026-08-14 by [ADR-0047](0047-relative-score-floor.md).** This section held
+> that the shipped tool default of 0.7 "keeps the meaning it was audited under". The
+> equivalence it claimed between the swept 0.0 and the shipped 0.7 was measured at this
+> sweep's `limit=10` and does not hold at the `limit=20` the product ships: 10 of the 44
+> baseline queries came back short at limit 20, and all 44 at limit 50. The parameter is
+> now `minRelativeScore`, defaults to 0, and is documented as relative to the response's
+> own top hit. The chosen fusion point below (k=60, 1:1, minScore 0.0, Max3X100) is
+> unaffected — the sweep already ran at 0.0.
 
 minScore still filters a single max-normalized fused list, exactly as swept above. The
 "measured inert at the chosen point" observation stands, and the shipped tool default of
