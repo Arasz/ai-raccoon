@@ -63,8 +63,14 @@ public sealed class ManagedHarness
         foreach (var doc in RealWorldCorpus.Documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // sourceFile: each corpus document is inserted as exactly one row (AddContentAsync
+            // does not chunk), so no two rows can ever be true chunk-siblings regardless of the
+            // value chosen here — but the doc's own id at least stops SourceFile from being
+            // uniformly null, which previously excluded every candidate from
+            // SourceAffinityRanker's per-source grouping/consolidation logic entirely
+            // (docs/reviews/2026-08-14-moe-codebase-review.md RAG-F8).
             await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                sourceFile: doc.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var harness = new ManagedHarness(dataRoot, store)
