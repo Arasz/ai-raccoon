@@ -42,10 +42,10 @@ public sealed class OtlpFlushOnExitTests : IDisposable
     [Fact]
     public async Task ExitingTheBareHostPath_FlushesTheSpanToTheCollector_WithoutAnExplicitForceFlush()
     {
-        using var env = await AcquireCleanEnvAsync();
+        // The collector owns the endpoint, so it is built before the scope that publishes it;
+        // it touches no environment variable, so it needs no gate of its own.
         using var collector = new CapturingCollector();
-        Environment.SetEnvironmentVariable(EndpointVar, collector.Endpoint);
-        Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
+        await using var env = await AcquireCleanEnvAsync(collector.Endpoint, "http/protobuf");
 
         using var lease = LoopbackPort.Reserve();
         var config = Config(lease.Port);
@@ -88,25 +88,10 @@ public sealed class OtlpFlushOnExitTests : IDisposable
     private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        return new EnvRestore(originalEndpoint, originalProtocol);
-    }
-
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            TestData.EnvVarGate.Release();
-        }
-    }
+    // Serialized with the other env-var tests via EnvScope, which takes TestData.EnvVarGate
+    // (the OTEL_* vars are process-global).
+    private static ValueTask<EnvScope> AcquireCleanEnvAsync(string? endpoint = null, string? protocol = null) =>
+        EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EndpointVar, endpoint), (ProtocolVar, protocol));
 
     /// <summary>Minimal loopback OTLP/HTTP collector stand-in: records every request path it receives.</summary>
     private sealed class CapturingCollector : IDisposable
