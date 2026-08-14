@@ -18,14 +18,15 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     TEMPORARY DIAGNOSTIC — not a gate. Prints the host's CPU capability alongside the ONNX
-///     query-embedding fingerprint and the sweep's AdrNdcg5, so a CI run reports which hardware
-///     produced which number.
+///     Reproduces docs/adr/0049: prints the host's CPU capability alongside the ONNX
+///     query-embedding fingerprint and the sweep's AdrNdcg5, so a run reports which hardware
+///     produced which number. Diagnostic, not a gate — env-gated and skipped by default.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class PlatformNumericsProbe : IDisposable
 {
+    private const string RunEnvVar = "AIRACCOON_PLATFORM_PROBE";
     private const string ProjectId = "job-search-ai-assistant";
     private const int SearchLimit = 10;
     private const int RankCutoff = 5;
@@ -37,13 +38,23 @@ public sealed class PlatformNumericsProbe : IDisposable
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    private readonly string _dataRoot;
-    private readonly Dictionary<string, HashSet<string>> _fileHashes;
     private readonly ITestOutputHelper _output;
+    private string? _dataRoot;
+    private Dictionary<string, HashSet<string>> _fileHashes = [];
 
-    public PlatformNumericsProbe(ITestOutputHelper output)
+    public PlatformNumericsProbe(ITestOutputHelper output) => _output = output;
+
+    public void Dispose()
     {
-        _output = output;
+        if (_dataRoot is not null)
+        {
+            TestData.DeleteTempRoot(_dataRoot);
+        }
+    }
+
+    /// <summary>Copies the corpus fixture into a private root and derives the relevance sets.</summary>
+    private void Setup()
+    {
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-platform-probe");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
@@ -51,11 +62,18 @@ public sealed class PlatformNumericsProbe : IDisposable
             dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
-
     [Fact]
     public async Task Probe_HostFingerprint_ReportsCpuAndEmbeddingAndNdcg()
     {
+        if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")
+        {
+            Assert.Skip($"{RunEnvVar} not set — this probe reports host CPU capability, the ONNX " +
+                        "query-embedding fingerprint and AdrNdcg5 together (docs/adr/0049). It asserts " +
+                        $"nothing; set {RunEnvVar}=1 to run it.");
+            return;
+        }
+
+        Setup();
         _output.WriteLine("=== HOST ===");
         _output.WriteLine($"OS={RuntimeInformation.OSDescription}");
         _output.WriteLine($"Arch={RuntimeInformation.ProcessArchitecture} ProcessorCount={Environment.ProcessorCount}");
@@ -87,7 +105,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         }
 
         _output.WriteLine("=== RETRIEVAL ===");
-        var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+        var options = new InfrastructureOptions { DataRoot = _dataRoot!, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
