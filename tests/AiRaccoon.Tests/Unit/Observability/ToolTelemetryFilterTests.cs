@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -25,11 +26,13 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         await TelemetryServerHost.SeedAccessModeAsync(_dataRoot, ReadOnlyProject, "ro", cancellationToken);
 
-        var port = TelemetryServerHost.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = TelemetryServerHost.Create(_dataRoot, port);
         var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
+        lease.ReleaseForBind();
         await host.StartAsync(cancellationToken);
         try
         {

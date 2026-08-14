@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Extensions;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
@@ -47,12 +47,14 @@ public sealed class OtlpFlushOnExitTests : IDisposable
         Environment.SetEnvironmentVariable(EndpointVar, collector.Endpoint);
         Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
 
-        var config = Config(FreePort());
+        using var lease = LoopbackPort.Reserve();
+        var config = Config(lease.Port);
         var host = McpServerSetup.CreateServerHost(config);
         var shutdown = new CancellationTokenSource();
 
         // The exact production shape (Program.cs:53): IHost.RunAsync starts the host, waits for
         // the token, and returns — whatever it does or doesn't dispose on the way out.
+        lease.ReleaseForBind();
         var runTask = host.RunAsync(config, shutdown.Token);
 
         var metrics = await AttachedToolCallMetricsAsync(host);
@@ -85,14 +87,6 @@ public sealed class OtlpFlushOnExitTests : IDisposable
 
     private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private static async Task<IDisposable> AcquireCleanEnvAsync()
     {
@@ -123,9 +117,10 @@ public sealed class OtlpFlushOnExitTests : IDisposable
 
         public CapturingCollector()
         {
-            var port = FreePort();
-            Endpoint = $"http://127.0.0.1:{port}";
+            using var lease = LoopbackPort.Reserve();
+            Endpoint = $"http://127.0.0.1:{lease.Port}";
             _listener.Prefixes.Add($"{Endpoint}/");
+            lease.ReleaseForBind();
             _listener.Start();
             _acceptLoop = Task.Run(AcceptLoopAsync);
         }

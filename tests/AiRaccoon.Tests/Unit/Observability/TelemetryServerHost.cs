@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Embedding;
@@ -47,14 +45,5 @@ internal static class TelemetryServerHost
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
             new EmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
-    }
-
-    public static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 }
