@@ -332,25 +332,32 @@ Make all three abstract; the compiler lists the work.
 
 ## Wave 4 — Boundaries, gates and the things that let this happen
 
-### WP20 · Gate the `Speed` trait — **H25, adversarial NF4**
-**Effort:** QUICK · **Surface:** `tests/AiRaccoon.Tests/Unit/SpeedGateCoverageTests.cs`
+### ~~WP20 · Gate the `Speed` trait~~ — **WITHDRAWN. The gate already exists and works.**
 
-The campaign's strongest healthy claim — CI's three filters partition the suite exactly — was verified
-five ways and holds. **It is held by discipline, not by a mechanism.** `BddGateCoverageTests` guards the
-`@bdd` tag by reflection *and* asserts its own query still finds classes (the anti-vacuity check). There
-is no equivalent for `Speed`, and no workflow runs the complement filter, so a new test class without
-`[Trait(Speed, …)]` runs in none of the three PR jobs and nothing goes red.
+The adversarial pass filed this as new finding 4: *"Nothing gates the `Speed` trait … CI's exact
+partition is true today by discipline, not by a gate."* The QA lane had said the opposite, listing
+`SpeedGateCoverageTests` among the self-guarding derived gates. **The orchestrator settled it by opening
+the file, and the QA lane is right.**
 
-`nightly.yml:9-12` states in its own header that scheduled runs are best-effort and can be dropped — so
-the nightly unfiltered run is not a backstop either.
+`tests/AiRaccoon.Tests/Unit/SpeedGateCoverageTests.cs` exists and does precisely what this package
+proposed: `EveryTestClass_CarriesASpeedTrait` reflects over every class with a `[Fact]`/`[Theory]`
+(excluding Reqnroll's generated features, which `Category=bdd` covers) and asserts each carries a
+`Speed` trait — **and** it has the anti-vacuity assertion, `TheGuardSeesTheTestClasses`, requiring the
+reflection query to find more than 100 classes.
 
-**Change:** a reflection test asserting every test class carries a `Speed` trait, modelled on
-`BddGateCoverageTests`, **including its anti-vacuity assertion** (the guard must confirm it still sees
-the classes, or it becomes vacuous the day the reflection query stops matching).
+**Proved it can actually fail**, because a gate nobody has watched go red is not a gate. Dropped a
+trait-less `ProbeNoSpeedTraitTests` into `Unit/` and ran it:
 
-**Gate — watch it go red first.** Add a test class with no `Speed` trait and confirm the new guard
-fails. Then delete it. Separately, confirm the anti-vacuity assertion fails when the reflection query
-is broken.
+```
+these classes carry no Speed trait, so no CI job runs them: AiRaccoon.Tests.Unit.ProbeNoSpeedTraitTests
+Failed!  - Failed: 1, Passed: 1
+```
+
+Removed the probe; back to `Passed! - Failed: 0, Passed: 2`. **The partition is held by a mechanism,
+not by discipline.** Nothing to build here.
+
+*Kept in the plan rather than deleted, so the next reader can see this was checked and rejected rather
+than overlooked.*
 
 ### WP19 · Fix the flaky test in the merge gate — **adversarial new finding 7, correcting QA F3**
 **Effort:** SMALL · **Surface:** `tests/AiRaccoon.Tests/Integration/Mcp/ToolRefusalsTests.cs:218-229`

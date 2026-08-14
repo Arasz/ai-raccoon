@@ -253,7 +253,7 @@ intermediate value rather than the user-visible `ranking`. Both leave the findin
 1. **`memory_write` does not chunk, and the current build truncates it silently** — 555 live rows, 114,883 tokens. See H5 above. **This is the most important thing the adversarial pass found.**
 2. **The ingest chunk budget is non-engine-aware when `embedding.provider` is unset**, and configuring the engine later re-embeds without re-chunking.
 3. **The `project:` scoping invariant is enforced and tested on writes, absent and untested on deletes** — which is how B1's fix should be scoped.
-4. **Nothing gates the `Speed` trait.** `BddGateCoverageTests` guards the `@bdd` tag by reflection with its own anti-vacuity check; there is no equivalent for `Speed`, and no workflow runs the complement filter. **CI's exact partition — the campaign's strongest healthy claim — is true today by discipline, not by a gate.** A new test class without `[Trait(Speed, …)]` would run in none of the three PR jobs and nothing would go red.
+4. ~~Nothing gates the `Speed` trait~~ — **refuted by the orchestrator, and this one is worth reading as a lesson.** The pass and the QA lane disagreed; the QA lane was right. `tests/AiRaccoon.Tests/Unit/SpeedGateCoverageTests.cs` exists, asserts every `[Fact]`/`[Theory]` class carries a `Speed` trait, and has the anti-vacuity check. Settled by opening the file, then by **proving the gate can fail** — a trait-less probe class turned it red and removing it turned it green. **The pass that corrected five lane claims got one of its own new findings wrong.** That is the argument for arbitrating by reading rather than by counting who said what, and it is why an adversarial pass is a stage in a campaign rather than the last word in one.
 5. **The deployed server is older than HEAD** — its schema exposes `minScore`/0.7/ADR-0006 where HEAD has `minRelativeScore`/0/ADR-0047. Related: `quiet.log` contains **zero** "Chunk truncated at embed time" lines, because the code carrying that EventId is not what is running.
 6. **`NodeRunner.StartHttpMcpServer` double-disposes the host** — the actual cause of the one real `crit`.
 7. **A flaky test sits in the PR gate** — `ToolRefusalsTests.KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog` failed on a single `Speed=Fast` run and on an unfiltered run, then passed clean on rerun. This **corrects the QA lane**, which saw it only under artificial concurrency and reasonably concluded it was not a CI risk.
@@ -298,7 +298,6 @@ intermediate value rather than the user-visible `ranking`. Both leave the findin
 | H22 | The MCP layer holds real business logic — a consent gate, a mode decision, two pipelines and a query-guard policy engine | MEASURED | architecture F9 |
 | H23 | The architecture-enforcement library is pinned but never referenced, and no architecture test exists | READ | architecture F12 |
 | H24 | The ingest chunk budget is silently non-engine-aware when `embedding.provider` is unset (104/258 over-window vs 0/276), and configuring the engine later re-embeds without re-chunking | MEASURED | adversarial NF2 |
-| H25 | Nothing gates the `Speed` trait, so CI's exact partition holds by discipline rather than by a mechanism | MEASURED | adversarial NF4 |
 | H26 | `NodeRunner.StartHttpMcpServer` double-disposes the host, which is the actual cause of the one real `crit` in `serve.log` | READ | adversarial NF6 |
 
 The remaining **62 findings** at MEDIUM and LOW are in the lane reports, grouped by surface in the
@@ -344,12 +343,12 @@ holds.
 **Tests and CI.** The three CI filters partition the suite exactly — 2142 + 143 + 585 = 2870,
 measured independently by two lanes **and re-verified five ways by the adversarial pass** (empty
 complement, three empty pairwise intersections, discovery sum, execution sum, independent unfiltered
-total). **With one caveat the pass added, and it matters: nothing gates the `Speed` trait.**
-`BddGateCoverageTests` guards the `@bdd` tag by reflection and even asserts its own query still finds
-classes; there is no equivalent for `Speed`, and no workflow runs the complement filter. A new test
-class without `[Trait(Speed, …)]` would run in none of the three PR jobs and nothing would go red. The
-partition is exact **today, by discipline** — it is not held by a mechanism. That is a gate to build,
-not a property to rely on. The
+total). **And it is held by a mechanism, not by discipline** — the adversarial pass claimed otherwise and was
+wrong, which the orchestrator settled by opening the file. `SpeedGateCoverageTests` reflects over every
+class carrying a `[Fact]`/`[Theory]` and asserts each has a `Speed` trait, with the anti-vacuity
+assertion alongside it. Proved it can fail: a trait-less probe class turned it red
+(`these classes carry no Speed trait, so no CI job runs them: …ProbeNoSpeedTraitTests`), and removing
+the probe turned it green. The
 default-interface-member dispatch trap is guarded explicitly, with a comment naming the mechanism and
 its own dedicated test. Shared fakes derive their vectors from `SHA256` of the actual input, so
 swapping inputs would change outcomes. Env-gated probes use `Assert.Skip`, not a bare `return`, so
