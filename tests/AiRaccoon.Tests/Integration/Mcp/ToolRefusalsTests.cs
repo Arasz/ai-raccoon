@@ -28,14 +28,14 @@ using Shouldly;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;
 
-namespace AiRaccoon.Tests.Unit.Mcp;
+namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
 ///     A correct refusal (path-outside-scope) must not read as a crash: the SDK logs Error on
 ///     every exception escaping a tool, so the old catch-and-rethrow shape produced an Error
 ///     record for an expected refusal.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ToolRefusalsTests : IDisposable
 {

@@ -3,9 +3,9 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Encryption;
+namespace AiRaccoon.Tests.Integration.Encryption;
 
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class EncryptionStateTests : IDisposable
 {

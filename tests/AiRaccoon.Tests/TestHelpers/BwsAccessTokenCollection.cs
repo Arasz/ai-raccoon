@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Encryption;
+namespace AiRaccoon.Tests.TestHelpers;
 
 /// <summary>
 ///     Serialises the test classes that mutate the process-global BWS_ACCESS_TOKEN. Two of them

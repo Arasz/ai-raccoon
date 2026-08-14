@@ -3,14 +3,14 @@ using Shouldly;
 using SQLitePCL;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Storage;
+namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     Pins the SQLite engine surface (docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md): the app
 ///     depends on the 3.53.0 WAL-reset fix and on SQLite3MC's temp-in-memory and encryption properties.
 ///     Floor assertions (>= 3.53.4, 2.4.x) let patch bumps through but fail on a major/minor regression.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SqliteEngineCapabilityTests
 {
