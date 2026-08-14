@@ -1,9 +1,9 @@
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.Unit.Embedding;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;

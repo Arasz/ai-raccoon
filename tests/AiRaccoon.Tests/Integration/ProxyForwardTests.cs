@@ -1,10 +1,10 @@
+using AiRaccoon.Tests.TestHelpers;
 using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Tests.E2E;
-using AiRaccoon.Tests.Unit.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
