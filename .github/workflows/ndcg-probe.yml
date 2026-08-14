@@ -1,0 +1,40 @@
+name: ndcg-probe
+
+# TEMPORARY diagnostic for the AdrNdcg5 cross-run variance (work/ndcg-nondeterminism).
+# Samples several runners at once so a single push reports whether the host CPU's
+# capability set tracks the embedding fingerprint and the metric. Delete with the branch.
+
+on:
+  push:
+    branches: [work/ndcg-nondeterminism]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5, 6]
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+      - name: CPU
+        run: lscpu || cat /proc/cpuinfo
+      - name: Build
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Platform numerics probe
+        run: >-
+          dotnet test --filter "FullyQualifiedName~PlatformNumericsProbe" --no-build --nologo
+          --logger "console;verbosity=detailed"
+      - name: Real gates
+        run: >-
+          dotnet test --no-build --nologo -v m
+          --filter "FullyQualifiedName~SourceAffinitySweepTests|FullyQualifiedName~RrfParameterSweepTests"
