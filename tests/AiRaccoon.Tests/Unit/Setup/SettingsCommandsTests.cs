@@ -3,6 +3,8 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
@@ -40,6 +42,11 @@ public class SettingsCommandsTests
                 ["noise", "enable"] => commands.NoiseEnabledSetAsync(true, store, streams, ct),
                 ["noise", "disable"] => commands.NoiseEnabledSetAsync(false, store, streams, ct),
                 ["noise", "show"] => commands.NoiseShowAsync(store, streams, ct),
+                ["queryguard", "enable"] => commands.QueryGuardEnabledSetAsync(true, store, streams, ct),
+                ["queryguard", "disable"] => commands.QueryGuardEnabledSetAsync(false, store, streams, ct),
+                ["queryguard", "shadow", "enable"] => commands.QueryGuardShadowSetAsync(true, store, streams, ct),
+                ["queryguard", "shadow", "disable"] => commands.QueryGuardShadowSetAsync(false, store, streams, ct),
+                ["queryguard", "show"] => commands.QueryGuardShowAsync(store, streams, ct),
                 _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
             };
         });
@@ -192,5 +199,55 @@ public class SettingsCommandsTests
         enableExit.ShouldBe(0);
         enabledOut.ShouldContain("enabled: True");
         NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task QueryGuardShow_NoRow_PrintsEnabledByDefault_ShadowOffByDefault()
+    {
+        var (exit, stdout, _) = await Run(["queryguard", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("enabled: True  shadow: False");
+    }
+
+    /// <summary>The kill switch round-trips through the same parse MemoryTools.Search reads it with.</summary>
+    [Fact]
+    public async Task QueryGuardDisableThenEnable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (disableExit, _, _) = await Run(["queryguard", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        QueryGuardConfigKeys.ParseEnabled(store.Settings[QueryGuardConfigKeys.EnabledGlobal]).ShouldBeFalse();
+
+        var (enableExit, _, _) = await Run(["queryguard", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        QueryGuardConfigKeys.ParseEnabled(store.Settings[QueryGuardConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task QueryGuardShadowEnableThenDisable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (enableExit, _, _) = await Run(["queryguard", "shadow", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("shadow: True");
+        QueryGuardConfigKeys.ParseShadow(store.Settings[QueryGuardConfigKeys.ShadowGlobal]).ShouldBeTrue();
+
+        var (disableExit, _, _) = await Run(["queryguard", "shadow", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("shadow: False");
+        QueryGuardConfigKeys.ParseShadow(store.Settings[QueryGuardConfigKeys.ShadowGlobal]).ShouldBeFalse();
     }
 }
