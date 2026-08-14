@@ -79,9 +79,10 @@ active ongoing loss:
   agents do not write, and the zero-shot policy's measured 2/12 recall means it almost never
   triggers. **The filter's ineffectiveness is the only reason the silent-discard path has not
   cost anyone a memory.**
-- **Auto-TTL has never fired** because real agent writes run 64–166 words, comfortably over the
-  8-word floor. The 39 short entries all predate the feature. Even when it does fire, the rating
-  gate means nothing is sweepable before day 22.2.
+- **Auto-TTL has never fired** — and the reason is structural, not behavioural: `InsertEntry`
+  has no `ttl_days` column, so the computed TTL is silently dropped by Dapper before it reaches
+  the row. See the correction box in the next section. (An earlier revision of this document
+  attributed it to real writes running 64–166 words; that explanation was wrong.)
 - **But the reaper is armed and live**: `full` mode with sweeping enabled, which answers the
   ML lane's open question. The safety margin is behavioural, not structural.
 
@@ -251,7 +252,42 @@ regex policy**, which is registered first and short-circuits. Its "< 1 ms overhe
 by about 7×. The shipped configuration makes every valid write ~60% slower than the entire
 baseline write the ADR quotes, to buy a fuzzy exact-match on three strings.
 
-**The auto-TTL policy arms the reaper on ordinary writes.** [MEASURED, ML lane F2/F6]
+> ### ⚠ Correction: the auto-TTL never reached the database
+>
+> **Found by the Wave 1 implementation lane when its RED test refused to go red; verified by the
+> orchestrator.** Everything below about the *policy* is correct — it does compute a 3-day TTL
+> for every write under 8 words. **But the value is never persisted.**
+>
+> `MemorySql.InsertEntry`'s column list is
+> `(hash, path, value, source_file, section, scope, project_id, context_label, workspace_id,
+> agent_id, created_at, updated_at, source_id)` — **there is no `ttl_days` column and no
+> `@ttlDays` placeholder.** `SqliteMemoryStore.WriteAsync:105` passes `ttl_days = resolvedTtlDays`
+> into the Dapper parameter object, and **Dapper silently drops a parameter with no matching
+> placeholder.** `git log -S"ttl_days" -- MemorySql.cs` confirms the column was never added by
+> the auto-TTL commit (`1235b54f`, PR #270).
+>
+> **Consequences:**
+> - ADR-0030's feature is **dead on arrival**. It has never set a TTL on any row, ever. It was
+>   shipped with an ADR, a benchmark and green tests while being inert.
+> - **ML-F2 drops from HIGH to LOW.** The reaper was never armed by auto-TTL. The severity below
+>   is retained for the record but is superseded by this box.
+> - The live-bank observation (`ttl_days` NULL on all 15,236 rows) is now *fully* explained. This
+>   review's earlier explanation — "real agent writes run 64–166 words, comfortably over the
+>   8-word floor" — was right about the observation and **wrong about the cause**.
+> - **Explicit TTL still works:** `memory_set_ttl` goes through `UpdateEntryTtl`'s
+>   `SET ttl_days = @ttlDays`. So ADR-0034's "explicit TTL is authoritative" replacement rests on
+>   a path that functions.
+> - WP2 still deletes the policy — but the justification changes from *preventing data loss* to
+>   *removing dead code and a false ADR*.
+>
+> **New finding (generalizable): Dapper silently ignores unmatched parameters.** That is the
+> mechanism by which a feature passed review, an ADR, a benchmark and a test suite while doing
+> nothing. Any future SQL/parameter mismatch fails the same silent way. Worth a guard — a test
+> that asserts every property of a statement's parameter object has a matching placeholder in its
+> SQL. Filed into WP10.
+
+**The auto-TTL policy arms the reaper on ordinary writes.** [MEASURED at the policy level; see
+the correction box above — it never reaches the row] [ML lane F2/F6]
 
 `PromotionScorer.cs:18-19` sets `MinWordsFloor = 8`, `MinWordsCap = 0.50`; any content under 8
 words returns `min(prior, 0.50)`. `PromotionScorerTtlPolicy` marks anything scoring `< 0.6` as

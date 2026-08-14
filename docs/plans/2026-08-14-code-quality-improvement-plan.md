@@ -335,6 +335,13 @@ query must fall below a stated threshold on an **ANALYZE'd** bank with the real 
   policy* intercepted; stop writing into tracked `docs/`; fix or delete the allocation metric
   (`GC.GetAllocatedBytesForCurrentThread` read across `await` is why the committed report says
   `-549,67 KB`).
+- **Guard against silently-dropped SQL parameters.** `MemorySql.InsertEntry` has no `ttl_days`
+  column while `WriteAsync` passes `ttl_days` into the Dapper parameter object; Dapper silently
+  ignores unmatched parameters, which is how ADR-0030's auto-TTL shipped with an ADR, a benchmark
+  and green tests while never once persisting a TTL. Add a test that asserts, for every statement
+  in `MemorySql`, that each property of its parameter object has a matching `@placeholder` in the
+  SQL. Break it on purpose (add a bogus parameter) and watch it go red. This is a cheap gate
+  against a whole class of silent failure.
 - Commit a small paraphrased labelled fixture so the promotion scorer has a hardcoded floor.
   *(Framing corrected — the existing `measured ± 0.10` tests are documented gate-machinery tests
   for the no-fixture path, not a defect; the gap is only the absent fixture.)*
